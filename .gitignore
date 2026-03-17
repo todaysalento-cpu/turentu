@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+
+# Build / cache
+.next/
+dist/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dataset pesanti
+dataset_auto/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor files
+.vscode/
+.idea/
+
+# Optional: TypeScript build
+*.tsbuildinfo
+
+# Optional: temporary files
+*.tmp

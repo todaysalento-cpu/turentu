@@ -1,12 +1,14 @@
 {
   "name": "ride-system",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",        // ← punta al file corretto
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
+    "start": "node server.js",   // ← indispensabile per Render
+    "dev": "nodemon server.js",  // opzionale per sviluppo locale
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --verbose"
   },
   "dependencies": {
@@ -43,7 +45,8 @@
     "chalk": "^5.3.0",
     "jest": "^29.7.0",
     "jest-html-reporter": "^3.7.0",
-    "jest-spec-reporter": "^1.0.19"
+    "jest-spec-reporter": "^1.0.19",
+    "nodemon": "^3.0.2"    // ← utile per sviluppo
   },
   "jest": {
     "testEnvironment": "node",

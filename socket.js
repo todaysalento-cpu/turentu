@@ -1,20 +1,32 @@
 // ======================= socket.js =======================
 import jwt from 'jsonwebtoken';
 import { pool } from './db/db.js';
+import { getCorseCache } from './services/search/search.cache.js';
 
 let io;
 
-// ===== Funzione pubblica notifiche =====
+// =======================
+// Funzione pubblica per notifiche
+// =======================
 const sendNotification = ({ userId, role, notification }) => {
   if (!io) throw new Error('Socket.io non inizializzato!');
   if (!notification || !userId || !role) return;
 
   console.log(`📣 Invio notifica a ${role}_${userId}:`, notification);
-
   io.to(`${role}_${userId}`).emit('new_notification', notification);
 };
 
-// ===== Setup Socket.IO =====
+// =======================
+// Getter io
+// =======================
+const getIO = () => {
+  if (!io) throw new Error('Socket.io non inizializzato!');
+  return io;
+};
+
+// =======================
+// Setup Socket.IO
+// =======================
 const setupSocket = (ioServer) => {
   io = ioServer;
   const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
@@ -35,70 +47,53 @@ const setupSocket = (ioServer) => {
     }
   });
 
-  // ===========================
+  // =======================
   // CONNECTION
-  // ===========================
+  // =======================
   io.on('connection', async (socket) => {
     const { id: userId, role } = socket.user;
-
-    const personalRoom = `${role}_${userId}`;
     const joinedRooms = new Set();
+
+    // Room personale
+    const personalRoom = `${role}_${userId}`;
     socket.join(personalRoom);
     joinedRooms.add(personalRoom);
 
     console.log('🔌 Client connesso:', socket.id);
     console.log('👤 Utente:', socket.user);
 
-    // ===========================
+    // =======================
     // AUTISTA JOIN CORSE
-    // ===========================
+    // =======================
     if (role === 'autista') {
       try {
-        const { rows: corse } = await pool.query(
-          `SELECT c.id, c.start_datetime
-           FROM corse c
-           JOIN veicolo v ON v.id = c.veicolo_id
-           WHERE v.driver_id = $1`,
-          [userId]
-        );
+        // Leggi corse attive direttamente dalla cache (Redis se disponibile)
+        const corseCache = await getCorseCache();
+        const corse = corseCache.filter(c => c.veicolo_id === userId); // esempio mapping driver -> veicolo
 
         console.log(`🚗 Autista ha ${corse.length} corse`);
 
         for (const corsa of corse) {
-          const corsaId = Number(corsa.id);
-          const corsaRoom = `corsa_${corsaId}`;
-
+          const corsaRoom = `corsa_${corsa.id}`;
           if (!joinedRooms.has(corsaRoom)) {
             socket.join(corsaRoom);
             joinedRooms.add(corsaRoom);
             console.log(`✈️ Autista join corsa room: ${corsaRoom}`);
           }
-
-          const { rows: clienti } = await pool.query(
-            `SELECT u.id, u.nome
-             FROM utente u
-             JOIN prenotazioni p ON p.cliente_id = u.id
-             WHERE p.corsa_id = $1`,
-            [corsaId]
-          );
-
-          socket.emit('corsa_clients', { corsa_id: corsaId, clienti });
         }
       } catch (err) {
         console.error('Errore join corsa autista:', err);
       }
     }
 
-    // ===========================
+    // =======================
     // JOIN CHAT
-    // ===========================
+    // =======================
     socket.on('join_chat', async ({ corsa_id, cliente_id }) => {
       corsa_id = Number(corsa_id);
       cliente_id = Number(cliente_id);
 
-      console.log("📥 EVENT join_chat:", { corsa_id, cliente_id });
       const room = `chat_${corsa_id}_${cliente_id}`;
-
       if (!joinedRooms.has(room)) {
         socket.join(room);
         joinedRooms.add(room);
@@ -106,9 +101,9 @@ const setupSocket = (ioServer) => {
       }
 
       try {
-        // ===========================
-        // MESSAGGI (anche 0 messaggi)
-        // ===========================
+        // =======================
+        // MESSAGGI
+        // =======================
         const { rows: messagesRows } = await pool.query(
           `SELECT id, corsa_id, cliente_id, sender_id, testo AS text, created_at AS timestamp, read_status
            FROM messaggi
@@ -131,9 +126,9 @@ const setupSocket = (ioServer) => {
             : r.read_status || { autista: false, cliente: false }
         }));
 
-        // ===========================
+        // =======================
         // PARTECIPANTI
-        // ===========================
+        // =======================
         const { rows: participants } = await pool.query(
           `SELECT u.id, u.nome, 'cliente' AS role
            FROM utente u
@@ -148,20 +143,20 @@ const setupSocket = (ioServer) => {
           [corsa_id]
         );
 
-        // ===========================
-        // INVIO INIT_CHAT
-        // ===========================
+        // =======================
+        // INIT CHAT
+        // =======================
         socket.emit('init_chat', {
           corsa_id,
           cliente_id,
-          messages: messages || [], // array anche se vuoto
+          messages: messages || [],
           participants,
           lastMessageTime: messages.length ? messages[messages.length - 1].timestamp : new Date().toISOString()
         });
 
-        // ===========================
-        // UPDATE LETTI
-        // ===========================
+        // =======================
+        // Aggiorna messaggi letti
+        // =======================
         if (messages.length > 0) {
           await pool.query(
             `UPDATE messaggi
@@ -184,13 +179,13 @@ const setupSocket = (ioServer) => {
           });
         }
       } catch (err) {
-        console.error('❌ Errore join_chat:', err);
+        console.error('❌ join_chat error:', err);
       }
     });
 
-    // ===========================
+    // =======================
     // SEND MESSAGE
-    // ===========================
+    // =======================
     socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
       if (!text?.trim()) return;
 
@@ -233,4 +228,4 @@ const setupSocket = (ioServer) => {
   });
 };
 
-export { io, setupSocket, sendNotification };
+export { io, setupSocket, sendNotification, getIO };

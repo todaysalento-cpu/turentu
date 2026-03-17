@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
-import { io } from '../server.js';
+import { sendNotification, getIO } from '../socket.js'; // ✅ nuovo import
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
@@ -82,22 +82,16 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     for (const slot of slots) {
       let { veicolo_id, start_datetime, posti_richiesti, origine, destinazione, localitaOrigine, localitaDestinazione, distanzaKm } = slot;
 
-      // ✅ Validazioni slot
       let durataMinuti = slot.durataMinuti ?? slot.durata_minuti;
       if (!durataMinuti || durataMinuti <= 0) throw new Error("Durata dello slot mancante o non valida");
-
-      // Se arriva un valore troppo grande (es. in secondi) lo converto in minuti
       if (durataMinuti > 5000) durataMinuti = Math.round(durataMinuti / 60);
-
       if (!origine?.lat || !origine?.lon || !destinazione?.lat || !destinazione?.lon) throw new Error("Coordinate mancanti");
       if (!localitaOrigine || !localitaDestinazione) throw new Error("Indirizzi mancanti");
       if (!start_datetime) throw new Error("start_datetime mancante");
 
-      // 🔹 Intervallo Postgres
       const durataInterval = `${durataMinuti} minutes`;
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-      // 🔹 Inserimento pending
       const result = await pool.query(
         `INSERT INTO pending
           (veicolo_id, cliente_id, start_datetime, durata, posti_richiesti,
@@ -169,20 +163,31 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         const notifDriver = notifDriverRes.rows[0];
         notifDriver.displayDate = formatNotificationDate(new Date(notifDriver.created_at));
 
-        io.to(`autista_${driverId}`).emit('new_notification', notifDriver);
-        io.to(`autista_${driverId}`).emit('pending_update', {
-          id: row.id,
-          cliente: req.user.nome,
-          origine: pendingNormalized.origine,
-          destinazione: pendingNormalized.destinazione,
-          origine_address: localitaOrigine,
-          destinazione_address: localitaDestinazione,
-          prezzo: pendingNormalized.prezzo,
-          distanza: pendingNormalized.distanza,
-          stato: row.stato,
-          durataMinuti,
-          posti_richiesti: row.posti_richiesti
+        // ✅ USO SOCKET.JS
+        sendNotification({
+          userId: driverId,
+          role: 'autista',
+          notification: notifDriver
         });
+
+        try {
+          const io = getIO();
+          io.to(`autista_${driverId}`).emit('pending_update', {
+            id: row.id,
+            cliente: req.user.nome,
+            origine: pendingNormalized.origine,
+            destinazione: pendingNormalized.destinazione,
+            origine_address: localitaOrigine,
+            destinazione_address: localitaDestinazione,
+            prezzo: pendingNormalized.prezzo,
+            distanza: pendingNormalized.distanza,
+            stato: row.stato,
+            durataMinuti,
+            posti_richiesti: row.posti_richiesti
+          });
+        } catch (err) {
+          console.warn('⚠️ WS non disponibile:', err.message);
+        }
       }
 
       // 🔹 Notifiche cliente
@@ -200,7 +205,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const notifCliente = notifClienteRes.rows[0];
       notifCliente.displayDate = formatNotificationDate(new Date(notifCliente.created_at));
 
-      io.to(`cliente_${clienteId}`).emit('new_notification', notifCliente);
+      sendNotification({
+        userId: clienteId,
+        role: 'cliente',
+        notification: notifCliente
+      });
     }
 
     res.json({

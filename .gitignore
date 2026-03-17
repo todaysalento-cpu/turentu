@@ -34,3 +34,5 @@ Thumbs.db
 
 # Optional: temporary files
 *.tmp
+.vercel
+.env*.local

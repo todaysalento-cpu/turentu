@@ -1,15 +1,18 @@
-// ======================= server.js =======================
+// ======================= server.js (HTTP + Socket.IO + Redis) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import http from 'http';
+import { Server } from 'socket.io';
 
-import { pool } from './db/db.js';
-import * as pendingService from './services/pending/pending.service.js';
-import { loadCachesUltra } from './services/search/search.cache.js';
+// ===== SOCKET SETUP =====
+import { setupSocket } from './socket.js';
 
-// ROUTERS
+// ===== REDIS =====
+import { redisClient } from './redis.js';
+
+// ===== ROUTERS =====
 import adminRouter from './routes/admin/index.js';
 import bookingRouter from './routes/booking.routes.js';
 import { bookingClienteRouter } from './routes/booking.cliente.routes.js';
@@ -22,28 +25,60 @@ import { pendingRouter } from './routes/pending.routes.js';
 import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
-import { chatRouter } from './routes/chat.routes.js'; // ✅ chat router
+import { chatRouter } from './routes/chat.routes.js';
+import searchRouter from './routes/search.routes.js'; // ✅ nuovo
 
-// SOCKET.IO
-import { Server } from 'socket.io';
-import { setupSocket } from './socket.js';
+// ===== SERVICES =====
+import * as pendingService from './services/pending/pending.service.js';
+import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
 
-// ===== MIDDLEWARE =====
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+// =======================
+// CORS
+// =======================
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS not allowed'));
+  },
+  credentials: true
+}));
+
+// =======================
+// STRIPE WEBHOOK (RAW BODY)
+// Deve stare PRIMA di express.json()
+// =======================
+app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
+
+// =======================
+// MIDDLEWARE STANDARD
+// =======================
 app.use(cookieParser());
-app.use('/webhook-stripe', stripeWebhookRouter);
 app.use(express.json());
 
-// ===== LOG REQUEST =====
-app.use((req, res, next) => {
-  console.log(`🌐 ${req.method} ${req.url} | Body:`, req.body, '| Query:', req.query);
-  next();
-});
+// =======================
+// LOGGING DEV
+// =======================
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`🌐 ${req.method} ${req.url}`);
+    if (Object.keys(req.body || {}).length) console.log('📦 Body:', req.body);
+    if (Object.keys(req.query || {}).length) console.log('🔎 Query:', req.query);
+    next();
+  });
+}
 
-// ===== ROUTES =====
+// =======================
+// ROUTES
+// =======================
 app.use('/auth', authRouter);
 app.use('/notifications', notificationsRouter);
 app.use('/booking', bookingRouter);
@@ -55,40 +90,62 @@ app.use('/pending', pendingRouter);
 app.use('/tariffe', tariffeRouter);
 app.use('/distanza', distanzaRouter);
 app.use('/admin', adminRouter);
-app.use('/chat', chatRouter); // ✅ chat router montato
+app.use('/chat', chatRouter);
+app.use('/search', searchRouter); // ✅ aggiunto
 
-// ===== SERVER HTTP & SOCKET.IO =====
-const serverHttp = http.createServer(app);
+// =======================
+// HEALTH CHECK
+// =======================
+app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() }));
+app.get('/ping', (_, res) => res.json({ status: 'pong', message: 'API server funzionante!' }));
 
-export const io = new Server(serverHttp, {
-  cors: { origin: 'http://localhost:3000', methods: ['GET','POST'], credentials: true }
+// =======================
+// 404
+// =======================
+app.use((req, res) => res.status(404).json({ error: 'Not Found', path: req.originalUrl }));
+
+// =======================
+// GLOBAL ERROR HANDLER
+// =======================
+app.use((err, req, res, next) => {
+  console.error('💥 ERROR:', err.message);
+  res.status(err.status || 500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+  });
 });
 
-// ===== Setup Socket.IO =====
+// =======================
+// SERVER HTTP + SOCKET.IO
+// =======================
+const port = process.env.PORT || 3000;
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET','POST'], credentials: true }
+});
+
+// setup Socket.IO
 setupSocket(io);
 
-// ===== HEALTH CHECK =====
-app.get('/', (_, res) => {
-  console.log('✅ Health check chiamato');
-  res.json({ status: 'OK', service: 'TURENTU API' });
-});
-
-// ===== SEARCH =====
-app.post('/search', async (req, res) => {
+// =======================
+// INIT CACHES REDIS
+// =======================
+const initCaches = async () => {
   try {
-    const form = req.body;
-    if (!form.coordDest) form.coordDest = { lat: 0, lon: 0 };
-    const { cercaSlotUltra } = await import('./services/search/search.service.js');
-    const risultati = await cercaSlotUltra(form);
-    console.log('🔍 Search risultati:', risultati.length);
-    res.json(risultati);
-  } catch (err) {
-    console.error('Search error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+    if (!redisClient.isOpen) await redisClient.connect();
+    console.log('🟢 Redis pronto');
 
-// ===== CLEANUP PENDING =====
+    await loadCachesUltra(); // può salvare direttamente dati in Redis
+    console.log('🗃️ Caches search caricate in Redis');
+  } catch (err) {
+    console.error('Errore init caches:', err.message);
+  }
+};
+
+// =======================
+// CLEANUP PENDING
+// =======================
 const cleanupPending = async () => {
   try {
     const count = await pendingService.cleanupExpired();
@@ -98,19 +155,14 @@ const cleanupPending = async () => {
   }
 };
 
-// ===== LOAD CACHES =====
-const initCaches = async () => {
-  try {
-    await loadCachesUltra();
-    console.log('🗃️ Caches search caricate');
-  } catch (err) {
-    console.error('Errore load caches:', err.message);
-  }
-};
-
-// ===== START SERVER =====
-serverHttp.listen(PORT, async () => {
-  console.log(`🚀 Server avviato su http://localhost:${PORT}`);
+// =======================
+// START SERVER
+// =======================
+server.listen(port, async () => {
+  console.log(`🚀 Server avviato su http://localhost:${port}`);
+  console.log('🟢 Socket.IO pronto');
   await initCaches();
   await cleanupPending();
 });
+
+export { io, server };

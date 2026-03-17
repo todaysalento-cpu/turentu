@@ -1,4 +1,4 @@
-// services/search/search.service.js
+// ======================= services/search/search.service.js =======================
 import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
@@ -9,13 +9,13 @@ import { formatResults } from './formatter/search.formatter.js';
  * @returns {Array} risultati formattati per frontend
  */
 export async function cercaSlotUltra(richiesta) {
-  // Assicura che la cache sia caricata
+  // Assicura che la cache sia caricata in Redis
   await loadCachesUltra();
 
-  // Leggi le cache
-  const veicoliCache = getVeicoliCache();
-  const disponibilitaCache = getDisponibilitaCache();
-  const corseCache = getCorseCache();
+  // Leggi le cache da Redis (getter ora asincroni)
+  const veicoliCache = await getVeicoliCache();
+  const disponibilitaCache = await getDisponibilitaCache();
+  const corseCache = await getCorseCache();
 
   if (!veicoliCache || !disponibilitaCache || !corseCache) {
     throw new Error('Cache non caricata correttamente');
@@ -54,7 +54,7 @@ export async function cercaSlotPerCliente(clienteId, richiesta) {
  */
 export async function cercaSlotPerAutista(veicoloId) {
   await loadCachesUltra();
-  const corseCache = getCorseCache();
+  const corseCache = await getCorseCache();
   if (!corseCache) return [];
   return corseCache.filter(c => c.veicolo_id === veicoloId);
 }

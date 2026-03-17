@@ -2,10 +2,10 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { pool } from '../db/db.js';
-import { io } from '../server.js';
 import * as pendingService from '../services/pending/pending.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 import { calcolaPrezzo } from '../utils/pricing.util.js';
+import { getIO } from '../socket.js'; // <-- import corretto
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 const router = express.Router();
@@ -42,7 +42,6 @@ router.post(
       const roomId = corsaId || pendingId;
 
       switch (event.type) {
-
         case 'payment_intent.amount_capturable_updated':
           await aggiornaStato(intent.id, 'autorizzazione', client);
           break;
@@ -87,6 +86,7 @@ async function aggiornaStato(stripeIntentId, stato, client) {
  */
 async function handlePaymentSuccess({ intent, tipo, pendingId, corsaId, clienteId, roomId, client }) {
   await aggiornaStato(intent.id, 'pagato', client);
+  const io = getIO();
 
   // 🔹 Prenotazione già esistente
   if (tipo === 'prenota' && corsaId) {
@@ -140,31 +140,18 @@ async function handlePaymentSuccess({ intent, tipo, pendingId, corsaId, clienteI
     if (!corsaRes[0]) throw new Error(`Corsa ${corsaId} non trovata`);
     const corsa = corsaRes[0];
 
-    // 🔹 Log e parse distanza
-    console.log('📌 Corsa recuperata dal DB:', corsa);
     corsa.distanza = parseFloat(corsa.distanza);
-    if (isNaN(corsa.distanza)) {
-      console.warn(`⚠️ Distanza corsa ${corsaId} non valida, impostata a 0`);
-      corsa.distanza = 0;
-    }
-    console.log(`📏 Distanza convertita per calcolo prezzo: ${corsa.distanza} (tipo: ${typeof corsa.distanza})`);
+    if (isNaN(corsa.distanza)) corsa.distanza = 0;
 
     for (const p of prenotazioni) {
       try {
         const prezzoFinale = await calcolaPrezzo(
-          {
-            ...corsa,
-            distanza: corsa.distanza,
-            posti_prenotati: corsa.posti_prenotati,
-            primo_posto: corsa.primo_posto
-          },
+          { ...corsa, distanza: corsa.distanza, posti_prenotati: corsa.posti_prenotati, primo_posto: corsa.primo_posto },
           p.posti_prenotati,
           'prenotabile'
         );
 
         const amount = Math.round(prezzoFinale * 100);
-
-        console.log(`💰 Pagamento da catturare prenotazione ${p.prenotazione_id}: prezzoFinale=${prezzoFinale}, amount=${amount}`);
 
         await stripe.paymentIntents.capture(p.stripe_payment_intent, { amount_to_capture: amount });
 
@@ -189,6 +176,7 @@ async function handlePaymentSuccess({ intent, tipo, pendingId, corsaId, clienteI
 
 async function handlePaymentFailed({ intent, roomId, client }) {
   await aggiornaStato(intent.id, 'annullato', client);
+  const io = getIO();
 
   io.to(`prenotazione_cliente_${roomId}`).emit('prenotazione_update', {
     status: 'annullato',

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test Ricerca Corse – TURENTU</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 30px;
+    }
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    button {
+      background: #22c55e;
+      border: none;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    pre {
+      background: #020617;
+      padding: 15px;
+      margin-top: 20px;
+      max-height: 400px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🚗 Test Ricerca Corse</h1>
+
+  <label>Indirizzo di partenza</label>
+  <input id="address" value="Roma Termini" />
+
+  <button onclick="search()">Cerca corse</button>
+
+  <pre id="output">In attesa…</pre>
+
+  <script>
+    async function search() {
+      const out = document.getElementById("output");
+      out.textContent = "⏳ Caricamento...";
+
+      try {
+        // 1️⃣ GEOCODE
+        const geoRes = await fetch(
+          `http://localhost:3001/geocode?address=${encodeURIComponent(
+            document.getElementById("address").value
+          )}`
+        );
+
+        if (!geoRes.ok) throw new Error("Geocoding fallito");
+
+        const geo = await geoRes.json();
+
+        // 2️⃣ SEARCH
+        const searchRes = await fetch(
+          "http://localhost:3001/search",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              lat: geo.lat,
+              lon: geo.lon,
+              raggio_km: 5,
+              posti_richiesti: 1
+            })
+          }
+        );
+
+        if (!searchRes.ok) throw new Error("Search fallita");
+
+        const data = await searchRes.json();
+        out.textContent = JSON.stringify(data, null, 2);
+
+      } catch (err) {
+        out.textContent = "❌ Errore: " + err.message;
+      }
+    }
+  </script>
+
+</body>
+</html>

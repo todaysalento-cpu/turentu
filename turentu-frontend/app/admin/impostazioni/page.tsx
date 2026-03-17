@@ -1,0 +1,1 @@
+﻿<div>Impostazioni Globali</div>

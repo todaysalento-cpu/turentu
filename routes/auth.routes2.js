@@ -1,0 +1,166 @@
+// ======================= routes/auth.routes.js =======================
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { pool } from '../db/db.js';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
+
+// -------------------- Nodemailer --------------------
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: process.env.SMTP_SECURE === 'true', // true per 465
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// ===================== LOGIN =====================
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, email, password, tipo, nome FROM utente WHERE email = $1',
+      [email]
+    );
+    const user = result.rows[0];
+
+    if (!user) return res.status(401).json({ message: 'Utente non trovato' });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ message: 'Password errata' });
+
+    const payload = {
+      id: user.id,
+      role: user.tipo,
+      email: user.email,
+      nome: user.nome,
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: false, // localhost
+      path: '/',
+    });
+
+    res.json({ ...payload, token }); // restituiamo anche il token per test via curl
+  } catch (err) {
+    console.error('❌ Auth login error:', err);
+    res.status(500).json({ message: 'Errore server' });
+  }
+});
+
+// ===================== ME =====================
+router.get('/me', (req, res) => {
+  const token = req.cookies?.token || req.headers['authorization']?.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Non autenticato' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    res.json(payload);
+  } catch (err) {
+    return res.status(401).json({ message: 'Token non valido' });
+  }
+});
+
+// ===================== LOGOUT =====================
+router.post('/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: false, // localhost
+    path: '/',
+  });
+
+  res.json({ message: 'Logout eseguito' });
+});
+
+// ===================== FORGOT PASSWORD =====================
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email richiesta' });
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query(
+      'SELECT id, nome FROM utente WHERE email=$1',
+      [email]
+    );
+    if (!userRes.rows.length) return res.status(404).json({ message: 'Utente non trovato' });
+
+    const user = userRes.rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 3600 * 1000); // 1 ora
+
+    await client.query(
+      `UPDATE utente SET reset_token=$1, reset_expires=$2 WHERE id=$3`,
+      [token, expires, user.id]
+    );
+
+    const resetLink = `https://tuosito.it/reset-password?token=${token}`;
+    await transporter.sendMail({
+      from: '"Il tuo sito" <no-reply@tuosito.it>',
+      to: email,
+      subject: 'Recupero password',
+      html: `<p>Ciao ${user.nome},</p>
+             <p>Hai richiesto di resettare la tua password.</p>
+             <p>Clicca qui per impostarne una nuova:</p>
+             <a href="${resetLink}">${resetLink}</a>
+             <p>Il link scade tra 1 ora.</p>`
+    });
+
+    res.json({ message: 'Email inviata con istruzioni per resettare la password' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Errore server' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== RESET PASSWORD =====================
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ message: 'Token e nuova password richiesti' });
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query(
+      `SELECT id FROM utente WHERE reset_token=$1 AND reset_expires > NOW()`,
+      [token]
+    );
+    if (!userRes.rows.length) return res.status(400).json({ message: 'Token non valido o scaduto' });
+
+    const userId = userRes.rows[0].id;
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await client.query(
+      `UPDATE utente SET password=$1, reset_token=NULL, reset_expires=NULL WHERE id=$2`,
+      [hashed, userId]
+    );
+
+    res.json({ message: 'Password aggiornata con successo' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Errore server' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== TEST ROUTE =====================
+// solo per debug, non richiede autenticazione
+router.get('/test', (req, res) => {
+  res.json({ message: 'Auth routes funzionanti' });
+});
+
+export { router };

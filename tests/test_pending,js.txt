@@ -1,0 +1,28 @@
+// ================== test-pending.js ==================
+import { pool } from './db/db.js';
+
+async function createPending() {
+  try {
+    const clienteId = 1;  // sostituisci con un cliente esistente
+    const autistaId = 5;  // il tuo autista
+
+    const origine = 'Via Roma 1';
+    const destinazione = 'Piazza Duomo 10';
+    const prezzo = 15.5;
+
+    const res = await pool.query(
+      `INSERT INTO corsa (cliente_id, autista_id, origine, destinazione, prezzo, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING *`,
+      [clienteId, autistaId, origine, destinazione, prezzo]
+    );
+
+    console.log('✅ Pending creato:', res.rows[0]);
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Errore creazione pending:', err);
+    process.exit(1);
+  }
+}
+
+createPending();

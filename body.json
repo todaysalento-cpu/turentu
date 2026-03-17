@@ -1,0 +1,8 @@
+{
+  "origine": { "lat": 41.8976, "lon": 12.4823 },
+  "destinazione": { "lat": 41.9009, "lon": 12.5001 },
+  "data": "2026-01-30T11:00:00.000Z",
+  "passeggeri": 2,
+  "km": 3,
+  "posti_richiesti": 1
+}

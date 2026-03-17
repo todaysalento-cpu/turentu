@@ -1,0 +1,5 @@
+// Cache in memoria (oggetto)
+const cache = {
+  "slot:1": { veicolo_id: 1, coord: { lat: 41.891, lon: 12.495 }, prezzo: 5.00, slot_libero: true },
+  "slot:2": { veicolo_id: 2, coord: { lat: 41.892, lon: 12.496 }, prezzo: 5.00, slot_libero: true }
+};

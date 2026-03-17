@@ -1,0 +1,62 @@
+{
+  "name": "ride-system",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --verbose"
+  },
+  "dependencies": {
+    "axios": "^1.13.5",
+    "bcryptjs": "^3.0.3",
+    "car-query": "^1.0.12",
+    "chart.js": "^4.5.1",
+    "chartjs-node-canvas": "^5.0.0",
+    "cookie-parser": "^1.4.7",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "fetch-cookie": "^3.2.0",
+    "jose": "^6.1.3",
+    "jsonwebtoken": "^9.0.3",
+    "mode": "^0.3.2",
+    "ngeohash": "^0.6.3",
+    "node-fetch": "^3.3.2",
+    "node-geocoder": "^4.4.1",
+    "nodemailer": "^8.0.1",
+    "openai": "^6.27.0",
+    "pg": "^8.18.0",
+    "react-hot-toast": "^2.6.0",
+    "recharts": "^3.7.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "stripe": "^20.3.1",
+    "tough-cookie": "^6.0.0",
+    "undici": "^6.23.0"
+  },
+  "devDependencies": {
+    "chalk": "^5.3.0",
+    "jest": "^29.7.0",
+    "jest-html-reporter": "^3.7.0",
+    "jest-spec-reporter": "^1.0.19"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "reporters": [
+      "default",
+      "jest-spec-reporter",
+      [
+        "jest-html-reporter",
+        {
+          "pageTitle": "Report Test TURENTU",
+          "outputPath": "reports/test-report.html",
+          "includeFailureMsg": true,
+          "includeConsoleLog": true
+        }
+      ]
+    ]
+  }
+}

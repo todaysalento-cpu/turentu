@@ -26,7 +26,7 @@ import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
 import { chatRouter } from './routes/chat.routes.js';
-import searchRouter from './routes/search.routes.js'; // ✅ nuovo
+import searchRouter from './routes/search.routes.js';
 
 // ===== SERVICES =====
 import * as pendingService from './services/pending/pending.service.js';
@@ -37,11 +37,7 @@ const app = express();
 // =======================
 // CORS
 // =======================
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+const allowedOrigins = [process.env.FRONTEND_URL].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -91,7 +87,7 @@ app.use('/tariffe', tariffeRouter);
 app.use('/distanza', distanzaRouter);
 app.use('/admin', adminRouter);
 app.use('/chat', chatRouter);
-app.use('/search', searchRouter); // ✅ aggiunto
+app.use('/search', searchRouter);
 
 // =======================
 // HEALTH CHECK
@@ -122,7 +118,11 @@ const port = process.env.PORT || 3000;
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET','POST'], credentials: true }
+  cors: {
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
 });
 
 // setup Socket.IO
@@ -132,11 +132,13 @@ setupSocket(io);
 // INIT CACHES REDIS
 // =======================
 const initCaches = async () => {
+  if (!redisClient) return console.warn('⚠️ Redis non configurato');
+
   try {
     if (!redisClient.isOpen) await redisClient.connect();
     console.log('🟢 Redis pronto');
 
-    await loadCachesUltra(); // può salvare direttamente dati in Redis
+    await loadCachesUltra();
     console.log('🗃️ Caches search caricate in Redis');
   } catch (err) {
     console.error('Errore init caches:', err.message);
@@ -158,8 +160,8 @@ const cleanupPending = async () => {
 // =======================
 // START SERVER
 // =======================
-server.listen(port, async () => {
-  console.log(`🚀 Server avviato su http://localhost:${port}`);
+server.listen(port, '0.0.0.0', async () => {
+  console.log(`🚀 Server avviato su port ${port}`);
   console.log('🟢 Socket.IO pronto');
   await initCaches();
   await cleanupPending();

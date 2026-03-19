@@ -1,0 +1,150 @@
+== app/admin/dashboard/MapLive.tsx ==
+Line 28 TS2322 - Type 'number[][]' is not assignable to type '[number, number][]'. [Severity 1]
+
+== app/autista/disponibilita/page.tsx ==
+Line 235 TS7006 - Parameter 'i' implicitly has an 'any' type. [Severity 1]
+Line 286 TS2322 - Type '{ data: { start: string | null; fine: string | null; giorni_esclusi: number[]; inattivita: Inattivita[]; id: number; modello: string; }[]; layout: string; columns: { key: string; header: string; render: (row: any) => any; }[]; actions: (row: any) => Element; }' is not assignable to type 'IntrinsicAttributes & Props<any>'. [Severity 1]
+
+== app/autista/live/page.tsx ==
+Line 154 TS2322 - Type '{ corse: any[]; onToggleCorsa: (corsa: any) => Promise<void>; loadingId: number | null; unreadCounts: Record<number, number>; onSelectCorsa: (corsa: any) => void; }' is not assignable to type 'IntrinsicAttributes & CorseGiornataProps'. [Severity 1]
+Line 166 TS2769 - No overload matches this call. [Severity 1]
+
+== app/autista/page.tsx ==
+Line 4 TS2307 - Cannot find module './live' or its corresponding type declarations. [Severity 1]
+
+== app/autista/tariffe/page.tsx ==
+Line 76 TS7006 - Parameter 't' implicitly has an 'any' type. [Severity 1]
+Line 140 TS2322 - Type '{ key: number; veicoloModello: string; targa: string | undefined; tariffe: Tariffa[]; distanzaSimulata: number | undefined; origineSimulata: string | undefined; destinazioneSimulata: string | undefined; onConfigure: () => void; onSimula: () => void; showAddButton: boolean; onAdd: () => void; }' is not assignable to type 'IntrinsicAttributes & Props'. [Severity 1]
+Line 166 TS2322 - Type '{ open: true; veicoloId: number; veicoloModello: string; tariffeIniziali: Tariffa[]; loading: boolean; onClose: () => void; onSaveAll: (savedTariffe: Tariffa[]) => void; onSimula: () => void; distanzaSimulata: number | undefined; origineSimulata: string | undefined; destinazioneSimulata: string | undefined; }' is not assignable to type 'IntrinsicAttributes & TariffeModalProps'. [Severity 1]
+
+== app/autista/veicolo/page.tsx ==
+Line 127 TS2719 - Type '(v: Veicolo) => void' is not assignable to type '(v: Veicolo) => void'. Two different types with this name exist, but they are unrelated. [Severity 1]
+
+== app/cliente/prenotazioni/page.tsx ==
+Line 164 TS2769 - No overload matches this call. [Severity 1]
+
+== app/Header.tsx ==
+Line 8 TS2339 - Property 'setLoginOpen' does not exist on type 'UserContextType'. [Severity 1]
+
+== app/register/page.tsx ==
+Line 46 TS2554 - Expected 2 arguments, but got 1. [Severity 1]
+
+== app/ricerca/useRicerca.ts ==
+Line 122 TS2339 - Property 'durataMinuti' does not exist on type 'Risultato'. [Severity 1]
+Line 123 TS2339 - Property 'start_datetime' does not exist on type 'Risultato'. [Severity 1]
+Line 130 TS7006 - Parameter 'r' implicitly has an 'any' type. [Severity 1]
+Line 83 TS2367 - This comparison appears to be unintentional because the types 'string[] | undefined' and 'string' have no overlap. [Severity 3]
+
+== components/ActionButton.tsx ==
+Line 3 TS2614 - Module '"../app/page"' has no exported member 'FiltroSlot'. Did you mean to use 'import FiltroSlot from "../app/page"' instead? [Severity 3]
+
+== components/AdminMap.tsx ==
+Line 16 TS2304 - Cannot find name 'useEffect'. [Severity 3]
+
+== components/BookingFlow.tsx ==
+Line 135 TS2322 - Type 'string | undefined' is not assignable to type 'string'. [Severity 1]
+Line 136 TS2322 - Type 'string | undefined' is not assignable to type 'string'. [Severity 1]
+Line 16 TS2614 - Module '"../app/page"' has no exported member 'FiltroSlot'. Did you mean to use 'import FiltroSlot from "../app/page"' instead? [Severity 3]
+
+== components/CalendarioDesktop.tsx ==
+Line 102 TS2322 - Type '(date: Date) => void' is not assignable to type '(value: Value, event: MouseEvent<HTMLButtonElement, MouseEvent>) => void'. [Severity 1]
+
+== components/ChatList.tsx ==
+Line 8 TS2339 - Property 'corsa' does not exist on type 'ChatContextType'. [Severity 1]
+Line 8 TS2339 - Property 'openChat' does not exist on type 'ChatContextType'. [Severity 1]
+Line 23 TS2345 - Argument of type '() => (() => Socket<DefaultEventsMap, DefaultEventsMap>) | undefined' is not assignable to parameter of type 'EffectCallback'. [Severity 2]
+
+== components/ChatPanel.tsx ==
+Line 119 TS2322 - Type 'number | null' is not assignable to type 'number'. [Severity 1]
+Line 120 TS2322 - Type 'string | null' is not assignable to type 'string'. [Severity 1]
+Line 206 TS7006 - Parameter 't' implicitly has an 'any' type. [Severity 1]
+Line 206 TS7006 - Parameter 'sum' implicitly has an 'any' type. [Severity 1]
+Line 226 TS7006 - Parameter 'thread' implicitly has an 'any' type. [Severity 1]
+Line 228 TS7006 - Parameter 'p' implicitly has an 'any' type. [Severity 1]
+Line 230 TS7006 - Parameter 'n' implicitly has an 'any' type. [Severity 1]
+Line 232 TS7006 - Parameter 'c' implicitly has an 'any' type. [Severity 1]
+Line 232 TS7006 - Parameter 'acc' implicitly has an 'any' type. [Severity 1]
+Line 48 TS18047 - 'user.role' is possibly 'null'. [Severity 2]
+Line 48 TS7053 - Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{ autista: boolean; cliente: boolean; }'. [Severity 2]
+Line 56 TS2353 - Object literal may only specify known properties, and 'start_datetime' does not exist in type 'CorsaThread'. [Severity 2]
+Line 75 TS2345 - Argument of type '() => (() => Socket<DefaultEventsMap, DefaultEventsMap>) | undefined' is not assignable to parameter of type 'EffectCallback'. [Severity 2]
+Line 86 TS2353 - Object literal may only specify known properties, and 'start_datetime' does not exist in type 'CorsaThread'. [Severity 2]
+Line 94 TS2345 - Argument of type 'number | null' is not assignable to parameter of type 'number'. [Severity 2]
+Line 121 TS18047 - 'user.role' is possibly 'null'. [Severity 2]
+Line 127 TS2345 - Argument of type 'number | null' is not assignable to parameter of type 'number'. [Severity 2]
+Line 291 TS18047 - 'user.role' is possibly 'null'. [Severity 2]
+
+== components/Header.tsx ==
+Line 186 TS2339 - Property 'title' does not exist on type 'Notification'. [Severity 1]
+Line 187 TS2339 - Property 'route' does not exist on type 'Notification'. [Severity 1]
+Line 187 TS2339 - Property 'route' does not exist on type 'Notification'. [Severity 1]
+Line 188 TS2339 - Property 'departure' does not exist on type 'Notification'. [Severity 1]
+Line 188 TS2339 - Property 'departure' does not exist on type 'Notification'. [Severity 1]
+Line 81 TS2353 - Object literal may only specify known properties, and 'id' does not exist in type 'CorsaThread'. [Severity 2]
+Line 88 TS2345 - Argument of type 'number' is not assignable to parameter of type 'string'. [Severity 2]
+Line 89 TS18047 - 'user' is possibly 'null'. [Severity 2]
+Line 89 TS2345 - Argument of type 'number' is not assignable to parameter of type 'string'. [Severity 2]
+
+== components/HeaderMobile.tsx ==
+Line 5 TS2307 - Cannot find module '../RicercaPage' or its corresponding type declarations. [Severity 1]
+
+== components/LocationSheet.tsx ==
+Line 33 TS2554 - Expected 1 arguments, but got 2. [Severity 1]
+
+== components/MobileBookingCard.tsx ==
+Line 8 TS2307 - Cannot find module './SearchFormTypes' or its corresponding type declarations. [Severity 1]
+Line 5 TS2614 - Module '"./ui/appInput"' has no exported member 'inputBaseClasses'. Did you mean to use 'import inputBaseClasses from "./ui/appInput"' instead? [Severity 3]
+
+== components/RegisterForm.tsx ==
+Line 40 TS2554 - Expected 2 arguments, but got 1. [Severity 1]
+
+== components/RisultatiList.tsx ==
+Line 5 TS2307 - Cannot find module '../types' or its corresponding type declarations. [Severity 1]
+Line 105 TS7006 - Parameter 's' implicitly has an 'any' type. [Severity 1]
+Line 105 TS7006 - Parameter 'i' implicitly has an 'any' type. [Severity 1]
+Line 6 TS2614 - Module '"../app/page"' has no exported member 'FiltroSlot'. Did you mean to use 'import FiltroSlot from "../app/page"' instead? [Severity 3]
+
+== components/RisultatiSelection.tsx ==
+Line 68 TS2322 - Type '{ filtri: string[]; selected: string; onSelect: (label: string) => void; className: string; tabClassName: string; selectedTabClassName: string; }' is not assignable to type 'IntrinsicAttributes & TabsProps'. [Severity 1]
+Line 6 TS2614 - Module '"../app/page"' has no exported member 'FiltroSlot'. Did you mean to use 'import FiltroSlot from "../app/page"' instead? [Severity 3]
+
+== components/RisultatoItem.tsx ==
+Line 1 TS2307 - Cannot find module '../RicercaPage' or its corresponding type declarations. [Severity 1]
+
+== components/SearchForm.tsx ==
+Line 14 TS2307 - Cannot find module '../types' or its corresponding type declarations. [Severity 1]
+Line 100 TS2322 - Type '{ children: (string | Element)[]; title: string; type: string; }' is not assignable to type 'IntrinsicAttributes & InfoHeroProps'. [Severity 1]
+Line 214 TS2322 - Type '{ children: (string | Element)[]; title: string; type: string; }' is not assignable to type 'IntrinsicAttributes & InfoHeroProps'. [Severity 1]
+Line 7 TS1261 - Already included file name 'D:/turentu/servizi/project-root/turentu-frontend/components/MobileSearchCTA.tsx' differs from file name 'D:/turentu/servizi/project-root/turentu-frontend/components/MobileSearchCta.tsx' only in casing. [Severity 3]
+Line 9 TS1261 - Already included file name 'D:/turentu/servizi/project-root/turentu-frontend/components/ui/appInput.tsx' differs from file name 'D:/turentu/servizi/project-root/turentu-frontend/components/ui/AppInput.tsx' only in casing. [Severity 3]
+
+== components/SocketProvider.tsx ==
+Line 5 TS2307 - Cannot find module './UserContext' or its corresponding type declarations. [Severity 1]
+Line 6 TS2307 - Cannot find module './NotificationContext' or its corresponding type declarations. [Severity 1]
+Line 19 TS2345 - Argument of type '() => (() => Socket<DefaultEventsMap, DefaultEventsMap>) | undefined' is not assignable to parameter of type 'EffectCallback'. [Severity 2]
+
+== components/steps/StepConferma.tsx ==
+Line 3 TS2304 - Cannot find name 'Risultato'. [Severity 3]
+
+== components/steps/StepPagamento.tsx ==
+Line 171 TS2339 - Property 'pending_id' does not exist on type '{ veicolo_id: number; start_datetime: string; durata_minuti: number; posti_richiesti: number; origine: Coord; destinazione: Coord; localitaOrigine: string; localitaDestinazione: string; posti_totali: number | undefined; distanzaKm: number; }'. [Severity 1]
+
+
+== components/ui/appInput.tsx ==
+Line 4 TS2430 - Interface 'AppInputProps' incorrectly extends interface 'InputHTMLAttributes<HTMLInputElement>'. [Severity 3]
+
+
+
+== components/VeicoloTable.tsx ==
+Line 3 TS2307 - Cannot find module '../../../components/GenericTable' or its corresponding type declarations. [Severity 1]
+Line 4 TS2307 - Cannot find module '../../../components/VeicoloForm' or its corresponding type declarations. [Severity 1]
+Line 100 TS7006 - Parameter 'nuovoVeicolo' implicitly has an 'any' type. [Severity 1]
+
+== context/NotificationContext.tsx ==
+Line 120 TS2345 - Argument of type '() => (() => void | null) | undefined' is not assignable to parameter of type 'EffectCallback'. [Severity 2]
+Line 132 TS2345 - Argument of type '() => (() => Socket<DefaultEventsMap, DefaultEventsMap>) | undefined' is not assignable to parameter of type 'EffectCallback'. [Severity 2]
+
+== hooks/usePlacesAutocomplete.ts ==
+Line 33 TS7006 - Parameter 'predictions' implicitly has an 'any' type. [Severity 1]
+Line 36 TS7006 - Parameter 'p' implicitly has an 'any' type. [Severity 1]
+PS D:\turentu\servizi\project-root\turentu-frontend>

@@ -34,31 +34,18 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS =======================
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'https://turentumi.vercel.app',
-  'https://turentu-m1fl5su2v-turentu.vercel.app'
-].filter(Boolean);
-
-// Middleware CORS principale
+// ======================= CORS (FIX DEFINITIVO) =======================
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // richieste dirette (Postman, curl)
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS not allowed'));
-  },
+  origin: true, // 🔥 accetta qualsiasi origin (Vercel friendly)
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Risposta automatica alle preflight OPTIONS
+// 🔥 fondamentale per preflight
 app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: true,
+  credentials: true
 }));
 
 // ======================= STRIPE WEBHOOK (RAW BODY)
@@ -94,18 +81,32 @@ app.use('/chat', chatRouter);
 app.use('/search', searchRouter);
 
 // ======================= HEALTH CHECK
-app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() }));
-app.get('/ping', (_, res) => res.json({ status: 'pong', message: 'API server funzionante!' }));
+app.get('/', (_, res) =>
+  res.json({
+    status: 'OK',
+    service: 'TURENTU API',
+    timestamp: new Date().toISOString()
+  })
+);
+
+app.get('/ping', (_, res) =>
+  res.json({ status: 'pong', message: 'API server funzionante!' })
+);
 
 // ======================= 404
-app.use((req, res) => res.status(404).json({ error: 'Not Found', path: req.originalUrl }));
+app.use((req, res) =>
+  res.status(404).json({ error: 'Not Found', path: req.originalUrl })
+);
 
 // ======================= GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+    message:
+      process.env.NODE_ENV === 'production'
+        ? 'Something went wrong'
+        : err.message
   });
 });
 
@@ -115,7 +116,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: true, // 🔥 stesso fix anche qui
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   }
@@ -127,6 +128,7 @@ setupSocket(io);
 // ======================= INIT CACHES REDIS
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
+
   try {
     if (!redisClient.isOpen) await redisClient.connect();
     console.log('🟢 Redis pronto');
@@ -152,6 +154,7 @@ const cleanupPending = async () => {
 server.listen(port, '0.0.0.0', async () => {
   console.log(`🚀 Server avviato su port ${port}`);
   console.log('🟢 Socket.IO pronto');
+
   await initCaches();
   await cleanupPending();
 });

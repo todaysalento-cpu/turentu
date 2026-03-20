@@ -36,8 +36,10 @@ const app = express();
 
 // ======================= CORS =======================
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'https://turentu-m1fl5su2v-turentu.vercel.app'
-];
+  process.env.FRONTEND_URL,                     // variabile d'ambiente
+  'https://turentumi.vercel.app',               // frontend production
+  'https://turentu-m1fl5su2v-turentu.vercel.app' // alias se serve
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -45,18 +47,18 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS not allowed'));
   },
-  credentials: true, // essenziale per inviare cookie cross-domain
+  credentials: true, // essenziale per inviare cookie cross-site
 }));
 
-// ======================= STRIPE WEBHOOK (RAW BODY) =======================
+// ======================= STRIPE WEBHOOK (RAW BODY)
 // Deve stare PRIMA di express.json()
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
-// ======================= MIDDLEWARE STANDARD =======================
+// ======================= MIDDLEWARE STANDARD
 app.use(cookieParser());
 app.use(express.json());
 
-// ======================= LOGGING DEV =======================
+// ======================= LOGGING DEV
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     console.log(`🌐 ${req.method} ${req.url}`);
@@ -66,7 +68,7 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// ======================= ROUTES =======================
+// ======================= ROUTES
 app.use('/auth', authRouter);
 app.use('/notifications', notificationsRouter);
 app.use('/booking', bookingRouter);
@@ -81,14 +83,14 @@ app.use('/admin', adminRouter);
 app.use('/chat', chatRouter);
 app.use('/search', searchRouter);
 
-// ======================= HEALTH CHECK =======================
+// ======================= HEALTH CHECK
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() }));
 app.get('/ping', (_, res) => res.json({ status: 'pong', message: 'API server funzionante!' }));
 
-// ======================= 404 =======================
+// ======================= 404
 app.use((req, res) => res.status(404).json({ error: 'Not Found', path: req.originalUrl }));
 
-// ======================= GLOBAL ERROR HANDLER =======================
+// ======================= GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
   res.status(err.status || 500).json({
@@ -97,7 +99,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ======================= SERVER HTTP + SOCKET.IO =======================
+// ======================= SERVER HTTP + SOCKET.IO
 const port = process.env.PORT || 3000;
 const server = http.createServer(app);
 
@@ -112,7 +114,7 @@ const io = new Server(server, {
 // setup Socket.IO
 setupSocket(io);
 
-// ======================= INIT CACHES REDIS =======================
+// ======================= INIT CACHES REDIS
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
 
@@ -127,7 +129,7 @@ const initCaches = async () => {
   }
 };
 
-// ======================= CLEANUP PENDING =======================
+// ======================= CLEANUP PENDING
 const cleanupPending = async () => {
   try {
     const count = await pendingService.cleanupExpired();
@@ -137,7 +139,7 @@ const cleanupPending = async () => {
   }
 };
 
-// ======================= START SERVER =======================
+// ======================= START SERVER
 server.listen(port, '0.0.0.0', async () => {
   console.log(`🚀 Server avviato su port ${port}`);
   console.log('🟢 Socket.IO pronto');

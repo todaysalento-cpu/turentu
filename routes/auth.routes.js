@@ -23,18 +23,29 @@ const transporter = nodemailer.createTransport({
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log('📥 Tentativo login:', email);
 
   try {
     const result = await pool.query(
       'SELECT id, email, password, tipo, nome FROM utente WHERE email = $1',
       [email]
     );
-    const user = result.rows[0];
 
-    if (!user) return res.status(401).json({ message: 'Utente non trovato' });
+    console.log('📦 Risultato query:', result.rows);
+
+    const user = result.rows[0];
+    if (!user) {
+      console.log('❌ Utente non trovato');
+      return res.status(401).json({ message: 'Utente non trovato' });
+    }
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: 'Password errata' });
+    console.log('🔑 Password match:', match);
+
+    if (!match) {
+      console.log('❌ Password errata');
+      return res.status(401).json({ message: 'Password errata' });
+    }
 
     const payload = {
       id: user.id,
@@ -43,15 +54,19 @@ router.post('/login', async (req, res) => {
       nome: user.nome,
     };
 
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    console.log('✅ Payload pronto:', payload);
 
-    // ✅ Cookie sicuro per produzione
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    console.log('🛡️ Token generato:', token);
+
     res.cookie('token', token, {
       httpOnly: true,
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      secure: process.env.NODE_ENV === 'production', // HTTPS in prod
+      secure: process.env.NODE_ENV === 'production',
       path: '/',
     });
+
+    console.log('🍪 Cookie settato');
 
     res.json({ ...payload, token });
   } catch (err) {
@@ -69,6 +84,7 @@ router.get('/me', (req, res) => {
     const payload = jwt.verify(token, JWT_SECRET);
     res.json({ ...payload, token });
   } catch (err) {
+    console.error('❌ Token non valido:', err.message);
     return res.status(401).json({ message: 'Token non valido' });
   }
 });
@@ -82,6 +98,7 @@ router.post('/logout', (req, res) => {
     path: '/',
   });
 
+  console.log('🔓 Logout eseguito');
   res.json({ message: 'Logout eseguito' });
 });
 
@@ -96,7 +113,11 @@ router.post('/forgot-password', async (req, res) => {
       'SELECT id, nome FROM utente WHERE email=$1',
       [email]
     );
-    if (!userRes.rows.length) return res.status(404).json({ message: 'Utente non trovato' });
+
+    if (!userRes.rows.length) {
+      console.log('❌ Utente non trovato per forgot-password:', email);
+      return res.status(404).json({ message: 'Utente non trovato' });
+    }
 
     const user = userRes.rows[0];
     const token = crypto.randomBytes(32).toString('hex');
@@ -119,9 +140,10 @@ router.post('/forgot-password', async (req, res) => {
              <p>Il link scade tra 1 ora.</p>`
     });
 
+    console.log('📧 Email reset inviata a', email);
     res.json({ message: 'Email inviata con istruzioni per resettare la password' });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Forgot-password error:', err);
     res.status(500).json({ message: 'Errore server' });
   } finally {
     client.release();
@@ -139,7 +161,11 @@ router.post('/reset-password', async (req, res) => {
       `SELECT id FROM utente WHERE reset_token=$1 AND reset_expires > NOW()`,
       [token]
     );
-    if (!userRes.rows.length) return res.status(400).json({ message: 'Token non valido o scaduto' });
+
+    if (!userRes.rows.length) {
+      console.log('❌ Token reset non valido o scaduto:', token);
+      return res.status(400).json({ message: 'Token non valido o scaduto' });
+    }
 
     const userId = userRes.rows[0].id;
     const hashed = await bcrypt.hash(newPassword, 10);
@@ -149,9 +175,10 @@ router.post('/reset-password', async (req, res) => {
       [hashed, userId]
     );
 
+    console.log('✅ Password aggiornata per utente id', userId);
     res.json({ message: 'Password aggiornata con successo' });
   } catch (err) {
-    console.error(err);
+    console.error('❌ Reset-password error:', err);
     res.status(500).json({ message: 'Errore server' });
   } finally {
     client.release();
@@ -160,6 +187,7 @@ router.post('/reset-password', async (req, res) => {
 
 // ===================== TEST ROUTE =====================
 router.get('/test', (req, res) => {
+  console.log('🧪 Test route chiamata');
   res.json({ message: 'Auth routes funzionanti' });
 });
 

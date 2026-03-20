@@ -36,22 +36,32 @@ const app = express();
 
 // ======================= CORS =======================
 const allowedOrigins = [
-  process.env.FRONTEND_URL,                     // variabile d'ambiente
-  'https://turentumi.vercel.app',               // frontend production
-  'https://turentu-m1fl5su2v-turentu.vercel.app' // alias se serve
+  process.env.FRONTEND_URL,
+  'https://turentumi.vercel.app',
+  'https://turentu-m1fl5su2v-turentu.vercel.app'
 ].filter(Boolean);
 
+// Middleware CORS principale
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // richieste dirette (curl, Postman)
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // richieste dirette (Postman, curl)
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error('CORS not allowed'));
   },
-  credentials: true, // essenziale per inviare cookie cross-site
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Risposta automatica alle preflight OPTIONS
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ======================= STRIPE WEBHOOK (RAW BODY)
-// Deve stare PRIMA di express.json()
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
 // ======================= MIDDLEWARE STANDARD
@@ -106,7 +116,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   }
 });
@@ -117,7 +127,6 @@ setupSocket(io);
 // ======================= INIT CACHES REDIS
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
-
   try {
     if (!redisClient.isOpen) await redisClient.connect();
     console.log('🟢 Redis pronto');

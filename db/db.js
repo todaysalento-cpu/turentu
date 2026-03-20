@@ -7,10 +7,10 @@ const connectionString = process.env.DATABASE_URL || 'postgresql://corse_db_user
 
 export const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false }, // necessario per Render
+  ssl: { rejectUnauthorized: false },
   max: 75,
-  idleTimeoutMillis: 5000,
-  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000,  // aumento timeout
 });
 
 // Funzione di esempio per fetch delle corse

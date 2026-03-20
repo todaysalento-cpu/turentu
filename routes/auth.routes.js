@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === 'true', // true per 465
+  secure: process.env.SMTP_SECURE === 'true',
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -45,14 +45,15 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
+    // ✅ Cookie sicuro per produzione
     res.cookie('token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: false, // localhost
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production', // HTTPS in prod
       path: '/',
     });
 
-    res.json({ ...payload, token }); // restituiamo anche il token per test via curl
+    res.json({ ...payload, token });
   } catch (err) {
     console.error('❌ Auth login error:', err);
     res.status(500).json({ message: 'Errore server' });
@@ -61,15 +62,11 @@ router.post('/login', async (req, res) => {
 
 // ===================== ME =====================
 router.get('/me', (req, res) => {
-  // Prendi il token dai cookie
   const token = req.cookies?.token;
   if (!token) return res.status(401).json({ message: 'Non autenticato' });
 
   try {
-    // Verifica token
     const payload = jwt.verify(token, JWT_SECRET);
-
-    // ✅ Invia anche il token al frontend
     res.json({ ...payload, token });
   } catch (err) {
     return res.status(401).json({ message: 'Token non valido' });
@@ -80,8 +77,8 @@ router.get('/me', (req, res) => {
 router.post('/logout', (req, res) => {
   res.clearCookie('token', {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false, // localhost
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
   });
 
@@ -162,7 +159,6 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // ===================== TEST ROUTE =====================
-// solo per debug, non richiede autenticazione
 router.get('/test', (req, res) => {
   res.json({ message: 'Auth routes funzionanti' });
 });

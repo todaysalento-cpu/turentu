@@ -1,4 +1,3 @@
-// services/search/formatter/search.formatter.js
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
@@ -18,8 +17,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, vei
       const result = await getDurataDistanza(richiesta.coord, richiesta.coordDest);
       durataRichiesta = Number(result.durataMs ?? 0);
       distanzaRichiesta = Number(result.distanzaKm ?? 0);
-      console.log('🔹 DURATA RICHIESTA CALCOLATA:', durataRichiesta, 'ms');
-      console.log('🔹 DISTANZA RICHIESTA CALCOLATA:', distanzaRichiesta, 'km');
     } catch (err) {
       console.warn('Errore calcolo durata/distanza richiesta:', err);
     }
@@ -43,7 +40,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, vei
         ? { lat: item.dest_lat, lon: item.dest_lon }
         : richiesta.coordDest;
 
-      // ✅ Ora leggiamo direttamente il timestamp (già UTC corretto)
       const oraPartenza = isCorsa
         ? (item.start_datetime ? new Date(item.start_datetime) : null)
         : (richiesta.start_datetime ? new Date(richiesta.start_datetime) : null);
@@ -52,21 +48,17 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, vei
 
       if (!oraPartenza) {
         durataMs = durataRichiesta;
-      } 
-      else if (isCorsa) {
+      } else if (isCorsa) {
         if (item.arrivo_datetime) {
           const arrivo = new Date(item.arrivo_datetime);
           durataMs = arrivo.getTime() - oraPartenza.getTime();
-        } 
-        else if (item.durata) {
+        } else if (item.durata) {
           const [h, m, s] = item.durata.split(':').map(Number);
           durataMs = (h * 3600 + m * 60 + s) * 1000;
-        } 
-        else {
+        } else {
           durataMs = durataRichiesta;
         }
-      } 
-      else {
+      } else {
         durataMs = durataRichiesta;
       }
 
@@ -83,20 +75,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, vei
 
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
 
-      console.log('🔹 SLOT / CORSA DEBUG:', {
-        veicolo_id: item.veicolo_id,
-        isCorsa,
-        itemId: item.id ?? 'N/D',
-        start_datetime: item.start_datetime,
-        arrivo_datetime: item.arrivo_datetime ?? 'N/D',
-        durataOriginale: item.durata,
-        durataMs,
-        durataMinuti,
-        oraPartenza,
-        oraArrivo,
-        distanzaKm
-      });
-
       const prezzo = await calcolaPrezzo(
         {
           km: distanzaKm,
@@ -109,13 +87,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, vei
         item.stato
       );
 
-      console.log('🔹 Prezzo calcolato:', prezzo);
-
       return {
         tipo: 'slot',
         id: uuidv4(),
         veicolo_id: item.veicolo_id,
         modello: v?.modello ?? 'N/D',
+        tipoVeicolo: v?.tipo ?? 'citycar', // 🔹 aggiunto tipo per icone frontend
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
         coordOrigine,
         coordDestinazione,

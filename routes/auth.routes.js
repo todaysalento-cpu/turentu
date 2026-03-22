@@ -5,9 +5,11 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../db/db.js';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // -------------------- Nodemailer --------------------
 const transporter = nodemailer.createTransport({
@@ -23,41 +25,21 @@ const transporter = nodemailer.createTransport({
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
-  console.log('📥 Tentativo login:', email);
+  if (!email || !password) return res.status(400).json({ message: 'Email e password richieste' });
 
   try {
     const result = await pool.query(
-      'SELECT id, email, password, tipo, nome FROM utente WHERE email = $1',
+      'SELECT id, email, password, tipo, nome FROM utente WHERE email=$1',
       [email]
     );
-
-    console.log('📦 Risultato query:', result.rows);
-
     const user = result.rows[0];
-    if (!user) {
-      console.log('❌ Utente non trovato');
-      return res.status(401).json({ message: 'Utente non trovato' });
-    }
+    if (!user) return res.status(401).json({ message: 'Utente non trovato' });
 
     const match = await bcrypt.compare(password, user.password);
-    console.log('🔑 Password match:', match);
+    if (!match) return res.status(401).json({ message: 'Password errata' });
 
-    if (!match) {
-      console.log('❌ Password errata');
-      return res.status(401).json({ message: 'Password errata' });
-    }
-
-    const payload = {
-      id: user.id,
-      role: user.tipo,
-      email: user.email,
-      nome: user.nome,
-    };
-
-    console.log('✅ Payload pronto:', payload);
-
+    const payload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
-    console.log('🛡️ Token generato:', token);
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -66,12 +48,102 @@ router.post('/login', async (req, res) => {
       path: '/',
     });
 
-    console.log('🍪 Cookie settato');
-
     res.json({ ...payload, token });
   } catch (err) {
     console.error('❌ Auth login error:', err);
     res.status(500).json({ message: 'Errore server' });
+  }
+});
+
+// ===================== REGISTER =====================
+router.post('/register', async (req, res) => {
+  const { nome, email, password, tipo } = req.body;
+  if (!nome || !email || !password)
+    return res.status(400).json({ message: 'Nome, email e password richiesti' });
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
+    if (userRes.rows.length) return res.status(409).json({ message: 'Email già registrata' });
+
+    const hashed = await bcrypt.hash(password, 10);
+    const insertRes = await client.query(
+      'INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome',
+      [nome, email, hashed, tipo || 'cliente']
+    );
+    const user = insertRes.rows[0];
+
+    const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
+    const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
+    res.json({ ...jwtPayload, token: jwtToken });
+  } catch (err) {
+    console.error('❌ Register error:', err);
+    res.status(500).json({ message: 'Errore server' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== LOGIN GOOGLE =====================
+router.post('/google', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ message: 'Token Google richiesto' });
+
+  const client = await pool.connect();
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const nome = payload.name;
+
+    let userRes = await client.query(
+      'SELECT id, tipo, email, nome FROM utente WHERE email=$1',
+      [email]
+    );
+
+    let user;
+    if (userRes.rows.length) {
+      user = userRes.rows[0];
+      console.log('✅ Utente Google esistente:', email);
+    } else {
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const hashed = await bcrypt.hash(randomPassword, 10);
+
+      const insertRes = await client.query(
+        'INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome',
+        [nome, email, hashed, 'cliente']
+      );
+      user = insertRes.rows[0];
+      console.log('🆕 Nuovo utente Google creato:', email);
+    }
+
+    const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
+    const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
+    res.json({ ...jwtPayload, token: jwtToken });
+  } catch (err) {
+    console.error('❌ Google login error:', err);
+    res.status(500).json({ message: 'Login Google fallito' });
+  } finally {
+    client.release();
   }
 });
 
@@ -97,7 +169,6 @@ router.post('/logout', (req, res) => {
     secure: process.env.NODE_ENV === 'production',
     path: '/',
   });
-
   console.log('🔓 Logout eseguito');
   res.json({ message: 'Logout eseguito' });
 });
@@ -109,22 +180,16 @@ router.post('/forgot-password', async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const userRes = await client.query(
-      'SELECT id, nome FROM utente WHERE email=$1',
-      [email]
-    );
-
-    if (!userRes.rows.length) {
-      console.log('❌ Utente non trovato per forgot-password:', email);
+    const userRes = await client.query('SELECT id, nome FROM utente WHERE email=$1', [email]);
+    if (!userRes.rows.length)
       return res.status(404).json({ message: 'Utente non trovato' });
-    }
 
     const user = userRes.rows[0];
     const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 3600 * 1000); // 1 ora
+    const expires = new Date(Date.now() + 3600 * 1000);
 
     await client.query(
-      `UPDATE utente SET reset_token=$1, reset_expires=$2 WHERE id=$3`,
+      'UPDATE utente SET reset_token=$1, reset_expires=$2 WHERE id=$3',
       [token, expires, user.id]
     );
 
@@ -137,7 +202,7 @@ router.post('/forgot-password', async (req, res) => {
              <p>Hai richiesto di resettare la tua password.</p>
              <p>Clicca qui per impostarne una nuova:</p>
              <a href="${resetLink}">${resetLink}</a>
-             <p>Il link scade tra 1 ora.</p>`
+             <p>Il link scade tra 1 ora.</p>`,
     });
 
     console.log('📧 Email reset inviata a', email);
@@ -153,25 +218,23 @@ router.post('/forgot-password', async (req, res) => {
 // ===================== RESET PASSWORD =====================
 router.post('/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
-  if (!token || !newPassword) return res.status(400).json({ message: 'Token e nuova password richiesti' });
+  if (!token || !newPassword)
+    return res.status(400).json({ message: 'Token e nuova password richiesti' });
 
   const client = await pool.connect();
   try {
     const userRes = await client.query(
-      `SELECT id FROM utente WHERE reset_token=$1 AND reset_expires > NOW()`,
+      'SELECT id FROM utente WHERE reset_token=$1 AND reset_expires > NOW()',
       [token]
     );
-
-    if (!userRes.rows.length) {
-      console.log('❌ Token reset non valido o scaduto:', token);
+    if (!userRes.rows.length)
       return res.status(400).json({ message: 'Token non valido o scaduto' });
-    }
 
     const userId = userRes.rows[0].id;
     const hashed = await bcrypt.hash(newPassword, 10);
 
     await client.query(
-      `UPDATE utente SET password=$1, reset_token=NULL, reset_expires=NULL WHERE id=$2`,
+      'UPDATE utente SET password=$1, reset_token=NULL, reset_expires=NULL WHERE id=$2',
       [hashed, userId]
     );
 

@@ -1,4 +1,4 @@
-// ======================= server.js (HTTP + Socket.IO + Redis) =======================
+// ======================= server.js (aggiornato CORS) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -6,13 +6,9 @@ import cookieParser from 'cookie-parser';
 import http from 'http';
 import { Server } from 'socket.io';
 
-// ===== SOCKET SETUP =====
 import { setupSocket } from './socket.js';
-
-// ===== REDIS =====
 import { redisClient } from './redis.js';
 
-// ===== ROUTERS =====
 import adminRouter from './routes/admin/index.js';
 import bookingRouter from './routes/booking.routes.js';
 import { bookingClienteRouter } from './routes/booking.cliente.routes.js';
@@ -28,11 +24,9 @@ import { notificationsRouter } from './routes/notification.routes.js';
 import { chatRouter } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 
-// ===== NUOVE ROTTE AUTISTA =====
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
 
-// ===== SERVICES =====
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
 
@@ -40,26 +34,32 @@ const app = express();
 
 // ======================= CORS PROD/DEV
 const allowedOrigins = [
-  'http://localhost:3000', // frontend locale
-  'https://turentu-7wmvl71px-turentu.vercel.app', // frontend produzione
+  'http://localhost:3000',                          // locale
+  'https://turentu-7wmvl71px-turentu.vercel.app',   // vecchio prod
+  'https://turentumi.vercel.app',                  // nuovo prod
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('CORS non consentito'));
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('CORS non consentito:', origin);
+      callback(new Error('CORS non consentito'));
+    }
   },
-  credentials: true,
+  credentials: true,       // 🔹 fondamentale per cookie
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
 
+// Preflight per tutte le rotte
 app.options('*', cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) callback(null, true);
     else callback(new Error('CORS non consentito'));
   },
-  credentials: true
+  credentials: true,
 }));
 
 // ======================= STRIPE WEBHOOK
@@ -68,16 +68,6 @@ app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebh
 // ======================= MIDDLEWARE STANDARD
 app.use(cookieParser());
 app.use(express.json());
-
-// ======================= LOGGING DEV
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
-    console.log(`🌐 ${req.method} ${req.url}`);
-    if (Object.keys(req.body || {}).length) console.log('📦 Body:', req.body);
-    if (Object.keys(req.query || {}).length) console.log('🔎 Query:', req.query);
-    next();
-  });
-}
 
 // ======================= ROUTES
 app.use('/auth', authRouter);
@@ -100,11 +90,7 @@ app.use('/autista', autistaStatusRouter); // /autista/status
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>
-  res.json({
-    status: 'OK',
-    service: 'TURENTU API',
-    timestamp: new Date().toISOString()
-  })
+  res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() })
 );
 
 app.get('/ping', (_, res) =>

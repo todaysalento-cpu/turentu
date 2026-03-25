@@ -26,20 +26,13 @@ export async function getDisponibilita(driver_id) {
   return res.rows.map(d => {
     let disponibile = true;
 
-    // --- Giorni esclusi
+    // --- Normalizza giorni esclusi
     const giorniEsclusiNum = Array.isArray(d.giorni_esclusi)
-      ? Array.from(new Set(d.giorni_esclusi.map(Number)))
+      ? d.giorni_esclusi.map(Number)
       : [];
 
-    console.log('Veicolo:', d.veicolo_id, d.modello);
-    console.log('Giorni esclusi DB:', d.giorni_esclusi, '=> convertiti:', giorniEsclusiNum);
-    console.log('Giorno corrente (0=Dom):', dayOfWeek);
-
-    if (giorniEsclusiNum.includes(dayOfWeek)) {
-      console.log('→ Turno non disponibile per giorno escluso oggi');
-      disponibile = false;
-    } else if (giorniEsclusiNum.length >= 7) {
-      console.log('→ Tutti i giorni esclusi → turno non disponibile');
+    // Controllo giorno escluso o tutti i giorni esclusi
+    if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
       disponibile = false;
     }
 
@@ -49,7 +42,6 @@ export async function getDisponibilita(driver_id) {
         const start = new Date(i.start);
         const end = new Date(i.fine);
         if (now >= start && now <= end) {
-          console.log('→ Turno non disponibile per inattività:', i);
           disponibile = false;
           break;
         }
@@ -61,14 +53,7 @@ export async function getDisponibilita(driver_id) {
     const endDate = new Date(d.fine);
     const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
     const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
-
-    if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-      console.log(`→ Turno non disponibile per orario. Ora corrente: ${currentMinutes} min, start: ${startMinutes}, end: ${endMinutes}`);
-      disponibile = false;
-    }
-
-    console.log('Disponibile finale:', disponibile);
-    console.log('---------------------------');
+    if (currentMinutes < startMinutes || currentMinutes > endMinutes) disponibile = false;
 
     return { ...d, disponibile };
   });
@@ -99,6 +84,10 @@ export async function createDisponibilita(turno) {
     throw new Error('Orario non valido: start deve essere prima di fine');
   }
 
+  // Normalizza tipi
+  giorni_esclusi = Array.isArray(giorni_esclusi) ? giorni_esclusi.map(Number) : [];
+  inattivita = Array.isArray(inattivita) ? inattivita : [];
+
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo
       (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
@@ -126,8 +115,7 @@ export async function updateDisponibilita(id, update) {
   let idx = 1;
 
   if (update.start) update.start = parseTimeString(update.start);
-  if (update.fine)  update.fine  = parseTimeString(update.fine);
-
+  if (update.fine) update.fine = parseTimeString(update.fine);
   if (update.giorni_esclusi) update.giorni_esclusi = update.giorni_esclusi.map(Number);
   if (update.inattivita) update.inattivita = JSON.stringify(update.inattivita);
 

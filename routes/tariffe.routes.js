@@ -40,43 +40,59 @@ router.get('/veicolo/:id', async (req, res) => {
 // -------------------- POST nuova tariffa o update se esiste --------------------
 router.post('/', async (req, res) => {
   try {
-    const {
-      veicolo_id,
-      tipo = 'standard',
-      euro_km = 1,
-      prezzo_passeggero = 0,
-      giorno_settimana,
-      ora_inizio,
-      ora_fine
-    } = req.body;
+    const body = req.body;
 
-    // Usa upsert: se esiste già la tariffa per veicolo+tipo, aggiorna, altrimenti inserisci
-    const result = await pool.query(
-      `INSERT INTO tariffe
-        (veicolo_id, tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (veicolo_id, tipo) DO UPDATE SET
-         euro_km = EXCLUDED.euro_km,
-         prezzo_passeggero = EXCLUDED.prezzo_passeggero,
-         giorno_settimana = EXCLUDED.giorno_settimana,
-         ora_inizio = EXCLUDED.ora_inizio,
-         ora_fine = EXCLUDED.ora_fine,
-         updated_at = NOW()
-       RETURNING 
-         id,
-         veicolo_id,
-         tipo,
-         euro_km::float AS euro_km,
-         prezzo_passeggero::float AS prezzo_passeggero,
-         giorno_settimana,
-         ora_inizio,
-         ora_fine,
-         created_at,
-         updated_at`,
-      [veicolo_id, tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine]
-    );
+    // Accetta sia un singolo oggetto che un array di tariffe
+    const tariffeArray = Array.isArray(body) ? body : [body];
 
-    res.status(201).json(result.rows[0]);
+    if (tariffeArray.some(t => !t.veicolo_id)) {
+      return res.status(400).json({ error: 'veicolo_id mancante in una o più tariffe' });
+    }
+
+    const results = [];
+
+    for (const t of tariffeArray) {
+      const {
+        veicolo_id,
+        tipo = 'standard',
+        euro_km = 1,
+        prezzo_passeggero = 0,
+        giorno_settimana,
+        ora_inizio,
+        ora_fine
+      } = t;
+
+      console.log('💾 Inserendo/aggiornando tariffa:', t);
+
+      const result = await pool.query(
+        `INSERT INTO tariffe
+          (veicolo_id, tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (veicolo_id, tipo) DO UPDATE SET
+           euro_km = EXCLUDED.euro_km,
+           prezzo_passeggero = EXCLUDED.prezzo_passeggero,
+           giorno_settimana = EXCLUDED.giorno_settimana,
+           ora_inizio = EXCLUDED.ora_inizio,
+           ora_fine = EXCLUDED.ora_fine,
+           updated_at = NOW()
+         RETURNING 
+           id,
+           veicolo_id,
+           tipo,
+           euro_km::float AS euro_km,
+           prezzo_passeggero::float AS prezzo_passeggero,
+           giorno_settimana,
+           ora_inizio,
+           ora_fine,
+           created_at,
+           updated_at`,
+        [veicolo_id, tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine]
+      );
+
+      results.push(result.rows[0]);
+    }
+
+    res.status(201).json(results);
   } catch (err) {
     console.error('❌ Insert/Update tariffa error:', err);
     res.status(500).json({ error: err.message });

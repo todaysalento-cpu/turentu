@@ -54,9 +54,19 @@ veicoloRouter.post('/', async (req, res) => {
     const driver_id = req.user.id;
     const { modello, marca, posti_totali, raggio_km, targa, servizi, tipo, anno, lat, lon, image_url } = req.body;
 
-    // Validazione tipo veicolo
     if (tipo && !TIPI_VEICOLO.includes(tipo)) {
       return res.status(400).json({ error: 'Tipo veicolo non valido' });
+    }
+
+    // Controllo preventivo targa duplicata
+    if (targa) {
+      const targaCheck = await pool.query(
+        'SELECT id FROM veicolo WHERE targa=$1',
+        [targa]
+      );
+      if (targaCheck.rowCount > 0) {
+        return res.status(400).json({ error: 'Targa già utilizzata da un altro veicolo' });
+      }
     }
 
     const result = await pool.query(
@@ -77,9 +87,12 @@ veicoloRouter.post('/', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error('❌ Veicoli POST error:', err);
+
+    // Gestione duplicato a livello DB (race condition)
     if (err.code === '23505' && err.constraint === 'veicolo_targa_key') {
       return res.status(400).json({ error: 'Targa già utilizzata da un altro veicolo' });
     }
+
     res.status(500).json({ error: err.message });
   }
 });
@@ -93,9 +106,19 @@ veicoloRouter.put('/:id', async (req, res) => {
     const veicolo_id = Number(req.params.id);
     const { modello, marca, posti_totali, raggio_km, targa, servizi, tipo, anno, lat, lon, image_url } = req.body;
 
-    // Validazione tipo veicolo
     if (tipo && !TIPI_VEICOLO.includes(tipo)) {
       return res.status(400).json({ error: 'Tipo veicolo non valido' });
+    }
+
+    // Controllo preventivo targa duplicata su altri veicoli
+    if (targa) {
+      const targaCheck = await pool.query(
+        'SELECT id FROM veicolo WHERE targa=$1 AND id<>$2',
+        [targa, veicolo_id]
+      );
+      if (targaCheck.rowCount > 0) {
+        return res.status(400).json({ error: 'Targa già utilizzata da un altro veicolo' });
+      }
     }
 
     const result = await pool.query(
@@ -121,9 +144,11 @@ veicoloRouter.put('/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error('❌ Veicolo PUT error:', err);
+
     if (err.code === '23505' && err.constraint === 'veicolo_targa_key') {
       return res.status(400).json({ error: 'Targa già utilizzata da un altro veicolo' });
     }
+
     res.status(500).json({ error: err.message });
   }
 });
@@ -153,7 +178,7 @@ veicoloRouter.delete('/:id', async (req, res) => {
 });
 
 // ----------------------------
-// GET marche-modelli da JSON locale (stabile)
+// GET marche-modelli da JSON locale
 // ----------------------------
 veicoloRouter.get('/marche-modelli', async (req, res) => {
   try {
@@ -187,4 +212,36 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 // ----------------------------
 veicoloRouter.get('/tipi', (req, res) => {
   res.json(TIPI_VEICOLO);
+});
+
+// ----------------------------
+// GET controllo targa duplicata
+// Esempio: /veicolo/check-targa?targa=ABC123&id=5
+// id opzionale per ignorare il veicolo corrente durante l'update
+// ----------------------------
+veicoloRouter.get('/check-targa', async (req, res) => {
+  try {
+    const driver_id = req.user.id;
+    const targa = req.query.targa;
+    const veicoloId = req.query.id ? Number(req.query.id) : null;
+
+    if (!targa) {
+      return res.status(400).json({ error: 'Parametro targa obbligatorio' });
+    }
+
+    let query = 'SELECT id FROM veicolo WHERE targa=$1';
+    const queryParams = [targa];
+
+    if (veicoloId) {
+      query += ' AND id<>$2';
+      queryParams.push(veicoloId);
+    }
+
+    const result = await pool.query(query, queryParams);
+
+    res.json({ inUse: result.rowCount > 0 });
+  } catch (err) {
+    console.error('❌ Errore check-targa:', err);
+    res.status(500).json({ error: 'Impossibile verificare la targa' });
+  }
 });

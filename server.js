@@ -28,27 +28,30 @@ import { notificationsRouter } from './routes/notification.routes.js';
 import { chatRouter } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 
+// ===== NUOVE ROTTE AUTISTA =====
+import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
+import autistaStatusRouter from './routes/autistaStatus.routes.js';
+
 // ===== SERVICES =====
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS (FIX DEFINITIVO) =======================
+// ======================= CORS
 app.use(cors({
-  origin: true, // 🔥 accetta qualsiasi origin (Vercel friendly)
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 🔥 fondamentale per preflight
 app.options('*', cors({
   origin: true,
   credentials: true
 }));
 
-// ======================= STRIPE WEBHOOK (RAW BODY)
+// ======================= STRIPE WEBHOOK
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
 // ======================= MIDDLEWARE STANDARD
@@ -79,6 +82,10 @@ app.use('/distanza', distanzaRouter);
 app.use('/admin', adminRouter);
 app.use('/chat', chatRouter);
 app.use('/search', searchRouter);
+
+// ===== ROTTE AUTISTA
+app.use('/autista/profilo', autistaProfiloRouter);
+app.use('/autista', autistaStatusRouter); // ⚡ attenzione: router.get('/status') -> /autista/status
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>
@@ -116,7 +123,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: true, // 🔥 stesso fix anche qui
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   }

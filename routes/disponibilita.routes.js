@@ -25,15 +25,24 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const driver_id = req.user.id;
-    const { veicolo_id } = req.body;
+    const { veicolo_id, start, fine, giorni_esclusi = [], inattivita = [] } = req.body;
 
+    // Controlla che il veicolo appartenga all'autista
     const veicolo = await pool.query(
       'SELECT * FROM veicolo WHERE id=$1 AND driver_id=$2',
       [veicolo_id, driver_id]
     );
     if (!veicolo.rows.length) return res.status(403).json({ message: 'Veicolo non autorizzato' });
 
-    const turno = await disponibilitaService.createDisponibilita(req.body);
+    // Passa giorni_esclusi come array e inattivita come JSONB
+    const turno = await disponibilitaService.createDisponibilita({
+      veicolo_id,
+      start,
+      fine,
+      giorni_esclusi,
+      inattivita,
+    });
+
     res.json(turno);
   } catch (err) {
     console.error('❌ Creazione disponibilità error:', err);
@@ -46,7 +55,7 @@ router.put('/:id', async (req, res) => {
   try {
     const driver_id = req.user.id;
     const id = req.params.id;
-    const { veicolo_id } = req.body;
+    const { veicolo_id, start, fine, giorni_esclusi = [], inattivita = [] } = req.body;
 
     // Controlla che il turno appartenga a un veicolo dell'autista
     const turno = await pool.query(
@@ -57,7 +66,14 @@ router.put('/:id', async (req, res) => {
     );
     if (!turno.rows.length) return res.status(403).json({ message: 'Non autorizzato' });
 
-    const updated = await disponibilitaService.updateDisponibilita(id, req.body);
+    // Aggiorna con array e JSONB
+    const updated = await disponibilitaService.updateDisponibilita(id, {
+      start,
+      fine,
+      giorni_esclusi,
+      inattivita,
+    });
+
     res.json(updated);
   } catch (err) {
     console.error('❌ Update disponibilità error:', err);

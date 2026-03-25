@@ -38,27 +38,16 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS PROD/DEV
-const allowedOrigins = [
-  'http://localhost:3000', // frontend locale
-  'https://turentu-7wmvl71px-turentu.vercel.app', // frontend produzione
-];
-
+// ======================= CORS
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('CORS non consentito'));
-  },
+  origin: true,
   credentials: true,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.options('*', cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('CORS non consentito'));
-  },
+  origin: true,
   credentials: true
 }));
 
@@ -96,7 +85,7 @@ app.use('/search', searchRouter);
 
 // ===== ROTTE AUTISTA
 app.use('/autista/profilo', autistaProfiloRouter);
-app.use('/autista', autistaStatusRouter); // /autista/status
+app.use('/autista', autistaStatusRouter); // ⚡ attenzione: router.get('/status') -> /autista/status
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>
@@ -134,8 +123,8 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
   }
 });

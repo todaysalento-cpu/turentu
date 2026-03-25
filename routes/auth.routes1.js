@@ -22,14 +22,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ===================== COOKIE CONFIG
-const cookieOptions = {
-  httpOnly: true,
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-};
-
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -49,8 +41,12 @@ router.post('/login', async (req, res) => {
     const payload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
-    // ✅ Imposto cookie cross-site sicuro
-    res.cookie('token', token, cookieOptions);
+    res.cookie('token', token, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
 
     res.json({ ...payload, token });
   } catch (err) {
@@ -80,7 +76,13 @@ router.post('/register', async (req, res) => {
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions);
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Register error:', err);
@@ -113,6 +115,7 @@ router.post('/google', async (req, res) => {
     let user;
     if (userRes.rows.length) {
       user = userRes.rows[0];
+      console.log('✅ Utente Google esistente:', email);
     } else {
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashed = await bcrypt.hash(randomPassword, 10);
@@ -122,12 +125,19 @@ router.post('/google', async (req, res) => {
         [nome, email, hashed, 'cliente']
       );
       user = insertRes.rows[0];
+      console.log('🆕 Nuovo utente Google creato:', email);
     }
 
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions);
+    res.cookie('token', jwtToken, {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Google login error:', err);
@@ -153,8 +163,95 @@ router.get('/me', (req, res) => {
 
 // ===================== LOGOUT =====================
 router.post('/logout', (req, res) => {
-  res.clearCookie('token', cookieOptions);
+  res.clearCookie('token', {
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+  });
+  console.log('🔓 Logout eseguito');
   res.json({ message: 'Logout eseguito' });
+});
+
+// ===================== FORGOT PASSWORD =====================
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email richiesta' });
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query('SELECT id, nome FROM utente WHERE email=$1', [email]);
+    if (!userRes.rows.length)
+      return res.status(404).json({ message: 'Utente non trovato' });
+
+    const user = userRes.rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 3600 * 1000);
+
+    await client.query(
+      'UPDATE utente SET reset_token=$1, reset_expires=$2 WHERE id=$3',
+      [token, expires, user.id]
+    );
+
+    const resetLink = `https://tuosito.it/reset-password?token=${token}`;
+    await transporter.sendMail({
+      from: '"Il tuo sito" <no-reply@tuosito.it>',
+      to: email,
+      subject: 'Recupero password',
+      html: `<p>Ciao ${user.nome},</p>
+             <p>Hai richiesto di resettare la tua password.</p>
+             <p>Clicca qui per impostarne una nuova:</p>
+             <a href="${resetLink}">${resetLink}</a>
+             <p>Il link scade tra 1 ora.</p>`,
+    });
+
+    console.log('📧 Email reset inviata a', email);
+    res.json({ message: 'Email inviata con istruzioni per resettare la password' });
+  } catch (err) {
+    console.error('❌ Forgot-password error:', err);
+    res.status(500).json({ message: 'Errore server' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== RESET PASSWORD =====================
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword)
+    return res.status(400).json({ message: 'Token e nuova password richiesti' });
+
+  const client = await pool.connect();
+  try {
+    const userRes = await client.query(
+      'SELECT id FROM utente WHERE reset_token=$1 AND reset_expires > NOW()',
+      [token]
+    );
+    if (!userRes.rows.length)
+      return res.status(400).json({ message: 'Token non valido o scaduto' });
+
+    const userId = userRes.rows[0].id;
+    const hashed = await bcrypt.hash(newPassword, 10);
+
+    await client.query(
+      'UPDATE utente SET password=$1, reset_token=NULL, reset_expires=NULL WHERE id=$2',
+      [hashed, userId]
+    );
+
+    console.log('✅ Password aggiornata per utente id', userId);
+    res.json({ message: 'Password aggiornata con successo' });
+  } catch (err) {
+    console.error('❌ Reset-password error:', err);
+    res.status(500).json({ message: 'Errore server' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== TEST ROUTE =====================
+router.get('/test', (req, res) => {
+  console.log('🧪 Test route chiamata');
+  res.json({ message: 'Auth routes funzionanti' });
 });
 
 export { router };

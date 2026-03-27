@@ -111,12 +111,10 @@ veicoloRouter.post('/', async (req, res) => {
       image_url
     } = req.body;
 
-    // 🔹 Normalizzazione
     targa = targa?.trim().toUpperCase() || null;
     servizi = servizi ?? [];
     raggio_km = raggio_km ?? 50;
 
-    // 🔹 Validazioni
     if (tipo && !TIPI_VEICOLO.includes(tipo)) {
       return res.status(400).json({ error: 'Tipo veicolo non valido' });
     }
@@ -136,10 +134,10 @@ veicoloRouter.post('/', async (req, res) => {
       `INSERT INTO veicolo
         (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, image_url)
        VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,
+         $1,$2,$3,$4,$5,$6,$7::jsonb,$8::varchar,$9::int,
          CASE 
-           WHEN $10::float IS NOT NULL AND $11::float IS NOT NULL
-           THEN ST_SetSRID(ST_MakePoint($10::float, $11::float),4326)
+           WHEN $10 IS NOT NULL AND $11 IS NOT NULL
+           THEN ST_SetSRID(ST_MakePoint($10::double precision, $11::double precision),4326)
            ELSE NULL
          END,
          $12
@@ -198,7 +196,6 @@ veicoloRouter.put('/:id', async (req, res) => {
       image_url
     } = req.body;
 
-    // 🔹 Normalizzazione
     targa = targa?.trim().toUpperCase() || null;
     servizi = servizi ?? [];
     raggio_km = raggio_km ?? 50;
@@ -225,12 +222,12 @@ veicoloRouter.put('/:id', async (req, res) => {
         posti_totali=$3,
         raggio_km=$4,
         targa=$5,
-        servizi=$6,
-        tipo=$7,
-        anno=$8,
+        servizi=$6::jsonb,
+        tipo=$7::varchar,
+        anno=$8::int,
         coord = CASE 
-          WHEN $9::float IS NOT NULL AND $10::float IS NOT NULL
-          THEN ST_SetSRID(ST_MakePoint($9::float, $10::float),4326)
+          WHEN $9 IS NOT NULL AND $10 IS NOT NULL
+          THEN ST_SetSRID(ST_MakePoint($9::double precision, $10::double precision),4326)
           ELSE coord
         END,
         image_url=$11

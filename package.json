@@ -40,7 +40,8 @@
     "stripe": "^20.3.1",
     "tough-cookie": "^6.0.0",
     "undici": "^6.23.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "chalk": "^5.3.0",

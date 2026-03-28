@@ -1,4 +1,4 @@
-// ======================= server.js (CORS + cookie fix Safari) =======================
+// ======================= server.js (CORS + cookie fix Safari + logging) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -30,13 +30,14 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS PROD/DEV
+// ======================= ALLOWED ORIGINS
 const allowedOrigins = [
   'http://localhost:3000',                           // dev
   'https://turentu-7wmvl71px-turentu.vercel.app',    // vecchio prod
   'https://turentumi.vercel.app',                    // nuovo prod
 ];
 
+// ======================= CORS CONFIG
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -46,7 +47,7 @@ app.use(cors({
       callback(new Error('CORS non consentito'));
     }
   },
-  credentials: true, // 🔹 fondamentale per cookie cross-site
+  credentials: true, // fondamentale per cookie cross-site
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization']
 }));
@@ -58,6 +59,28 @@ app.options('*', cors({
   },
   credentials: true,
 }));
+
+// ======================= LOGGING MIDDLEWARE
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] 🔹 REQUEST: ${req.method} ${req.originalUrl} - From: ${req.ip}`);
+  next();
+});
+
+// Log dettagliato delle risposte
+app.use((req, res, next) => {
+  const originalSend = res.send;
+  res.send = function (body) {
+    console.log(`[${new Date().toISOString()}] 🔹 RESPONSE ${res.statusCode} for ${req.method} ${req.originalUrl}`);
+    return originalSend.call(this, body);
+  };
+  next();
+});
+
+// Log rotte /autista/* per debug fetch mobile
+app.use('/autista', (req, res, next) => {
+  console.log(`[${new Date().toISOString()}] 🏎️ Autista route hit: ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // ======================= STRIPE WEBHOOK
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
@@ -100,12 +123,12 @@ app.use((req, res) =>
 // ======================= GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
+  console.error(err.stack);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message:
-      process.env.NODE_ENV === 'production'
-        ? 'Something went wrong'
-        : err.message
+    message: process.env.NODE_ENV === 'production'
+      ? 'Something went wrong'
+      : err.message
   });
 });
 

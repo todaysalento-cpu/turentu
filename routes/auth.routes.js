@@ -22,12 +22,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ===================== COOKIE CONFIG
+// ===================== COOKIE CONFIG CROSS-SITE =====================
 const cookieOptions = {
-  httpOnly: true,
-  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  secure: process.env.NODE_ENV === 'production',
+  httpOnly: true,                  // ⚡ non accessibile da JS
+  sameSite: 'none',                // ⚡ necessario cross-site
+  secure: true,                    // ⚡ HTTPS obbligatorio
   path: '/',
+  domain: '.turentumi.vercel.app', // ⚡ condiviso tra front e backend
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 giorni
 };
 
 // ===================== LOGIN =====================
@@ -49,9 +51,7 @@ router.post('/login', async (req, res) => {
     const payload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
-    // ✅ Imposto cookie cross-site sicuro
-    res.cookie('token', token, cookieOptions);
-
+    res.cookie('token', token, cookieOptions); // ✅ cross-site cookie
     res.json({ ...payload, token });
   } catch (err) {
     console.error('❌ Auth login error:', err);
@@ -80,7 +80,7 @@ router.post('/register', async (req, res) => {
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions);
+    res.cookie('token', jwtToken, cookieOptions); // ✅ cross-site cookie
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Register error:', err);
@@ -105,12 +105,9 @@ router.post('/google', async (req, res) => {
     const email = payload.email;
     const nome = payload.name;
 
-    let userRes = await client.query(
-      'SELECT id, tipo, email, nome FROM utente WHERE email=$1',
-      [email]
-    );
-
+    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE email=$1', [email]);
     let user;
+
     if (userRes.rows.length) {
       user = userRes.rows[0];
     } else {
@@ -127,7 +124,7 @@ router.post('/google', async (req, res) => {
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions);
+    res.cookie('token', jwtToken, cookieOptions); // ✅ cross-site cookie
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Google login error:', err);

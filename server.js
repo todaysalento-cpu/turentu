@@ -1,4 +1,4 @@
-// ======================= server.js (aggiornato CORS) =======================
+// ======================= server.js (CORS + cookie cross-site) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -32,28 +32,25 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS PROD/DEV
+// ======================= ALLOWED ORIGINS
 const allowedOrigins = [
   'http://localhost:3000',                          // locale
   'https://turentu-7wmvl71px-turentu.vercel.app',   // vecchio prod
   'https://turentumi.vercel.app',                  // nuovo prod
 ];
 
+// ======================= CORS + COOKIE
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn('CORS non consentito:', origin);
-      callback(new Error('CORS non consentito'));
-    }
+    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+    else callback(new Error('CORS non consentito'));
   },
-  credentials: true,       // 🔹 fondamentale per cookie
+  credentials: true, // ✅ fondamentale per cookie cross-site
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
+  allowedHeaders: ['Content-Type','Authorization'],
 }));
 
-// Preflight per tutte le rotte
+// Preflight globale
 app.options('*', cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) callback(null, true);
@@ -86,7 +83,7 @@ app.use('/search', searchRouter);
 
 // ===== ROTTE AUTISTA
 app.use('/autista/profilo', autistaProfiloRouter);
-app.use('/autista', autistaStatusRouter); // /autista/status
+app.use('/autista', autistaStatusRouter);
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>

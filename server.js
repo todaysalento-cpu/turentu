@@ -1,4 +1,4 @@
-// ======================= server.js (CORS + cookie cross-site) =======================
+// ======================= server.js (CORS + cookie fix Safari) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -23,34 +23,34 @@ import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
 import { chatRouter } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
-
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
-
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= ALLOWED ORIGINS
+// ======================= CORS PROD/DEV
 const allowedOrigins = [
-  'http://localhost:3000',                          // locale
-  'https://turentu-7wmvl71px-turentu.vercel.app',   // vecchio prod
-  'https://turentumi.vercel.app',                  // nuovo prod
+  'http://localhost:3000',                           // dev
+  'https://turentu-7wmvl71px-turentu.vercel.app',    // vecchio prod
+  'https://turentumi.vercel.app',                    // nuovo prod
 ];
 
-// ======================= CORS + COOKIE
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('CORS non consentito'));
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('CORS non consentito:', origin);
+      callback(new Error('CORS non consentito'));
+    }
   },
-  credentials: true, // ✅ fondamentale per cookie cross-site
+  credentials: true, // 🔹 fondamentale per cookie cross-site
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
 
-// Preflight globale
 app.options('*', cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) callback(null, true);
@@ -80,8 +80,6 @@ app.use('/distanza', distanzaRouter);
 app.use('/admin', adminRouter);
 app.use('/chat', chatRouter);
 app.use('/search', searchRouter);
-
-// ===== ROTTE AUTISTA
 app.use('/autista/profilo', autistaProfiloRouter);
 app.use('/autista', autistaStatusRouter);
 
@@ -123,7 +121,6 @@ const io = new Server(server, {
   }
 });
 
-// setup Socket.IO
 setupSocket(io);
 
 // ======================= INIT CACHES REDIS

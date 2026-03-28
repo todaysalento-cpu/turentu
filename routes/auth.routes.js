@@ -24,12 +24,12 @@ const transporter = nodemailer.createTransport({
 
 // ===================== COOKIE CONFIG CROSS-SITE =====================
 const cookieOptions = {
-  httpOnly: true,                  // ⚡ non accessibile da JS
-  sameSite: 'none',                // ⚡ necessario cross-site
-  secure: true,                    // ⚡ HTTPS obbligatorio
+  httpOnly: true,
+  sameSite: 'none',          // cross-site
+  secure: true,              // HTTPS obbligatorio
   path: '/',
-  domain: '.turentumi.vercel.app', // ⚡ condiviso tra front e backend
-  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 giorni
+  // domain: undefined      // ❌ non metti domain per cross-site frontend/back
+  maxAge: 7 * 24 * 60 * 60 * 1000
 };
 
 // ===================== LOGIN =====================

@@ -33,12 +33,13 @@ const app = express();
 // ======================= ALLOWED ORIGINS
 const allowedOrigins = [
   'http://localhost:3000',                           // dev
+  'https://turentu-6zju0bt3n-turentu.vercel.app',    // prod attuale
   'https://turentu-7wmvl71px-turentu.vercel.app',    // vecchio prod
   'https://turentumi.vercel.app',                    // nuovo prod
 ];
 
 // ======================= CORS CONFIG
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -49,16 +50,11 @@ app.use(cors({
   },
   credentials: true, // fondamentale per cookie cross-site
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization']
-}));
+  allowedHeaders: ['Content-Type','Authorization'],
+};
 
-app.options('*', cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-    else callback(new Error('CORS non consentito'));
-  },
-  credentials: true,
-}));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // ======================= LOGGING MIDDLEWARE
 app.use((req, res, next) => {
@@ -66,7 +62,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Log dettagliato delle risposte
 app.use((req, res, next) => {
   const originalSend = res.send;
   res.send = function (body) {
@@ -76,7 +71,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Log rotte /autista/* per debug fetch mobile
 app.use('/autista', (req, res, next) => {
   console.log(`[${new Date().toISOString()}] 🏎️ Autista route hit: ${req.method} ${req.originalUrl}`);
   next();

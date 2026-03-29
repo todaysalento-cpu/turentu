@@ -2,6 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { getCorseByAutista, accettaCorsa, toggleCorsa } from '../services/corsa/corse.service.js';
 import { getAddress } from '../utils/geo.util.js';
+import { getIO } from '../socket.js';
 
 export const corseRouter = express.Router();
 corseRouter.use(authMiddleware);
@@ -52,16 +53,14 @@ corseRouter.get('/autista/today/:id', async (req, res) => {
 });
 
 // ----------------------
-// 3️⃣ Accetta corsa
+// 3️⃣ Accetta corsa (aggiornata con socket)
 // ----------------------
 corseRouter.post('/:id/accetta', async (req, res) => {
   try {
     let corsa = await accettaCorsa(Number(req.params.id));
+    if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
 
-    if (!corsa) {
-      return res.status(404).json({ error: 'Corsa non trovata' });
-    }
-
+    // Aggiorna indirizzi se mancanti
     const origine_address = corsa.origine_address || (corsa.origine ? await getAddress(corsa.origine) : 'N/D');
     const destinazione_address = corsa.destinazione_address || (corsa.destinazione ? await getAddress(corsa.destinazione) : 'N/D');
 
@@ -71,6 +70,14 @@ corseRouter.post('/:id/accetta', async (req, res) => {
       origine_address,
       destinazione_address
     };
+
+    // 🔹 EMIT WebSocket
+    try {
+      const io = getIO();
+      io.to(`autista_${corsa.veicolo_id}`).emit('nuova_corsa', { ...corsa, pending_id: corsa.pending_id ?? null });
+    } catch (err) {
+      console.warn('⚠️ WS non disponibile:', err.message);
+    }
 
     res.json({ nuovaCorsa: corsa });
   } catch (err) {
@@ -85,6 +92,15 @@ corseRouter.post('/:id/accetta', async (req, res) => {
 corseRouter.post('/:id/start', async (req, res) => {
   try {
     const corsa = await toggleCorsa(Number(req.params.id), 'start');
+
+    // 🔹 EMIT WebSocket per live update
+    try {
+      const io = getIO();
+      io.to(`autista_${corsa.veicolo_id}`).emit('corsaUpdate', corsa);
+    } catch (err) {
+      console.warn('⚠️ WS non disponibile:', err.message);
+    }
+
     res.json(corsa);
   } catch (err) {
     console.error('Errore POST /:id/start', err);
@@ -93,11 +109,20 @@ corseRouter.post('/:id/start', async (req, res) => {
 });
 
 // ----------------------
-// 5️⃣ Termina corsa (con cattura pagamenti automatica)
+// 5️⃣ Termina corsa
 // ----------------------
 corseRouter.post('/:id/end', async (req, res) => {
   try {
     const corsa = await toggleCorsa(Number(req.params.id), 'end');
+
+    // 🔹 EMIT WebSocket
+    try {
+      const io = getIO();
+      io.to(`autista_${corsa.veicolo_id}`).emit('corsaUpdate', corsa);
+    } catch (err) {
+      console.warn('⚠️ WS non disponibile:', err.message);
+    }
+
     res.json({
       message: 'Corsa completata e pagamenti catturati',
       corsa

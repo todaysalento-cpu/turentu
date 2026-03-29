@@ -23,19 +23,21 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===================== COOKIE CONFIG CROSS-SITE =====================
+// gestione automatica dev vs prod
+const isProduction = process.env.NODE_ENV === 'production';
 const cookieOptions = {
   httpOnly: true,
-  sameSite: 'none',          // cross-site
-  secure: true,              // HTTPS obbligatorio
+  sameSite: isProduction ? 'none' : 'lax', // 'none' solo in prod con HTTPS
+  secure: isProduction,                    // true solo in produzione
   path: '/',
-  // domain: undefined      // ❌ non metti domain per cross-site frontend/back
   maxAge: 7 * 24 * 60 * 60 * 1000
 };
 
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: 'Email e password richieste' });
+  if (!email || !password)
+    return res.status(400).json({ message: 'Email e password richieste' });
 
   try {
     const result = await pool.query(
@@ -51,7 +53,7 @@ router.post('/login', async (req, res) => {
     const payload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', token, cookieOptions); // ✅ cross-site cookie
+    res.cookie('token', token, cookieOptions);
     res.json({ ...payload, token });
   } catch (err) {
     console.error('❌ Auth login error:', err);
@@ -68,7 +70,8 @@ router.post('/register', async (req, res) => {
   const client = await pool.connect();
   try {
     const userRes = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
-    if (userRes.rows.length) return res.status(409).json({ message: 'Email già registrata' });
+    if (userRes.rows.length)
+      return res.status(409).json({ message: 'Email già registrata' });
 
     const hashed = await bcrypt.hash(password, 10);
     const insertRes = await client.query(
@@ -80,7 +83,7 @@ router.post('/register', async (req, res) => {
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions); // ✅ cross-site cookie
+    res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Register error:', err);
@@ -105,7 +108,10 @@ router.post('/google', async (req, res) => {
     const email = payload.email;
     const nome = payload.name;
 
-    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE email=$1', [email]);
+    let userRes = await client.query(
+      'SELECT id, tipo, email, nome FROM utente WHERE email=$1',
+      [email]
+    );
     let user;
 
     if (userRes.rows.length) {
@@ -113,7 +119,6 @@ router.post('/google', async (req, res) => {
     } else {
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashed = await bcrypt.hash(randomPassword, 10);
-
       const insertRes = await client.query(
         'INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome',
         [nome, email, hashed, 'cliente']
@@ -124,7 +129,7 @@ router.post('/google', async (req, res) => {
     const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
-    res.cookie('token', jwtToken, cookieOptions); // ✅ cross-site cookie
+    res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
   } catch (err) {
     console.error('❌ Google login error:', err);

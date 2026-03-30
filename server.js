@@ -1,4 +1,3 @@
-// ======================= server.js (CORS + cookie fix Safari + logging) =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -30,56 +29,24 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= ALLOWED ORIGINS
-const allowedOrigins = [
-  'http://localhost:3000',                           // dev
-  'https://turentu-6zju0bt3n-turentu.vercel.app',    // prod attuale
-  'https://turentu-7wmvl71px-turentu.vercel.app',    // vecchio prod
-  'https://turentumi.vercel.app',                    // nuovo prod
-];
+// ======================= CORS SEMPLIFICATO (proxy /api)
+app.use(cors({
+  origin: true, // 🔥 lascia passare tutto (gestito da Vercel)
+  credentials: true
+}));
 
-// ======================= CORS CONFIG
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn('CORS non consentito:', origin);
-      callback(new Error('CORS non consentito'));
-    }
-  },
-  credentials: true, // fondamentale per cookie cross-site
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-};
+app.options('*', cors());
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-
-// ======================= LOGGING MIDDLEWARE
+// ======================= LOGGING
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] 🔹 REQUEST: ${req.method} ${req.originalUrl} - From: ${req.ip}`);
-  next();
-});
-
-app.use((req, res, next) => {
-  const originalSend = res.send;
-  res.send = function (body) {
-    console.log(`[${new Date().toISOString()}] 🔹 RESPONSE ${res.statusCode} for ${req.method} ${req.originalUrl}`);
-    return originalSend.call(this, body);
-  };
-  next();
-});
-
-app.use('/autista', (req, res, next) => {
-  console.log(`[${new Date().toISOString()}] 🏎️ Autista route hit: ${req.method} ${req.originalUrl}`);
+  console.log(`[${new Date().toISOString()}] 🔹 ${req.method} ${req.originalUrl}`);
   next();
 });
 
 // ======================= STRIPE WEBHOOK
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
-// ======================= MIDDLEWARE STANDARD
+// ======================= MIDDLEWARE
 app.use(cookieParser());
 app.use(express.json());
 
@@ -100,13 +67,9 @@ app.use('/search', searchRouter);
 app.use('/autista/profilo', autistaProfiloRouter);
 app.use('/autista', autistaStatusRouter);
 
-// ======================= HEALTH CHECK
+// ======================= HEALTH
 app.get('/', (_, res) =>
   res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() })
-);
-
-app.get('/ping', (_, res) =>
-  res.json({ status: 'pong', message: 'API server funzionante!' })
 );
 
 // ======================= 404
@@ -114,10 +77,9 @@ app.use((req, res) =>
   res.status(404).json({ error: 'Not Found', path: req.originalUrl })
 );
 
-// ======================= GLOBAL ERROR HANDLER
+// ======================= ERROR HANDLER
 app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
-  console.error(err.stack);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'production'
@@ -126,21 +88,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ======================= SERVER HTTP + SOCKET.IO
+// ======================= SERVER + SOCKET.IO
 const port = process.env.PORT || 3000;
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+    origin: true,
     credentials: true
   }
 });
 
 setupSocket(io);
 
-// ======================= INIT CACHES REDIS
+// ======================= INIT
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
 
@@ -149,26 +110,25 @@ const initCaches = async () => {
     console.log('🟢 Redis pronto');
 
     await loadCachesUltra();
-    console.log('🗃️ Caches search caricate in Redis');
+    console.log('🗃️ Cache caricate');
   } catch (err) {
-    console.error('Errore init caches:', err.message);
+    console.error('Errore cache:', err.message);
   }
 };
 
-// ======================= CLEANUP PENDING
 const cleanupPending = async () => {
   try {
     const count = await pendingService.cleanupExpired();
-    console.log(`🧹 Pending cleanup completato, ${count} elementi rimossi`);
+    console.log(`🧹 Cleanup pending: ${count}`);
   } catch (err) {
-    console.error('Errore cleanup pending:', err.message);
+    console.error('Errore cleanup:', err.message);
   }
 };
 
-// ======================= START SERVER
+// ======================= START
 server.listen(port, '0.0.0.0', async () => {
-  console.log(`🚀 Server avviato su port ${port}`);
-  console.log('🟢 Socket.IO pronto');
+  console.log(`🚀 Server su porta ${port}`);
+  console.log('🟢 Socket.IO attivo');
 
   await initCaches();
   await cleanupPending();

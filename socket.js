@@ -30,6 +30,7 @@ const getIO = () => {
 const setupSocket = (ioServer) => {
   io = ioServer;
   const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
+  const isDev = process.env.NODE_ENV !== 'production';
 
   // ===== AUTH =====
   io.use((socket, next) => {
@@ -38,7 +39,9 @@ const setupSocket = (ioServer) => {
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      decoded.role = decoded.role.toLowerCase();
+      decoded.role = ['autista', 'cliente'].includes(decoded.role?.toLowerCase())
+        ? decoded.role.toLowerCase()
+        : 'cliente';
       socket.user = decoded;
       next();
     } catch (err) {
@@ -59,30 +62,28 @@ const setupSocket = (ioServer) => {
     socket.join(personalRoom);
     joinedRooms.add(personalRoom);
 
-    console.log('🔌 Client connesso:', socket.id);
-    console.log('👤 Utente:', socket.user);
+    if (isDev) console.log('🔌 Client connesso:', socket.id, socket.user);
 
     // =======================
     // AUTISTA JOIN CORSE
     // =======================
     if (role === 'autista') {
       try {
-        // Leggi corse attive direttamente dalla cache (Redis se disponibile)
         const corseCache = await getCorseCache();
-        const corse = corseCache.filter(c => c.veicolo_id === userId); // esempio mapping driver -> veicolo
+        const corse = corseCache.filter(c => c.veicolo_id === userId);
 
-        console.log(`🚗 Autista ha ${corse.length} corse`);
+        if (isDev) console.log(`🚗 Autista ha ${corse.length} corse`);
 
         for (const corsa of corse) {
           const corsaRoom = `corsa_${corsa.id}`;
           if (!joinedRooms.has(corsaRoom)) {
             socket.join(corsaRoom);
             joinedRooms.add(corsaRoom);
-            console.log(`✈️ Autista join corsa room: ${corsaRoom}`);
+            if (isDev) console.log(`✈️ Autista join corsa room: ${corsaRoom}`);
           }
         }
       } catch (err) {
-        console.error('Errore join corsa autista:', err);
+        console.error('❌ Errore join corsa autista:', err);
       }
     }
 
@@ -90,14 +91,15 @@ const setupSocket = (ioServer) => {
     // JOIN CHAT
     // =======================
     socket.on('join_chat', async ({ corsa_id, cliente_id }) => {
-      corsa_id = Number(corsa_id);
-      cliente_id = Number(cliente_id);
+      const corsaIdNum = Number(corsa_id);
+      const clienteIdNum = Number(cliente_id);
+      if (isNaN(corsaIdNum) || isNaN(clienteIdNum)) return;
 
-      const room = `chat_${corsa_id}_${cliente_id}`;
+      const room = `chat_${corsaIdNum}_${clienteIdNum}`;
       if (!joinedRooms.has(room)) {
         socket.join(room);
         joinedRooms.add(room);
-        console.log(`🟢 Join chat room: ${room}`);
+        if (isDev) console.log(`🟢 Join chat room: ${room}`);
       }
 
       try {
@@ -109,7 +111,7 @@ const setupSocket = (ioServer) => {
            FROM messaggi
            WHERE corsa_id=$1 AND cliente_id=$2
            ORDER BY created_at ASC`,
-          [corsa_id, cliente_id]
+          [corsaIdNum, clienteIdNum]
         );
 
         const messages = messagesRows.map(r => ({
@@ -140,15 +142,15 @@ const setupSocket = (ioServer) => {
            JOIN corse c ON c.veicolo_id = v.id
            JOIN utente u ON u.id = v.driver_id
            WHERE c.id = $1`,
-          [corsa_id]
+          [corsaIdNum]
         );
 
         // =======================
         // INIT CHAT
         // =======================
         socket.emit('init_chat', {
-          corsa_id,
-          cliente_id,
+          corsa_id: corsaIdNum,
+          cliente_id: clienteIdNum,
           messages: messages || [],
           participants,
           lastMessageTime: messages.length ? messages[messages.length - 1].timestamp : new Date().toISOString()
@@ -162,19 +164,19 @@ const setupSocket = (ioServer) => {
             `UPDATE messaggi
              SET read_status = jsonb_set(read_status, $1, 'true'::jsonb)
              WHERE corsa_id=$2 AND cliente_id=$3 AND sender_id != $4`,
-            [`{${role}}`, corsa_id, cliente_id, userId]
+            [`{${role}}`, corsaIdNum, clienteIdNum, userId]
           );
 
           const { rows: unreadRows } = await pool.query(
             `SELECT COUNT(*) AS count
              FROM messaggi
              WHERE corsa_id=$1 AND cliente_id=$2 AND sender_id != $3 AND NOT (read_status->>$4)::boolean`,
-            [corsa_id, cliente_id, userId, role]
+            [corsaIdNum, clienteIdNum, userId, role]
           );
 
           io.to(room).emit('unread_count', {
-            corsa_id,
-            cliente_id,
+            corsa_id: corsaIdNum,
+            cliente_id: clienteIdNum,
             count: parseInt(unreadRows[0].count, 10)
           });
         }
@@ -189,9 +191,11 @@ const setupSocket = (ioServer) => {
     socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
       if (!text?.trim()) return;
 
-      corsa_id = Number(corsa_id);
-      cliente_id = Number(cliente_id);
-      const room = `chat_${corsa_id}_${cliente_id}`;
+      const corsaIdNum = Number(corsa_id);
+      const clienteIdNum = Number(cliente_id);
+      if (isNaN(corsaIdNum) || isNaN(clienteIdNum)) return;
+
+      const room = `chat_${corsaIdNum}_${clienteIdNum}`;
       const readStatus = { autista: role === 'autista', cliente: role === 'cliente' };
 
       try {
@@ -200,16 +204,16 @@ const setupSocket = (ioServer) => {
            (corsa_id, cliente_id, sender_id, testo, created_at, read_status)
            VALUES ($1,$2,$3,$4,$5,$6)
            RETURNING id, corsa_id, cliente_id, sender_id, testo AS text, created_at AS timestamp, read_status`,
-          [corsa_id, cliente_id, userId, text.trim(), new Date(), JSON.stringify(readStatus)]
+          [corsaIdNum, clienteIdNum, userId, text.trim(), new Date(), JSON.stringify(readStatus)]
         );
 
         const msg = rows[0];
-        console.log("📡 Broadcast new_message");
+        if (isDev) console.log("📡 Broadcast new_message");
 
         io.to(room).emit('new_message', {
           id: msg.id,
-          corsa_id: Number(msg.corsa_id),
-          cliente_id: Number(msg.cliente_id),
+          corsa_id: corsaIdNum,
+          cliente_id: clienteIdNum,
           sender_id: msg.sender_id,
           sender_name: role,
           role,
@@ -222,8 +226,11 @@ const setupSocket = (ioServer) => {
       }
     });
 
+    // =======================
+    // DISCONNECT
+    // =======================
     socket.on('disconnect', (reason) => {
-      console.log('❌ Client disconnesso:', socket.id, '| reason:', reason);
+      if (isDev) console.log('❌ Client disconnesso:', socket.id, '| reason:', reason);
     });
   });
 };

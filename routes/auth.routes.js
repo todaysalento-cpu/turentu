@@ -22,15 +22,17 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ===================== COOKIE CONFIG CROSS-SITE =====================
-// gestione automatica dev vs prod
-const isProduction = process.env.NODE_ENV === 'production';
+// ===================== COOKIE CONFIG =====================
+// ✅ Proxy Vercel → SAME SITE
 const cookieOptions = {
   httpOnly: true,
-  sameSite: isProduction ? 'none' : 'lax', // 'none' solo in prod con HTTPS
-  secure: isProduction,                    // true solo in produzione
+  sameSite: 'lax',     // 🔥 fondamentale
+  secure: true,        // HTTPS (Vercel)
   path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+
+  // 🔽 opzionale (solo se userai dominio custom tipo turentu.com)
+  // domain: '.turentu.com'
 };
 
 // ===================== LOGIN =====================
@@ -50,7 +52,13 @@ router.post('/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: 'Password errata' });
 
-    const payload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
+    const payload = {
+      id: user.id,
+      role: user.tipo,
+      email: user.email,
+      nome: user.nome
+    };
+
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
     res.cookie('token', token, cookieOptions);
@@ -68,23 +76,39 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ message: 'Nome, email e password richiesti' });
 
   const client = await pool.connect();
+
   try {
-    const userRes = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
+    const userRes = await client.query(
+      'SELECT id FROM utente WHERE email=$1',
+      [email]
+    );
+
     if (userRes.rows.length)
       return res.status(409).json({ message: 'Email già registrata' });
 
     const hashed = await bcrypt.hash(password, 10);
+
     const insertRes = await client.query(
-      'INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome',
+      `INSERT INTO utente (nome, email, password, tipo)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, tipo, email, nome`,
       [nome, email, hashed, tipo || 'cliente']
     );
+
     const user = insertRes.rows[0];
 
-    const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
+    const jwtPayload = {
+      id: user.id,
+      role: user.tipo,
+      email: user.email,
+      nome: user.nome
+    };
+
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
     res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
+
   } catch (err) {
     console.error('❌ Register error:', err);
     res.status(500).json({ message: 'Errore server' });
@@ -96,14 +120,17 @@ router.post('/register', async (req, res) => {
 // ===================== LOGIN GOOGLE =====================
 router.post('/google', async (req, res) => {
   const { token } = req.body;
-  if (!token) return res.status(400).json({ message: 'Token Google richiesto' });
+  if (!token)
+    return res.status(400).json({ message: 'Token Google richiesto' });
 
   const client = await pool.connect();
+
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
+
     const payload = ticket.getPayload();
     const email = payload.email;
     const nome = payload.name;
@@ -112,6 +139,7 @@ router.post('/google', async (req, res) => {
       'SELECT id, tipo, email, nome FROM utente WHERE email=$1',
       [email]
     );
+
     let user;
 
     if (userRes.rows.length) {
@@ -119,18 +147,29 @@ router.post('/google', async (req, res) => {
     } else {
       const randomPassword = crypto.randomBytes(16).toString('hex');
       const hashed = await bcrypt.hash(randomPassword, 10);
+
       const insertRes = await client.query(
-        'INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome',
+        `INSERT INTO utente (nome, email, password, tipo)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, tipo, email, nome`,
         [nome, email, hashed, 'cliente']
       );
+
       user = insertRes.rows[0];
     }
 
-    const jwtPayload = { id: user.id, role: user.tipo, email: user.email, nome: user.nome };
+    const jwtPayload = {
+      id: user.id,
+      role: user.tipo,
+      email: user.email,
+      nome: user.nome
+    };
+
     const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
 
     res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
+
   } catch (err) {
     console.error('❌ Google login error:', err);
     res.status(500).json({ message: 'Login Google fallito' });
@@ -142,7 +181,8 @@ router.post('/google', async (req, res) => {
 // ===================== ME =====================
 router.get('/me', (req, res) => {
   const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ message: 'Non autenticato' });
+  if (!token)
+    return res.status(401).json({ message: 'Non autenticato' });
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -155,7 +195,10 @@ router.get('/me', (req, res) => {
 
 // ===================== LOGOUT =====================
 router.post('/logout', (req, res) => {
-  res.clearCookie('token', cookieOptions);
+  res.clearCookie('token', {
+    ...cookieOptions,
+    maxAge: 0
+  });
   res.json({ message: 'Logout eseguito' });
 });
 

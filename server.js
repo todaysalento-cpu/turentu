@@ -1,3 +1,4 @@
+// ======================= server.js =======================
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
@@ -29,12 +30,12 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS SEMPLIFICATO (proxy /api)
+// ======================= CORS (Sviluppo + Produzione)
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 app.use(cors({
-  origin: true, // 🔥 lascia passare tutto (gestito da Vercel)
-  credentials: true
+  origin: FRONTEND_URL,
+  credentials: true,
 }));
-
 app.options('*', cors());
 
 // ======================= LOGGING
@@ -51,23 +52,23 @@ app.use(cookieParser());
 app.use(express.json());
 
 // ======================= ROUTES
-app.use('/auth', authRouter);
-app.use('/notifications', notificationsRouter);
-app.use('/booking', bookingRouter);
-app.use('/booking', bookingClienteRouter);
-app.use('/disponibilita', disponibilitaRouter);
-app.use('/veicolo', veicoloRouter);
-app.use('/corse', corseRouter);
-app.use('/pending', pendingRouter);
-app.use('/tariffe', tariffeRouter);
-app.use('/distanza', distanzaRouter);
-app.use('/admin', adminRouter);
-app.use('/chat', chatRouter);
-app.use('/search', searchRouter);
-app.use('/autista/profilo', autistaProfiloRouter);
-app.use('/autista', autistaStatusRouter);
+app.use('/api/auth', authRouter); // 🔹 Aggiornato per frontend /api/auth/*
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/booking', bookingRouter);
+app.use('/api/booking', bookingClienteRouter);
+app.use('/api/disponibilita', disponibilitaRouter);
+app.use('/api/veicolo', veicoloRouter);
+app.use('/api/corse', corseRouter);
+app.use('/api/pending', pendingRouter);
+app.use('/api/tariffe', tariffeRouter);
+app.use('/api/distanza', distanzaRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/autista/profilo', autistaProfiloRouter);
+app.use('/api/autista', autistaStatusRouter);
 
-// ======================= HEALTH
+// ======================= HEALTH CHECK
 app.get('/', (_, res) =>
   res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() })
 );
@@ -82,9 +83,7 @@ app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production'
-      ? 'Something went wrong'
-      : err.message
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
   });
 });
 
@@ -94,14 +93,14 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: true,
-    credentials: true
+    origin: FRONTEND_URL,
+    credentials: true,
   }
 });
 
 setupSocket(io);
 
-// ======================= INIT
+// ======================= INIT CACHE REDIS
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
 
@@ -116,6 +115,7 @@ const initCaches = async () => {
   }
 };
 
+// ======================= CLEANUP PENDING
 const cleanupPending = async () => {
   try {
     const count = await pendingService.cleanupExpired();
@@ -125,7 +125,7 @@ const cleanupPending = async () => {
   }
 };
 
-// ======================= START
+// ======================= START SERVER
 server.listen(port, '0.0.0.0', async () => {
   console.log(`🚀 Server su porta ${port}`);
   console.log('🟢 Socket.IO attivo');

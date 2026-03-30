@@ -23,16 +23,12 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===================== COOKIE CONFIG =====================
-// ✅ Proxy Vercel → SAME SITE
 const cookieOptions = {
   httpOnly: true,
-  sameSite: 'lax',     // 🔥 fondamentale
-  secure: true,        // HTTPS (Vercel)
+  sameSite: 'lax', // 🔥 fondamentale per login Google e cross-site
+  secure: process.env.NODE_ENV === 'production', // solo in produzione
   path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-
-  // 🔽 opzionale (solo se userai dominio custom tipo turentu.com)
-  // domain: '.turentu.com'
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 giorni
 };
 
 // ===================== LOGIN =====================
@@ -78,11 +74,7 @@ router.post('/register', async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const userRes = await client.query(
-      'SELECT id FROM utente WHERE email=$1',
-      [email]
-    );
-
+    const userRes = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
     if (userRes.rows.length)
       return res.status(409).json({ message: 'Email già registrata' });
 
@@ -108,7 +100,6 @@ router.post('/register', async (req, res) => {
 
     res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
-
   } catch (err) {
     console.error('❌ Register error:', err);
     res.status(500).json({ message: 'Errore server' });
@@ -120,8 +111,7 @@ router.post('/register', async (req, res) => {
 // ===================== LOGIN GOOGLE =====================
 router.post('/google', async (req, res) => {
   const { token } = req.body;
-  if (!token)
-    return res.status(400).json({ message: 'Token Google richiesto' });
+  if (!token) return res.status(400).json({ message: 'Token Google richiesto' });
 
   const client = await pool.connect();
 
@@ -169,7 +159,6 @@ router.post('/google', async (req, res) => {
 
     res.cookie('token', jwtToken, cookieOptions);
     res.json({ ...jwtPayload, token: jwtToken });
-
   } catch (err) {
     console.error('❌ Google login error:', err);
     res.status(500).json({ message: 'Login Google fallito' });
@@ -181,8 +170,7 @@ router.post('/google', async (req, res) => {
 // ===================== ME =====================
 router.get('/me', (req, res) => {
   const token = req.cookies?.token;
-  if (!token)
-    return res.status(401).json({ message: 'Non autenticato' });
+  if (!token) return res.status(401).json({ message: 'Non autenticato' });
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);

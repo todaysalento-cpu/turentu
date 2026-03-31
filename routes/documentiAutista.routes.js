@@ -43,7 +43,7 @@ router.post(
       }
 
       // Upload file su Cloudinary
-      const fileUrls: Record<string, string> = {};
+      const fileUrls = {}; // <-- rimosso tipo TypeScript
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
         if (file) {

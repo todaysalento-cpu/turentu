@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { pool } from '../db/db.js'; 
+import { pool } from '../db/db.js';
 import { uploadFile } from '../helpers/cloudinary.js';
 
 const router = Router();
+
+// Configurazione multer (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Campi documenti attesi
 const documentFields = [
   { name: 'foto_profilo', maxCount: 1 },
   { name: 'carta_identita', maxCount: 1 },
@@ -25,14 +28,14 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
       ...rest
     } = req.body;
 
-    // 🔹 Verifica utente esiste
+    // 🔹 Verifica che l'utente esista
     const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
     if (!userRes.rows[0]) {
       return res.status(400).json({ success: false, message: 'Utente non trovato' });
     }
 
     // 🔹 Upload file su Cloudinary
-    const fileUrls: Record<string, string> = {};
+    const fileUrls = {}; // <- JS puro, niente tipi
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {

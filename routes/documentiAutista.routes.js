@@ -14,10 +14,11 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
+// POST /api/autista/documenti/profilo
 router.post('/profilo', upload.fields(documentFields), async (req, res) => {
   try {
     const {
-      utente_id,  // 🔹 usa utente_id coerente con la tabella
+      utente_id, // coerente con tabella utente
       nome_titolare_conto,
       numero_conto,
       nome_banca,
@@ -25,13 +26,13 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
     } = req.body;
 
     // 🔹 Verifica utente esiste
-    const userRes = await pool.query('SELECT tipo FROM utente WHERE id=$1', [utente_id]);
+    const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
     if (!userRes.rows[0]) {
       return res.status(400).json({ success: false, message: 'Utente non trovato' });
     }
 
     // 🔹 Upload file su Cloudinary
-    const fileUrls = {};
+    const fileUrls: Record<string, string> = {};
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {
@@ -49,10 +50,12 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
       );
     }
 
-    // 🔹 Aggiornamento dati bancari
+    // 🔹 Aggiornamento dati bancari e tipo utente
     await pool.query(
-      'UPDATE utente SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo=$4 WHERE id=$5',
-      [nome_banca, numero_conto, nome_titolare_conto, 'autista', utente_id]
+      `UPDATE utente 
+       SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo='autista' 
+       WHERE id=$4`,
+      [nome_banca, numero_conto, nome_titolare_conto, utente_id]
     );
 
     return res.json({ success: true, message: 'Profilo e documenti salvati correttamente', fileUrls });

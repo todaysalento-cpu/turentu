@@ -6,12 +6,10 @@ import { pool } from '../db/db.js';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
-import twilio from 'twilio';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
 // -------------------- Nodemailer --------------------
 const transporter = nodemailer.createTransport({
@@ -27,10 +25,10 @@ const transporter = nodemailer.createTransport({
 // ===================== COOKIE CONFIG =====================
 const cookieOptions = {
   httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax', // 🔥 fondamentale per login Google e cross-site
+  secure: process.env.NODE_ENV === 'production', // solo in produzione
   path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 giorni
 };
 
 // ===================== LOGIN =====================
@@ -190,79 +188,6 @@ router.post('/logout', (req, res) => {
     maxAge: 0
   });
   res.json({ message: 'Logout eseguito' });
-});
-
-// ===================== OTP =====================
-// INVIO OTP
-router.post('/otp/send', async (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ message: 'Numero mancante' });
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-  try {
-    await pool.query(
-      'INSERT INTO otp_temp (phone, code, expires_at) VALUES ($1, $2, NOW() + INTERVAL \'5 minutes\')',
-      [phone, otp]
-    );
-
-    await twilioClient.messages.create({
-      body: `Il tuo codice OTP è: ${otp}`,
-      from: process.env.TWILIO_PHONE,
-      to: phone,
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ OTP send error:', err);
-    res.status(500).json({ message: 'Errore invio OTP' });
-  }
-});
-
-// VERIFICA OTP
-router.post('/otp/verify', async (req, res) => {
-  const { phone, otp } = req.body;
-  if (!phone || !otp) return res.status(400).json({ message: 'Dati mancanti' });
-
-  try {
-    const result = await pool.query(
-      'SELECT * FROM otp_temp WHERE phone=$1 AND code=$2 AND expires_at > NOW()',
-      [phone, otp]
-    );
-
-    if (result.rows.length === 0)
-      return res.status(400).json({ message: 'OTP non valido o scaduto' });
-
-    // cerca utente
-    let userRes = await pool.query('SELECT id, tipo, nome FROM utente WHERE phone=$1', [phone]);
-    let user;
-
-    if (userRes.rows.length === 0) {
-      const insertRes = await pool.query(
-        `INSERT INTO utente (phone, tipo) VALUES ($1, $2) RETURNING id, tipo, nome`,
-        [phone, 'cliente']
-      );
-      user = insertRes.rows[0];
-    } else {
-      user = userRes.rows[0];
-    }
-
-    const jwtPayload = {
-      id: user.id,
-      role: user.tipo,
-      nome: user.nome,
-      phone,
-    };
-    const jwtToken = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' });
-
-    await pool.query('DELETE FROM otp_temp WHERE phone=$1', [phone]);
-
-    res.cookie('token', jwtToken, cookieOptions);
-    res.json({ ...jwtPayload, token: jwtToken });
-  } catch (err) {
-    console.error('❌ OTP verify error:', err);
-    res.status(500).json({ message: 'Errore server' });
-  }
 });
 
 export { router };

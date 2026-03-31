@@ -26,7 +26,15 @@ router.post(
   async (req, res) => {
     try {
       const utente_id = req.user.id; // preso dal token
-      const { nome_titolare_conto, numero_conto, nome_banca } = req.body;
+      const {
+        nome,
+        cognome,
+        codice_fiscale,
+        patente,
+        certificato_ncc,
+        iban,
+        telefono,
+      } = req.body;
 
       // Controllo che l'utente esista
       const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
@@ -35,7 +43,7 @@ router.post(
       }
 
       // Upload file su Cloudinary
-      const fileUrls = {}; // <- rimosso ": Record<string, string>"
+      const fileUrls: Record<string, string> = {};
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
         if (file) {
@@ -44,24 +52,59 @@ router.post(
         }
       }
 
-      // Inserimento documenti nel DB
-      for (const tipo in fileUrls) {
-        const url = fileUrls[tipo];
-        await pool.query(
-          'INSERT INTO documenti_autista (autista_id, tipo, url) VALUES ($1, $2, $3)',
-          [utente_id, tipo, url]
-        );
-      }
-
-      // Aggiorna dati bancari e tipo utente
+      // Inserimento/aggiornamento profilo personale in autista_profilo
       await pool.query(
-        `UPDATE utente 
-         SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo='autista' 
-         WHERE id=$4`,
-        [nome_banca, numero_conto, nome_titolare_conto, utente_id]
+        `INSERT INTO autista_profilo
+          (utente_id, nome, cognome, codice_fiscale, patente, certificato_ncc, iban, telefono, foto_profilo, documenti, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
+         ON CONFLICT (utente_id)
+         DO UPDATE SET
+           nome = $2,
+           cognome = $3,
+           codice_fiscale = $4,
+           patente = $5,
+           certificato_ncc = $6,
+           iban = $7,
+           telefono = $8,
+           foto_profilo = $9,
+           documenti = $10,
+           updated_at = now()`,
+        [
+          utente_id,
+          nome,
+          cognome,
+          codice_fiscale,
+          patente,
+          certificato_ncc === 'true' || certificato_ncc === true,
+          iban,
+          telefono,
+          fileUrls['foto_profilo'] || null,
+          JSON.stringify({
+            carta_identita: fileUrls['carta_identita'] || null,
+            patente_foto: fileUrls['patente_foto'] || null,
+            certificato_abilitazione: fileUrls['certificato_abilitazione'] || null,
+            iscrizione_ruolo: fileUrls['iscrizione_ruolo'] || null,
+          }),
+        ]
       );
 
-      return res.json({ success: true, message: 'Profilo e documenti salvati correttamente', fileUrls });
+      // Inserimento dei documenti in documenti_autista
+      for (const [tipo, url] of Object.entries(fileUrls)) {
+        if (tipo !== 'foto_profilo' && url) {
+          await pool.query(
+            `INSERT INTO documenti_autista (autista_id, tipo, url)
+             VALUES ($1,$2,$3)
+             ON CONFLICT DO NOTHING`,
+            [utente_id, tipo, url]
+          );
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: 'Profilo e documenti salvati correttamente',
+        fileUrls,
+      });
     } catch (err) {
       console.error('💥 Errore route /autista/documenti/profilo:', err);
       return res.status(500).json({ success: false, message: 'Errore interno server' });

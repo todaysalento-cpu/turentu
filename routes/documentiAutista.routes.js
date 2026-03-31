@@ -1,7 +1,7 @@
 // ======================= routes/documentiAutista.routes.js =======================
 import { Router } from 'express';
 import multer from 'multer';
-import { db } from '../db/db.js';
+import { pool } from '../db/db.js'; // 🔹 usa 'pool', non 'db'
 import { uploadFile } from '../helpers/cloudinary.js';
 
 const router = Router();
@@ -30,7 +30,7 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
     } = req.body;
 
     // 🔹 Verifica utente esiste e tipo autista
-    const userRes = await db.query('SELECT tipo FROM utente WHERE id=$1', [autista_id]);
+    const userRes = await pool.query('SELECT tipo FROM utente WHERE id=$1', [autista_id]);
     if (!userRes.rows[0] || userRes.rows[0].tipo !== 'autista') {
       return res.status(400).json({ success: false, message: 'Utente non è autista' });
     }
@@ -48,14 +48,14 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
     // 🔹 Inserimento documenti nel DB
     const documenti = Object.entries(fileUrls).map(([tipo, url]) => ({ tipo, url }));
     for (const doc of documenti) {
-      await db.query(
+      await pool.query(
         'INSERT INTO documenti_autista (autista_id, tipo, url) VALUES ($1, $2, $3)',
         [autista_id, doc.tipo, doc.url]
       );
     }
 
     // 🔹 Aggiornamento dati bancari
-    await db.query(
+    await pool.query(
       'UPDATE utente SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3 WHERE id=$4',
       [nome_banca, numero_conto, nome_titolare_conto, autista_id]
     );

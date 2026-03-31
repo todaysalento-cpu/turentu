@@ -1,5 +1,6 @@
 // ======================= helpers/cloudinary.js =======================
-import fetch from 'node-fetch'; // se usi Node 18+ puoi anche usare fetch globale
+import fetch from 'node-fetch';
+import FormData from 'form-data';
 
 /**
  * uploadFile(fileBuffer, filename)
@@ -12,7 +13,7 @@ export async function uploadFile(fileBuffer, filename) {
     if (!fileBuffer) return null;
 
     const formData = new FormData();
-    formData.append('file', fileBuffer, filename);
+    formData.append('file', fileBuffer, { filename });
     formData.append('upload_preset', process.env.CLOUDINARY_UPLOAD_PRESET);
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;

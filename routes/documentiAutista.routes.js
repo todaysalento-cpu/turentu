@@ -25,17 +25,17 @@ router.post(
   upload.fields(documentFields),
   async (req, res) => {
     try {
-      const utente_id = req.user.id; // 🔹 preso dal token
+      const utente_id = req.user.id; // preso dal token
       const { nome_titolare_conto, numero_conto, nome_banca } = req.body;
 
-      // 🔹 Controllo che l'utente esista
+      // Controllo che l'utente esista
       const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
       if (!userRes.rows[0]) {
         return res.status(400).json({ success: false, message: 'Utente non trovato' });
       }
 
-      // 🔹 Upload file su Cloudinary
-      const fileUrls: Record<string, string> = {};
+      // Upload file su Cloudinary
+      const fileUrls = {}; // <- rimosso ": Record<string, string>"
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
         if (file) {
@@ -44,15 +44,16 @@ router.post(
         }
       }
 
-      // 🔹 Inserimento documenti nel DB
-      for (const [tipo, url] of Object.entries(fileUrls)) {
+      // Inserimento documenti nel DB
+      for (const tipo in fileUrls) {
+        const url = fileUrls[tipo];
         await pool.query(
           'INSERT INTO documenti_autista (autista_id, tipo, url) VALUES ($1, $2, $3)',
           [utente_id, tipo, url]
         );
       }
 
-      // 🔹 Aggiorna dati bancari e tipo utente
+      // Aggiorna dati bancari e tipo utente
       await pool.query(
         `UPDATE utente 
          SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo='autista' 

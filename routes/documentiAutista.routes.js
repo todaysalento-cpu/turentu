@@ -4,11 +4,8 @@ import { pool } from '../db/db.js';
 import { uploadFile } from '../helpers/cloudinary.js';
 
 const router = Router();
-
-// Configurazione multer (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Campi documenti attesi
 const documentFields = [
   { name: 'foto_profilo', maxCount: 1 },
   { name: 'carta_identita', maxCount: 1 },
@@ -17,25 +14,18 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// POST /api/autista/documenti/profilo
 router.post('/profilo', upload.fields(documentFields), async (req, res) => {
   try {
-    const {
-      utente_id, // coerente con tabella utente
-      nome_titolare_conto,
-      numero_conto,
-      nome_banca,
-      ...rest
-    } = req.body;
+    const { utente_id, nome_titolare_conto, numero_conto, nome_banca } = req.body;
 
-    // 🔹 Verifica che l'utente esista
+    // Controlla che l'utente esista
     const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
     if (!userRes.rows[0]) {
       return res.status(400).json({ success: false, message: 'Utente non trovato' });
     }
 
-    // 🔹 Upload file su Cloudinary
-    const fileUrls = {}; // <- JS puro, niente tipi
+    // Upload file su Cloudinary
+    const fileUrls = {}; // <-- JS puro, niente tipi
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {
@@ -44,7 +34,7 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
       }
     }
 
-    // 🔹 Inserimento documenti nel DB
+    // Inserimento documenti nel DB
     const documenti = Object.entries(fileUrls).map(([tipo, url]) => ({ tipo, url }));
     for (const doc of documenti) {
       await pool.query(
@@ -53,7 +43,7 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
       );
     }
 
-    // 🔹 Aggiornamento dati bancari e tipo utente
+    // Aggiorna dati bancari e tipo utente
     await pool.query(
       `UPDATE utente 
        SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo='autista' 

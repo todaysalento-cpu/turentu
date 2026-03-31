@@ -18,14 +18,23 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
+// Mapping frontend -> DB per documenti_autista.tipo
+const tipoMapping: Record<string, string> = {
+  foto_profilo: 'foto_profilo',
+  carta_identita: 'carta_identita',
+  patente_foto: 'patente',                  // <- mappatura corretta
+  certificato_abilitazione: 'certificato_abilitazione',
+  iscrizione_ruolo: 'iscrizione_ruolo',
+};
+
 // POST /api/autista/documenti/profilo
 router.post(
   '/profilo',
-  authMiddleware, // Prende utente dal token JWT
+  authMiddleware, // prende utente dal token JWT
   upload.fields(documentFields),
   async (req, res) => {
     try {
-      const utente_id = req.user.id; // preso dal token
+      const utente_id = req.user.id;
       const {
         nome,
         cognome,
@@ -43,7 +52,7 @@ router.post(
       }
 
       // Upload file su Cloudinary
-      const fileUrls = {}; // <-- rimosso tipo TypeScript
+      const fileUrls: Record<string, string> = {};
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
         if (file) {
@@ -88,14 +97,15 @@ router.post(
         ]
       );
 
-      // Inserimento dei documenti in documenti_autista
-      for (const [tipo, url] of Object.entries(fileUrls)) {
-        if (tipo !== 'foto_profilo' && url) {
+      // Inserimento dei documenti in documenti_autista con mapping corretto
+      for (const [field, url] of Object.entries(fileUrls)) {
+        if (field !== 'foto_profilo' && url) {
+          const tipoDB = tipoMapping[field];
           await pool.query(
             `INSERT INTO documenti_autista (autista_id, tipo, url)
              VALUES ($1,$2,$3)
              ON CONFLICT DO NOTHING`,
-            [utente_id, tipo, url]
+            [utente_id, tipoDB, url]
           );
         }
       }

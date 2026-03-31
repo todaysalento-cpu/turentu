@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { pool } from '../db/db.js';
 import { uploadFile } from '../helpers/cloudinary.js';
+import { authMiddleware } from '../middleware/auth.js'; // <- middleware JWT
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -14,9 +15,10 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-router.post('/profilo', upload.fields(documentFields), async (req, res) => {
+router.post('/profilo', authMiddleware, upload.fields(documentFields), async (req, res) => {
   try {
-    const { utente_id, nome_titolare_conto, numero_conto, nome_banca } = req.body;
+    const utente_id = req.user.id; // 🔹 preso dal token
+    const { nome_titolare_conto, numero_conto, nome_banca } = req.body;
 
     // Controlla che l'utente esista
     const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
@@ -25,7 +27,7 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
     }
 
     // Upload file su Cloudinary
-    const fileUrls = {}; // <-- JS puro, niente tipi
+    const fileUrls = {};
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {

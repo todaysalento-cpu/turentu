@@ -213,9 +213,13 @@ router.post('/otp/send', async (req, res) => {
       );
     } else {
       // crea nuovo utente OTP temporaneo
+      const tempEmail = `otp_${phone}@example.com`; // email fittizia unica
+      const tempPassword = crypto.randomBytes(16).toString('hex');
+
       await pool.query(
-        'INSERT INTO utente (phone, tipo, nome, password, otp_code, otp_expires) VALUES ($1, $2, $3, $4, $5, $6)',
-        [phone, 'cliente', 'Utente OTP', crypto.randomBytes(16).toString('hex'), otp, expiresAt]
+        `INSERT INTO utente (nome, email, password, tipo, phone, otp_code, otp_expires)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        ['Utente OTP', tempEmail, tempPassword, 'cliente', phone, otp, expiresAt]
       );
     }
 
@@ -272,5 +276,4 @@ router.post('/otp/verify', async (req, res) => {
     res.status(500).json({ message: 'Errore server' });
   }
 });
-
 export { router };

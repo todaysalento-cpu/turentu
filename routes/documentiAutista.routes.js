@@ -1,15 +1,11 @@
-// ======================= routes/documentiAutista.routes.js =======================
 import { Router } from 'express';
 import multer from 'multer';
-import { pool } from '../db/db.js'; // 🔹 usa 'pool', non 'db'
+import { pool } from '../db/db.js'; 
 import { uploadFile } from '../helpers/cloudinary.js';
 
 const router = Router();
-
-// Configurazione multer (memory storage per buffer)
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔹 Campi attesi come file dal frontend
 const documentFields = [
   { name: 'foto_profilo', maxCount: 1 },
   { name: 'carta_identita', maxCount: 1 },
@@ -18,21 +14,20 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// POST /api/autista/documenti/profilo
 router.post('/profilo', upload.fields(documentFields), async (req, res) => {
   try {
     const {
-      autista_id,
+      utente_id,  // 🔹 usa utente_id coerente con la tabella
       nome_titolare_conto,
       numero_conto,
       nome_banca,
       ...rest
     } = req.body;
 
-    // 🔹 Verifica utente esiste e tipo autista
-    const userRes = await pool.query('SELECT tipo FROM utente WHERE id=$1', [autista_id]);
-    if (!userRes.rows[0] || userRes.rows[0].tipo !== 'autista') {
-      return res.status(400).json({ success: false, message: 'Utente non è autista' });
+    // 🔹 Verifica utente esiste
+    const userRes = await pool.query('SELECT tipo FROM utente WHERE id=$1', [utente_id]);
+    if (!userRes.rows[0]) {
+      return res.status(400).json({ success: false, message: 'Utente non trovato' });
     }
 
     // 🔹 Upload file su Cloudinary
@@ -50,14 +45,14 @@ router.post('/profilo', upload.fields(documentFields), async (req, res) => {
     for (const doc of documenti) {
       await pool.query(
         'INSERT INTO documenti_autista (autista_id, tipo, url) VALUES ($1, $2, $3)',
-        [autista_id, doc.tipo, doc.url]
+        [utente_id, doc.tipo, doc.url]
       );
     }
 
     // 🔹 Aggiornamento dati bancari
     await pool.query(
-      'UPDATE utente SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3 WHERE id=$4',
-      [nome_banca, numero_conto, nome_titolare_conto, autista_id]
+      'UPDATE utente SET nome_banca=$1, numero_conto=$2, nome_titolare_conto=$3, tipo=$4 WHERE id=$5',
+      [nome_banca, numero_conto, nome_titolare_conto, 'autista', utente_id]
     );
 
     return res.json({ success: true, message: 'Profilo e documenti salvati correttamente', fileUrls });

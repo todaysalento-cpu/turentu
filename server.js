@@ -25,6 +25,10 @@ import { chatRouter } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
+
+// 🔹 NUOVO: import documenti autista
+import documentiAutistaRouter from './routes/documentiAutista.routes.js';
+
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
 
@@ -52,7 +56,7 @@ app.use(cookieParser());
 app.use(express.json());
 
 // ======================= ROUTES
-app.use('/api/auth', authRouter); // 🔹 Aggiornato per frontend /api/auth/*
+app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/booking', bookingClienteRouter);
@@ -67,6 +71,9 @@ app.use('/api/chat', chatRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
+
+// 🔹 NUOVO: route documenti autista
+app.use('/api/autista/documenti', documentiAutistaRouter);
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>

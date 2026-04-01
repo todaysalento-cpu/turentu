@@ -18,7 +18,7 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// ✅ Mapping corretto (JS puro)
+// Mapping documenti
 const tipoMapping = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
@@ -34,68 +34,48 @@ router.post(
   async (req, res) => {
     try {
       const utente_id = req.user.id;
+      const { nome, cognome, telefono, iban, nome_titolare_conto, nome_banca } = req.body;
 
-      const {
-        nome,
-        cognome,
-        codice_fiscale,
-        patente,
-        certificato_ncc,
-        iban,
-        telefono,
-      } = req.body;
-
-      // 🔹 Controllo utente
-      const userRes = await pool.query(
-        'SELECT id FROM utente WHERE id=$1',
-        [utente_id]
-      );
-
+      // Controllo utente
+      const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
       if (!userRes.rows[0]) {
-        return res.status(400).json({
-          success: false,
-          message: 'Utente non trovato',
-        });
+        return res.status(400).json({ success: false, message: 'Utente non trovato' });
       }
 
-      // 🔹 Upload file
-      const fileUrls = {}; // ✅ JS puro
-
+      // Upload file
+      const fileUrls = {};
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
-
         if (file) {
           const url = await uploadFile(file.buffer, file.originalname);
           if (url) fileUrls[field.name] = url;
         }
       }
 
-      // 🔹 Salvataggio profilo
+      // Salvataggio profilo (INSERT o UPDATE)
       await pool.query(
         `INSERT INTO autista_profilo
-        (utente_id, nome, cognome, codice_fiscale, patente, certificato_ncc, iban, telefono, foto_profilo, documenti, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
+        (utente_id, nome, cognome, telefono, iban, nome_titolare_conto, nome_banca, foto_profilo, documenti, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now(), now())
         ON CONFLICT (utente_id)
         DO UPDATE SET
           nome = $2,
           cognome = $3,
-          codice_fiscale = $4,
-          patente = $5,
-          certificato_ncc = $6,
-          iban = $7,
-          telefono = $8,
-          foto_profilo = $9,
-          documenti = $10,
+          telefono = $4,
+          iban = $5,
+          nome_titolare_conto = $6,
+          nome_banca = $7,
+          foto_profilo = $8,
+          documenti = $9,
           updated_at = now()`,
         [
           utente_id,
           nome,
           cognome,
-          codice_fiscale,
-          patente,
-          certificato_ncc === 'true' || certificato_ncc === true,
-          iban,
           telefono,
+          iban,
+          nome_titolare_conto,
+          nome_banca,
           fileUrls['foto_profilo'] || null,
           JSON.stringify({
             carta_identita: fileUrls['carta_identita'] || null,
@@ -106,14 +86,11 @@ router.post(
         ]
       );
 
-      // 🔹 Inserimento documenti con mapping corretto
+      // Inserimento documenti separati (opzionale)
       for (const [field, url] of Object.entries(fileUrls)) {
         if (field !== 'foto_profilo' && url) {
           const tipoDB = tipoMapping[field];
-
-          // sicurezza extra
           if (!tipoDB) continue;
-
           await pool.query(
             `INSERT INTO documenti_autista (autista_id, tipo, url)
              VALUES ($1,$2,$3)
@@ -131,10 +108,7 @@ router.post(
 
     } catch (err) {
       console.error('💥 Errore route /autista/documenti/profilo:', err);
-      return res.status(500).json({
-        success: false,
-        message: 'Errore interno server',
-      });
+      return res.status(500).json({ success: false, message: 'Errore interno server' });
     }
   }
 );

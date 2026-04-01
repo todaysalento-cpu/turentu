@@ -6,10 +6,10 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
-// Configurazione multer per ricevere file in memoria
+// Configurazione multer
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Definizione campi documenti
+// Campi documenti
 const documentFields = [
   { name: 'foto_profilo', maxCount: 1 },
   { name: 'carta_identita', maxCount: 1 },
@@ -18,23 +18,23 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// Mapping frontend -> DB per documenti_autista.tipo
-const tipoMapping: Record<string, string> = {
+// ✅ Mapping corretto (JS puro)
+const tipoMapping = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
-  patente_foto: 'patente',                  // <- mappatura corretta
+  patente_foto: 'patente',
   certificato_abilitazione: 'certificato_abilitazione',
   iscrizione_ruolo: 'iscrizione_ruolo',
 };
 
-// POST /api/autista/documenti/profilo
 router.post(
   '/profilo',
-  authMiddleware, // prende utente dal token JWT
+  authMiddleware,
   upload.fields(documentFields),
   async (req, res) => {
     try {
       const utente_id = req.user.id;
+
       const {
         nome,
         cognome,
@@ -45,39 +45,48 @@ router.post(
         telefono,
       } = req.body;
 
-      // Controllo che l'utente esista
-      const userRes = await pool.query('SELECT id FROM utente WHERE id=$1', [utente_id]);
+      // 🔹 Controllo utente
+      const userRes = await pool.query(
+        'SELECT id FROM utente WHERE id=$1',
+        [utente_id]
+      );
+
       if (!userRes.rows[0]) {
-        return res.status(400).json({ success: false, message: 'Utente non trovato' });
+        return res.status(400).json({
+          success: false,
+          message: 'Utente non trovato',
+        });
       }
 
-      // Upload file su Cloudinary
-      const fileUrls: Record<string, string> = {};
+      // 🔹 Upload file
+      const fileUrls = {}; // ✅ JS puro
+
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
+
         if (file) {
           const url = await uploadFile(file.buffer, file.originalname);
           if (url) fileUrls[field.name] = url;
         }
       }
 
-      // Inserimento/aggiornamento profilo personale in autista_profilo
+      // 🔹 Salvataggio profilo
       await pool.query(
         `INSERT INTO autista_profilo
-          (utente_id, nome, cognome, codice_fiscale, patente, certificato_ncc, iban, telefono, foto_profilo, documenti, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
-         ON CONFLICT (utente_id)
-         DO UPDATE SET
-           nome = $2,
-           cognome = $3,
-           codice_fiscale = $4,
-           patente = $5,
-           certificato_ncc = $6,
-           iban = $7,
-           telefono = $8,
-           foto_profilo = $9,
-           documenti = $10,
-           updated_at = now()`,
+        (utente_id, nome, cognome, codice_fiscale, patente, certificato_ncc, iban, telefono, foto_profilo, documenti, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now(), now())
+        ON CONFLICT (utente_id)
+        DO UPDATE SET
+          nome = $2,
+          cognome = $3,
+          codice_fiscale = $4,
+          patente = $5,
+          certificato_ncc = $6,
+          iban = $7,
+          telefono = $8,
+          foto_profilo = $9,
+          documenti = $10,
+          updated_at = now()`,
         [
           utente_id,
           nome,
@@ -97,10 +106,14 @@ router.post(
         ]
       );
 
-      // Inserimento dei documenti in documenti_autista con mapping corretto
+      // 🔹 Inserimento documenti con mapping corretto
       for (const [field, url] of Object.entries(fileUrls)) {
         if (field !== 'foto_profilo' && url) {
           const tipoDB = tipoMapping[field];
+
+          // sicurezza extra
+          if (!tipoDB) continue;
+
           await pool.query(
             `INSERT INTO documenti_autista (autista_id, tipo, url)
              VALUES ($1,$2,$3)
@@ -115,9 +128,13 @@ router.post(
         message: 'Profilo e documenti salvati correttamente',
         fileUrls,
       });
+
     } catch (err) {
       console.error('💥 Errore route /autista/documenti/profilo:', err);
-      return res.status(500).json({ success: false, message: 'Errore interno server' });
+      return res.status(500).json({
+        success: false,
+        message: 'Errore interno server',
+      });
     }
   }
 );

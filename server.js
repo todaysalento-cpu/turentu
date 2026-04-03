@@ -25,8 +25,6 @@ import { chatRouter } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
-
-// 🔹 NUOVO: import documenti autista
 import documentiAutistaRouter from './routes/documentiAutista.routes.js';
 
 import * as pendingService from './services/pending/pending.service.js';
@@ -35,9 +33,22 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 const app = express();
 
 // ======================= CORS (Sviluppo + Produzione)
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_PROD = 'https://turentumi.vercel.app';
+const FRONTEND_DEV = 'http://localhost:3000';
+
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [FRONTEND_PROD]
+  : [FRONTEND_DEV];
+
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Postman, CURL, server-to-server
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS non consentito per origin: ${origin}`));
+    }
+  },
   credentials: true,
 }));
 app.options('*', cors());
@@ -71,8 +82,6 @@ app.use('/api/chat', chatRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
-
-// 🔹 NUOVO: route documenti autista
 app.use('/api/autista/documenti', documentiAutistaRouter);
 
 // ======================= HEALTH CHECK
@@ -95,12 +104,12 @@ app.use((err, req, res, next) => {
 });
 
 // ======================= SERVER + SOCKET.IO
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: allowedOrigins,
     credentials: true,
   }
 });
@@ -110,7 +119,6 @@ setupSocket(io);
 // ======================= INIT CACHE REDIS
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
-
   try {
     if (!redisClient.isOpen) await redisClient.connect();
     console.log('🟢 Redis pronto');

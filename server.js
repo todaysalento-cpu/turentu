@@ -26,6 +26,7 @@ import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
 import documentiAutistaRouter from './routes/documentiAutista.routes.js';
+import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js'; // <- nuova rotta
 
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
@@ -83,6 +84,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
+app.use('/api/documenti', documentiVeicoloRouter); // <- montaggio nuova rotta documenti veicolo
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>

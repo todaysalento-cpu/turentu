@@ -1,0 +1,82 @@
+// routes/documentiVeicolo.routes.js
+import { Router } from 'express';
+import multer from 'multer';
+import { pool } from '../db/db.js';
+import { uploadFile } from '../helpers/cloudinary.js';
+import { authMiddleware } from '../middleware/auth.js';
+
+const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
+
+// ===================== CAMPi DOCUMENTI VEICOLO =====================
+const documentFields = [
+  { name: 'licenza_ncc', maxCount: 1 },
+  { name: 'assicurazione', maxCount: 1 },
+  { name: 'libretto', maxCount: 1 },
+];
+
+// ===================== MAPPING TIPI =====================
+const tipoMapping = {
+  licenza_ncc: 'licenza_ncc',
+  assicurazione: 'assicurazione',
+  libretto: 'libretto',
+};
+
+// ===================== POST UPLOAD DOCUMENTI =====================
+router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
+  try {
+    const veicolo_id = parseInt(req.body.veicolo_id);
+    const driver_id = req.user.id;
+
+    if (!veicolo_id) {
+      return res.status(400).json({ success: false, message: 'ID veicolo mancante' });
+    }
+
+    // Controllo veicolo esistente
+    const veicoloRes = await pool.query(
+      'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
+      [veicolo_id, driver_id]
+    );
+    if (!veicoloRes.rowCount) {
+      return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
+    }
+
+    // Controllo che ci siano file da caricare
+    if (!req.files || Object.keys(req.files).length === 0) {
+      return res.status(400).json({ success: false, message: 'Nessun documento caricato' });
+    }
+
+    // Upload file su Cloudinary
+    const fileUrls = {};
+    for (const field of documentFields) {
+      const file = req.files?.[field.name]?.[0];
+      if (file) {
+        const url = await uploadFile(file.buffer, file.originalname);
+        if (url) fileUrls[field.name] = url;
+      }
+    }
+
+    // Salvataggio documenti nel DB
+    for (const [field, url] of Object.entries(fileUrls)) {
+      if (!url) continue;
+      await pool.query(
+        `INSERT INTO documenti_veicolo (veicolo_id, tipo, url)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (veicolo_id, tipo) DO UPDATE SET url = EXCLUDED.url`,
+        [veicolo_id, tipoMapping[field], url]
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: 'Documenti veicolo salvati correttamente',
+      fileUrls,
+    });
+
+  } catch (err) {
+    console.error('💥 Errore /documenti veicolo:', err);
+    return res.status(500).json({ success: false, message: 'Errore interno server' });
+  }
+});
+
+export default router;

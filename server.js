@@ -26,7 +26,7 @@ import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
 import documentiAutistaRouter from './routes/documentiAutista.routes.js';
-import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js'; // <- nuova rotta
+import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
 
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
@@ -34,12 +34,13 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 const app = express();
 
 // ======================= CORS (Sviluppo + Produzione)
-const FRONTEND_PROD = 'https://turentumi.vercel.app';
-const FRONTEND_DEV = 'http://localhost:3000';
+const FRONTEND_PROD = [
+  'https://turentumi.vercel.app',
+  'https://turentu-dkq55slsk-turentu.vercel.app' // staging / preview Vercel
+];
+const FRONTEND_DEV = ['http://localhost:3000'];
 
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [FRONTEND_PROD]
-  : [FRONTEND_DEV];
+const allowedOrigins = process.env.NODE_ENV === 'production' ? FRONTEND_PROD : FRONTEND_DEV;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -47,6 +48,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`❌ CORS non consentito per origin: ${origin}`);
       callback(new Error(`CORS non consentito per origin: ${origin}`));
     }
   },
@@ -84,7 +86,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
-app.use('/api/documenti', documentiVeicoloRouter); // <- montaggio nuova rotta documenti veicolo
+app.use('/api/documenti', documentiVeicoloRouter); // documenti veicolo
 
 // ======================= HEALTH CHECK
 app.get('/', (_, res) =>

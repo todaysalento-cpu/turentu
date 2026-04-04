@@ -41,7 +41,6 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
       return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
     }
 
-    // Controllo che ci siano file da caricare
     if (!req.files || Object.keys(req.files).length === 0) {
       return res.status(400).json({ success: false, message: 'Nessun documento caricato' });
     }
@@ -56,14 +55,15 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
       }
     }
 
-    // Salvataggio documenti nel DB
+    // Salvataggio documenti nel DB usando documenti_autista
     for (const [field, url] of Object.entries(fileUrls)) {
       if (!url) continue;
       await pool.query(
-        `INSERT INTO documenti_veicolo (veicolo_id, tipo, url)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (veicolo_id, tipo) DO UPDATE SET url = EXCLUDED.url`,
-        [veicolo_id, tipoMapping[field], url]
+        `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (veicolo_id, tipo) 
+         DO UPDATE SET url = EXCLUDED.url`,
+        [driver_id, veicolo_id, tipoMapping[field], url]
       );
     }
 

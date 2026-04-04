@@ -27,8 +27,8 @@ const transporter = nodemailer.createTransport({
 // ===================== COOKIE CONFIG =====================
 const cookieOptions = {
   httpOnly: true,
-  sameSite: 'lax',
-  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // cross-site in produzione
+  secure: process.env.NODE_ENV === 'production',                   // https solo in produzione
   path: '/',
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
@@ -193,7 +193,6 @@ router.post('/logout', (req, res) => {
 });
 
 // ===================== OTP =====================
-
 // INVIO OTP
 router.post('/otp/send', async (req, res) => {
   const { phone } = req.body;
@@ -206,14 +205,12 @@ router.post('/otp/send', async (req, res) => {
     const userRes = await pool.query('SELECT id FROM utente WHERE phone=$1', [phone]);
 
     if (userRes.rows.length) {
-      // aggiorna OTP per utente esistente
       await pool.query(
         'UPDATE utente SET otp_code=$1, otp_expires=$2 WHERE phone=$3',
         [otp, expiresAt, phone]
       );
     } else {
-      // crea nuovo utente OTP temporaneo
-      const tempEmail = `otp_${phone}@example.com`; // email fittizia unica
+      const tempEmail = `otp_${phone}@example.com`;
       const tempPassword = crypto.randomBytes(16).toString('hex');
 
       await pool.query(
@@ -255,7 +252,6 @@ router.post('/otp/verify', async (req, res) => {
     if (new Date(user.otp_expires) < new Date())
       return res.status(400).json({ message: 'OTP scaduto' });
 
-    // pulisce OTP dal DB
     await pool.query(
       'UPDATE utente SET otp_code=NULL, otp_expires=NULL WHERE id=$1',
       [user.id]
@@ -276,4 +272,5 @@ router.post('/otp/verify', async (req, res) => {
     res.status(500).json({ message: 'Errore server' });
   }
 });
+
 export { router };

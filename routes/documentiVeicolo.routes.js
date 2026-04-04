@@ -58,11 +58,16 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     // Salvataggio documenti nel DB usando documenti_autista
     for (const [field, url] of Object.entries(fileUrls)) {
       if (!url) continue;
+
       await pool.query(
         `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (veicolo_id, tipo) 
-         DO UPDATE SET url = EXCLUDED.url`,
+         ON CONFLICT (autista_id, veicolo_id, tipo)
+         DO UPDATE SET
+           url = EXCLUDED.url,
+           stato = 'pending',
+           note_admin = NULL,
+           created_at = CURRENT_TIMESTAMP`,
         [driver_id, veicolo_id, tipoMapping[field], url]
       );
     }

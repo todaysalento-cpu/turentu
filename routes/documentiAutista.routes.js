@@ -15,8 +15,8 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// Mappa nomi frontend → nomi DB validi
-const tipoMap: Record<string, string> = {
+// ✅ FIX: rimosso TypeScript
+const tipoMap = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
   patente_foto: 'patente',
@@ -28,19 +28,22 @@ const tipoMap: Record<string, string> = {
 router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
   try {
     const utente_id = req.user.id;
-    const fileUrls: Record<string, string> = {};
+    const fileUrls = {}; // ✅ FIX: niente type
 
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (!file) continue;
 
-      // Carica su Cloudinary
+      // Upload su Cloudinary
       const url = await uploadFile(file.buffer, file.originalname);
-      if (!url) continue;
+      if (!url) {
+        console.error(`❌ Upload fallito per ${field.name}`);
+        continue;
+      }
 
       fileUrls[field.name] = url;
 
-      // Salva o aggiorna documento nel DB
+      // Salva o aggiorna documento
       await pool.query(
         `INSERT INTO documenti_autista (autista_id, tipo, url)
          VALUES ($1, $2, $3)
@@ -50,10 +53,18 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
       );
     }
 
-    res.json({ success: true, message: 'Documenti salvati correttamente', fileUrls });
+    return res.json({
+      success: true,
+      message: 'Documenti salvati correttamente',
+      fileUrls,
+    });
+
   } catch (err) {
     console.error('❌ Errore /autista/documenti POST:', err);
-    res.status(500).json({ success: false, message: 'Errore interno server' });
+    return res.status(500).json({
+      success: false,
+      message: 'Errore interno server',
+    });
   }
 });
 

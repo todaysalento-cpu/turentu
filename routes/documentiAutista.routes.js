@@ -31,7 +31,7 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
         await pool.query(
           `INSERT INTO documenti_autista (autista_id, tipo, url)
            VALUES ($1, $2, $3)
-           ON CONFLICT (autista_id, tipo)
+           ON CONFLICT (autista_id, tipo)  -- ora funziona se aggiungi vincolo UNIQUE
            DO UPDATE SET url = EXCLUDED.url`,
           [utente_id, field.name, url]
         );

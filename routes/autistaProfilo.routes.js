@@ -28,94 +28,67 @@ router.post(
     try {
       const utente_id = req.user.id;
 
-      const {
+      const { nome, cognome, telefono, iban, nome_titolare_conto, nome_banca } = req.body;
+
+      // Validazione campi obbligatori
+      if (!nome || !cognome || !telefono || !iban || !nome_titolare_conto || !nome_banca) {
+        return res.status(400).json({ success: false, message: 'Campi obbligatori mancanti' });
+      }
+
+      // Gestione file caricati
+      const files = {};
+      const fileFields = ['foto_profilo', 'carta_identita', 'patente_foto', 'certificato_abilitazione', 'iscrizione_ruolo'];
+      fileFields.forEach(field => {
+        if (req.files[field]?.[0]) {
+          files[field] = req.files[field][0].buffer;
+        }
+      });
+
+      // Creazione JSON documenti
+      const documenti = {
+        carta_identita: files.carta_identita || null,
+        patente_foto: files.patente_foto || null,
+        certificato_abilitazione: files.certificato_abilitazione || null,
+        iscrizione_ruolo: files.iscrizione_ruolo || null,
+      };
+
+      // INSERT o UPDATE
+      const query = `
+        INSERT INTO autista_profilo
+          (utente_id, nome, cognome, telefono, iban, nome_titolare_conto, nome_banca, foto_profilo, documenti, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NOW(), NOW())
+        ON CONFLICT (utente_id)
+        DO UPDATE SET
+          nome = $2,
+          cognome = $3,
+          telefono = $4,
+          iban = $5,
+          nome_titolare_conto = $6,
+          nome_banca = $7,
+          foto_profilo = $8,
+          documenti = $9,
+          updated_at = NOW()
+        RETURNING *;
+      `;
+
+      const values = [
+        utente_id,
         nome,
         cognome,
         telefono,
         iban,
         nome_titolare_conto,
         nome_banca,
-      } = req.body;
+        files.foto_profilo || null,
+        JSON.stringify(documenti),
+      ];
 
-      console.log('👤 USER ID (profilo):', utente_id);
-      console.log('📦 BODY:', req.body);
+      const result = await pool.query(query, values);
 
-      // Validazione campi obbligatori aggiornati
-      if (!nome || !cognome || !telefono || !iban || !nome_titolare_conto || !nome_banca) {
-        return res.status(400).json({ error: 'Campi obbligatori mancanti' });
-      }
-
-      // Gestione file caricati
-      const fileFields = ['foto_profilo','carta_identita','patente_foto','certificato_abilitazione','iscrizione_ruolo'];
-      const files = {};
-      fileFields.forEach(field => {
-        if (req.files[field]?.[0]) {
-          files[field] = req.files[field][0].buffer; // salva il buffer
-        }
-      });
-
-      // Controllo se esiste già il profilo
-      const existing = await pool.query(
-        'SELECT 1 FROM autista_profilo WHERE utente_id = $1',
-        [utente_id]
-      );
-
-      if (existing.rowCount > 0) {
-        // UPDATE
-        const updated = await pool.query(
-          `UPDATE autista_profilo
-           SET nome=$1, cognome=$2, telefono=$3, iban=$4, nome_titolare_conto=$5,
-               nome_banca=$6, foto_profilo=$7, carta_identita=$8, patente_foto=$9,
-               certificato_abilitazione=$10, iscrizione_ruolo=$11, updated_at=NOW()
-           WHERE utente_id=$12
-           RETURNING *`,
-          [
-            nome,
-            cognome,
-            telefono,
-            iban,
-            nome_titolare_conto,
-            nome_banca,
-            files.foto_profilo || null,
-            files.carta_identita || null,
-            files.patente_foto || null,
-            files.certificato_abilitazione || null,
-            files.iscrizione_ruolo || null,
-            utente_id,
-          ]
-        );
-
-        return res.json(updated.rows[0]);
-      }
-
-      // INSERT
-      const inserted = await pool.query(
-        `INSERT INTO autista_profilo
-         (utente_id, nome, cognome, telefono, iban, nome_titolare_conto, nome_banca,
-          foto_profilo, carta_identita, patente_foto, certificato_abilitazione, iscrizione_ruolo)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         RETURNING *`,
-        [
-          utente_id,
-          nome,
-          cognome,
-          telefono,
-          iban,
-          nome_titolare_conto,
-          nome_banca,
-          files.foto_profilo || null,
-          files.carta_identita || null,
-          files.patente_foto || null,
-          files.certificato_abilitazione || null,
-          files.iscrizione_ruolo || null,
-        ]
-      );
-
-      res.json(inserted.rows[0]);
-
+      res.json({ success: true, data: result.rows[0] });
     } catch (err) {
-      console.error('❌ Errore /autista/profilo:', err);
-      res.status(500).json({ error: 'Errore interno server' });
+      console.error('❌ Errore /autista/profilo POST:', err);
+      res.status(500).json({ success: false, message: 'Errore interno server' });
     }
   }
 );
@@ -133,14 +106,10 @@ router.get('/me', authMiddleware, async (req, res) => {
       [utente_id]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({});
-    }
-
-    res.json(result.rows[0]);
+    res.json({ success: true, data: result.rows[0] || null });
   } catch (err) {
     console.error('❌ Errore GET /autista/profilo/me:', err);
-    res.status(500).json({ error: 'Errore interno server' });
+    res.status(500).json({ success: false, message: 'Errore interno server' });
   }
 });
 
@@ -157,13 +126,13 @@ router.get('/:utenteId', async (req, res) => {
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Profilo non trovato' });
+      return res.status(404).json({ success: false, message: 'Profilo non trovato' });
     }
 
-    res.json(result.rows[0]);
+    res.json({ success: true, data: result.rows[0] });
   } catch (err) {
-    console.error('Errore GET /autista/profilo/:utenteId:', err);
-    res.status(500).json({ error: 'Errore interno server' });
+    console.error('❌ Errore GET /autista/profilo/:utenteId:', err);
+    res.status(500).json({ success: false, message: 'Errore interno server' });
   }
 });
 

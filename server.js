@@ -33,43 +33,45 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 
 const app = express();
 
-// ======================= CORS (Sviluppo + Produzione)
+// ======================= CORS CONFIGURAZIONE =======================
 const FRONTEND_PROD = [
   'https://turentumi.vercel.app',
-  'https://turentu-dkq55slsk-turentu.vercel.app' // staging / preview Vercel
+  'https://turentu-dkq55slsk-turentu.vercel.app' // staging / preview
 ];
-const FRONTEND_DEV = ['http://localhost:3000'];
+const FRONTEND_DEV = [
+  'http://localhost:3000',
+  'https://turentumi.vercel.app' // utile se test da Vercel in locale
+];
 
 const allowedOrigins = process.env.NODE_ENV === 'production' ? FRONTEND_PROD : FRONTEND_DEV;
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // Postman, CURL, server-to-server
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`❌ CORS non consentito per origin: ${origin}`);
-      callback(new Error(`CORS non consentito per origin: ${origin}`));
-    }
+    if (!origin) return callback(null, true); // server-to-server, Postman, CURL
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn(`❌ CORS non consentito per origin: ${origin}`);
+    return callback(new Error('CORS non consentito'));
   },
   credentials: true,
 }));
-app.options('*', cors());
 
-// ======================= LOGGING
+// preflight per tutte le rotte
+app.options('*', cors({ origin: allowedOrigins, credentials: true }));
+
+// ======================= LOGGING =======================
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] 🔹 ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// ======================= STRIPE WEBHOOK
+// ======================= STRIPE WEBHOOK =======================
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
-// ======================= MIDDLEWARE
+// ======================= MIDDLEWARE =======================
 app.use(cookieParser());
 app.use(express.json());
 
-// ======================= ROUTES
+// ======================= ROUTES =======================
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
@@ -88,17 +90,17 @@ app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter); // documenti veicolo
 
-// ======================= HEALTH CHECK
+// ======================= HEALTH CHECK =======================
 app.get('/', (_, res) =>
   res.json({ status: 'OK', service: 'TURENTU API', timestamp: new Date().toISOString() })
 );
 
-// ======================= 404
+// ======================= 404 HANDLER =======================
 app.use((req, res) =>
   res.status(404).json({ error: 'Not Found', path: req.originalUrl })
 );
 
-// ======================= ERROR HANDLER
+// ======================= ERROR HANDLER =======================
 app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
   res.status(err.status || 500).json({
@@ -107,7 +109,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ======================= SERVER + SOCKET.IO
+// ======================= SERVER + SOCKET.IO =======================
 const port = process.env.PORT || 3001;
 const server = http.createServer(app);
 
@@ -120,7 +122,7 @@ const io = new Server(server, {
 
 setupSocket(io);
 
-// ======================= INIT CACHE REDIS
+// ======================= INIT CACHE REDIS =======================
 const initCaches = async () => {
   if (!redisClient) return console.warn('⚠️ Redis non configurato');
   try {
@@ -134,7 +136,7 @@ const initCaches = async () => {
   }
 };
 
-// ======================= CLEANUP PENDING
+// ======================= CLEANUP PENDING =======================
 const cleanupPending = async () => {
   try {
     const count = await pendingService.cleanupExpired();
@@ -144,7 +146,7 @@ const cleanupPending = async () => {
   }
 };
 
-// ======================= START SERVER
+// ======================= START SERVER =======================
 server.listen(port, '0.0.0.0', async () => {
   console.log(`🚀 Server su porta ${port}`);
   console.log('🟢 Socket.IO attivo');

@@ -34,29 +34,44 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 const app = express();
 
 // ======================= CORS CONFIGURAZIONE =======================
+
 const FRONTEND_PROD = [
-  'https://turentumi.vercel.app',
-  'https://turentu-dkq55slsk-turentu.vercel.app' // staging / preview
+  'https://turentumi.vercel.app'
 ];
+
 const FRONTEND_DEV = [
-  'http://localhost:3000',
-  'https://turentumi.vercel.app' // utile se test da Vercel in locale
+  'http://localhost:3000'
 ];
 
-const allowedOrigins = process.env.NODE_ENV === 'production' ? FRONTEND_PROD : FRONTEND_DEV;
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
 
-app.use(cors({
+  // localhost
+  if (FRONTEND_DEV.includes(origin)) return true;
+
+  // dominio principale
+  if (FRONTEND_PROD.includes(origin)) return true;
+
+  // 🔥 QUALSIASI preview Vercel
+  if (origin.endsWith('.vercel.app')) return true;
+
+  return false;
+};
+
+const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // server-to-server, Postman, CURL
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
     console.warn(`❌ CORS non consentito per origin: ${origin}`);
     return callback(new Error('CORS non consentito'));
   },
   credentials: true,
-}));
+};
 
-// preflight per tutte le rotte
-app.options('*', cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // ======================= LOGGING =======================
 app.use((req, res, next) => {
@@ -88,7 +103,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
-app.use('/api/documenti', documentiVeicoloRouter); // documenti veicolo
+app.use('/api/documenti', documentiVeicoloRouter);
 
 // ======================= HEALTH CHECK =======================
 app.get('/', (_, res) =>
@@ -105,7 +120,9 @@ app.use((err, req, res, next) => {
   console.error('💥 ERROR:', err.message);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+    message: process.env.NODE_ENV === 'production'
+      ? 'Something went wrong'
+      : err.message
   });
 });
 
@@ -115,7 +132,10 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      return callback('CORS not allowed', false);
+    },
     credentials: true,
   }
 });

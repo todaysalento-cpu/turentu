@@ -24,11 +24,12 @@ function formatNotificationDate(input) {
   return `${dayName} all’${time}`;
 }
 
-// -------------------- GET pending di un veicolo --------------------
+// -------------------- GET pending --------------------
 router.get('/autista/:veicoloId', async (req, res) => {
   const client = await pool.connect();
   try {
     const veicoloId = Number(req.params.veicoloId);
+
     const result = await client.query(
       `SELECT p.*, u.nome AS cliente_nome
        FROM pending p
@@ -37,11 +38,13 @@ router.get('/autista/:veicoloId', async (req, res) => {
        ORDER BY p.id ASC`,
       [veicoloId]
     );
+
     const pendings = result.rows.map(p => ({
       ...p,
       cliente: p.cliente_nome || 'Cliente N/D',
       prezzo: Number(p.prezzo ?? 0),
     }));
+
     res.json({ pendings });
   } catch (err) {
     console.error('❌ Error fetching pendings:', err);
@@ -54,143 +57,149 @@ router.get('/autista/:veicoloId', async (req, res) => {
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
+
   try {
     const id = Number(req.params.id);
     await client.query('BEGIN');
 
-    const pendingRes = await client.query(`SELECT * FROM pending WHERE id = $1 FOR UPDATE`, [id]);
+    const pendingRes = await client.query(
+      `SELECT * FROM pending WHERE id = $1 FOR UPDATE`,
+      [id]
+    );
+
     if (!pendingRes.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Pending non trovato' });
     }
+
     const selectedPending = pendingRes.rows[0];
+
     if (selectedPending.stato !== 'pending') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'Questa richiesta non è più disponibile' });
+      return res.status(400).json({ message: 'Non disponibile' });
     }
 
+    // 🔥 BLOCCO doppia accettazione
     if (selectedPending.request_id) {
       const alreadyAccepted = await client.query(
         `SELECT id FROM pending WHERE request_id = $1 AND stato = 'accettata' FOR UPDATE`,
         [selectedPending.request_id]
       );
+
       if (alreadyAccepted.rows.length) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Richiesta già accettata da un altro autista' });
+        return res.status(400).json({ message: 'Già accettata' });
       }
     }
 
-    const returningFields = `
-      *, 
-      ST_X(origine::geometry) AS origine_lon, 
-      ST_Y(origine::geometry) AS origine_lat,
-      ST_X(destinazione::geometry) AS destinazione_lon, 
-      ST_Y(destinazione::geometry) AS destinazione_lat,
-      origine_address, destinazione_address, payment_intent_id, distanza
-    `;
+    // -------------------- UPDATE pending --------------------
     const result = await client.query(
-      `UPDATE pending SET stato = 'accettata' WHERE id = $1 RETURNING ${returningFields}`,
+      `UPDATE pending 
+       SET stato = 'accettata' 
+       WHERE id = $1 
+       RETURNING *,
+         ST_X(origine::geometry) AS origine_lon,
+         ST_Y(origine::geometry) AS origine_lat,
+         ST_X(destinazione::geometry) AS destinazione_lon,
+         ST_Y(destinazione::geometry) AS destinazione_lat`,
       [id]
     );
 
-    let acceptedPendings = result.rows;
-
-    if (selectedPending.request_id) {
-      await client.query(
-        `UPDATE pending SET stato = 'rifiutata' WHERE request_id = $1 AND id <> $2`,
-        [selectedPending.request_id, id]
-      );
-    }
-
-    acceptedPendings = acceptedPendings.map(p => ({
-      ...p,
-      origine: { lat: p.origine_lat ?? null, lon: p.origine_lon ?? null },
-      destinazione: { lat: p.destinazione_lat ?? null, lon: p.destinazione_lon ?? null },
-      origine_address: p.origine_address || 'N/D',
-      destinazione_address: p.destinazione_address || 'N/D',
-      prezzo: Number(p.prezzo ?? 0),
-      distanza: p.distanza !== null ? Number(p.distanza) : null,
-    }));
-
     const io = getIO();
-    let prenotazioni = [];
+    const acceptedPendings = result.rows;
 
     for (const p of acceptedPendings) {
-      let corsa, prenotazione;
-
+      // 🔥 PRENDO driver_id CORRETTO
       const driverRes = await client.query(
-        `SELECT u.nome AS driver_nome FROM veicolo v JOIN utente u ON u.id = v.driver_id WHERE v.id = $1`,
+        `SELECT v.driver_id, u.nome AS driver_nome
+         FROM veicolo v
+         JOIN utente u ON u.id = v.driver_id
+         WHERE v.id = $1`,
         [p.veicolo_id]
       );
+
+      const driverId = driverRes.rows[0]?.driver_id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
 
+      let corsa, prenotazione;
+
+      // -------------------- CREA O USA CORSA --------------------
       if (!p.corsa_id) {
-        const existingCorsa = await client.query(
-          `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
+        const existing = await client.query(
+          `SELECT * FROM corse 
+           WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
           [p.veicolo_id, p.start_datetime]
         );
-        if (existingCorsa.rows.length) {
-          corsa = existingCorsa.rows[0];
+
+        if (existing.rows.length) {
+          corsa = existing.rows[0];
           prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
         } else {
           const veicolo = { id: p.veicolo_id, posti: 4 };
-          const corsaResult = await createCorsaFromPending({ ...p, distanza: p.distanza }, veicolo, client);
-          corsa = corsaResult.corsa;
-          prenotazione = corsaResult.prenotazione;
-          await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
+          const res = await createCorsaFromPending(p, veicolo, client);
+          corsa = res.corsa;
+          prenotazione = res.prenotazione;
+
+          await client.query(
+            `UPDATE pending SET corsa_id = $1 WHERE id = $2`,
+            [corsa.id, p.id]
+          );
         }
-        p.corsa_id = corsa.id;
-        prenotazioni.push(prenotazione);
       } else {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [p.corsa_id]);
-        if (!corsaRes.rows.length) throw new Error('Corsa non trovata');
         corsa = corsaRes.rows[0];
         prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
-        prenotazioni.push(prenotazione);
       }
 
-      if (p.payment_intent_id) {
-        await client.query(
-          `INSERT INTO pagamenti (prenotazione_id, stripe_payment_intent, importo, stato, updated_at)
-           VALUES ($1,$2,$3,'autorizzazione',NOW())`,
-          [prenotazione.id, p.payment_intent_id, p.prezzo]
-        );
-      }
-
-      const messageCliente = `✅ Il tuo viaggio da ${p.origine_address} a ${p.destinazione_address} è stato accettato da ${driverNome}.\nPrezzo: €${p.prezzo.toFixed(2)}`;
-      const notifClienteRes = await client.query(
-        `INSERT INTO notifications(user_id, type, message, seen, created_at)
-         VALUES ($1,'pending',$2,false,NOW()) RETURNING *`,
-        [p.cliente_id, messageCliente]
-      );
-
-      const notifCliente = notifClienteRes.rows[0];
-      notifCliente.displayDate = formatNotificationDate(new Date(notifCliente.created_at));
-      sendNotification({ userId: p.cliente_id, role: 'cliente', notification: notifCliente });
-
-      // 🔥 Emit aggiornato con veicolo_id e indirizzi completi
-      io.to(`cliente_${p.cliente_id}`).emit('pending_update', {
-        id: p.id,
-        corsa_id: p.corsa_id,
-        stato: 'accettata',
-        driver_nome: driverNome,
-        pending_id: p.id,
-        veicolo_id: p.veicolo_id
-      });
-
+      // -------------------- COSTRUISCO CORSA COMPLETA --------------------
       const corsaCompleta = {
         ...corsa,
+        corsa_id: corsa.id,
+        veicolo_id: p.veicolo_id,
+        pending_id: p.id,
+        origine: { lat: p.origine_lat, lon: p.origine_lon },
+        destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon },
         origine_address: p.origine_address,
         destinazione_address: p.destinazione_address,
-        veicolo_id: p.veicolo_id,
-        pending_id: p.id
       };
 
-      io.to(`autista_${p.veicolo_id}`).emit('nuova_corsa', corsaCompleta);
+      // -------------------- SOCKET AUTISTA (🔥 FIX) --------------------
+      io.to(`autista_${driverId}`).emit('pending_update', {
+        id: p.id,
+        stato: 'accettata',
+        pending_id: p.id,
+        veicolo_id: p.veicolo_id,
+        corsa: corsaCompleta // 🔥 QUESTO RISOLVE IL TUO BUG
+      });
+
+      io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
+
+      // -------------------- SOCKET CLIENTE --------------------
+      io.to(`cliente_${p.cliente_id}`).emit('pending_update', {
+        id: p.id,
+        stato: 'accettata',
+        corsa_id: corsa.id,
+      });
+
+      // -------------------- NOTIFICA --------------------
+      const message = `✅ Viaggio accettato da ${driverNome}`;
+      const notif = await client.query(
+        `INSERT INTO notifications(user_id,type,message,seen,created_at)
+         VALUES ($1,'pending',$2,false,NOW()) RETURNING *`,
+        [p.cliente_id, message]
+      );
+
+      sendNotification({
+        userId: p.cliente_id,
+        role: 'cliente',
+        notification: notif.rows[0]
+      });
     }
 
     await client.query('COMMIT');
-    res.json({ pendings: acceptedPendings, prenotazioni });
+
+    res.json({ ok: true });
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Pending accept error:', err);
@@ -200,14 +209,22 @@ router.post('/:id/accetta', async (req, res) => {
   }
 });
 
-// -------------------- Helper real-time nuova pending --------------------
+// -------------------- NEW PENDING --------------------
 export async function notifyNewPending(pending) {
   try {
     const io = getIO();
-    const message = `🚖 Nuova richiesta da ${pending.cliente_nome} da ${pending.origine_address} a ${pending.destinazione_address}`;
-    io.to(`autista_${pending.veicolo_id}`).emit('new_pending', { pending, message });
+
+    const driverRes = await pool.query(
+      `SELECT driver_id FROM veicolo WHERE id = $1`,
+      [pending.veicolo_id]
+    );
+
+    const driverId = driverRes.rows[0]?.driver_id;
+
+    io.to(`autista_${driverId}`).emit('new_pending', { pending });
+
   } catch (err) {
-    console.error('❌ Errore notifyNewPending:', err);
+    console.error('❌ notifyNewPending error:', err);
   }
 }
 

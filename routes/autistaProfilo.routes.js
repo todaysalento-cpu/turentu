@@ -56,7 +56,6 @@ router.post(
       );
 
       res.json({ success: true, data: result.rows[0] });
-
     } catch (err) {
       console.error('❌ Errore /autista/profilo POST:', err);
       res.status(500).json({ success: false, message: 'Errore interno server' });
@@ -64,20 +63,53 @@ router.post(
   }
 );
 
-// ===================== GET PROFILO LOGGATO =====================
+// ===================== GET PROFILO LOGGATO CON DOCUMENTI =====================
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const utente_id = req.user.id;
 
-    const result = await pool.query(
+    // 1️⃣ Recupera dati profilo
+    const profiloResult = await pool.query(
       'SELECT * FROM autista_profilo WHERE utente_id = $1',
       [utente_id]
     );
+    const profilo = profiloResult.rows[0] || null;
 
-    res.json({
-      success: true,
-      data: result.rows[0] || null
+    if (!profilo) {
+      return res.json({ success: true, data: null });
+    }
+
+    // 2️⃣ Recupera documenti
+    const docResult = await pool.query(
+      'SELECT tipo, url FROM documenti_autista WHERE autista_id = $1',
+      [utente_id]
+    );
+
+    // Mappa DB -> frontend (JS puro, niente TypeScript)
+    const tipoMap = {
+      foto_profilo: 'foto_profilo',
+      carta_identita: 'carta_identita',
+      patente: 'patente_foto',               // ← mappatura corretta
+      certificato_abilitazione: 'certificato_abilitazione',
+      iscrizione_ruolo: 'iscrizione_ruolo',
+      licenza_ncc: 'licenza_ncc',
+      assicurazione: 'assicurazione',
+      libretto: 'libretto',
+    };
+
+    const documenti = {};
+    docResult.rows.forEach(doc => {
+      const key = tipoMap[doc.tipo];
+      if (key && doc.url) documenti[key] = doc.url;
     });
+
+    // 3️⃣ Componi risposta finale
+    const responseData = {
+      ...profilo,
+      documenti,
+    };
+
+    res.json({ success: true, data: responseData });
 
   } catch (err) {
     console.error('❌ Errore GET /autista/profilo/me:', err);

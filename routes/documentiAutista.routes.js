@@ -7,7 +7,7 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Documenti da gestire
+// ===================== DOCUMENTI =====================
 const documentFields = [
   { name: 'carta_identita', maxCount: 1 },
   { name: 'patente_foto', maxCount: 1 },
@@ -15,57 +15,96 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// ✅ FIX: rimosso TypeScript
+// ===================== MAPPING FRONTEND -> DB =====================
 const tipoMap = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
-  patente_foto: 'patente',
+  patente_foto: 'patente', // <-- mapping corretto per il DB
   certificato_abilitazione: 'certificato_abilitazione',
   iscrizione_ruolo: 'iscrizione_ruolo',
 };
 
-// POST /autista/documenti → upload documenti
-router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
-  try {
-    const utente_id = req.user.id;
-    const fileUrls = {}; // ✅ FIX: niente type
+// ===================== ROUTE =====================
+router.post(
+  '/',
+  authMiddleware,
+  upload.fields([{ name: 'foto_profilo', maxCount: 1 }, ...documentFields]),
+  async (req, res) => {
+    try {
+      const utente_id = req.user.id;
+      const fileUrls = {};
 
-    for (const field of documentFields) {
-      const file = req.files?.[field.name]?.[0];
-      if (!file) continue;
+      console.log('✅ User ID:', utente_id);
+      console.log('📂 Files ricevuti:', req.files);
 
-      // Upload su Cloudinary
-      const url = await uploadFile(file.buffer, file.originalname);
-      if (!url) {
-        console.error(`❌ Upload fallito per ${field.name}`);
-        continue;
+      // ===================== FOTO PROFILO =====================
+      const fotoFile = req.files?.foto_profilo?.[0];
+      if (fotoFile) {
+        console.log('📌 Foto profilo:', fotoFile.originalname);
+        const url = await uploadFile(fotoFile.buffer, fotoFile.originalname);
+        if (url) {
+          fileUrls.foto_profilo = url;
+
+          await pool.query(
+            `INSERT INTO autista_profilo (utente_id, foto_profilo, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (utente_id)
+             DO UPDATE SET foto_profilo = EXCLUDED.foto_profilo, updated_at = NOW()`,
+            [utente_id, url]
+          );
+        }
       }
 
-      fileUrls[field.name] = url;
+      // ===================== DOCUMENTI =====================
+      for (const field of documentFields) {
+        const file = req.files?.[field.name]?.[0];
 
-      // Salva o aggiorna documento
-      await pool.query(
-        `INSERT INTO documenti_autista (autista_id, tipo, url)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (autista_id, tipo)
-         DO UPDATE SET url = EXCLUDED.url`,
-        [utente_id, tipoMap[field.name], url]
-      );
+        if (!file) {
+          console.log(`⚠️ Nessun file per ${field.name}`);
+          continue;
+        }
+
+        console.log(`📂 Upload ${field.name}:`, file.originalname);
+        const url = await uploadFile(file.buffer, file.originalname);
+        if (!url) {
+          console.log(`❌ Upload fallito: ${field.name}`);
+          continue;
+        }
+
+        // Usa mapping per il DB, ma mantiene chiave frontend per il client
+        const tipoDb = tipoMap[field.name];
+        fileUrls[field.name] = url;
+
+        await pool.query(
+          `INSERT INTO documenti_autista (autista_id, tipo, url)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (autista_id, tipo)
+           DO UPDATE SET
+             url = EXCLUDED.url,
+             stato = 'pending',
+             note_admin = NULL`,
+          [utente_id, tipoDb, url]
+        );
+
+        console.log(`✅ Salvato DB: ${tipoDb}`);
+      }
+
+      console.log('📤 RESPONSE:', fileUrls);
+
+      return res.json({
+        success: true,
+        message: 'Documenti e foto_profilo salvati correttamente',
+        fileUrls,
+      });
+
+    } catch (err) {
+      console.error('❌ Errore /autista/documenti POST:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Errore interno server',
+      });
     }
-
-    return res.json({
-      success: true,
-      message: 'Documenti salvati correttamente',
-      fileUrls,
-    });
-
-  } catch (err) {
-    console.error('❌ Errore /autista/documenti POST:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Errore interno server',
-    });
   }
-});
+);
 
 export default router;

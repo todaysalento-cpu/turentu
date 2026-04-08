@@ -43,8 +43,15 @@ async function geocodeLocalita(localita) {
 }
 
 // ----------------------------
-// GET marche-modelli
+// AUTENTICAZIONE
 // ----------------------------
+veicoloRouter.use(authMiddleware);
+
+// ----------------------------
+// ROUTE STATICHE
+// ----------------------------
+
+// GET marche-modelli
 veicoloRouter.get('/marche-modelli', async (req, res) => {
   try {
     const now = Date.now();
@@ -64,37 +71,116 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
   }
 });
 
-// ----------------------------
-// AUTH middleware
-// ----------------------------
-veicoloRouter.use(authMiddleware);
+// GET tipi veicolo
+veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
+
+// CHECK targa
+veicoloRouter.get('/check-targa', async (req, res) => {
+  try {
+    const { targa, id } = req.query;
+    if (!targa) return res.status(400).json({ error: 'Targa mancante' });
+
+    const params = [targa];
+    let query = 'SELECT id FROM veicolo WHERE targa=$1';
+
+    if (id) {
+      const idNum = Number(Array.isArray(id) ? id[0] : id);
+      if (Number.isNaN(idNum)) return res.status(400).json({ error: 'ID veicolo non valido' });
+      params.push(idNum);
+      query += ' AND id<>$2';
+    }
+
+    const result = await pool.query(query, params);
+    res.json({ inUse: result.rowCount > 0 });
+  } catch (err) {
+    console.error('❌ Check targa error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ----------------------------
-// GET veicoli (con localita, lon, lat)
+// ROUTE DINAMICHE
 // ----------------------------
+
+// GET tutti i veicoli con documenti
 veicoloRouter.get('/', async (req, res) => {
   try {
     const driver_id = req.user.id;
-    const result = await pool.query(
-      `SELECT *,
-        ST_X(coord::geometry) AS lon,
-        ST_Y(coord::geometry) AS lat,
-        localita
+    const veicoloRes = await pool.query(
+      `SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
        FROM veicolo
        WHERE driver_id=$1
        ORDER BY id DESC`,
       [driver_id]
     );
-    res.json(result.rows);
+    const veicoli = veicoloRes.rows;
+
+    // Recupero documenti
+    const veicoloIds = veicoli.map(v => v.id);
+    const documentiMap = {};
+    if (veicoloIds.length) {
+      const docRes = await pool.query(
+        `SELECT veicolo_id, tipo, url, stato
+         FROM documenti_autista
+         WHERE veicolo_id = ANY($1::int[])`,
+        [veicoloIds]
+      );
+      docRes.rows.forEach(d => {
+        if (!documentiMap[d.veicolo_id]) documentiMap[d.veicolo_id] = {};
+        documentiMap[d.veicolo_id][d.tipo] = { url: d.url, stato: d.stato };
+      });
+    }
+
+    const veicoliWithDocs = veicoli.map(v => ({
+      ...v,
+      documenti: documentiMap[v.id] || {}
+    }));
+
+    res.json(veicoliWithDocs);
   } catch (err) {
     console.error('❌ Veicoli GET error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ----------------------------
-// POST veicolo (geocode sicuro + localita)
-// ----------------------------
+// GET singolo veicolo con documenti
+veicoloRouter.get('/:id', async (req, res) => {
+  try {
+    const driver_id = req.user.id;
+    const veicoloId = Number(req.params.id);
+    if (!veicoloId) return res.status(400).json({ error: 'ID veicolo non valido' });
+
+    const veicoloRes = await pool.query(
+      `SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
+       FROM veicolo
+       WHERE id=$1 AND driver_id=$2`,
+      [veicoloId, driver_id]
+    );
+    if (!veicoloRes.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
+
+    const veicolo = veicoloRes.rows[0];
+
+    const docRes = await pool.query(
+      `SELECT tipo, url, stato
+       FROM documenti_autista
+       WHERE veicolo_id=$1`,
+      [veicoloId]
+    );
+
+    const documenti = {};
+    docRes.rows.forEach(d => documenti[d.tipo] = { url: d.url, stato: d.stato });
+
+    res.json({
+      ...veicolo,
+      documenti
+    });
+  } catch (err) {
+    console.error('❌ Veicolo GET/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST veicolo
 veicoloRouter.post('/', async (req, res) => {
   try {
     const driver_id = req.user.id;
@@ -104,7 +190,7 @@ veicoloRouter.post('/', async (req, res) => {
     servizi = servizi ?? [];
     raggio_km = raggio_km ?? 50;
 
-    if (tipo && !TIPI_VEICOLO.includes(tipo)) 
+    if (tipo && !TIPI_VEICOLO.includes(tipo))
       return res.status(400).json({ error: 'Tipo veicolo non valido' });
 
     if (targa) {
@@ -112,40 +198,20 @@ veicoloRouter.post('/', async (req, res) => {
       if (check.rowCount > 0) return res.status(400).json({ error: 'Targa già utilizzata' });
     }
 
-    // Geocoding backend se lat/lon mancanti
     if ((!lat || !lon) && localita) {
-      try {
-        const geo = await geocodeLocalita(localita);
-        lat = geo.lat;
-        lon = geo.lon;
-      } catch (err) {
-        console.error('Geocode fallito:', err);
-        return res.status(400).json({ error: 'Impossibile determinare coordinate per la località' });
-      }
+      const geo = await geocodeLocalita(localita);
+      lat = geo.lat;
+      lon = geo.lon;
     }
 
-    let coord = null;
-    if (lat != null && lon != null) coord = `SRID=4326;POINT(${lon} ${lat})`;
+    const coord = lat != null && lon != null ? `SRID=4326;POINT(${lon} ${lat})` : null;
 
     const result = await pool.query(
       `INSERT INTO veicolo
         (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url)
        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,ST_GeomFromText($10),$11,$12)
        RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat`,
-      [
-        driver_id,
-        marca,
-        modello,
-        posti_totali || 1,
-        raggio_km,
-        targa,
-        JSON.stringify(servizi),
-        tipo ?? null,
-        anno ?? null,
-        coord,
-        localita ?? null,
-        image_url ?? null
-      ]
+      [driver_id, marca, modello, posti_totali || 1, raggio_km, targa, JSON.stringify(servizi), tipo ?? null, anno ?? null, coord, localita ?? null, image_url ?? null]
     );
 
     res.json(result.rows[0]);
@@ -156,20 +222,20 @@ veicoloRouter.post('/', async (req, res) => {
   }
 });
 
-// ----------------------------
-// PUT veicolo (geocode sicuro + localita)
-// ----------------------------
+// PUT veicolo
 veicoloRouter.put('/:id', async (req, res) => {
   try {
     const driver_id = req.user.id;
-    const veicoloId = parseInt(req.params.id);
+    const veicoloId = Number(req.params.id);
+    if (!veicoloId) return res.status(400).json({ error: 'ID veicolo non valido' });
+
     let { modello, marca, posti_totali, raggio_km, targa, servizi, tipo, anno, lat, lon, localita, image_url } = req.body;
 
     targa = targa?.trim().toUpperCase() || null;
     servizi = servizi ?? [];
     raggio_km = raggio_km ?? 50;
 
-    if (tipo && !TIPI_VEICOLO.includes(tipo)) 
+    if (tipo && !TIPI_VEICOLO.includes(tipo))
       return res.status(400).json({ error: 'Tipo veicolo non valido' });
 
     if (targa) {
@@ -177,20 +243,13 @@ veicoloRouter.put('/:id', async (req, res) => {
       if (check.rowCount > 0) return res.status(400).json({ error: 'Targa già utilizzata' });
     }
 
-    // Geocoding backend se lat/lon mancanti
     if ((!lat || !lon) && localita) {
-      try {
-        const geo = await geocodeLocalita(localita);
-        lat = geo.lat;
-        lon = geo.lon;
-      } catch (err) {
-        console.error('Geocode fallito:', err);
-        return res.status(400).json({ error: 'Impossibile determinare coordinate per la località' });
-      }
+      const geo = await geocodeLocalita(localita);
+      lat = geo.lat;
+      lon = geo.lon;
     }
 
-    let coord = null;
-    if (lat != null && lon != null) coord = `SRID=4326;POINT(${lon} ${lat})`;
+    const coord = lat != null && lon != null ? `SRID=4326;POINT(${lon} ${lat})` : null;
 
     const result = await pool.query(
       `UPDATE veicolo SET
@@ -207,21 +266,7 @@ veicoloRouter.put('/:id', async (req, res) => {
         image_url=$11
        WHERE id=$12 AND driver_id=$13
        RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat`,
-      [
-        marca,
-        modello,
-        posti_totali || 1,
-        raggio_km,
-        targa,
-        JSON.stringify(servizi),
-        tipo ?? null,
-        anno ?? null,
-        coord,
-        localita ?? null,
-        image_url ?? null,
-        veicoloId,
-        driver_id
-      ]
+      [marca, modello, posti_totali || 1, raggio_km, targa, JSON.stringify(servizi), tipo ?? null, anno ?? null, coord, localita ?? null, image_url ?? null, veicoloId, driver_id]
     );
 
     if (result.rowCount === 0) return res.status(404).json({ error: 'Veicolo non trovato' });
@@ -232,13 +277,13 @@ veicoloRouter.put('/:id', async (req, res) => {
   }
 });
 
-// ----------------------------
 // DELETE veicolo
-// ----------------------------
 veicoloRouter.delete('/:id', async (req, res) => {
   try {
     const driver_id = req.user.id;
-    const veicoloId = parseInt(req.params.id);
+    const veicoloId = Number(req.params.id);
+    if (!veicoloId) return res.status(400).json({ error: 'ID veicolo non valido' });
+
     const result = await pool.query('DELETE FROM veicolo WHERE id=$1 AND driver_id=$2 RETURNING *', [veicoloId, driver_id]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Veicolo non trovato' });
     res.json({ success: true });
@@ -246,31 +291,4 @@ veicoloRouter.delete('/:id', async (req, res) => {
     console.error('❌ Veicoli DELETE error:', err);
     res.status(500).json({ error: err.message });
   }
-});
-
-// ----------------------------
-// CHECK targa
-// ----------------------------
-veicoloRouter.get('/check-targa', async (req, res) => {
-  try {
-    const { targa, id } = req.query;
-    if (!targa) return res.status(400).json({ error: 'Targa mancante' });
-
-    const params = [targa];
-    let query = 'SELECT id FROM veicolo WHERE targa=$1';
-    if (id) { params.push(parseInt(id)); query += ' AND id<>$2'; }
-
-    const result = await pool.query(query, params);
-    res.json({ inUse: result.rowCount > 0 });
-  } catch (err) {
-    console.error('❌ Check targa error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ----------------------------
-// GET tipi
-// ----------------------------
-veicoloRouter.get('/tipi', (req, res) => {
-  res.json(TIPI_VEICOLO);
 });

@@ -28,7 +28,14 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     const veicolo_id = parseInt(req.body.veicolo_id);
     const driver_id = req.user.id;
 
+    console.log('🚀 Richiesta upload documenti', {
+      veicolo_id,
+      driver_id,
+      files: req.files ? Object.keys(req.files) : null,
+    });
+
     if (!veicolo_id) {
+      console.warn('❌ ID veicolo mancante');
       return res.status(400).json({ success: false, message: 'ID veicolo mancante' });
     }
 
@@ -38,10 +45,12 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
       [veicolo_id, driver_id]
     );
     if (!veicoloRes.rowCount) {
+      console.warn('❌ Veicolo non trovato', { veicolo_id, driver_id });
       return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
     }
 
     if (!req.files || Object.keys(req.files).length === 0) {
+      console.warn('❌ Nessun documento caricato');
       return res.status(400).json({ success: false, message: 'Nessun documento caricato' });
     }
 
@@ -50,8 +59,14 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {
+        console.log(`📤 Upload file: ${field.name} - ${file.originalname} (${file.mimetype}, ${file.size} bytes)`);
         const url = await uploadFile(file.buffer, file.originalname);
-        if (url) fileUrls[field.name] = url;
+        if (url) {
+          fileUrls[field.name] = url;
+          console.log(`✅ File caricato su Cloudinary: ${url}`);
+        } else {
+          console.error(`❌ Upload fallito per ${field.name}`);
+        }
       }
     }
 
@@ -59,7 +74,7 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     for (const [field, url] of Object.entries(fileUrls)) {
       if (!url) continue;
 
-      await pool.query(
+      const dbRes = await pool.query(
         `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (autista_id, veicolo_id, tipo)
@@ -67,10 +82,15 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
            url = EXCLUDED.url,
            stato = 'pending',
            note_admin = NULL,
-           created_at = CURRENT_TIMESTAMP`,
+           created_at = CURRENT_TIMESTAMP
+         RETURNING *`,
         [driver_id, veicolo_id, tipoMapping[field], url]
       );
+
+      console.log(`💾 Documento salvato nel DB: tipo=${field}`, dbRes.rows[0]);
     }
+
+    console.log('🎉 Tutti i documenti elaborati correttamente');
 
     return res.json({
       success: true,

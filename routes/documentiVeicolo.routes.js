@@ -8,21 +8,18 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ===================== CAMPi DOCUMENTI VEICOLO =====================
 const documentFields = [
   { name: 'licenza_ncc', maxCount: 1 },
   { name: 'assicurazione', maxCount: 1 },
   { name: 'libretto', maxCount: 1 },
 ];
 
-// ===================== MAPPING TIPI =====================
 const tipoMapping = {
   licenza_ncc: 'licenza_ncc',
   assicurazione: 'assicurazione',
   libretto: 'libretto',
 };
 
-// ===================== POST UPLOAD DOCUMENTI =====================
 router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
   try {
     const veicolo_id = parseInt(req.body.veicolo_id);
@@ -35,7 +32,6 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     });
 
     if (!veicolo_id) {
-      console.warn('❌ ID veicolo mancante');
       return res.status(400).json({ success: false, message: 'ID veicolo mancante' });
     }
 
@@ -45,35 +41,32 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
       [veicolo_id, driver_id]
     );
     if (!veicoloRes.rowCount) {
-      console.warn('❌ Veicolo non trovato', { veicolo_id, driver_id });
       return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
     }
 
     if (!req.files || Object.keys(req.files).length === 0) {
-      console.warn('❌ Nessun documento caricato');
       return res.status(400).json({ success: false, message: 'Nessun documento caricato' });
     }
 
     // Upload file su Cloudinary
-    const fileUrls = {};
+    const fileUrls: Record<string, string> = {};
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {
-        console.log(`📤 Upload file: ${field.name} - ${file.originalname} (${file.mimetype}, ${file.size} bytes)`);
+        console.log(`📤 Upload file: ${field.name} - ${file.originalname}`);
         const url = await uploadFile(file.buffer, file.originalname);
         if (url) {
           fileUrls[field.name] = url;
           console.log(`✅ File caricato su Cloudinary: ${url}`);
-        } else {
-          console.error(`❌ Upload fallito per ${field.name}`);
         }
       }
     }
 
-    // Salvataggio documenti nel DB usando documenti_autista
+    // Salvataggio documenti nel DB
     for (const [field, url] of Object.entries(fileUrls)) {
       if (!url) continue;
 
+      // Qui usiamo la constraint completa (autista_id + veicolo_id + tipo)
       const dbRes = await pool.query(
         `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url)
          VALUES ($1, $2, $3, $4)
@@ -91,12 +84,7 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     }
 
     console.log('🎉 Tutti i documenti elaborati correttamente');
-
-    return res.json({
-      success: true,
-      message: 'Documenti veicolo salvati correttamente',
-      fileUrls,
-    });
+    return res.json({ success: true, message: 'Documenti veicolo salvati correttamente', fileUrls });
 
   } catch (err) {
     console.error('💥 Errore /documenti veicolo:', err);

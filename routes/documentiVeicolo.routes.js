@@ -49,7 +49,7 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     }
 
     // Upload file su Cloudinary
-    const fileUrls: Record<string, string> = {};
+    const fileUrls = {}; // ✅ semplice oggetto JS, niente tipo TS
     for (const field of documentFields) {
       const file = req.files?.[field.name]?.[0];
       if (file) {
@@ -58,6 +58,8 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
         if (url) {
           fileUrls[field.name] = url;
           console.log(`✅ File caricato su Cloudinary: ${url}`);
+        } else {
+          console.error(`❌ Upload fallito per ${field.name}`);
         }
       }
     }
@@ -66,7 +68,6 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
     for (const [field, url] of Object.entries(fileUrls)) {
       if (!url) continue;
 
-      // Qui usiamo la constraint completa (autista_id + veicolo_id + tipo)
       const dbRes = await pool.query(
         `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url)
          VALUES ($1, $2, $3, $4)

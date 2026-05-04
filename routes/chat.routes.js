@@ -4,13 +4,40 @@ import { pool } from '../db/db.js';
 import jwt from 'jsonwebtoken';
 import fetch from 'node-fetch';
 
-export const chatRouter = express.Router();
+const chatRouter = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 
-// ... tutto il codice del router come hai già
+// ======================= AUTH MIDDLEWARE =======================
+const authMiddleware = (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
+    if (!token) return res.status(401).json({ message: 'No token' });
 
-// ---------------------
-// SOCKET ATTACH
-// ---------------------
+    const decoded = jwt.verify(token, JWT_SECRET);
+    decoded.role = decoded.role.toLowerCase();
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error('❌ Errore auth:', err.message);
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// ======================= INIT CHAT =======================
+chatRouter.get('/init', authMiddleware, async (req, res) => {
+  const { id: userId, role } = req.user;
+
+  try {
+    // Qui la tua logica originale, ad esempio:
+    const { rows } = await pool.query('SELECT * FROM corse LIMIT 10');
+    res.json(rows);
+  } catch (err) {
+    console.error('❌ Errore init chat:', err);
+    res.status(500).json({ message: 'Errore init chat' });
+  }
+});
+
+// ======================= SOCKET ATTACH =======================
 export const attachChatSocket = (io) => {
   io.on('connection', (socket) => {
     console.log('📡 Nuovo client connesso:', socket.id);
@@ -42,6 +69,7 @@ export const attachChatSocket = (io) => {
         const room = `chat_${corsa_id}_${cliente_id}`;
         io.to(room).emit('new_message', msg);
 
+        // ================= PUSH =================
         const { rows: tokens } = await pool.query(`
           SELECT push_token
           FROM utente_push_tokens
@@ -71,11 +99,7 @@ export const attachChatSocket = (io) => {
                     body: text,
                     sound: 'default',
                   },
-                  data: {
-                    corsa_id,
-                    cliente_id,
-                    message_id: msg.id,
-                  },
+                  data: { corsa_id, cliente_id, message_id: msg.id },
                 }),
               });
             } catch (pushErr) {
@@ -91,5 +115,5 @@ export const attachChatSocket = (io) => {
   });
 };
 
-// ✅ Esportazione default del router
+// ======================= EXPORT DEFAULT =======================
 export default chatRouter;

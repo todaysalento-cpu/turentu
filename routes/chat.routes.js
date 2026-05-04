@@ -1,244 +1,68 @@
-// routes/chat.routes.js
-import express from 'express';
-import { pool } from '../db/db.js';
-import jwt from 'jsonwebtoken';
-import fetch from 'node-fetch'; // Per inviare push tramite FCM o simili
-
-export const chatRouter = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
-
-// =======================
-// Middleware di autenticazione
-// =======================
-const authMiddleware = (req, res, next) => {
+socket.on('send_message', async ({ corsa_id, cliente_id, text, sender_id }) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
-    if (!token) return res.status(401).json({ message: 'No token' });
+    // inserimento nel DB
+    const { rows } = await pool.query(`
+      INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, read_status)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, created_at AS timestamp
+    `, [corsa_id, cliente_id, sender_id, text, JSON.stringify({ autista: false, cliente: false })]);
 
-    const decoded = jwt.verify(token, JWT_SECRET);
-    decoded.role = decoded.role.toLowerCase();
-    req.user = decoded;
+    const msg = {
+      ...rows[0],
+      corsa_id,
+      cliente_id,
+      sender_id,
+      text,
+      sender_name: 'autista', // da calcolare correttamente se necessario
+      role: 'autista',
+    };
 
-    console.log('✅ Utente autenticato:', decoded);
-    next();
-  } catch (err) {
-    console.error('❌ Errore auth:', err.message);
-    res.status(401).json({ message: 'Invalid token' });
-  }
-};
+    // invio messaggio via socket
+    const room = `chat_${corsa_id}_${cliente_id}`;
+    io.to(room).emit('new_message', msg);
 
-// =======================
-// INIT THREADS CON MESSAGGI
-// =======================
-chatRouter.get('/init', authMiddleware, async (req, res) => {
-  const { id: userId, role } = req.user;
+    // -----------------------
+    // PUSH NOTIFICATION
+    // -----------------------
+    const { rows: tokens } = await pool.query(`
+      SELECT push_token
+      FROM utente_push_tokens
+      WHERE user_id != $1
+        AND user_id IN (
+          SELECT cliente_id FROM prenotazioni WHERE corsa_id=$2
+          UNION
+          SELECT driver_id FROM veicolo v
+          JOIN corse c ON v.id = c.veicolo_id
+          WHERE c.id=$2
+        )
+    `, [sender_id, corsa_id]);
 
-  try {
-    let rows;
-
-    if (role === 'autista') {
-      const result = await pool.query(`
-        SELECT 
-          c.id AS corsa_id,
-          p.cliente_id,
-          c.origine_address AS origine,
-          c.destinazione_address AS destinazione,
-          c.start_datetime
-        FROM corse c
-        JOIN veicolo v ON v.id = c.veicolo_id
-        JOIN prenotazioni p ON p.corsa_id = c.id
-        WHERE v.driver_id = $1
-        ORDER BY c.start_datetime DESC
-      `, [userId]);
-      rows = result.rows;
-    } else {
-      const result = await pool.query(`
-        SELECT 
-          c.id AS corsa_id,
-          p.cliente_id,
-          c.origine_address AS origine,
-          c.destinazione_address AS destinazione,
-          c.start_datetime
-        FROM corse c
-        JOIN prenotazioni p ON p.corsa_id = c.id
-        WHERE p.cliente_id = $1
-        ORDER BY c.start_datetime DESC
-      `, [userId]);
-      rows = result.rows;
+    for (let t of tokens) {
+      if (t.push_token) {
+        await fetch('https://fcm.googleapis.com/fcm/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `key=${process.env.FCM_SERVER_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: t.push_token,
+            notification: {
+              title: 'Nuovo messaggio',
+              body: text,
+              sound: 'default',
+            },
+            data: {
+              corsa_id,
+              cliente_id,
+              message_id: msg.id,
+            },
+          }),
+        });
+      }
     }
 
-    const threads = await Promise.all(
-      rows.map(async (row) => {
-        const corsaId = parseInt(row.corsa_id, 10);
-        const clienteId = parseInt(row.cliente_id, 10);
-
-        const { rows: unread } = await pool.query(`
-          SELECT COUNT(*) AS count
-          FROM messaggi
-          WHERE corsa_id=$1
-            AND cliente_id=$2
-            AND sender_id != $3
-            AND NOT (read_status->>$4)::boolean
-        `, [corsaId, clienteId, userId, role]);
-
-        const { rows: messagesRows } = await pool.query(`
-          SELECT 
-            id,
-            corsa_id,
-            cliente_id,
-            sender_id,
-            testo AS text,
-            created_at AS timestamp,
-            read_status
-          FROM messaggi
-          WHERE corsa_id=$1 AND cliente_id=$2
-          ORDER BY created_at ASC
-        `, [corsaId, clienteId]);
-
-        const messages = messagesRows.map(m => ({
-          ...m,
-          sender_name: m.sender_id === userId ? role : role === 'autista' ? 'cliente' : 'autista',
-          role: m.sender_id === userId ? role : role === 'autista' ? 'cliente' : 'autista',
-          read_status: typeof m.read_status === 'string' ? JSON.parse(m.read_status) : m.read_status || { autista: false, cliente: false }
-        }));
-
-        return {
-          id: `${corsaId}_${clienteId}`,
-          corsa_id: corsaId,
-          cliente_id: clienteId,
-          origine: row.origine,
-          destinazione: row.destinazione,
-          start_datetime: row.start_datetime,
-          unreadCount: parseInt(unread[0].count, 10) || 0,
-          messages,
-          participants: []
-        };
-      })
-    );
-
-    res.json(threads);
-
   } catch (err) {
-    console.error('❌ Errore init chat:', err);
-    res.status(500).json({ message: 'Errore init chat' });
+    console.error('❌ Errore send_message:', err);
   }
 });
-
-// =======================
-// CLIENTI DI UNA CORSA
-// =======================
-chatRouter.get('/:corsaId/clients', authMiddleware, async (req, res) => {
-  const corsaId = parseInt(req.params.corsaId, 10);
-
-  try {
-    const { rows } = await pool.query(`
-      SELECT u.id, u.nome
-      FROM utente u
-      JOIN prenotazioni p ON p.cliente_id = u.id
-      WHERE p.corsa_id = $1
-    `, [corsaId]);
-
-    res.json(rows);
-  } catch (err) {
-    console.error('❌ Errore fetch clienti:', err);
-    res.status(500).json({ message: 'Errore fetch clienti' });
-  }
-});
-
-// =======================
-// FETCH MESSAGGI DI UNA CHAT
-// =======================
-chatRouter.get('/:corsaId/:clienteId', authMiddleware, async (req, res) => {
-  const { id: userIdRaw, role } = req.user;
-  const userId = parseInt(userIdRaw, 10);
-  const corsaId = parseInt(req.params.corsaId, 10);
-  const clienteId = parseInt(req.params.clienteId, 10);
-
-  try {
-    const { rows } = await pool.query(`
-      SELECT 
-        id,
-        corsa_id,
-        cliente_id,
-        sender_id,
-        testo AS text,
-        created_at AS timestamp,
-        read_status
-      FROM messaggi
-      WHERE corsa_id=$1 AND cliente_id=$2
-      ORDER BY created_at ASC
-    `, [corsaId, clienteId]);
-
-    const messages = rows.map(m => ({
-      ...m,
-      sender_name: m.sender_id === userId ? role : role === 'autista' ? 'cliente' : 'autista',
-      role: m.sender_id === userId ? role : role === 'autista' ? 'cliente' : 'autista',
-      read_status: typeof m.read_status === 'string' ? JSON.parse(m.read_status) : m.read_status || { autista: false, cliente: false }
-    }));
-
-    res.json({
-      id: `${corsaId}_${clienteId}`,
-      corsa_id: corsaId,
-      cliente_id: clienteId,
-      messages
-    });
-  } catch (err) {
-    console.error('❌ Errore fetch messaggi:', err);
-    res.status(500).json({ message: 'Errore fetch messaggi' });
-  }
-});
-
-// =======================
-// SOCKET: SEND MESSAGE + PUSH
-// =======================
-export const attachChatSocket = (io) => {
-  io.on('connection', (socket) => {
-    console.log('📡 Nuovo client connesso:', socket.id);
-
-    socket.on('join_chat', ({ corsa_id, cliente_id }) => {
-      const room = `chat_${corsa_id}_${cliente_id}`;
-      socket.join(room);
-      console.log(`🟢 Utente entrato nella room: ${room}`);
-    });
-
-    socket.on('send_message', async ({ corsa_id, cliente_id, text, sender_id }) => {
-      try {
-        // inserimento nel DB
-        const { rows } = await pool.query(`
-          INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, read_status)
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING id, created_at AS timestamp
-        `, [corsa_id, cliente_id, sender_id, text, JSON.stringify({ autista: false, cliente: false })]);
-
-        const msg = {
-          ...rows[0],
-          corsa_id,
-          cliente_id,
-          sender_id,
-          text,
-          sender_name: 'autista', // qui si può calcolare correttamente
-          role: 'autista'
-        };
-
-        const room = `chat_${corsa_id}_${cliente_id}`;
-        io.to(room).emit('new_message', msg);
-
-        // -----------------------
-        // PUSH NOTIFICATION
-        // -----------------------
-        // recupero push token dei partecipanti (es. utente opposto)
-        const { rows: tokens } = await pool.query(`
-          SELECT push_token
-          FROM utente_push_tokens
-          WHERE user_id != $1
-            AND user_id IN (
-              SELECT cliente_id FROM prenotazioni WHERE corsa_id=$2
-              UNION
-              SELECT driver_id FROM veicolo v JOIN corse c ON v.id = c.veicolo_id WHERE c.id=$2
-            )
-        `, [sender_id, corsa_id]);
-
-        for (let t of tokens) {
-          if (t.push_token) {
-            // esempio FCM
-            await fetch('https://f

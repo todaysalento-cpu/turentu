@@ -2,7 +2,6 @@
 import express from 'express';
 import { pool } from '../db/db.js';
 import jwt from 'jsonwebtoken';
-import fetch from 'node-fetch'; // Per inviare push tramite FCM o simili
 
 export const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
@@ -12,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 // =======================
 const authMiddleware = (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1] || req.cookies?.token;
+    const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ message: 'No token' });
 
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -31,7 +30,8 @@ const authMiddleware = (req, res, next) => {
 // INIT THREADS CON MESSAGGI
 // =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
-  const { id: userId, role } = req.user;
+  let { id: userId, role } = req.user;
+  userId = parseInt(userId, 10);
 
   try {
     let rows;
@@ -72,6 +72,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
         const corsaId = parseInt(row.corsa_id, 10);
         const clienteId = parseInt(row.cliente_id, 10);
 
+        // unread count
         const { rows: unread } = await pool.query(`
           SELECT COUNT(*) AS count
           FROM messaggi
@@ -81,6 +82,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
             AND NOT (read_status->>$4)::boolean
         `, [corsaId, clienteId, userId, role]);
 
+        // messaggi reali
         const { rows: messagesRows } = await pool.query(`
           SELECT 
             id,
@@ -189,7 +191,7 @@ chatRouter.get('/:corsaId/:clienteId', authMiddleware, async (req, res) => {
 });
 
 // =======================
-// SOCKET: SEND MESSAGE + PUSH
+// SOCKET: SEND MESSAGE
 // =======================
 export const attachChatSocket = (io) => {
   io.on('connection', (socket) => {
@@ -216,29 +218,17 @@ export const attachChatSocket = (io) => {
           cliente_id,
           sender_id,
           text,
-          sender_name: 'autista', // qui si può calcolare correttamente
+          sender_name: 'autista', // da calcolare in base al sender_id e ruolo reale
           role: 'autista'
         };
 
         const room = `chat_${corsa_id}_${cliente_id}`;
-        io.to(room).emit('new_message', msg);
+        io.to(room).emit('new_message', msg); // ✅ solo messaggio nuovo
+      } catch (err) {
+        console.error('❌ Errore send_message:', err);
+      }
+    });
+  });
+};
 
-        // -----------------------
-        // PUSH NOTIFICATION
-        // -----------------------
-        // recupero push token dei partecipanti (es. utente opposto)
-        const { rows: tokens } = await pool.query(`
-          SELECT push_token
-          FROM utente_push_tokens
-          WHERE user_id != $1
-            AND user_id IN (
-              SELECT cliente_id FROM prenotazioni WHERE corsa_id=$2
-              UNION
-              SELECT driver_id FROM veicolo v JOIN corse c ON v.id = c.veicolo_id WHERE c.id=$2
-            )
-        `, [sender_id, corsa_id]);
-
-        for (let t of tokens) {
-          if (t.push_token) {
-            // esempio FCM
-            await fetch('https://f
+export default chatRouter;

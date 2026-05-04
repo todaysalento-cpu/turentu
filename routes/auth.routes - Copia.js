@@ -34,6 +34,7 @@ const cookieOptions = {
 };
 
 // ===================== /me =====================
+// Ora legge sia cookie che header Authorization
 router.get('/me', (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
@@ -152,36 +153,6 @@ router.post('/google', async (req, res) => {
   } finally {
     client.release();
   }
-});
-
-// ===================== SAVE PUSH TOKEN =====================
-router.post('/me/push-token', (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
-
-  if (!token) return res.status(401).json({ message: 'Non autenticato' });
-
-  let user;
-  try {
-    user = jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    console.error('❌ Token non valido:', err.message);
-    return res.status(401).json({ message: 'Token non valido' });
-  }
-
-  const { push_token, device_type } = req.body;
-  if (!push_token) return res.status(400).json({ message: 'push_token richiesto' });
-
-  pool.query(`
-    INSERT INTO utente_push_tokens (user_id, push_token, device_type)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (user_id, push_token) DO NOTHING
-  `, [user.id, push_token, device_type || 'unknown'])
-    .then(() => res.json({ message: 'Token push salvato' }))
-    .catch(err => {
-      console.error('❌ Errore salvataggio push token:', err);
-      res.status(500).json({ message: 'Errore server' });
-    });
 });
 
 export { router };

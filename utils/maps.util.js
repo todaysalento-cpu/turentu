@@ -4,44 +4,40 @@ import fetch from "node-fetch";
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // =========================
-// DISTANZA & DURATA
+// CACHE DISTANZA
 // =========================
 const mapsCache = new Map();
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 ora
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
 
 function normalizeCoord(c) {
   if (!c) return null;
 
   return {
     lat: c.lat,
-    lon: c.lon ?? c.lng, // 🔥 FIX CRITICO (supporta frontend misto)
+    lon: c.lon ?? c.lng, // 🔥 supporto frontend misto
   };
 }
 
-function makeCacheKey(origine, destinazione) {
-  const o = normalizeCoord(origine);
-  const d = normalizeCoord(destinazione);
-
+function makeCacheKey(o, d) {
   const oLat = o?.lat?.toFixed(5) ?? "0";
   const oLon = o?.lon?.toFixed(5) ?? "0";
   const dLat = d?.lat?.toFixed(5) ?? "0";
   const dLon = d?.lon?.toFixed(5) ?? "0";
-
   return `${oLat}:${oLon}|${dLat}:${dLon}`;
 }
 
-/**
- * Restituisce durata in ms e distanza in km tra due coordinate
- */
+// =========================
+// DISTANZA + DURATA
+// =========================
 export async function getDurataDistanza(origine, destinazione) {
-  if (!GOOGLE_MAPS_API_KEY)
-    throw new Error("Chiave API di Google Maps non definita");
+  if (!GOOGLE_MAPS_API_KEY) {
+    throw new Error("GOOGLE_MAPS_API_KEY mancante");
+  }
 
   const o = normalizeCoord(origine);
   const d = normalizeCoord(destinazione);
 
   if (!o || !d) {
-    console.warn("getDurataDistanza: coordinate mancanti");
     return { durataMs: 0, distanzaKm: 0 };
   }
 
@@ -49,52 +45,45 @@ export async function getDurataDistanza(origine, destinazione) {
   const cached = mapsCache.get(key);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    console.log("🧠 Maps cache HIT");
-    return {
-      durataMs: cached.durataMs,
-      distanzaKm: cached.distanzaKm,
-    };
+    return cached;
   }
 
-  console.log("🌍 Maps API CALL");
-
   try {
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?units=metric&origins=${o.lat},${o.lon}&destinations=${d.lat},${d.lon}&key=${GOOGLE_MAPS_API_KEY}`;
+    const url =
+      `https://maps.googleapis.com/maps/api/distancematrix/json` +
+      `?units=metric&origins=${o.lat},${o.lon}` +
+      `&destinations=${d.lat},${d.lon}` +
+      `&key=${GOOGLE_MAPS_API_KEY}`;
 
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.status !== "OK")
-      throw new Error(`Google Maps error: ${data.status}`);
+    const res = await fetch(url);
+    const data = await res.json();
 
     const element = data.rows?.[0]?.elements?.[0];
 
     if (!element || element.status !== "OK") {
-      console.warn("Errore distanza:", element?.status);
       return { durataMs: 0, distanzaKm: 0 };
     }
 
-    const durataMs = (element.duration?.value ?? 0) * 1000;
-    const distanzaKm = (element.distance?.value ?? 0) / 1000;
-
-    mapsCache.set(key, {
-      durataMs,
-      distanzaKm,
+    const result = {
+      durataMs: (element.duration?.value ?? 0) * 1000,
+      distanzaKm: (element.distance?.value ?? 0) / 1000,
       timestamp: Date.now(),
-    });
+    };
 
-    return { durataMs, distanzaKm };
-  } catch (err) {
-    console.error("getDurataDistanza ERROR:", err);
+    mapsCache.set(key, result);
+
+    return result;
+  } catch (e) {
+    console.error("getDurataDistanza ERROR:", e);
     return { durataMs: 0, distanzaKm: 0 };
   }
 }
 
 // =========================
-// REVERSE GEOCODE (FIXED)
+// REVERSE GEOCODING (FIX PRINCIPALE)
 // =========================
 const reverseCache = new Map();
-const REVERSE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+const REVERSE_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export async function getLocalitaSafe(coord) {
   const c = normalizeCoord(coord);
@@ -106,14 +95,17 @@ export async function getLocalitaSafe(coord) {
   const cached = reverseCache.get(key);
 
   if (cached && Date.now() - cached.timestamp < REVERSE_CACHE_TTL) {
-    return cached.data.indirizzo;
+    return cached.value;
   }
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${c.lat},${c.lon}&key=${GOOGLE_MAPS_API_KEY}`;
+    const url =
+      `https://maps.googleapis.com/maps/api/geocode/json` +
+      `?latlng=${c.lat},${c.lon}` +
+      `&key=${GOOGLE_MAPS_API_KEY}`;
 
-    const response = await fetch(url);
-    const data = await response.json();
+    const res = await fetch(url);
+    const data = await res.json();
 
     if (data.status !== "OK" || !data.results?.length) {
       return "Località sconosciuta";
@@ -121,20 +113,32 @@ export async function getLocalitaSafe(coord) {
 
     const result = data.results[0];
 
-    // 🔥 FIX IMPORTANTE: usa direttamente formatted_address (più affidabile)
-    let localita = result.formatted_address || "Località sconosciuta";
+    // 🔥 FIX IMPORTANTE: priorità a componenti più "puliti"
+    const components = result.address_components || [];
 
-    // pulizia UI leggera
-    localita = localita.replace(", Italia", "").trim();
+    const get = (type) =>
+      components.find((c) => c.types.includes(type))?.long_name;
 
-    const payload = { indirizzo: localita };
+    const localita =
+      get("locality") ||
+      get("administrative_area_level_3") ||
+      get("administrative_area_level_2") ||
+      result.formatted_address ||
+      "Località sconosciuta";
+
+    const clean = localita
+      .replace(", Italy", "")
+      .replace(", Italia", "")
+      .trim();
+
+    const value = clean || "Località sconosciuta";
 
     reverseCache.set(key, {
-      data: payload,
+      value,
       timestamp: Date.now(),
     });
 
-    return localita;
+    return value;
   } catch (err) {
     console.error("getLocalitaSafe ERROR:", err);
     return "Località sconosciuta";

@@ -24,9 +24,6 @@ const emitNuovaCorsa = (driverId, corsa) => {
   console.log("🚀 EMIT nuova_corsa -> autista", driverId, corsa.id);
 
   io.to(`autista_${driverId}`).emit("nuova_corsa", corsa);
-
-  // ❌ FIX: NON usare io.in().socketsJoin (instabile)
-  // ✔ NON forzare join qui
 };
 
 // 👉 update corsa
@@ -50,6 +47,17 @@ const emitNewPending = (driverId, pending) => {
   if (!io) return;
 
   io.to(`autista_${driverId}`).emit("new_pending", { pending });
+};
+
+// 👉 NOTIFICATIONS (🔥 FIX CRITICO MANCANTE)
+const sendNotification = ({ userId, role, notification }) => {
+  if (!io) return;
+
+  if (!userId || !role || !notification) return;
+
+  console.log("🔔 NOTIFICATION ->", role, userId);
+
+  io.to(`${role}_${userId}`).emit("new_notification", notification);
 };
 
 // =======================
@@ -100,12 +108,12 @@ const setupSocket = (ioServer) => {
 
     console.log("🔌 CONNECTED:", socket.id, userId, role);
 
-    // =======================
-    // ROOM PERSONALE
-    // =======================
+    // room personale
     const personalRoom = `${role}_${userId}`;
     socket.join(personalRoom);
     joinedRooms.add(personalRoom);
+
+    console.log("🏠 JOIN PERSONAL ROOM:", personalRoom);
 
     // =======================
     // AUTISTA → CORSE
@@ -114,7 +122,6 @@ const setupSocket = (ioServer) => {
       try {
         const corseCache = await getCorseCache();
 
-        // 🔥 FIX CRITICO: normalizza ID
         const corse = corseCache.filter(
           (c) => Number(c.driver_id) === Number(userId)
         );

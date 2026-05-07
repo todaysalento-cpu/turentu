@@ -26,19 +26,18 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// ======================= INIT CHAT (FIXED) =======================
+// ======================= INIT CHAT =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
   const { id: userIdRaw, role } = req.user;
   const userId = parseInt(userIdRaw, 10);
 
   try {
-
     let rows = [];
 
-    // ===================== AUTISTA =====================
+    // ================= AUTISTA =================
     if (role === 'autista') {
       const result = await pool.query(`
-        SELECT 
+        SELECT DISTINCT
           c.id AS corsa_id,
           p.cliente_id,
           c.origine_address,
@@ -54,7 +53,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
       rows = result.rows;
     }
 
-    // ===================== CLIENTE =====================
+    // ================= CLIENTE =================
     else {
       const result = await pool.query(`
         SELECT 
@@ -72,21 +71,25 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
       rows = result.rows;
     }
 
-    // ===================== THREADS =====================
+    // ================= THREADS =================
     const threads = await Promise.all(
       rows.map(async (r) => {
         const corsaId = r.corsa_id;
         const clienteId = r.cliente_id;
 
-        // unread
+        const chatId =
+          role === 'autista'
+            ? `${corsaId}_${clienteId}`
+            : `${corsaId}`;
+
+        // unread messages
         const { rows: unread } = await pool.query(`
           SELECT COUNT(*)::int AS count
           FROM messaggi
           WHERE corsa_id=$1
             AND cliente_id=$2
             AND sender_id != $3
-            AND COALESCE((read_status->>$4)::boolean, false) = false
-        `, [corsaId, clienteId, userId, role]);
+        `, [corsaId, clienteId, userId]);
 
         // messages
         const { rows: messages } = await pool.query(`
@@ -96,15 +99,14 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
             cliente_id,
             sender_id,
             testo AS text,
-            created_at,
-            read_status
+            created_at
           FROM messaggi
           WHERE corsa_id=$1 AND cliente_id=$2
           ORDER BY created_at ASC
         `, [corsaId, clienteId]);
 
         return {
-          id: `${corsaId}_${clienteId}`,
+          id: chatId,
           corsa_id: corsaId,
           cliente_id: clienteId,
           origine: r.origine_address,
@@ -126,18 +128,40 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
 
 // ======================= SOCKET =======================
 export const attachChatSocket = (io) => {
+
+  // 🔥 FIX AUTH SOCKET
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error("no token"));
+
+      const decoded = jwt.verify(token, JWT_SECRET);
+      decoded.role = decoded.role.toLowerCase();
+      socket.user = decoded;
+
+      next();
+    } catch (err) {
+      next(new Error("invalid token"));
+    }
+  });
+
   io.on('connection', (socket) => {
     console.log('📡 socket connected:', socket.id);
 
     socket.on('join_chat', ({ corsa_id, cliente_id }) => {
-      socket.join(`chat_${corsa_id}_${cliente_id}`);
+      const room =
+        socket.user.role === 'autista'
+          ? `chat_${corsa_id}_${cliente_id}`
+          : `chat_${corsa_id}`;
+
+      socket.join(room);
     });
 
     socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
       try {
 
-        const sender_id = socket.user?.id;
-        const sender_role = socket.user?.role;
+        const sender_id = socket.user.id;
+        const sender_role = socket.user.role;
 
         const { rows } = await pool.query(`
           INSERT INTO messaggi
@@ -162,7 +186,12 @@ export const attachChatSocket = (io) => {
           role: sender_role
         };
 
-        io.to(`chat_${corsa_id}_${cliente_id}`).emit('new_message', msg);
+        const room =
+          sender_role === 'autista'
+            ? `chat_${corsa_id}_${cliente_id}`
+            : `chat_${corsa_id}`;
+
+        io.to(room).emit('new_message', msg);
 
         // ================= PUSH =================
         const { rows: tokens } = await pool.query(`

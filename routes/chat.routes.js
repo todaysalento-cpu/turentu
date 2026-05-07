@@ -49,8 +49,10 @@ chatRouter.get(
   '/init',
   authMiddleware,
   async (req, res) => {
-    const { id: userIdRaw, role } =
-      req.user;
+    const {
+      id: userIdRaw,
+      role,
+    } = req.user;
 
     const userId = Number(userIdRaw);
 
@@ -63,12 +65,13 @@ chatRouter.get(
       if (role === 'autista') {
         const result = await pool.query(
           `
-          SELECT DISTINCT
+          SELECT
             c.id AS corsa_id,
             p.cliente_id,
             c.origine_address,
             c.destinazione_address,
             c.start_datetime
+
           FROM corse c
 
           INNER JOIN veicolo v
@@ -78,6 +81,13 @@ chatRouter.get(
             ON p.corsa_id = c.id
 
           WHERE v.driver_id = $1
+
+          GROUP BY
+            c.id,
+            p.cliente_id,
+            c.origine_address,
+            c.destinazione_address,
+            c.start_datetime
 
           ORDER BY c.start_datetime DESC
         `,
@@ -93,18 +103,26 @@ chatRouter.get(
       else if (role === 'cliente') {
         const result = await pool.query(
           `
-          SELECT DISTINCT
+          SELECT
             c.id AS corsa_id,
             p.cliente_id,
             c.origine_address,
             c.destinazione_address,
             c.start_datetime
+
           FROM prenotazioni p
 
           INNER JOIN corse c
             ON c.id = p.corsa_id
 
           WHERE p.cliente_id = $1
+
+          GROUP BY
+            c.id,
+            p.cliente_id,
+            c.origine_address,
+            c.destinazione_address,
+            c.start_datetime
 
           ORDER BY c.start_datetime DESC
         `,
@@ -127,7 +145,6 @@ chatRouter.get(
             r.cliente_id
           );
 
-          // 🔥 thread unico
           const chatId = `${corsaId}_${clienteId}`;
 
           // ================= UNREAD =================
@@ -135,7 +152,9 @@ chatRouter.get(
             await pool.query(
               `
               SELECT COUNT(*)::int AS count
+
               FROM messaggi
+
               WHERE corsa_id = $1
                 AND cliente_id = $2
                 AND sender_id != $3
@@ -158,9 +177,12 @@ chatRouter.get(
                 sender_id,
                 testo AS text,
                 created_at
+
               FROM messaggi
+
               WHERE corsa_id = $1
                 AND cliente_id = $2
+
               ORDER BY created_at ASC
             `,
               [corsaId, clienteId]
@@ -168,7 +190,9 @@ chatRouter.get(
 
           return {
             id: chatId,
+
             corsa_id: corsaId,
+
             cliente_id: clienteId,
 
             origine:
@@ -189,30 +213,13 @@ chatRouter.get(
         })
       );
 
-      // =====================================================
-      // REMOVE DUPLICATES
-      // =====================================================
-      const uniqueThreads =
-        Array.from(
-          new Map(
-            threads.map((t) => [
-              t.id,
-              t,
-            ])
-          ).values()
-        );
+      console.log('✅ CHAT INIT:', {
+        role,
+        userId,
+        threads: threads.length,
+      });
 
-      console.log(
-        '✅ CHAT INIT:',
-        {
-          role,
-          userId,
-          threads:
-            uniqueThreads.length,
-        }
-      );
-
-      return res.json(uniqueThreads);
+      return res.json(threads);
     } catch (err) {
       console.error(
         '❌ init chat error:',
@@ -274,16 +281,17 @@ export const attachChatSocket = (io) => {
       }) => {
         try {
           const userId =
-            socket.user.id;
+            Number(socket.user.id);
 
-          // 🔥 SECURITY CHECK
+          // ================= SECURITY =================
           const access =
             await pool.query(
               `
               SELECT 1
+
               FROM prenotazioni p
 
-              JOIN corse c
+              INNER JOIN corse c
                 ON c.id = p.corsa_id
 
               LEFT JOIN veicolo v
@@ -339,20 +347,29 @@ export const attachChatSocket = (io) => {
         text,
       }) => {
         try {
+          if (
+            !text ||
+            typeof text !== 'string' ||
+            !text.trim()
+          ) {
+            return;
+          }
+
           const sender_id =
-            socket.user.id;
+            Number(socket.user.id);
 
           const sender_role =
             socket.user.role;
 
-          // ================= SECURITY CHECK =================
+          // ================= SECURITY =================
           const canAccess =
             await pool.query(
               `
               SELECT 1
+
               FROM prenotazioni p
 
-              JOIN corse c
+              INNER JOIN corse c
                 ON c.id = p.corsa_id
 
               LEFT JOIN veicolo v
@@ -394,6 +411,7 @@ export const attachChatSocket = (io) => {
                 testo,
                 read_status
               )
+
               VALUES ($1,$2,$3,$4,$5)
 
               RETURNING
@@ -404,7 +422,8 @@ export const attachChatSocket = (io) => {
                 corsa_id,
                 cliente_id,
                 sender_id,
-                text,
+                text.trim(),
+
                 JSON.stringify({
                   autista: false,
                   cliente: false,
@@ -414,10 +433,14 @@ export const attachChatSocket = (io) => {
 
           const msg = {
             ...rows[0],
+
             corsa_id,
+
             cliente_id,
+
             sender_id,
-            text,
+
+            text: text.trim(),
 
             sender_name:
               sender_role ===
@@ -428,7 +451,7 @@ export const attachChatSocket = (io) => {
             role: sender_role,
           };
 
-          // 🔥 ROOM UNIFICATA
+          // ================= ROOM =================
           const room = `chat_${corsa_id}_${cliente_id}`;
 
           io.to(room).emit(
@@ -442,7 +465,9 @@ export const attachChatSocket = (io) => {
           } = await pool.query(
             `
             SELECT push_token
+
             FROM utente_push_tokens
+
             WHERE user_id != $1
               AND user_id IN (
 
@@ -453,9 +478,10 @@ export const attachChatSocket = (io) => {
                 UNION
 
                 SELECT driver_id
+
                 FROM veicolo v
 
-                JOIN corse c
+                INNER JOIN corse c
                   ON v.id = c.veicolo_id
 
                 WHERE c.id = $2
@@ -466,8 +492,9 @@ export const attachChatSocket = (io) => {
 
           // ================= PUSH =================
           for (const t of tokens) {
-            if (!t.push_token)
+            if (!t.push_token) {
               continue;
+            }
 
             try {
               await fetch(
@@ -477,6 +504,7 @@ export const attachChatSocket = (io) => {
 
                   headers: {
                     Authorization: `key=${process.env.FCM_SERVER_KEY}`,
+
                     'Content-Type':
                       'application/json',
                   },
@@ -488,7 +516,7 @@ export const attachChatSocket = (io) => {
                       title:
                         'Nuovo messaggio',
 
-                      body: text,
+                      body: text.trim(),
                     },
 
                     data: {

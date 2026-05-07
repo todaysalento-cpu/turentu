@@ -12,13 +12,21 @@ router.use(authMiddleware);
 function formatNotificationDate(input) {
   const d = input instanceof Date ? input : new Date(input);
   if (isNaN(d.getTime())) return '';
+
   const today = new Date();
   const tomorrow = new Date();
   tomorrow.setDate(today.getDate() + 1);
+
   const isToday = d.toDateString() === today.toDateString();
   const isTomorrow = d.toDateString() === tomorrow.toDateString();
+
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dayName = d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long' });
+  const dayName = d.toLocaleDateString('it-IT', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'long'
+  });
+
   if (isToday) return `oggi alle ${time}`;
   if (isTomorrow) return `domani alle ${time}`;
   return `${dayName} all’${time}`;
@@ -27,6 +35,7 @@ function formatNotificationDate(input) {
 // -------------------- GET pending --------------------
 router.get('/autista/:veicoloId', async (req, res) => {
   const client = await pool.connect();
+
   try {
     const veicoloId = Number(req.params.veicoloId);
 
@@ -46,6 +55,7 @@ router.get('/autista/:veicoloId', async (req, res) => {
     }));
 
     res.json({ pendings });
+
   } catch (err) {
     console.error('❌ Error fetching pendings:', err);
     res.status(500).json({ error: err.message });
@@ -106,10 +116,10 @@ router.post('/:id/accetta', async (req, res) => {
     );
 
     const io = getIO();
-    const acceptedPendings = result.rows;
 
-    for (const p of acceptedPendings) {
-      // 🔥 PRENDO driver_id CORRETTO
+    for (const p of result.rows) {
+
+      // 🔥 DRIVER
       const driverRes = await client.query(
         `SELECT v.driver_id, u.nome AS driver_nome
          FROM veicolo v
@@ -123,7 +133,7 @@ router.post('/:id/accetta', async (req, res) => {
 
       let corsa, prenotazione;
 
-      // -------------------- CREA O USA CORSA --------------------
+      // -------------------- CORSA --------------------
       if (!p.corsa_id) {
         const existing = await client.query(
           `SELECT * FROM corse 
@@ -136,9 +146,9 @@ router.post('/:id/accetta', async (req, res) => {
           prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
         } else {
           const veicolo = { id: p.veicolo_id, posti: 4 };
-          const res = await createCorsaFromPending(p, veicolo, client);
-          corsa = res.corsa;
-          prenotazione = res.prenotazione;
+          const resCorsa = await createCorsaFromPending(p, veicolo, client);
+          corsa = resCorsa.corsa;
+          prenotazione = resCorsa.prenotazione;
 
           await client.query(
             `UPDATE pending SET corsa_id = $1 WHERE id = $2`,
@@ -151,7 +161,6 @@ router.post('/:id/accetta', async (req, res) => {
         prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
       }
 
-      // -------------------- COSTRUISCO CORSA COMPLETA --------------------
       const corsaCompleta = {
         ...corsa,
         corsa_id: corsa.id,
@@ -163,13 +172,11 @@ router.post('/:id/accetta', async (req, res) => {
         destinazione_address: p.destinazione_address,
       };
 
-      // -------------------- SOCKET AUTISTA (🔥 FIX) --------------------
+      // -------------------- SOCKET DRIVER --------------------
       io.to(`autista_${driverId}`).emit('pending_update', {
         id: p.id,
         stato: 'accettata',
-        pending_id: p.id,
-        veicolo_id: p.veicolo_id,
-        corsa: corsaCompleta // 🔥 QUESTO RISOLVE IL TUO BUG
+        corsa: corsaCompleta
       });
 
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
@@ -181,23 +188,16 @@ router.post('/:id/accetta', async (req, res) => {
         corsa_id: corsa.id,
       });
 
-      // -------------------- NOTIFICA --------------------
-      const message = `✅ Viaggio accettato da ${driverNome}`;
-      const notif = await client.query(
-        `INSERT INTO notifications(user_id,type,message,seen,created_at)
-         VALUES ($1,'pending',$2,false,NOW()) RETURNING *`,
-        [p.cliente_id, message]
-      );
-
-      sendNotification({
+      // -------------------- 🔥 PUSH NOTIFICATION CLIENTE --------------------
+      await sendNotification({
         userId: p.cliente_id,
-        role: 'cliente',
-        notification: notif.rows[0]
+        title: 'Viaggio accettato',
+        message: `Il tuo viaggio è stato accettato da ${driverNome}`,
+        type: 'pending'
       });
     }
 
     await client.query('COMMIT');
-
     res.json({ ok: true });
 
   } catch (err) {
@@ -221,7 +221,16 @@ export async function notifyNewPending(pending) {
 
     const driverId = driverRes.rows[0]?.driver_id;
 
+    // 🔥 SOCKET
     io.to(`autista_${driverId}`).emit('new_pending', { pending });
+
+    // 🔥 PUSH DRIVER
+    await sendNotification({
+      userId: driverId,
+      title: 'Nuova richiesta',
+      message: 'Hai una nuova corsa disponibile',
+      type: 'pending'
+    });
 
   } catch (err) {
     console.error('❌ notifyNewPending error:', err);

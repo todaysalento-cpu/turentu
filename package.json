@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "car-query": "^1.0.12",
     "chart.js": "^4.5.1",

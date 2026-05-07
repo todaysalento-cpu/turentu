@@ -21,15 +21,22 @@ const authMiddleware = (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(
+      token,
+      JWT_SECRET
+    );
 
-    decoded.role = decoded.role.toLowerCase();
+    decoded.role =
+      decoded.role.toLowerCase();
 
     req.user = decoded;
 
     next();
   } catch (err) {
-    console.error('❌ auth error:', err.message);
+    console.error(
+      '❌ auth error:',
+      err.message
+    );
 
     return res.status(401).json({
       message: 'Invalid token',
@@ -42,14 +49,17 @@ chatRouter.get(
   '/init',
   authMiddleware,
   async (req, res) => {
-    const { id: userIdRaw, role } = req.user;
+    const { id: userIdRaw, role } =
+      req.user;
 
-    const userId = parseInt(userIdRaw, 10);
+    const userId = Number(userIdRaw);
 
     try {
       let rows = [];
 
-      // ================= AUTISTA =================
+      // =====================================================
+      // AUTISTA
+      // =====================================================
       if (role === 'autista') {
         const result = await pool.query(
           `
@@ -60,11 +70,15 @@ chatRouter.get(
             c.destinazione_address,
             c.start_datetime
           FROM corse c
-          JOIN veicolo v
+
+          INNER JOIN veicolo v
             ON v.id = c.veicolo_id
-          JOIN prenotazioni p
+
+          INNER JOIN prenotazioni p
             ON p.corsa_id = c.id
+
           WHERE v.driver_id = $1
+
           ORDER BY c.start_datetime DESC
         `,
           [userId]
@@ -73,20 +87,25 @@ chatRouter.get(
         rows = result.rows;
       }
 
-      // ================= CLIENTE =================
-      else {
+      // =====================================================
+      // CLIENTE
+      // =====================================================
+      else if (role === 'cliente') {
         const result = await pool.query(
           `
-          SELECT
+          SELECT DISTINCT
             c.id AS corsa_id,
             p.cliente_id,
             c.origine_address,
             c.destinazione_address,
             c.start_datetime
           FROM prenotazioni p
-          JOIN corse c
+
+          INNER JOIN corse c
             ON c.id = p.corsa_id
+
           WHERE p.cliente_id = $1
+
           ORDER BY c.start_datetime DESC
         `,
           [userId]
@@ -95,13 +114,20 @@ chatRouter.get(
         rows = result.rows;
       }
 
-      // ================= THREADS =================
+      // =====================================================
+      // THREADS
+      // =====================================================
       const threads = await Promise.all(
         rows.map(async (r) => {
-          const corsaId = r.corsa_id;
-          const clienteId = r.cliente_id;
+          const corsaId = Number(
+            r.corsa_id
+          );
 
-          // 🔥 FIX IMPORTANTE
+          const clienteId = Number(
+            r.cliente_id
+          );
+
+          // 🔥 thread unico
           const chatId = `${corsaId}_${clienteId}`;
 
           // ================= UNREAD =================
@@ -114,7 +140,11 @@ chatRouter.get(
                 AND cliente_id = $2
                 AND sender_id != $3
             `,
-              [corsaId, clienteId, userId]
+              [
+                corsaId,
+                clienteId,
+                userId,
+              ]
             );
 
           // ================= MESSAGES =================
@@ -140,24 +170,56 @@ chatRouter.get(
             id: chatId,
             corsa_id: corsaId,
             cliente_id: clienteId,
-            origine: r.origine_address,
-            destinazione: r.destinazione_address,
-            start_datetime: r.start_datetime,
+
+            origine:
+              r.origine_address || '',
+
+            destinazione:
+              r.destinazione_address ||
+              '',
+
+            start_datetime:
+              r.start_datetime,
+
             unreadCount:
               unread?.[0]?.count || 0,
+
             messages,
           };
         })
       );
 
-      res.json(threads);
+      // =====================================================
+      // REMOVE DUPLICATES
+      // =====================================================
+      const uniqueThreads =
+        Array.from(
+          new Map(
+            threads.map((t) => [
+              t.id,
+              t,
+            ])
+          ).values()
+        );
+
+      console.log(
+        '✅ CHAT INIT:',
+        {
+          role,
+          userId,
+          threads:
+            uniqueThreads.length,
+        }
+      );
+
+      return res.json(uniqueThreads);
     } catch (err) {
       console.error(
         '❌ init chat error:',
         err
       );
 
-      res.status(500).json({
+      return res.status(500).json({
         message: 'Errore init chat',
       });
     }
@@ -173,7 +235,9 @@ export const attachChatSocket = (io) => {
         socket.handshake.auth?.token;
 
       if (!token) {
-        return next(new Error('no token'));
+        return next(
+          new Error('no token')
+        );
       }
 
       const decoded = jwt.verify(
@@ -188,7 +252,9 @@ export const attachChatSocket = (io) => {
 
       next();
     } catch (err) {
-      next(new Error('invalid token'));
+      next(
+        new Error('invalid token')
+      );
     }
   });
 
@@ -202,16 +268,65 @@ export const attachChatSocket = (io) => {
     // ================= JOIN CHAT =================
     socket.on(
       'join_chat',
-      ({ corsa_id, cliente_id }) => {
-        // 🔥 ROOM UNIFICATA
-        const room = `chat_${corsa_id}_${cliente_id}`;
+      async ({
+        corsa_id,
+        cliente_id,
+      }) => {
+        try {
+          const userId =
+            socket.user.id;
 
-        socket.join(room);
+          // 🔥 SECURITY CHECK
+          const access =
+            await pool.query(
+              `
+              SELECT 1
+              FROM prenotazioni p
 
-        console.log(
-          '🟢 joined room:',
-          room
-        );
+              JOIN corse c
+                ON c.id = p.corsa_id
+
+              LEFT JOIN veicolo v
+                ON v.id = c.veicolo_id
+
+              WHERE p.corsa_id = $1
+                AND p.cliente_id = $2
+                AND (
+                  p.cliente_id = $3
+                  OR v.driver_id = $3
+                )
+            `,
+              [
+                corsa_id,
+                cliente_id,
+                userId,
+              ]
+            );
+
+          if (
+            !access.rows.length
+          ) {
+            console.warn(
+              '❌ unauthorized join_chat'
+            );
+
+            return;
+          }
+
+          const room = `chat_${corsa_id}_${cliente_id}`;
+
+          socket.join(room);
+
+          console.log(
+            '🟢 joined room:',
+            room
+          );
+        } catch (err) {
+          console.error(
+            '❌ join_chat error:',
+            err
+          );
+        }
       }
     );
 
@@ -236,10 +351,13 @@ export const attachChatSocket = (io) => {
               `
               SELECT 1
               FROM prenotazioni p
+
               JOIN corse c
                 ON c.id = p.corsa_id
+
               LEFT JOIN veicolo v
                 ON v.id = c.veicolo_id
+
               WHERE p.corsa_id = $1
                 AND p.cliente_id = $2
                 AND (
@@ -264,7 +382,7 @@ export const attachChatSocket = (io) => {
             return;
           }
 
-          // ================= INSERT MESSAGE =================
+          // ================= INSERT =================
           const { rows } =
             await pool.query(
               `
@@ -277,7 +395,10 @@ export const attachChatSocket = (io) => {
                 read_status
               )
               VALUES ($1,$2,$3,$4,$5)
-              RETURNING id, created_at
+
+              RETURNING
+                id,
+                created_at
             `,
               [
                 corsa_id,
@@ -297,11 +418,13 @@ export const attachChatSocket = (io) => {
             cliente_id,
             sender_id,
             text,
+
             sender_name:
               sender_role ===
               'autista'
                 ? 'Autista'
                 : 'Cliente',
+
             role: sender_role,
           };
 
@@ -314,30 +437,34 @@ export const attachChatSocket = (io) => {
           );
 
           // ================= PUSH TOKENS =================
-          const { rows: tokens } =
-            await pool.query(
-              `
-              SELECT push_token
-              FROM utente_push_tokens
-              WHERE user_id != $1
-                AND user_id IN (
-                  SELECT cliente_id
-                  FROM prenotazioni
-                  WHERE corsa_id = $2
+          const {
+            rows: tokens,
+          } = await pool.query(
+            `
+            SELECT push_token
+            FROM utente_push_tokens
+            WHERE user_id != $1
+              AND user_id IN (
 
-                  UNION
+                SELECT cliente_id
+                FROM prenotazioni
+                WHERE corsa_id = $2
 
-                  SELECT driver_id
-                  FROM veicolo v
-                  JOIN corse c
-                    ON v.id = c.veicolo_id
-                  WHERE c.id = $2
-                )
-            `,
-              [sender_id, corsa_id]
-            );
+                UNION
 
-          // ================= SEND PUSH =================
+                SELECT driver_id
+                FROM veicolo v
+
+                JOIN corse c
+                  ON v.id = c.veicolo_id
+
+                WHERE c.id = $2
+              )
+          `,
+            [sender_id, corsa_id]
+          );
+
+          // ================= PUSH =================
           for (const t of tokens) {
             if (!t.push_token)
               continue;
@@ -360,13 +487,15 @@ export const attachChatSocket = (io) => {
                     notification: {
                       title:
                         'Nuovo messaggio',
+
                       body: text,
                     },
 
                     data: {
                       corsa_id,
                       cliente_id,
-                      message_id: msg.id,
+                      message_id:
+                        msg.id,
                     },
                   }),
                 }
@@ -388,12 +517,15 @@ export const attachChatSocket = (io) => {
     );
 
     // ================= DISCONNECT =================
-    socket.on('disconnect', () => {
-      console.log(
-        '🔴 socket disconnected:',
-        socket.id
-      );
-    });
+    socket.on(
+      'disconnect',
+      () => {
+        console.log(
+          '🔴 socket disconnected:',
+          socket.id
+        );
+      }
+    );
   });
 };
 

@@ -1,4 +1,3 @@
-// routes/chat.routes.js
 import express from 'express';
 import { pool } from '../db/db.js';
 import jwt from 'jsonwebtoken';
@@ -7,16 +6,14 @@ import fetch from 'node-fetch';
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 
-// ======================= AUTH MIDDLEWARE =======================
+// ======================= AUTH =======================
 const authMiddleware = (req, res, next) => {
   try {
     const token =
       req.headers.authorization?.split(' ')[1] ||
       req.cookies?.token;
 
-    if (!token) {
-      return res.status(401).json({ message: 'No token' });
-    }
+    if (!token) return res.status(401).json({ message: 'No token' });
 
     const decoded = jwt.verify(token, JWT_SECRET);
     decoded.role = decoded.role.toLowerCase();
@@ -24,98 +21,80 @@ const authMiddleware = (req, res, next) => {
 
     next();
   } catch (err) {
-    console.error('❌ Errore auth:', err.message);
+    console.error('❌ auth error:', err.message);
     return res.status(401).json({ message: 'Invalid token' });
   }
 };
 
-// ======================= INIT CHAT (FIXED) =======================
+// ======================= INIT CHAT =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
   const { id: userIdRaw, role } = req.user;
   const userId = parseInt(userIdRaw, 10);
 
   try {
-    // 🔥 CHAT REALI BASATE SU MESSAGGI
+
+    // 🔥 1 CHAT = 1 CORSA + CLIENTE
     const { rows } = await pool.query(`
       SELECT DISTINCT
         m.corsa_id,
         m.cliente_id,
-        c.origine_address AS origine,
-        c.destinazione_address AS destinazione,
+        c.origine_address,
+        c.destinazione_address,
         c.start_datetime
       FROM messaggi m
       JOIN corse c ON c.id = m.corsa_id
-      WHERE m.sender_id = $1 OR m.cliente_id = $1
+      WHERE 
+        ($1 = m.sender_id OR $1 = m.cliente_id)
       ORDER BY c.start_datetime DESC
     `, [userId]);
 
     const threads = await Promise.all(
-      rows.map(async (row) => {
-        const corsaId = parseInt(row.corsa_id, 10);
-        const clienteId = parseInt(row.cliente_id, 10);
+      rows.map(async (r) => {
+        const corsaId = r.corsa_id;
+        const clienteId = r.cliente_id;
 
-        // unread messages
-        const { rows: unread } = await pool.query(`
-          SELECT COUNT(*) AS count
+        // ================= unread =================
+        const { rows: unreadRows } = await pool.query(`
+          SELECT COUNT(*)::int AS count
           FROM messaggi
           WHERE corsa_id=$1
             AND cliente_id=$2
             AND sender_id != $3
-            AND NOT (read_status->>$4)::boolean
+            AND COALESCE((read_status->>$4)::boolean, false) = false
         `, [corsaId, clienteId, userId, role]);
 
-        // messages
-        const { rows: messagesRows } = await pool.query(`
+        // ================= messages =================
+        const { rows: messages } = await pool.query(`
           SELECT 
             id,
             corsa_id,
             cliente_id,
             sender_id,
             testo AS text,
-            created_at AS timestamp,
+            created_at,
             read_status
           FROM messaggi
           WHERE corsa_id=$1 AND cliente_id=$2
           ORDER BY created_at ASC
         `, [corsaId, clienteId]);
 
-        const messages = messagesRows.map(m => ({
-          ...m,
-          sender_name:
-            m.sender_id === userId
-              ? role
-              : role === 'autista'
-                ? 'cliente'
-                : 'autista',
-          role:
-            m.sender_id === userId
-              ? role
-              : role === 'autista'
-                ? 'cliente'
-                : 'autista',
-          read_status:
-            typeof m.read_status === 'string'
-              ? JSON.parse(m.read_status)
-              : m.read_status || { autista: false, cliente: false }
-        }));
-
         return {
           id: `${corsaId}_${clienteId}`,
           corsa_id: corsaId,
           cliente_id: clienteId,
-          origine: row.origine,
-          destinazione: row.destinazione,
-          start_datetime: row.start_datetime,
-          unreadCount: parseInt(unread[0]?.count || 0, 10),
-          messages,
-          participants: []
+          origine: r.origine_address,
+          destinazione: r.destinazione_address,
+          start_datetime: r.start_datetime,
+          unreadCount: unreadRows?.[0]?.count || 0,
+          messages
         };
       })
     );
 
     res.json(threads);
+
   } catch (err) {
-    console.error('❌ Errore init chat:', err);
+    console.error('❌ init error:', err);
     res.status(500).json({ message: 'Errore init chat' });
   }
 });
@@ -123,22 +102,23 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
 // ======================= SOCKET =======================
 export const attachChatSocket = (io) => {
   io.on('connection', (socket) => {
-    console.log('📡 Nuovo client connesso:', socket.id);
+    console.log('📡 socket connected:', socket.id);
 
     socket.on('join_chat', ({ corsa_id, cliente_id }) => {
-      const room = `chat_${corsa_id}_${cliente_id}`;
-      socket.join(room);
+      socket.join(`chat_${corsa_id}_${cliente_id}`);
     });
 
     socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
       try {
+
         const sender_id = socket.user?.id;
         const sender_role = socket.user?.role;
 
         const { rows } = await pool.query(`
-          INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, read_status)
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING id, created_at AS timestamp
+          INSERT INTO messaggi
+          (corsa_id, cliente_id, sender_id, testo, read_status)
+          VALUES ($1,$2,$3,$4,$5)
+          RETURNING id, created_at
         `, [
           corsa_id,
           cliente_id,
@@ -188,17 +168,17 @@ export const attachChatSocket = (io) => {
                 notification: {
                   title: 'Nuovo messaggio',
                   body: text,
-                  sound: 'default',
                 },
                 data: { corsa_id, cliente_id, message_id: msg.id },
               }),
             });
-          } catch (pushErr) {
-            console.warn('⚠️ Push error:', pushErr.message);
+          } catch (e) {
+            console.warn('push error:', e.message);
           }
         }
+
       } catch (err) {
-        console.error('❌ Errore send_message:', err);
+        console.error('❌ send_message error:', err);
       }
     });
   });

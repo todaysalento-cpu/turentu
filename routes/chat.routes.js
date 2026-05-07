@@ -26,35 +26,60 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// ======================= INIT CHAT =======================
+// ======================= INIT CHAT (FIXED) =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
   const { id: userIdRaw, role } = req.user;
   const userId = parseInt(userIdRaw, 10);
 
   try {
 
-    // 🔥 1 CHAT = 1 CORSA + CLIENTE
-    const { rows } = await pool.query(`
-      SELECT DISTINCT
-        m.corsa_id,
-        m.cliente_id,
-        c.origine_address,
-        c.destinazione_address,
-        c.start_datetime
-      FROM messaggi m
-      JOIN corse c ON c.id = m.corsa_id
-      WHERE 
-        ($1 = m.sender_id OR $1 = m.cliente_id)
-      ORDER BY c.start_datetime DESC
-    `, [userId]);
+    let rows = [];
 
+    // ===================== AUTISTA =====================
+    if (role === 'autista') {
+      const result = await pool.query(`
+        SELECT 
+          c.id AS corsa_id,
+          p.cliente_id,
+          c.origine_address,
+          c.destinazione_address,
+          c.start_datetime
+        FROM corse c
+        JOIN veicolo v ON v.id = c.veicolo_id
+        JOIN prenotazioni p ON p.corsa_id = c.id
+        WHERE v.driver_id = $1
+        ORDER BY c.start_datetime DESC
+      `, [userId]);
+
+      rows = result.rows;
+    }
+
+    // ===================== CLIENTE =====================
+    else {
+      const result = await pool.query(`
+        SELECT 
+          c.id AS corsa_id,
+          p.cliente_id,
+          c.origine_address,
+          c.destinazione_address,
+          c.start_datetime
+        FROM prenotazioni p
+        JOIN corse c ON c.id = p.corsa_id
+        WHERE p.cliente_id = $1
+        ORDER BY c.start_datetime DESC
+      `, [userId]);
+
+      rows = result.rows;
+    }
+
+    // ===================== THREADS =====================
     const threads = await Promise.all(
       rows.map(async (r) => {
         const corsaId = r.corsa_id;
         const clienteId = r.cliente_id;
 
-        // ================= unread =================
-        const { rows: unreadRows } = await pool.query(`
+        // unread
+        const { rows: unread } = await pool.query(`
           SELECT COUNT(*)::int AS count
           FROM messaggi
           WHERE corsa_id=$1
@@ -63,7 +88,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
             AND COALESCE((read_status->>$4)::boolean, false) = false
         `, [corsaId, clienteId, userId, role]);
 
-        // ================= messages =================
+        // messages
         const { rows: messages } = await pool.query(`
           SELECT 
             id,
@@ -85,7 +110,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
           origine: r.origine_address,
           destinazione: r.destinazione_address,
           start_datetime: r.start_datetime,
-          unreadCount: unreadRows?.[0]?.count || 0,
+          unreadCount: unread?.[0]?.count || 0,
           messages
         };
       })
@@ -94,7 +119,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
     res.json(threads);
 
   } catch (err) {
-    console.error('❌ init error:', err);
+    console.error('❌ init chat error:', err);
     res.status(500).json({ message: 'Errore init chat' });
   }
 });

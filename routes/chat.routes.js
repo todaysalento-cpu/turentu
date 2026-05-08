@@ -6,7 +6,6 @@ const chatRouter = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 
-
 // ======================= AUTH =======================
 const authMiddleware = (req, res, next) => {
   try {
@@ -31,7 +30,6 @@ const authMiddleware = (req, res, next) => {
     return res.status(401).json({ message: 'Invalid token' });
   }
 };
-
 
 // ======================= INIT CHAT =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
@@ -142,9 +140,7 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
       })
     );
 
-    console.log("✅ [CHAT INIT DONE]", {
-      threads: threads.length
-    });
+    console.log("✅ [CHAT INIT DONE]", { threads: threads.length });
 
     return res.json(threads);
 
@@ -154,16 +150,11 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
   }
 });
 
-
 // ======================= PAGINATION =======================
 chatRouter.get('/messages', authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
 
-  console.log("\n📥 [PAGINATION REQUEST]", {
-    corsa_id,
-    cliente_id,
-    cursor
-  });
+  console.log("\n📥 [PAGINATION REQUEST]", { corsa_id, cliente_id, cursor, limit });
 
   try {
     const values = [corsa_id, cliente_id, Number(limit)];
@@ -171,7 +162,11 @@ chatRouter.get('/messages', authMiddleware, async (req, res) => {
     let cursorQuery = '';
 
     if (cursor) {
-      values.push(cursor);
+      const cursorDate = new Date(Number(cursor));
+      if (isNaN(cursorDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid cursor' });
+      }
+      values.push(cursorDate);
       cursorQuery = `AND created_at < $4`;
     }
 
@@ -190,7 +185,7 @@ chatRouter.get('/messages', authMiddleware, async (req, res) => {
     return res.json({
       messages: rows.reverse(),
       hasMore: rows.length === Number(limit),
-      nextCursor: rows.length ? rows[rows.length - 1].created_at : null,
+      nextCursor: rows.length ? new Date(rows[0].created_at).getTime() : null,
     });
 
   } catch (err) {
@@ -199,10 +194,8 @@ chatRouter.get('/messages', authMiddleware, async (req, res) => {
   }
 });
 
-
 // ======================= SOCKET =======================
 export const attachChatSocket = (io) => {
-
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
@@ -226,17 +219,10 @@ export const attachChatSocket = (io) => {
   });
 
   io.on('connection', (socket) => {
+    console.log('📡 [SOCKET CONNECTED]', { socket: socket.id, user: socket.user?.id });
 
-    console.log('📡 [SOCKET CONNECTED]', {
-      socket: socket.id,
-      user: socket.user?.id
-    });
-
-    // ================= JOIN CHAT =================
     socket.on('join_chat', async ({ corsa_id, cliente_id }) => {
-
       console.log("📥 [JOIN CHAT]", { corsa_id, cliente_id });
-
       try {
         const userId = Number(socket.user.id);
 
@@ -257,9 +243,7 @@ export const attachChatSocket = (io) => {
         }
 
         const room = `chat_${corsa_id}_${cliente_id}`;
-
         socket.join(room);
-
         console.log("🏠 [JOINED ROOM]", room);
 
       } catch (err) {
@@ -267,14 +251,8 @@ export const attachChatSocket = (io) => {
       }
     });
 
-    // ================= SEND MESSAGE =================
     socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
-
-      console.log("📤 [SEND MESSAGE]", {
-        corsa_id,
-        cliente_id,
-        text
-      });
+      console.log("📤 [SEND MESSAGE]", { corsa_id, cliente_id, text });
 
       try {
         if (!text?.trim()) return;
@@ -320,7 +298,6 @@ export const attachChatSocket = (io) => {
         };
 
         const room = `chat_${corsa_id}_${cliente_id}`;
-
         console.log("📡 [EMIT]", room, msg.id);
 
         io.to(room).emit('new_message', msg);

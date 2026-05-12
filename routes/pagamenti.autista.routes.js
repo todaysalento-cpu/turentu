@@ -31,11 +31,13 @@ router.get("/autista", authMiddleware, async (req, res) => {
         c.origine_address,
         c.destinazione_address,
 
-        pr.id AS prenotazione_id
+        v.id AS veicolo_id,
+        v.autista_id
+
       FROM pagamenti p
       INNER JOIN corse c ON c.id = p.corsa_id
-      LEFT JOIN prenotazioni pr ON pr.id = p.prenotazione_id
-      WHERE c.autista_id = $1
+      INNER JOIN veicoli v ON v.id = c.veicolo_id
+      WHERE v.autista_id = $1
     `;
 
     if (status && status !== "tutti") {
@@ -53,6 +55,7 @@ router.get("/autista", authMiddleware, async (req, res) => {
       count: result.rows.length,
       data: result.rows,
     });
+
   } catch (err) {
     console.error("❌ Errore pagamenti autista:", err);
 

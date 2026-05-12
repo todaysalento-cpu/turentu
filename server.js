@@ -36,8 +36,9 @@ import autistaStatusRouter from './routes/autistaStatus.routes.js';
 import documentiAutistaRouter from './routes/documentiAutista.routes.js';
 import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
 
-// ⭐ NUOVA ROUTE PRENOTAZIONI
+// ⭐ NUOVE ROUTES
 import prenotazioniRouter from './routes/prenotazioni.routes.js';
+import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 
 // ======================= SERVICES =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -102,6 +103,9 @@ app.use('/api/pending', pendingRouter);
 
 // ⭐ PRENOTAZIONI
 app.use('/api/prenotazioni', prenotazioniRouter);
+
+// 💰 PAGAMENTI AUTISTA
+app.use('/api/pagamenti', pagamentiAutistaRouter);
 
 app.use('/api/tariffe', tariffeRouter);
 app.use('/api/distanza', distanzaRouter);

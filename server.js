@@ -29,12 +29,15 @@ import { pendingRouter } from './routes/pending.routes.js';
 import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
-import chatRouter, { attachChatSocket } from './routes/chat.routes.js'; // ✅ aggiornato
+import chatRouter, { attachChatSocket } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
 import documentiAutistaRouter from './routes/documentiAutista.routes.js';
 import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
+
+// ⭐ NUOVA ROUTE PRENOTAZIONI
+import prenotazioniRouter from './routes/prenotazioni.routes.js';
 
 // ======================= SERVICES =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -96,11 +99,15 @@ app.use('/api/disponibilita', disponibilitaRouter);
 app.use('/api/veicolo', veicoloRouter);
 app.use('/api/corse', corseRouter);
 app.use('/api/pending', pendingRouter);
+
+// ⭐ PRENOTAZIONI
+app.use('/api/prenotazioni', prenotazioniRouter);
+
 app.use('/api/tariffe', tariffeRouter);
 app.use('/api/distanza', distanzaRouter);
 
 app.use('/api/admin', adminRouter);
-app.use('/api/chat', chatRouter); // ✅ router chat
+app.use('/api/chat', chatRouter);
 app.use('/api/search', searchRouter);
 
 app.use('/api/autista/profilo', autistaProfiloRouter);
@@ -154,10 +161,8 @@ const io = new Server(server, {
   },
 });
 
-// ✅ socket generali
+// ======================= SOCKET =======================
 setupSocket(io);
-
-// ✅ socket chat (join rooms, send_message, ecc.)
 attachChatSocket(io);
 
 // ======================= FLOW REGISTRY =======================

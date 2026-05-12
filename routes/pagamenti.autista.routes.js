@@ -1,13 +1,11 @@
 import express from "express";
-import pool from "../db/db.js";
+import { pool } from "../db/db.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
 /**
  * GET /api/pagamenti/autista
- * Query params:
- * - status: tutti | pagato | pendente | rimborsato | autorizzazione
  */
 router.get("/autista", authMiddleware, async (req, res) => {
   try {
@@ -40,7 +38,6 @@ router.get("/autista", authMiddleware, async (req, res) => {
       WHERE c.autista_id = $1
     `;
 
-    // filtro stato pagamento
     if (status && status !== "tutti") {
       query += ` AND p.stato = $${idx}`;
       values.push(status);

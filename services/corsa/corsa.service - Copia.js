@@ -32,7 +32,6 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     }
     durataMin = Number(durataMin);
     if (isNaN(durataMin) || durataMin <= 0) throw new Error('Durata non valida nel pending');
-
     const arrivoDatetime = new Date(startDatetime.getTime() + durataMin * 60 * 1000);
 
     // --- POSTI ---
@@ -40,35 +39,19 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     const postiRichiesti = pending.posti_richiesti ?? pending.postiRichiesti ?? 1;
     const postiDisponibili = Math.max(postiTotali - postiRichiesti, 0);
 
-    // --- COORDINATE ---
+    // --- COORDINATE --- (default 0 se mancanti)
     const coordOrig = pending.coordOrigine ??
-      (pending.origine
-        ? { lat: pending.origine_lat ?? 0, lon: pending.origine_lon ?? 0 }
-        : { lat: 0, lon: 0 });
+                      (pending.origine ? { lat: pending.origine_lat ?? 0, lon: pending.origine_lon ?? 0 } : { lat: 0, lon: 0 });
 
     const coordDest = pending.coordDestinazione ??
-      (pending.destinazione
-        ? { lat: pending.destinazione_lat ?? 0, lon: pending.destinazione_lon ?? 0 }
-        : { lat: 0, lon: 0 });
+                      (pending.destinazione ? { lat: pending.destinazione_lat ?? 0, lon: pending.destinazione_lon ?? 0 } : { lat: 0, lon: 0 });
 
     // --- TIPO CORSA ---
-    const tipoCorsa =
-      pending.tipo_corsa === 'privata' || pending.tipoCorsa === 'privata'
-        ? 'privata'
-        : 'condivisa';
+    const tipoCorsa = pending.tipo_corsa === 'privata' || pending.tipoCorsa === 'privata' ? 'privata' : 'condivisa';
 
     // --- ADDRESS ---
-    const origine_address =
-      pending.origine_address ??
-      pending.localitaOrigine ??
-      pending.origineAddress ??
-      'N/D';
-
-    const destinazione_address =
-      pending.destinazione_address ??
-      pending.localitaDestinazione ??
-      pending.destinazioneAddress ??
-      'N/D';
+    const origine_address = pending.origine_address ?? pending.localitaOrigine ?? pending.origineAddress ?? 'N/D';
+    const destinazione_address = pending.destinazione_address ?? pending.localitaDestinazione ?? pending.destinazioneAddress ?? 'N/D';
 
     // --- DISTANZA ---
     let distanzaKm = Number(String(pending.distanza ?? 0).replace(',', '.').trim());
@@ -118,18 +101,9 @@ export async function createCorsaFromPending(pending, veicolo, client) {
       client
     );
 
-    // 🔥 FIX IMPORTANTE: collega pagamento alla corsa
-    await client.query(
-      `UPDATE pagamenti
-       SET corsa_id = $1
-       WHERE prenotazione_id = $2`,
-      [corsa.id, prenotazione.id]
-    );
-
     // --- POSIZIONE PREDITTIVA ---
     if (corsa.destinazione && corsa.arrivo_datetime) {
       const tempoX = params.tempoPosizioneX ?? 2 * 60 * 60 * 1000;
-
       await aggiornaPosizionePredittiva(
         veicolo.id,
         { lat: coordDest.lat, lon: coordDest.lon },

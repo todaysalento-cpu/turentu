@@ -4,7 +4,8 @@ import { pool } from '../db/db.js';
 
 const router = express.Router();
 
-router.get('/prenotazioni', authMiddleware, async (req, res) => {
+// ✅ CORRETTO: già montato su /api/prenotazioni nel server.js
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const clienteId = req.user.id;
 

@@ -32,12 +32,12 @@ router.get("/autista", authMiddleware, async (req, res) => {
         c.destinazione_address,
 
         v.id AS veicolo_id,
-        v.autista_id
+        v.driver_id
 
       FROM pagamenti p
       INNER JOIN corse c ON c.id = p.corsa_id
-      INNER JOIN veicoli v ON v.id = c.veicolo_id
-      WHERE v.autista_id = $1
+      INNER JOIN veicolo v ON v.id = c.veicolo_id
+      WHERE v.driver_id = $1
     `;
 
     if (status && status !== "tutti") {

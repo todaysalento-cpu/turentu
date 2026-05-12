@@ -1,5 +1,5 @@
 import express from "express";
-import pool from "../db.js"; // tuo pool pg
+import pool from "../db/db.js"; // ✔ FIX IMPORT (db/db.js)
 import authMiddleware from "../middleware/auth.js";
 
 const router = express.Router();
@@ -7,14 +7,14 @@ const router = express.Router();
 /**
  * GET /api/pagamenti/autista
  * Query params:
- * - status = tutti | pagato | pendente | rimborsato
+ * - status: tutti | pagato | pendente | rimborsato | autorizzazione
  */
 router.get("/autista", authMiddleware, async (req, res) => {
   try {
     const autistaId = req.user.id;
     const { status } = req.query;
 
-    let values = [autistaId];
+    const values = [autistaId];
     let idx = 2;
 
     let query = `
@@ -28,11 +28,15 @@ router.get("/autista", authMiddleware, async (req, res) => {
         p.updated_at,
         p.tipo_corsa,
         p.corsa_id,
+
         c.start_datetime,
         c.origine_address,
-        c.destinazione_address
+        c.destinazione_address,
+
+        pr.id AS prenotazione_id
       FROM pagamenti p
-      JOIN corse c ON c.id = p.corsa_id
+      INNER JOIN corse c ON c.id = p.corsa_id
+      LEFT JOIN prenotazioni pr ON pr.id = p.prenotazione_id
       WHERE c.autista_id = $1
     `;
 
@@ -47,10 +51,18 @@ router.get("/autista", authMiddleware, async (req, res) => {
 
     const result = await pool.query(query, values);
 
-    res.json(result.rows);
+    res.json({
+      success: true,
+      count: result.rows.length,
+      data: result.rows,
+    });
   } catch (err) {
-    console.error("Errore pagamenti autista:", err);
-    res.status(500).json({ error: "Errore server pagamenti" });
+    console.error("❌ Errore pagamenti autista:", err);
+
+    res.status(500).json({
+      success: false,
+      error: "Errore server pagamenti",
+    });
   }
 });
 

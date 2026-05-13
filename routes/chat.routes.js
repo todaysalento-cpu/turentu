@@ -20,16 +20,23 @@ const authMiddleware = (req, res, next) => {
     decoded.role = decoded.role.toLowerCase();
 
     req.user = decoded;
+
     next();
   } catch (err) {
-    return res.status(401).json({ message: 'Invalid token' });
+    console.error('auth error:', err);
+
+    return res.status(401).json({
+      message: 'Invalid token',
+    });
   }
 };
 
 // ======================= INIT CHAT =======================
 chatRouter.get('/init', authMiddleware, async (req, res) => {
   const { id: userIdRaw, role } = req.user;
+
   const userId = Number(userIdRaw);
+
   const MESSAGE_LIMIT = 30;
 
   try {
@@ -37,26 +44,41 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
 
     if (role === 'autista') {
       const result = await pool.query(
-        `SELECT c.id AS corsa_id, p.cliente_id, c.origine_address, c.destinazione_address, c.start_datetime
+        `SELECT DISTINCT
+            c.id AS corsa_id,
+            p.cliente_id,
+            c.origine_address,
+            c.destinazione_address,
+            c.start_datetime
          FROM corse c
-         INNER JOIN veicolo v ON v.id = c.veicolo_id
-         INNER JOIN prenotazioni p ON p.corsa_id = c.id
+         INNER JOIN veicolo v
+           ON v.id = c.veicolo_id
+         INNER JOIN prenotazioni p
+           ON p.corsa_id = c.id
          WHERE v.driver_id = $1
-         GROUP BY c.id, p.cliente_id, c.origine_address, c.destinazione_address, c.start_datetime
          ORDER BY c.start_datetime DESC`,
         [userId]
       );
+
       rows = result.rows;
-    } else if (role === 'cliente') {
+    }
+
+    else if (role === 'cliente') {
       const result = await pool.query(
-        `SELECT c.id AS corsa_id, p.cliente_id, c.origine_address, c.destinazione_address, c.start_datetime
+        `SELECT DISTINCT
+            c.id AS corsa_id,
+            p.cliente_id,
+            c.origine_address,
+            c.destinazione_address,
+            c.start_datetime
          FROM prenotazioni p
-         INNER JOIN corse c ON c.id = p.corsa_id
+         INNER JOIN corse c
+           ON c.id = p.corsa_id
          WHERE p.cliente_id = $1
-         GROUP BY c.id, p.cliente_id, c.origine_address, c.destinazione_address, c.start_datetime
          ORDER BY c.start_datetime DESC`,
         [userId]
       );
+
       rows = result.rows;
     }
 
@@ -71,14 +93,22 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
            WHERE corsa_id = $1
              AND cliente_id = $2
              AND sender_id != $3
-             AND letto = false`,
-          [corsaId, clienteId, userId]
+             AND (read_status->>$4) = 'false'`,
+          [corsaId, clienteId, userId, role]
         );
 
         const { rows: messages } = await pool.query(
-          `SELECT id, corsa_id, cliente_id, sender_id, testo AS text, created_at, letto, read_status
+          `SELECT
+              id,
+              corsa_id,
+              cliente_id,
+              sender_id,
+              testo AS text,
+              created_at,
+              read_status
            FROM messaggi
-           WHERE corsa_id = $1 AND cliente_id = $2
+           WHERE corsa_id = $1
+             AND cliente_id = $2
            ORDER BY created_at DESC
            LIMIT $3`,
           [corsaId, clienteId, MESSAGE_LIMIT]
@@ -91,41 +121,72 @@ chatRouter.get('/init', authMiddleware, async (req, res) => {
           origine: r.origine_address || '',
           destinazione: r.destinazione_address || '',
           start_datetime: r.start_datetime,
+
           unreadCount: unread?.[0]?.count || 0,
+
           messages: messages.reverse(),
+
           hasMore: messages.length === MESSAGE_LIMIT,
         };
       })
     );
 
     return res.json(threads);
+
   } catch (err) {
-    return res.status(500).json({ message: 'Errore init chat' });
+    console.error('init chat error:', err);
+
+    return res.status(500).json({
+      message: 'Errore init chat',
+    });
   }
 });
 
 // ======================= PAGINATION =======================
 chatRouter.get('/messages', authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
+  const {
+    corsa_id,
+    cliente_id,
+    cursor,
+    limit = 30,
+  } = req.query;
 
   try {
-    const values = [corsa_id, cliente_id, Number(limit)];
+    const values = [
+      corsa_id,
+      cliente_id,
+      Number(limit),
+    ];
+
     let cursorQuery = '';
 
     if (cursor) {
       const cursorDate = new Date(Number(cursor));
+
       if (isNaN(cursorDate.getTime())) {
-        return res.status(400).json({ message: 'Invalid cursor' });
+        return res.status(400).json({
+          message: 'Invalid cursor',
+        });
       }
+
       values.push(cursorDate);
+
       cursorQuery = `AND created_at < $4`;
     }
 
     const { rows } = await pool.query(
-      `SELECT id, corsa_id, cliente_id, sender_id, testo AS text, created_at, letto, read_status
+      `SELECT
+          id,
+          corsa_id,
+          cliente_id,
+          sender_id,
+          testo AS text,
+          created_at,
+          read_status
        FROM messaggi
-       WHERE corsa_id = $1 AND cliente_id = $2
-       ${cursorQuery}
+       WHERE corsa_id = $1
+         AND cliente_id = $2
+         ${cursorQuery}
        ORDER BY created_at DESC
        LIMIT $3`,
       values
@@ -133,124 +194,208 @@ chatRouter.get('/messages', authMiddleware, async (req, res) => {
 
     return res.json({
       messages: rows.reverse(),
+
       hasMore: rows.length === Number(limit),
-      nextCursor: rows.length ? new Date(rows[0].created_at).getTime() : null,
+
+      nextCursor:
+        rows.length
+          ? new Date(rows[0].created_at).getTime()
+          : null,
     });
 
   } catch (err) {
-    return res.status(500).json({ message: 'error' });
+    console.error('pagination error:', err);
+
+    return res.status(500).json({
+      message: 'error',
+    });
   }
 });
 
 // ======================= MARK AS READ =======================
 chatRouter.post('/mark_read', authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
+
   const userId = Number(req.user.id);
+
   const role = req.user.role;
 
   try {
     await pool.query(
       `UPDATE messaggi
-       SET read_status = jsonb_set(read_status, '{${role}}', 'true', false),
-           letto = CASE
-             WHEN (read_status->>'autista' = 'true' AND read_status->>'cliente' = 'true')
-             THEN true ELSE false END
+       SET read_status =
+         jsonb_set(
+           read_status,
+           '{${role}}',
+           'true',
+           false
+         )
        WHERE corsa_id = $1
          AND cliente_id = $2
          AND sender_id != $3
-         AND (read_status->>'${role}' = 'false')`,
+         AND (read_status->>'${role}') = 'false'`,
       [corsa_id, cliente_id, userId]
     );
 
-    return res.json({ message: 'Messaggi aggiornati come letti' });
+    return res.json({
+      message: 'Messaggi aggiornati come letti',
+    });
+
   } catch (err) {
-    return res.status(500).json({ message: 'Errore aggiornamento lettura' });
+    console.error('mark read error:', err);
+
+    return res.status(500).json({
+      message: 'Errore aggiornamento lettura',
+    });
   }
 });
 
 // ======================= SOCKET =======================
 export const attachChatSocket = (io) => {
+
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
-      if (!token) return next(new Error('no token'));
+
+      if (!token) {
+        return next(new Error('no token'));
+      }
 
       const decoded = jwt.verify(token, JWT_SECRET);
+
       decoded.role = decoded.role.toLowerCase();
+
       socket.user = decoded;
 
       next();
-    } catch {
+
+    } catch (err) {
+      console.error('socket auth error:', err);
+
       next(new Error('invalid token'));
     }
   });
 
   io.on('connection', (socket) => {
 
-    socket.on('join_chat', async ({ corsa_id, cliente_id }) => {
+    socket.on('join_chat', async ({
+      corsa_id,
+      cliente_id,
+    }) => {
+
       try {
         const userId = Number(socket.user.id);
 
         const access = await pool.query(
           `SELECT 1
            FROM prenotazioni p
-           INNER JOIN corse c ON c.id = p.corsa_id
-           LEFT JOIN veicolo v ON v.id = c.veicolo_id
+           INNER JOIN corse c
+             ON c.id = p.corsa_id
+           LEFT JOIN veicolo v
+             ON v.id = c.veicolo_id
            WHERE p.corsa_id = $1
              AND p.cliente_id = $2
-             AND (p.cliente_id = $3 OR v.driver_id = $3)`,
+             AND (
+               p.cliente_id = $3
+               OR v.driver_id = $3
+             )`,
           [corsa_id, cliente_id, userId]
         );
 
-        if (!access.rows.length) return;
+        if (!access.rows.length) {
+          return;
+        }
 
         socket.join(`chat_${corsa_id}_${cliente_id}`);
-      } catch {}
+
+      } catch (err) {
+        console.error('join chat error:', err);
+      }
     });
 
-    socket.on('send_message', async ({ corsa_id, cliente_id, text }) => {
+    socket.on('send_message', async ({
+      corsa_id,
+      cliente_id,
+      text,
+    }) => {
+
       try {
-        if (!text?.trim()) return;
+        if (!text?.trim()) {
+          return;
+        }
 
         const sender_id = Number(socket.user.id);
 
         const canAccess = await pool.query(
           `SELECT 1
            FROM prenotazioni p
-           INNER JOIN corse c ON c.id = p.corsa_id
-           LEFT JOIN veicolo v ON v.id = c.veicolo_id
+           INNER JOIN corse c
+             ON c.id = p.corsa_id
+           LEFT JOIN veicolo v
+             ON v.id = c.veicolo_id
            WHERE p.corsa_id = $1
              AND p.cliente_id = $2
-             AND (p.cliente_id = $3 OR v.driver_id = $3)`,
+             AND (
+               p.cliente_id = $3
+               OR v.driver_id = $3
+             )`,
           [corsa_id, cliente_id, sender_id]
         );
 
-        if (!canAccess.rows.length) return;
+        if (!canAccess.rows.length) {
+          return;
+        }
+
+        const readStatus =
+          socket.user.role === 'autista'
+            ? {
+                autista: true,
+                cliente: false,
+              }
+            : {
+                autista: false,
+                cliente: true,
+              };
 
         const { rows } = await pool.query(
           `INSERT INTO messaggi
-           (corsa_id, cliente_id, sender_id, testo, read_status, letto)
-           VALUES ($1,$2,$3,$4,$5,$6)
-           RETURNING id, created_at`,
+           (
+             corsa_id,
+             cliente_id,
+             sender_id,
+             testo,
+             read_status
+           )
+           VALUES ($1,$2,$3,$4,$5)
+           RETURNING
+             id,
+             created_at,
+             read_status`,
           [
             corsa_id,
             cliente_id,
             sender_id,
             text.trim(),
-            JSON.stringify({ autista: false, cliente: false }),
-            false,
+            JSON.stringify(readStatus),
           ]
         );
 
-        io.to(`chat_${corsa_id}_${cliente_id}`).emit('new_message', {
-          ...rows[0],
-          corsa_id,
-          cliente_id,
-          sender_id,
-          text: text.trim(),
-        });
+        io.to(`chat_${corsa_id}_${cliente_id}`)
+          .emit('new_message', {
+            ...rows[0],
 
-      } catch {}
+            corsa_id,
+
+            cliente_id,
+
+            sender_id,
+
+            text: text.trim(),
+          });
+
+      } catch (err) {
+        console.error('send message error:', err);
+      }
     });
   });
 };

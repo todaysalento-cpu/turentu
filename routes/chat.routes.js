@@ -19,12 +19,12 @@ const authMiddleware = (req, res, next) => {
 
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
 
-/* ======================= THREAD INIT ======================= */
+/* ======================= THREAD LIST ======================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
@@ -32,37 +32,41 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   const LIMIT = 30;
 
   try {
-    let rows = [];
+    let rows;
 
     if (role === "autista") {
       const r = await pool.query(
-        `SELECT DISTINCT
-            c.id AS corsa_id,
-            p.cliente_id,
-            c.origine_address,
-            c.destinazione_address,
-            c.start_datetime
-         FROM corse c
-         INNER JOIN veicolo v ON v.id = c.veicolo_id
-         INNER JOIN prenotazioni p ON p.corsa_id = c.id
-         WHERE v.driver_id = $1
-         ORDER BY c.start_datetime DESC`,
+        `
+        SELECT DISTINCT
+          c.id AS corsa_id,
+          p.cliente_id,
+          c.origine_address,
+          c.destinazione_address,
+          c.start_datetime
+        FROM corse c
+        JOIN veicolo v ON v.id = c.veicolo_id
+        JOIN prenotazioni p ON p.corsa_id = c.id
+        WHERE v.driver_id = $1
+        ORDER BY c.start_datetime DESC
+        `,
         [userId]
       );
 
       rows = r.rows;
     } else {
       const r = await pool.query(
-        `SELECT DISTINCT
-            c.id AS corsa_id,
-            p.cliente_id,
-            c.origine_address,
-            c.destinazione_address,
-            c.start_datetime
-         FROM prenotazioni p
-         INNER JOIN corse c ON c.id = p.corsa_id
-         WHERE p.cliente_id = $1
-         ORDER BY c.start_datetime DESC`,
+        `
+        SELECT DISTINCT
+          c.id AS corsa_id,
+          p.cliente_id,
+          c.origine_address,
+          c.destinazione_address,
+          c.start_datetime
+        FROM prenotazioni p
+        JOIN corse c ON c.id = p.corsa_id
+        WHERE p.cliente_id = $1
+        ORDER BY c.start_datetime DESC
+        `,
         [userId]
       );
 
@@ -74,44 +78,36 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         const corsaId = r.corsa_id;
         const clienteId = r.cliente_id;
 
-        const threadId = `${corsaId}_${clienteId}`;
-
         const unread = await pool.query(
-          `SELECT COUNT(*)::int AS count
-           FROM messaggi
-           WHERE corsa_id = $1
-             AND cliente_id = $2
-             AND sender_id != $3
-             AND (read_status->>$4) = 'false'`,
-          [corsaId, clienteId, userId, role]
+          `
+          SELECT COUNT(*)::int AS count
+          FROM messaggi
+          WHERE corsa_id = $1
+            AND cliente_id = $2
+            AND sender_id != $3
+          `,
+          [corsaId, clienteId, userId]
         );
 
         const messages = await pool.query(
-          `SELECT
-              id,
-              client_msg_id,
-              corsa_id,
-              cliente_id,
-              sender_id,
-              testo AS text,
-              created_at,
-              read_status
-           FROM messaggi
-           WHERE corsa_id = $1
-             AND cliente_id = $2
-           ORDER BY created_at DESC
-           LIMIT $3`,
+          `
+          SELECT *
+          FROM messaggi
+          WHERE corsa_id = $1 AND cliente_id = $2
+          ORDER BY created_at DESC
+          LIMIT $3
+          `,
           [corsaId, clienteId, LIMIT]
         );
 
         return {
-          id: threadId,
+          id: `${corsaId}_${clienteId}`,
           corsa_id: corsaId,
           cliente_id: clienteId,
           origine: r.origine_address,
           destinazione: r.destinazione_address,
           start_datetime: r.start_datetime,
-          unreadCount: unread.rows?.[0]?.count || 0,
+          unreadCount: unread.rows[0]?.count || 0,
           messages: messages.rows.reverse(),
           hasMore: messages.rows.length === LIMIT,
         };
@@ -139,21 +135,15 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT
-          id,
-          client_msg_id,
-          corsa_id,
-          cliente_id,
-          sender_id,
-          testo AS text,
-          created_at,
-          read_status
-       FROM messaggi
-       WHERE corsa_id = $1
-         AND cliente_id = $2
-         ${cursorQuery}
-       ORDER BY created_at DESC
-       LIMIT $3`,
+      `
+      SELECT *
+      FROM messaggi
+      WHERE corsa_id = $1
+        AND cliente_id = $2
+        ${cursorQuery}
+      ORDER BY created_at DESC
+      LIMIT $3
+      `,
       values
     );
 
@@ -164,12 +154,12 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
         ? new Date(rows[0].created_at).getTime()
         : null,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: "pagination error" });
   }
 });
 
-/* ======================= SEND MESSAGE (IDEMPOTENT) ======================= */
+/* ======================= SEND (HTTP FALLBACK ONLY) ======================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
 
@@ -177,25 +167,18 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO messaggi (
+      `
+      INSERT INTO messaggi (
         corsa_id,
         cliente_id,
         sender_id,
         testo,
-        client_msg_id,
-        read_status
+        client_msg_id
       )
-      VALUES ($1,$2,$3,$4,$5,
-        CASE
-          WHEN $3 = (SELECT driver_id FROM veicolo v
-                     JOIN corse c ON c.veicolo_id = v.id
-                     WHERE c.id = $1)
-          THEN '{"autista": true, "cliente": false}'
-          ELSE '{"autista": false, "cliente": true}'
-        END
-      )
+      VALUES ($1,$2,$3,$4,$5)
       ON CONFLICT (client_msg_id) DO NOTHING
-      RETURNING *`,
+      RETURNING *
+      `,
       [corsa_id, cliente_id, sender_id, text.trim(), client_msg_id]
     );
 
@@ -203,74 +186,14 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       return res.json({ ok: true, duplicate: true });
     }
 
-    const msg = rows[0];
+    // ❗ NON usiamo req.io qui
+    // Socket layer già emette realtime
 
-    req.io?.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
-
-    res.json({ ok: true, message: msg });
+    return res.json({ ok: true, message: rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "send error" });
   }
 });
-
-/* ======================= SOCKET ======================= */
-export const attachChatSocket = (io) => {
-  io.use((socket, next) => {
-    try {
-      const token = socket.handshake.auth?.token;
-      if (!token) return next(new Error("no token"));
-
-      const decoded = jwt.verify(token, JWT_SECRET);
-      decoded.role = decoded.role.toLowerCase();
-
-      socket.user = decoded;
-      next();
-    } catch {
-      next(new Error("invalid token"));
-    }
-  });
-
-  io.on("connection", (socket) => {
-    socket.on("join_chat", ({ corsa_id, cliente_id }) => {
-      const room = `chat_${corsa_id}_${cliente_id}`;
-      socket.join(room);
-    });
-
-    socket.on("send_message", async (payload) => {
-      const { corsa_id, cliente_id, text, client_msg_id } = payload;
-
-      if (!text?.trim() || !client_msg_id) return;
-
-      const sender_id = socket.user.id;
-
-      const { rows } = await pool.query(
-        `INSERT INTO messaggi (
-          corsa_id,
-          cliente_id,
-          sender_id,
-          testo,
-          client_msg_id,
-          read_status
-        )
-        VALUES ($1,$2,$3,$4,$5,
-          CASE
-            WHEN $3 = (SELECT driver_id FROM veicolo v
-                       JOIN corse c ON c.veicolo_id = v.id
-                       WHERE c.id = $1)
-            THEN '{"autista": true, "cliente": false}'
-            ELSE '{"autista": false, "cliente": true}'
-          END
-        )
-        ON CONFLICT (client_msg_id) DO NOTHING
-        RETURNING *`,
-        [corsa_id, cliente_id, sender_id, text.trim(), client_msg_id]
-      );
-
-      if (!rows.length) return;
-
-      io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", rows[0]);
-    });
-  });
-};
 
 export default chatRouter;

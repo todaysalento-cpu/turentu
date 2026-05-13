@@ -29,8 +29,7 @@ import { pendingRouter } from './routes/pending.routes.js';
 import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
-
-import chatRouter from './routes/chat.routes.js'; // ✅ FIX QUI
+import chatRouter, { attachChatSocket } from './routes/chat.routes.js';
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
@@ -168,6 +167,7 @@ const io = new Server(server, {
 
 // ======================= SOCKET =======================
 setupSocket(io);
+attachChatSocket(io);
 
 // ======================= FLOW REGISTRY =======================
 const registerFlows = () => {

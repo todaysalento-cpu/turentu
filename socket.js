@@ -92,7 +92,7 @@ const setupSocket = (ioServer) => {
 
       socket.join(`chat_${corsaId}_${clienteId}`);
 
-      /* 🔥 FIX: DELIVERY EVENT coerente con frontend */
+      /* ✅ DELIVERY EVENT coerente frontend */
       io.to(`chat_${corsaId}_${clienteId}`).emit("message_delivered", {
         corsa_id: corsaId,
         cliente_id: clienteId,
@@ -224,12 +224,13 @@ const setupSocket = (ioServer) => {
 
         await pushThreadUpdate(corsaId, clienteId);
 
-        /* 🔥 FIX EVENT NAME */
+        /* ✅ FIX: evento unico e coerente */
         io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
           corsa_id: corsaId,
           cliente_id: clienteId,
           reader_id: userId,
           role,
+          read_at: Date.now(),
         });
 
       } catch (err) {

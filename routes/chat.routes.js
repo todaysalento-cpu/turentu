@@ -1,6 +1,7 @@
 import express from "express";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
+import { getIO } from "../socket.js"; // 🔥 IMPORTANTE (adatta path se diverso)
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
@@ -62,7 +63,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   GET MESSAGES (🔥 MANCAVA → ORA FIX)
+   GET MESSAGES
 ========================================================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
@@ -189,8 +190,6 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       [corsaId, clienteId, senderId, trimmed, client_msg_id]
     );
 
-    if (!rows.length) return res.json({ ok: true, duplicate: true });
-
     const message = {
       ...rows[0],
       created_at: new Date(rows[0].created_at).getTime(),
@@ -220,7 +219,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   MARK AS READ
+   MARK AS READ (🔥 FIX SOCKET)
 ========================================================= */
 chatRouter.post("/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
@@ -255,6 +254,16 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
       `,
       [corsaId, clienteId]
     );
+
+    /* 🔥 SOCKET EMIT (QUESTO È IL FIX VERO) */
+    const io = getIO();
+
+    io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
+      corsa_id: corsaId,
+      cliente_id: clienteId,
+      reader_id: userId,
+      role,
+    });
 
     res.json({ ok: true });
 

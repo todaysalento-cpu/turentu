@@ -9,33 +9,19 @@ const JWT_SECRET =
   "segreto-di-test";
 
 /* ======================= AUTH ======================= */
-const authMiddleware = (
-  req,
-  res,
-  next
-) => {
+const authMiddleware = (req, res, next) => {
   try {
-
     const token =
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
     if (!token) {
-
       console.log("❌ NO TOKEN");
-
-      return res.status(401).json({
-        message: "No token",
-      });
+      return res.status(401).json({ message: "No token" });
     }
 
-    const decoded = jwt.verify(
-      token,
-      JWT_SECRET
-    );
-
-    decoded.role =
-      decoded.role?.toLowerCase();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;
 
@@ -45,542 +31,304 @@ const authMiddleware = (
     });
 
     next();
-
   } catch (err) {
-
-    console.error(
-      "❌ AUTH ERROR",
-      err
-    );
-
-    return res.status(401).json({
-      message: "Invalid token",
-    });
+    console.error("❌ AUTH ERROR", err);
+    return res.status(401).json({ message: "Invalid token" });
   }
 };
 
 /* =========================================================
    THREAD LIST
 ========================================================= */
-chatRouter.get(
-  "/init",
-  authMiddleware,
-  async (req, res) => {
+chatRouter.get("/init", authMiddleware, async (req, res) => {
+  const userId = Number(req.user.id);
+  const role = req.user.role;
 
-    const userId =
-      Number(req.user.id);
+  console.log("🚀 /chat/init START", { userId, role });
 
-    const role =
-      req.user.role;
+  try {
+    const query =
+      role === "autista"
+        ? `
+          SELECT
+            ct.corsa_id,
+            ct.cliente_id,
+            ct.driver_id,
+            ct.last_message,
+            ct.unread_count,
+            ct.updated_at
+          FROM chat_threads ct
+          JOIN corse c ON c.id = ct.corsa_id
+          JOIN veicolo v ON v.id = c.veicolo_id
+          WHERE v.driver_id = $1
+          ORDER BY ct.updated_at DESC
+        `
+        : `
+          SELECT
+            corsa_id,
+            cliente_id,
+            driver_id,
+            last_message,
+            unread_count,
+            updated_at
+          FROM chat_threads
+          WHERE cliente_id = $1
+          ORDER BY updated_at DESC
+        `;
 
-    console.log(
-      "🚀 /chat/init",
-      {
-        userId,
-        role,
-      }
-    );
+    console.log("📡 QUERY INIT:", query);
+    console.log("📡 PARAMS:", [userId]);
 
-    try {
+    const { rows } = await pool.query(query, [userId]);
 
-      const query = `
-        SELECT
-          corsa_id,
-          cliente_id,
-          driver_id,
-          last_message,
-          unread_count,
-          updated_at
-        FROM chat_threads
-        WHERE ${
-          role === "autista"
-            ? "driver_id = $1"
-            : "cliente_id = $1"
-        }
-        ORDER BY updated_at DESC
-      `;
+    console.log("📦 THREAD RAW:", rows);
 
-      const { rows } =
-        await pool.query(
-          query,
-          [userId]
-        );
+    const threads = rows.map((t) => ({
+      id: `${t.corsa_id}_${t.cliente_id}`,
+      corsa_id: t.corsa_id,
+      cliente_id: t.cliente_id,
+      driver_id: t.driver_id,
+      last_message: t.last_message,
+      unreadCount: t.unread_count,
+      updated_at: new Date(t.updated_at).getTime(),
+    }));
 
-      const threads =
-        rows.map((t) => ({
+    console.log("🧵 THREADS FINAL:", threads.length);
 
-          id:
-            `${t.corsa_id}_${t.cliente_id}`,
-
-          corsa_id:
-            t.corsa_id,
-
-          cliente_id:
-            t.cliente_id,
-
-          driver_id:
-            t.driver_id,
-
-          last_message:
-            t.last_message,
-
-          unreadCount:
-            t.unread_count,
-
-          updated_at:
-            new Date(
-              t.updated_at
-            ).getTime(),
-        }));
-
-      console.log(
-        "🧵 THREADS:",
-        threads.length
-      );
-
-      return res.json(
-        threads
-      );
-
-    } catch (err) {
-
-      console.error(
-        "❌ INIT ERROR:",
-        err
-      );
-
-      return res.status(500).json({
-        message:
-          "init error",
-      });
-    }
+    return res.json(threads);
+  } catch (err) {
+    console.error("❌ INIT ERROR:", err);
+    return res.status(500).json({ message: "init error" });
   }
-);
+});
 
 /* =========================================================
    GET MESSAGES
 ========================================================= */
-chatRouter.get(
-  "/messages",
-  authMiddleware,
-  async (req, res) => {
+chatRouter.get("/messages", authMiddleware, async (req, res) => {
+  const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
 
-    const {
-      corsa_id,
-      cliente_id,
-      cursor,
-      limit = 30,
-    } = req.query;
+  const userId = Number(req.user.id);
+  const role = req.user.role;
 
-    const userId =
-      Number(req.user.id);
+  console.log("🚀 /chat/messages", {
+    corsa_id,
+    cliente_id,
+    cursor,
+    limit,
+  });
 
-    const role =
-      req.user.role;
+  try {
+    const corsaId = Number(corsa_id);
+    const clienteId = Number(cliente_id);
 
-    console.log(
-      "🚀 /chat/messages",
-      {
-        corsa_id,
-        cliente_id,
-        cursor,
-        limit,
-      }
+    if (!corsaId || !clienteId) {
+      return res.status(400).json({ message: "invalid params" });
+    }
+
+    const threadCheck = await pool.query(
+      `
+      SELECT ct.*, v.driver_id
+      FROM chat_threads ct
+      JOIN corse c ON c.id = ct.corsa_id
+      JOIN veicolo v ON v.id = c.veicolo_id
+      WHERE ct.corsa_id = $1
+        AND ct.cliente_id = $2
+      `,
+      [corsaId, clienteId]
     );
 
-    try {
+    const thread = threadCheck.rows[0];
 
-      const corsaId =
-        Number(corsa_id);
+    console.log("🧵 THREAD CHECK:", thread);
 
-      const clienteId =
-        Number(cliente_id);
-
-      if (
-        !corsaId ||
-        !clienteId
-      ) {
-        return res.status(400).json({
-          message:
-            "invalid params",
-        });
-      }
-
-      /* ================= SECURITY CHECK ================= */
-
-      const threadCheck =
-        await pool.query(
-          `
-          SELECT *
-          FROM chat_threads
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-          `,
-          [
-            corsaId,
-            clienteId,
-          ]
-        );
-
-      const thread =
-        threadCheck.rows[0];
-
-      if (!thread) {
-
-        return res.status(404).json({
-          message:
-            "thread not found",
-        });
-      }
-
-      const isCliente =
-        role === "cliente" &&
-        Number(clienteId) ===
-          Number(userId);
-
-      const isDriver =
-        role === "autista" &&
-        Number(
-          thread.driver_id
-        ) === Number(userId);
-
-      if (
-        !isCliente &&
-        !isDriver
-      ) {
-
-        return res.status(403).json({
-          message:
-            "forbidden",
-        });
-      }
-
-      /* ================= QUERY ================= */
-
-      const values = [
-        corsaId,
-        clienteId,
-        Number(limit),
-      ];
-
-      let cursorQuery = "";
-
-      if (cursor) {
-
-        values.push(
-          new Date(
-            Number(cursor)
-          )
-        );
-
-        cursorQuery =
-          `AND created_at < $4`;
-      }
-
-      const { rows } =
-        await pool.query(
-          `
-          SELECT
-            id,
-            corsa_id,
-            cliente_id,
-            sender_id,
-            testo AS text,
-            created_at,
-            read_status,
-            client_msg_id,
-            status
-          FROM messaggi
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-            ${cursorQuery}
-          ORDER BY created_at DESC
-          LIMIT $3
-          `,
-          values
-        );
-
-      const messages =
-        rows
-          .map((m) => ({
-            ...m,
-            created_at:
-              new Date(
-                m.created_at
-              ).getTime(),
-          }))
-          .reverse();
-
-      return res.json({
-
-        messages,
-
-        hasMore:
-          rows.length ===
-          Number(limit),
-
-        nextCursor:
-          rows[0]
-            ?.created_at
-            ? new Date(
-                rows[0]
-                  .created_at
-              ).getTime()
-            : null,
-      });
-
-    } catch (err) {
-
-      console.error(
-        "❌ MESSAGES ERROR:",
-        err
-      );
-
-      return res.status(500).json({
-        message:
-          "messages error",
-      });
+    if (!thread) {
+      return res.status(404).json({ message: "thread not found" });
     }
+
+    const isCliente =
+      role === "cliente" &&
+      Number(clienteId) === userId;
+
+    const isDriver =
+      role === "autista" &&
+      Number(thread.driver_id) === userId;
+
+    console.log("🔐 AUTH CHECK", { isCliente, isDriver });
+
+    if (!isCliente && !isDriver) {
+      return res.status(403).json({ message: "forbidden" });
+    }
+
+    const values = [corsaId, clienteId, Number(limit)];
+    let cursorQuery = "";
+
+    if (cursor) {
+      values.push(new Date(Number(cursor)));
+      cursorQuery = `AND created_at < $4`;
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM messaggi
+      WHERE corsa_id = $1
+        AND cliente_id = $2
+        ${cursorQuery}
+      ORDER BY created_at DESC
+      LIMIT $3
+      `,
+      values
+    );
+
+    console.log("💬 MESSAGES RAW:", rows.length);
+
+    const messages = rows
+      .map((m) => ({
+        ...m,
+        created_at: new Date(m.created_at).getTime(),
+      }))
+      .reverse();
+
+    return res.json({
+      messages,
+      hasMore: rows.length === Number(limit),
+      nextCursor: rows[0]
+        ? new Date(rows[0].created_at).getTime()
+        : null,
+    });
+  } catch (err) {
+    console.error("❌ MESSAGES ERROR:", err);
+    return res.status(500).json({ message: "messages error" });
   }
-);
+});
 
 /* =========================================================
    SEND MESSAGE
 ========================================================= */
-chatRouter.post(
-  "/send",
-  authMiddleware,
-  async (req, res) => {
+chatRouter.post("/send", authMiddleware, async (req, res) => {
+  const { corsa_id, cliente_id, text, client_msg_id } = req.body;
 
-    const {
-      corsa_id,
-      cliente_id,
-      text,
-      client_msg_id,
-    } = req.body;
+  const senderId = Number(req.user.id);
+  const role = req.user.role;
 
-    const senderId =
-      Number(req.user.id);
+  console.log("🚀 /chat/send", {
+    corsa_id,
+    cliente_id,
+    senderId,
+    text,
+  });
 
-    const role =
-      req.user.role;
+  try {
+    const corsaId = Number(corsa_id);
+    const clienteId = Number(cliente_id);
+    const trimmed = text?.trim();
 
-    console.log(
-      "🚀 /chat/send",
-      {
-        corsa_id,
-        cliente_id,
-        senderId,
-        text,
-      }
+    if (!corsaId || !clienteId) {
+      return res.status(400).json({ message: "invalid params" });
+    }
+
+    if (!trimmed) {
+      return res.status(400).json({ message: "empty message" });
+    }
+
+    const threadCheck = await pool.query(
+      `
+      SELECT ct.*, v.driver_id
+      FROM chat_threads ct
+      JOIN corse c ON c.id = ct.corsa_id
+      JOIN veicolo v ON v.id = c.veicolo_id
+      WHERE ct.corsa_id = $1
+        AND ct.cliente_id = $2
+      `,
+      [corsaId, clienteId]
     );
 
-    try {
+    const thread = threadCheck.rows[0];
 
-      const corsaId =
-        Number(corsa_id);
+    console.log("🧵 THREAD SEND CHECK:", thread);
 
-      const clienteId =
-        Number(cliente_id);
-
-      const trimmed =
-        text?.trim();
-
-      if (
-        !corsaId ||
-        !clienteId
-      ) {
-
-        return res.status(400).json({
-          message:
-            "invalid params",
-        });
-      }
-
-      if (!trimmed) {
-
-        return res.status(400).json({
-          message:
-            "empty message",
-        });
-      }
-
-      /* ================= THREAD CHECK ================= */
-
-      const threadCheck =
-        await pool.query(
-          `
-          SELECT *
-          FROM chat_threads
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-          `,
-          [
-            corsaId,
-            clienteId,
-          ]
-        );
-
-      const thread =
-        threadCheck.rows[0];
-
-      if (!thread) {
-
-        return res.status(404).json({
-          message:
-            "thread not found",
-        });
-      }
-
-      /* ================= SECURITY ================= */
-
-      const isCliente =
-        role === "cliente" &&
-        Number(clienteId) ===
-          Number(senderId);
-
-      const isDriver =
-        role === "autista" &&
-        Number(
-          thread.driver_id
-        ) === Number(senderId);
-
-      if (
-        !isCliente &&
-        !isDriver
-      ) {
-
-        return res.status(403).json({
-          message:
-            "forbidden",
-        });
-      }
-
-      /* ================= INSERT MESSAGE ================= */
-
-      const { rows } =
-        await pool.query(
-          `
-          INSERT INTO messaggi (
-            corsa_id,
-            cliente_id,
-            sender_id,
-            testo,
-            client_msg_id,
-            read_status,
-            status
-          )
-          VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            jsonb_build_object(
-              'autista', false,
-              'cliente', false
-            ),
-            jsonb_build_object(
-              'sent', true,
-              'delivered', false,
-              'read', false
-            )
-          )
-          ON CONFLICT (
-            client_msg_id
-          )
-          DO NOTHING
-          RETURNING
-            id,
-            corsa_id,
-            cliente_id,
-            sender_id,
-            testo AS text,
-            created_at,
-            read_status,
-            client_msg_id,
-            status
-          `,
-          [
-            corsaId,
-            clienteId,
-            senderId,
-            trimmed,
-            client_msg_id,
-          ]
-        );
-
-      /* ================= DUPLICATE ================= */
-
-      if (!rows.length) {
-
-        return res.json({
-          ok: true,
-          duplicate: true,
-        });
-      }
-
-      const rawMessage =
-        rows[0];
-
-      const message = {
-        ...rawMessage,
-        created_at:
-          new Date(
-            rawMessage.created_at
-          ).getTime(),
-      };
-
-      /* ================= UPDATE THREAD ================= */
-
-      await pool.query(
-        `
-        UPDATE chat_threads
-        SET
-          last_message = $3,
-          unread_count =
-            unread_count + 1,
-          updated_at = NOW()
-        WHERE corsa_id = $1
-          AND cliente_id = $2
-        `,
-        [
-          corsaId,
-          clienteId,
-
-          JSON.stringify({
-            text:
-              message.text,
-
-            created_at:
-              message.created_at,
-          }),
-        ]
-      );
-
-      console.log(
-        "✅ MESSAGE SENT:",
-        message.id
-      );
-
-      return res.json({
-        ok: true,
-        message,
-      });
-
-    } catch (err) {
-
-      console.error(
-        "❌ SEND ERROR:",
-        err
-      );
-
-      return res.status(500).json({
-        message:
-          "send error",
-      });
+    if (!thread) {
+      return res.status(404).json({ message: "thread not found" });
     }
+
+    const isCliente =
+      role === "cliente" &&
+      Number(clienteId) === senderId;
+
+    const isDriver =
+      role === "autista" &&
+      Number(thread.driver_id) === senderId;
+
+    console.log("🔐 SEND AUTH", { isCliente, isDriver });
+
+    if (!isCliente && !isDriver) {
+      return res.status(403).json({ message: "forbidden" });
+    }
+
+    const { rows } = await pool.query(
+      `
+      INSERT INTO messaggi (
+        corsa_id,
+        cliente_id,
+        sender_id,
+        testo,
+        client_msg_id,
+        read_status,
+        status
+      )
+      VALUES (
+        $1,$2,$3,$4,$5,
+        jsonb_build_object('autista',false,'cliente',false),
+        jsonb_build_object('sent',true,'delivered',false,'read',false)
+      )
+      ON CONFLICT (client_msg_id) DO NOTHING
+      RETURNING *
+      `,
+      [corsaId, clienteId, senderId, trimmed, client_msg_id]
+    );
+
+    if (!rows.length) {
+      return res.json({ ok: true, duplicate: true });
+    }
+
+    const message = {
+      ...rows[0],
+      created_at: new Date(rows[0].created_at).getTime(),
+    };
+
+    console.log("✅ MESSAGE SENT:", message.id);
+
+    await pool.query(
+      `
+      UPDATE chat_threads
+      SET
+        last_message = $3,
+        unread_count = unread_count + 1,
+        updated_at = NOW()
+      WHERE corsa_id = $1
+        AND cliente_id = $2
+      `,
+      [
+        corsaId,
+        clienteId,
+        JSON.stringify({
+          text: message.text,
+          created_at: message.created_at,
+        }),
+      ]
+    );
+
+    console.log("🧵 THREAD UPDATED");
+
+    return res.json({
+      ok: true,
+      message,
+    });
+  } catch (err) {
+    console.error("❌ SEND ERROR:", err);
+    return res.status(500).json({ message: "send error" });
   }
-);
+});
 
 export default chatRouter;

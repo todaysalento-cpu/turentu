@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
 import { pool } from "./db/db.js";
-import { getCorseCache } from "./services/search/search.cache.js";
 
 let io;
 
@@ -13,7 +12,6 @@ const getIO = () => {
 /* ===================== NOTIFICATION ===================== */
 const sendNotification = ({ userId, role, notification }) => {
   if (!io) return;
-
   io.to(`${role}_${userId}`).emit("new_notification", notification);
 };
 
@@ -24,16 +22,9 @@ const pushThreadUpdate = async (corsaId, clienteId) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT
-        corsa_id,
-        cliente_id,
-        driver_id,
-        last_message,
-        unread_count,
-        updated_at
+      SELECT corsa_id, cliente_id, driver_id, last_message, unread_count, updated_at
       FROM chat_threads
-      WHERE corsa_id = $1
-        AND cliente_id = $2
+      WHERE corsa_id = $1 AND cliente_id = $2
       `,
       [corsaId, clienteId]
     );
@@ -43,7 +34,6 @@ const pushThreadUpdate = async (corsaId, clienteId) => {
 
     io.to(`chat_threads_${clienteId}`).emit("thread_update", thread);
     io.to(`chat_threads_driver_${thread.driver_id}`).emit("thread_update", thread);
-
   } catch (err) {
     console.error("❌ pushThreadUpdate:", err);
   }
@@ -62,21 +52,16 @@ const setupSocket = (ioServer) => {
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-
-      decoded.role = ["autista", "cliente"].includes(decoded.role?.toLowerCase())
-        ? decoded.role.toLowerCase()
-        : "cliente";
-
+      decoded.role = decoded.role?.toLowerCase();
       socket.user = decoded;
       next();
     } catch (err) {
-      console.error("❌ SOCKET AUTH:", err);
       return next(new Error("JWT_INVALID"));
     }
   });
 
   /* ================= CONNECTION ================= */
-  io.on("connection", async (socket) => {
+  io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
 
     console.log("🟢 SOCKET CONNECTED", { socketId: socket.id, userId, role });
@@ -96,36 +81,30 @@ const setupSocket = (ioServer) => {
 
       if (!corsaId || !clienteId) return;
 
-      try {
-        const { rows } = await pool.query(
-          `
-          SELECT driver_id
-          FROM chat_threads
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-          `,
-          [corsaId, clienteId]
-        );
+      const { rows } = await pool.query(
+        `
+        SELECT driver_id
+        FROM chat_threads
+        WHERE corsa_id = $1 AND cliente_id = $2
+        `,
+        [corsaId, clienteId]
+      );
 
-        const thread = rows[0];
-        if (!thread) return;
+      const thread = rows[0];
+      if (!thread) return;
 
-        const isCliente = role === "cliente" && Number(clienteId) === userId;
-        const isDriver = role === "autista" && Number(thread.driver_id) === userId;
+      const isCliente = role === "cliente" && Number(clienteId) === userId;
+      const isDriver = role === "autista" && Number(thread.driver_id) === userId;
 
-        if (!isCliente && !isDriver) return;
+      if (!isCliente && !isDriver) return;
 
-        socket.join(`chat_${corsaId}_${clienteId}`);
+      socket.join(`chat_${corsaId}_${clienteId}`);
 
-        console.log("💬 JOIN CHAT", {
-          room: `chat_${corsaId}_${clienteId}`,
-          userId,
-          role,
-        });
-
-      } catch (err) {
-        console.error("❌ join_chat:", err);
-      }
+      console.log("💬 JOIN CHAT", {
+        room: `chat_${corsaId}_${clienteId}`,
+        userId,
+        role,
+      });
     });
 
     /* ================= TYPING ================= */
@@ -150,28 +129,22 @@ const setupSocket = (ioServer) => {
       const corsaId = Number(corsa_id);
       const clienteId = Number(cliente_id);
 
-      try {
-        await pool.query(
-          `
-          UPDATE chat_threads
-          SET unread_count = 0
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-          `,
-          [corsaId, clienteId]
-        );
+      await pool.query(
+        `
+        UPDATE chat_threads
+        SET unread_count = 0
+        WHERE corsa_id = $1 AND cliente_id = $2
+        `,
+        [corsaId, clienteId]
+      );
 
-        await pushThreadUpdate(corsaId, clienteId);
+      await pushThreadUpdate(corsaId, clienteId);
 
-        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
-          corsa_id: corsaId,
-          cliente_id: clienteId,
-          reader_id: userId,
-        });
-
-      } catch (err) {
-        console.error("❌ mark_as_read:", err);
-      }
+      io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
+        corsa_id: corsaId,
+        cliente_id: clienteId,
+        reader_id: userId,
+      });
     });
 
     /* ================= SEND MESSAGE ================= */
@@ -180,30 +153,37 @@ const setupSocket = (ioServer) => {
 
       const { corsa_id, cliente_id, text, client_msg_id } = payload;
 
-      if (!text?.trim()) return;
-
       const corsaId = Number(corsa_id);
       const clienteId = Number(cliente_id);
+      const trimmed = text?.trim();
+
+      if (!corsaId || !clienteId || !trimmed) return;
 
       const room = `chat_${corsaId}_${clienteId}`;
-      const msgKey = client_msg_id || crypto.randomUUID();
 
       try {
         /* ================= THREAD ================= */
-        const threadData = await pool.query(
+        const { rows: threadRows } = await pool.query(
           `
           SELECT driver_id
           FROM chat_threads
-          WHERE corsa_id = $1
-            AND cliente_id = $2
+          WHERE corsa_id = $1 AND cliente_id = $2
           `,
           [corsaId, clienteId]
         );
 
-        const thread = threadData.rows[0];
+        const thread = threadRows[0];
         if (!thread) return;
 
         const driverId = thread.driver_id;
+
+        /* ================= AUTH CHECK (CRITICO) ================= */
+        const isCliente = role === "cliente" && Number(clienteId) === userId;
+        const isDriver = role === "autista" && Number(thread.driver_id) === userId;
+
+        if (!isCliente && !isDriver) return;
+
+        const msgKey = client_msg_id || crypto.randomUUID();
 
         /* ================= INSERT MESSAGE ================= */
         const { rows } = await pool.query(
@@ -225,7 +205,7 @@ const setupSocket = (ioServer) => {
           ON CONFLICT (client_msg_id) DO NOTHING
           RETURNING *
           `,
-          [corsaId, clienteId, userId, text.trim(), msgKey]
+          [corsaId, clienteId, userId, trimmed, msgKey]
         );
 
         if (!rows.length) return;
@@ -235,7 +215,7 @@ const setupSocket = (ioServer) => {
           created_at: new Date(rows[0].created_at).getTime(),
         };
 
-        /* ================= THREAD UPDATE (CLEAN) ================= */
+        /* ================= THREAD UPDATE ================= */
         await pool.query(
           `
           UPDATE chat_threads
@@ -243,20 +223,19 @@ const setupSocket = (ioServer) => {
             last_message = $3,
             unread_count = unread_count + 1,
             updated_at = NOW()
-          WHERE corsa_id = $1
-            AND cliente_id = $2
+          WHERE corsa_id = $1 AND cliente_id = $2
           `,
           [
             corsaId,
             clienteId,
             JSON.stringify({
-              text: msg.text,
+              text: trimmed,
               created_at: msg.created_at,
             }),
           ]
         );
 
-        /* ================= EMIT MESSAGE ================= */
+        /* ================= EMIT ================= */
         io.to(room).emit("new_message", msg);
 
         await pushThreadUpdate(corsaId, clienteId);
@@ -285,7 +264,6 @@ const setupSocket = (ioServer) => {
             },
           });
         }
-
       } catch (err) {
         console.error("❌ send_message:", err);
       }

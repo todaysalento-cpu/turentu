@@ -12,26 +12,43 @@ const authMiddleware = (req, res, next) => {
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
-    if (!token) return res.status(401).json({ message: "No token" });
+    if (!token) {
+      console.log("❌ NO TOKEN");
+      return res.status(401).json({ message: "No token" });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
+
     decoded.role = decoded.role.toLowerCase();
 
     req.user = decoded;
+
+    console.log("🟢 AUTH OK", {
+      userId: decoded.id,
+      role: decoded.role,
+    });
+
     next();
-  } catch {
+
+  } catch (err) {
+    console.error("❌ AUTH ERROR", err);
     return res.status(401).json({ message: "Invalid token" });
   }
 };
 
-/* ======================= THREAD LIST (100% DB SOURCE OF TRUTH) ======================= */
+/* ======================= THREAD LIST ======================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
 
+  console.log("🚀 /chat/init START", {
+    userId,
+    role,
+  });
+
   try {
-    const { rows } = await pool.query(
-      `
+
+    const query = `
       SELECT
         corsa_id,
         cliente_id,
@@ -40,41 +57,77 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         unread_count,
         updated_at
       FROM chat_threads
-      WHERE ${role === "autista" ? "driver_id = $1" : "cliente_id = $1"}
+      WHERE ${role === "autista"
+        ? "driver_id = $1"
+        : "cliente_id = $1"}
       ORDER BY updated_at DESC
-      `,
-      [userId]
-    );
+    `;
 
-    const threads = rows.map(t => ({
+    console.log("📡 QUERY:", query);
+    console.log("📡 PARAMS:", [userId]);
+
+    const { rows } = await pool.query(query, [userId]);
+
+    console.log("📦 RAW DB ROWS:", rows);
+
+    const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,
+
       corsa_id: t.corsa_id,
       cliente_id: t.cliente_id,
+      driver_id: t.driver_id,
+
       last_message: t.last_message,
       unreadCount: t.unread_count,
+
       updated_at: t.updated_at,
     }));
+
+    console.log("🧵 FINAL THREADS:", threads);
 
     res.json(threads);
 
   } catch (err) {
-    console.error("init error:", err);
-    res.status(500).json({ message: "init error" });
+    console.error("❌ INIT ERROR:", err);
+
+    res.status(500).json({
+      message: "init error",
+    });
   }
 });
 
-/* ======================= MESSAGES (ONLY FOR CHAT VIEW) ======================= */
+/* ======================= MESSAGES ======================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
+  const {
+    corsa_id,
+    cliente_id,
+    cursor,
+    limit = 30,
+  } = req.query;
+
+  console.log("🚀 /chat/messages", {
+    corsa_id,
+    cliente_id,
+    cursor,
+    limit,
+  });
 
   try {
-    const values = [corsa_id, cliente_id, Number(limit)];
+
+    const values = [
+      corsa_id,
+      cliente_id,
+      Number(limit),
+    ];
+
     let cursorQuery = "";
 
     if (cursor) {
       values.push(new Date(Number(cursor)));
       cursorQuery = `AND created_at < $4`;
     }
+
+    console.log("📡 MESSAGE QUERY PARAMS:", values);
 
     const { rows } = await pool.query(
       `
@@ -98,13 +151,19 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       values
     );
 
+    console.log("📦 RAW MESSAGES:", rows);
+
+    const messages = rows
+      .map((m) => ({
+        ...m,
+        created_at: new Date(m.created_at).getTime(),
+      }))
+      .reverse();
+
+    console.log("💬 FINAL MESSAGES:", messages);
+
     res.json({
-      messages: rows
-        .map(m => ({
-          ...m,
-          created_at: new Date(m.created_at).getTime(),
-        }))
-        .reverse(),
+      messages,
 
       hasMore: rows.length === Number(limit),
 
@@ -114,23 +173,44 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("pagination error:", err);
-    res.status(500).json({ message: "pagination error" });
+    console.error("❌ PAGINATION ERROR:", err);
+
+    res.status(500).json({
+      message: "pagination error",
+    });
   }
 });
 
-/* ======================= SEND (HTTP FALLBACK ONLY) ======================= */
-/*
-  IMPORTANT:
-  - NON aggiorni thread qui
-  - lo fa il TRIGGER PostgreSQL sync_chat_thread()
-  - backend resta leggero e scalabile
-*/
+/* ======================= SEND ======================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id, text, client_msg_id } = req.body;
+  const {
+    corsa_id,
+    cliente_id,
+    text,
+    client_msg_id,
+  } = req.body;
+
   const sender_id = Number(req.user.id);
 
+  console.log("🚀 /chat/send", {
+    corsa_id,
+    cliente_id,
+    sender_id,
+    text,
+    client_msg_id,
+  });
+
   try {
+
+    const trimmed = text?.trim();
+
+    if (!trimmed) {
+      console.log("❌ EMPTY MESSAGE");
+      return res.status(400).json({
+        message: "empty message",
+      });
+    }
+
     const { rows } = await pool.query(
       `
       INSERT INTO messaggi (
@@ -144,8 +224,15 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       )
       VALUES (
         $1,$2,$3,$4,$5,
-        jsonb_build_object('autista', false, 'cliente', false),
-        jsonb_build_object('sent', true, 'delivered', false, 'read', false)
+        jsonb_build_object(
+          'autista', false,
+          'cliente', false
+        ),
+        jsonb_build_object(
+          'sent', true,
+          'delivered', false,
+          'read', false
+        )
       )
       ON CONFLICT (client_msg_id) DO NOTHING
       RETURNING
@@ -159,24 +246,58 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         client_msg_id,
         status
       `,
-      [corsa_id, cliente_id, sender_id, text.trim(), client_msg_id]
+      [
+        corsa_id,
+        cliente_id,
+        sender_id,
+        trimmed,
+        client_msg_id,
+      ]
     );
 
+    console.log("📦 INSERT RESULT:", rows);
+
     if (!rows.length) {
-      return res.json({ ok: true, duplicate: true });
+
+      console.log("⚠️ DUPLICATE MESSAGE");
+
+      return res.json({
+        ok: true,
+        duplicate: true,
+      });
     }
+
+    const message = {
+      ...rows[0],
+      created_at: new Date(rows[0].created_at).getTime(),
+    };
+
+    console.log("✅ FINAL MESSAGE:", message);
+
+    /* ================= DEBUG CHAT THREADS ================= */
+    const threadCheck = await pool.query(
+      `
+      SELECT *
+      FROM chat_threads
+      WHERE corsa_id = $1
+        AND cliente_id = $2
+      `,
+      [corsa_id, cliente_id]
+    );
+
+    console.log("🧵 THREAD AFTER INSERT:", threadCheck.rows);
 
     return res.json({
       ok: true,
-      message: {
-        ...rows[0],
-        created_at: new Date(rows[0].created_at).getTime(),
-      },
+      message,
     });
 
   } catch (err) {
-    console.error("send error:", err);
-    res.status(500).json({ message: "send error" });
+    console.error("❌ SEND ERROR:", err);
+
+    res.status(500).json({
+      message: "send error",
+    });
   }
 });
 

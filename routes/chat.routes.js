@@ -78,22 +78,34 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         const corsaId = r.corsa_id;
         const clienteId = r.cliente_id;
 
+        /* ===================== UNREAD (COERENTE CON SOCKET) ===================== */
         const unread = await pool.query(
           `
           SELECT COUNT(*)::int AS count
           FROM messaggi
           WHERE corsa_id = $1
             AND cliente_id = $2
+            AND (read_status->>'cliente')::boolean = false
             AND sender_id != $3
           `,
           [corsaId, clienteId, userId]
         );
 
+        /* ===================== MESSAGES (NO SELECT *) ===================== */
         const messages = await pool.query(
           `
-          SELECT *
+          SELECT
+            id,
+            corsa_id,
+            cliente_id,
+            sender_id,
+            testo AS text,
+            created_at,
+            read_status,
+            client_msg_id
           FROM messaggi
-          WHERE corsa_id = $1 AND cliente_id = $2
+          WHERE corsa_id = $1
+            AND cliente_id = $2
           ORDER BY created_at DESC
           LIMIT $3
           `,
@@ -136,7 +148,15 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(
       `
-      SELECT *
+      SELECT
+        id,
+        corsa_id,
+        cliente_id,
+        sender_id,
+        testo AS text,
+        created_at,
+        read_status,
+        client_msg_id
       FROM messaggi
       WHERE corsa_id = $1
         AND cliente_id = $2
@@ -176,24 +196,4 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         client_msg_id
       )
       VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (client_msg_id) DO NOTHING
-      RETURNING *
-      `,
-      [corsa_id, cliente_id, sender_id, text.trim(), client_msg_id]
-    );
-
-    if (!rows.length) {
-      return res.json({ ok: true, duplicate: true });
-    }
-
-    // ❗ NON usiamo req.io qui
-    // Socket layer già emette realtime
-
-    return res.json({ ok: true, message: rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "send error" });
-  }
-});
-
-export default chatRouter;
+      ON CONFLICT (client_msg_id)

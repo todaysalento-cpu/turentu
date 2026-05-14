@@ -23,7 +23,6 @@ const emitCorsaUpdate = (corsa) => {
 
 const sendNotification = ({ userId, role, notification }) => {
   if (!io) return;
-
   if (!userId || !role || !notification) return;
 
   io.to(`${role}_${userId}`).emit("new_notification", notification);
@@ -37,7 +36,6 @@ const setupSocket = (ioServer) => {
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-
     if (!token) return next(new Error("NO_TOKEN"));
 
     try {
@@ -60,8 +58,8 @@ const setupSocket = (ioServer) => {
     console.log("🟢 SOCKET CONNECTED", { socketId: socket.id, userId, role });
 
     const joinedRooms = new Set();
-    const sentInitChats = new Set(); // 🔥 FIX DUPLICATI INIT
-    const sentMessages = new Set();  // 🔥 FIX DUPLICATI SEND
+    const sentInitChats = new Set();
+    const sentMessages = new Set();
 
     /* ===================== PERSONAL ROOM ===================== */
     const personalRoom = `${role}_${userId}`;
@@ -73,12 +71,10 @@ const setupSocket = (ioServer) => {
       try {
         const corseCache = await getCorseCache();
 
-        const corse = corseCache.filter(
-          (c) => Number(c.driver_id) === Number(userId)
-        );
+        for (const c of corseCache) {
+          if (Number(c.driver_id) !== Number(userId)) continue;
 
-        for (const corsa of corse) {
-          const room = `corsa_${corsa.id}`;
+          const room = `corsa_${c.id}`;
           socket.join(room);
           joinedRooms.add(room);
         }
@@ -96,10 +92,12 @@ const setupSocket = (ioServer) => {
 
       const room = `chat_${corsaId}_${clienteId}`;
 
-      if (joinedRooms.has(room)) return;
-
-      joinedRooms.add(room);
       socket.join(room);
+      joinedRooms.add(room);
+
+      const chatKey = `init_${corsaId}_${clienteId}`;
+      if (sentInitChats.has(chatKey)) return;
+      sentInitChats.add(chatKey);
 
       try {
         const { rows } = await pool.query(
@@ -122,24 +120,10 @@ const setupSocket = (ioServer) => {
           [corsaId, clienteId]
         );
 
-        const chatKey = `init_${corsaId}_${clienteId}`;
-
-        // 🔥 FIX: evita doppio init_chat
-        if (sentInitChats.has(chatKey)) return;
-        sentInitChats.add(chatKey);
-
         socket.emit("init_chat", {
           corsa_id: corsaId,
           cliente_id: clienteId,
-          messages: rows.map((m) => ({
-            id: m.id,
-            corsa_id: m.corsa_id,
-            cliente_id: m.cliente_id,
-            sender_id: m.sender_id,
-            text: m.text,
-            created_at: m.created_at,
-            client_msg_id: m.client_msg_id,
-          })),
+          messages: rows,
         });
       } catch (err) {
         console.error("❌ join_chat error:", err);
@@ -148,20 +132,18 @@ const setupSocket = (ioServer) => {
 
     /* ===================== SEND MESSAGE ===================== */
     socket.on("send_message", async (payload) => {
-      const {
-        corsa_id,
-        cliente_id,
-        text,
-        client_msg_id,
-      } = payload;
+      if (!payload) return;
 
+      const { corsa_id, cliente_id, text, client_msg_id } = payload;
       if (!text?.trim()) return;
 
-      const room = `chat_${Number(corsa_id)}_${Number(cliente_id)}`;
+      const corsaId = Number(corsa_id);
+      const clienteId = Number(cliente_id);
 
-      const msgKey = client_msg_id || `${userId}_${Date.now()}`;
+      const room = `chat_${corsaId}_${clienteId}`;
 
-      // 🔥 FIX: evita doppio send locale
+      const msgKey = client_msg_id || `${userId}_${Date.now()}_${Math.random()}`;
+
       if (sentMessages.has(msgKey)) return;
       sentMessages.add(msgKey);
 
@@ -182,16 +164,22 @@ const setupSocket = (ioServer) => {
             $3,
             $4,
             $5,
-            CASE
-              WHEN $3 = (
-                SELECT driver_id
-                FROM veicolo v
-                JOIN corse c ON c.veicolo_id = v.id
+            jsonb_build_object(
+              'autista',
+              CASE WHEN $3 = (
+                SELECT v.driver_id
+                FROM corse c
+                JOIN veicolo v ON v.id = c.veicolo_id
                 WHERE c.id = $1
-              )
-              THEN '{"autista": true, "cliente": false}'
-              ELSE '{"autista": false, "cliente": true}'
-            END
+              ) THEN true ELSE false END,
+              'cliente',
+              CASE WHEN $3 != (
+                SELECT v.driver_id
+                FROM corse c
+                JOIN veicolo v ON v.id = c.veicolo_id
+                WHERE c.id = $1
+              ) THEN true ELSE false END
+            )
           )
           ON CONFLICT (client_msg_id) DO NOTHING
           RETURNING
@@ -204,7 +192,7 @@ const setupSocket = (ioServer) => {
             read_status,
             client_msg_id
           `,
-          [corsa_id, cliente_id, userId, text.trim(), msgKey]
+          [corsaId, clienteId, userId, text.trim(), msgKey]
         );
 
         if (!rows.length) return;
@@ -214,12 +202,12 @@ const setupSocket = (ioServer) => {
         io.to(room).emit("new_message", msg);
 
         sendNotification({
-          userId: cliente_id,
+          userId: clienteId,
           role: "cliente",
           notification: {
             type: "new_message",
-            corsa_id,
-            cliente_id,
+            corsa_id: corsaId,
+            cliente_id: clienteId,
             text: msg.text,
           },
         });
@@ -229,11 +217,7 @@ const setupSocket = (ioServer) => {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log("❌ DISCONNECT", {
-        socketId: socket.id,
-        userId,
-        reason,
-      });
+      console.log("❌ DISCONNECT", { socketId: socket.id, userId, reason });
     });
   });
 };

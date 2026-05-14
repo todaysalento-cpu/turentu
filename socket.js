@@ -10,22 +10,35 @@ const getIO = () => {
   return io;
 };
 
-/* ===================== EMIT HELPERS ===================== */
-const emitNuovaCorsa = (driverId, corsa) => {
-  if (!io) return;
-  io.to(`autista_${driverId}`).emit("nuova_corsa", corsa);
-};
-
-const emitCorsaUpdate = (corsa) => {
-  if (!io) return;
-  io.to(`corsa_${corsa.id}`).emit("corsaUpdate", corsa);
-};
-
+/* ===================== NOTIFICATION ===================== */
 const sendNotification = ({ userId, role, notification }) => {
   if (!io) return;
-  if (!userId || !role || !notification) return;
-
   io.to(`${role}_${userId}`).emit("new_notification", notification);
+};
+
+/* ===================== THREAD PUSH (NEW) ===================== */
+const pushThreadUpdate = async (corsaId, clienteId) => {
+  if (!io) return;
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM chat_threads
+      WHERE corsa_id = $1 AND cliente_id = $2
+      `,
+      [corsaId, clienteId]
+    );
+
+    const thread = rows[0];
+    if (!thread) return;
+
+    io.to(`chat_threads_${thread.driver_id}`).emit("thread_update", thread);
+    io.to(`chat_threads_${thread.cliente_id}`).emit("thread_update", thread);
+
+  } catch (err) {
+    console.error("pushThreadUpdate error:", err);
+  }
 };
 
 /* ===================== SOCKET SETUP ===================== */
@@ -57,14 +70,13 @@ const setupSocket = (ioServer) => {
 
     console.log("🟢 SOCKET CONNECTED", { socketId: socket.id, userId, role });
 
-    const joinedRooms = new Set();
-    const sentInitChats = new Set();
     const sentMessages = new Set();
 
     /* ===================== PERSONAL ROOM ===================== */
-    const personalRoom = `${role}_${userId}`;
-    socket.join(personalRoom);
-    joinedRooms.add(personalRoom);
+    socket.join(`${role}_${userId}`);
+
+    /* ===================== HOME CHAT ROOM (NEW) ===================== */
+    socket.join(`chat_threads_${userId}`);
 
     /* ===================== AUTISTA ROOMS ===================== */
     if (role === "autista") {
@@ -73,10 +85,7 @@ const setupSocket = (ioServer) => {
 
         for (const c of corseCache) {
           if (Number(c.driver_id) !== Number(userId)) continue;
-
-          const room = `corsa_${c.id}`;
-          socket.join(room);
-          joinedRooms.add(room);
+          socket.join(`corsa_${c.id}`);
         }
       } catch (err) {
         console.error("❌ errore corse:", err);
@@ -91,42 +100,53 @@ const setupSocket = (ioServer) => {
       if (!corsaId || !clienteId) return;
 
       const room = `chat_${corsaId}_${clienteId}`;
-
       socket.join(room);
-      joinedRooms.add(room);
+    });
 
-      const chatKey = `init_${corsaId}_${clienteId}`;
-      if (sentInitChats.has(chatKey)) return;
-      sentInitChats.add(chatKey);
+    /* ===================== TYPING ===================== */
+    socket.on("typing", ({ corsa_id, cliente_id }) => {
+      io.to(`chat_${corsa_id}_${cliente_id}`).emit("typing", {
+        userId,
+        corsa_id,
+        cliente_id,
+      });
+    });
+
+    socket.on("stop_typing", ({ corsa_id, cliente_id }) => {
+      io.to(`chat_${corsa_id}_${cliente_id}`).emit("stop_typing", {
+        userId,
+        corsa_id,
+        cliente_id,
+      });
+    });
+
+    /* ===================== MARK AS READ ===================== */
+    socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
+      const corsaId = Number(corsa_id);
+      const clienteId = Number(cliente_id);
 
       try {
-        const { rows } = await pool.query(
+        await pool.query(
           `
-          SELECT
-            id,
-            corsa_id,
-            cliente_id,
-            sender_id,
-            testo AS text,
-            created_at,
-            read_status,
-            client_msg_id
-          FROM messaggi
+          UPDATE chat_threads
+          SET unread_count = 0,
+              updated_at = NOW()
           WHERE corsa_id = $1
             AND cliente_id = $2
-          ORDER BY created_at ASC
-          LIMIT 30
           `,
           [corsaId, clienteId]
         );
 
-        socket.emit("init_chat", {
+        await pushThreadUpdate(corsaId, clienteId);
+
+        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
           corsa_id: corsaId,
           cliente_id: clienteId,
-          messages: rows,
+          reader_id: userId,
         });
+
       } catch (err) {
-        console.error("❌ join_chat error:", err);
+        console.error("mark_as_read error:", err);
       }
     });
 
@@ -142,12 +162,14 @@ const setupSocket = (ioServer) => {
 
       const room = `chat_${corsaId}_${clienteId}`;
 
-      const msgKey = client_msg_id || `${userId}_${Date.now()}_${Math.random()}`;
+      const msgKey =
+        client_msg_id || `${userId}_${Date.now()}_${Math.random()}`;
 
       if (sentMessages.has(msgKey)) return;
       sentMessages.add(msgKey);
 
       try {
+        /* ================= INSERT MESSAGE ================= */
         const { rows } = await pool.query(
           `
           INSERT INTO messaggi (
@@ -158,29 +180,7 @@ const setupSocket = (ioServer) => {
             client_msg_id,
             read_status
           )
-          VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            jsonb_build_object(
-              'autista',
-              CASE WHEN $3 = (
-                SELECT v.driver_id
-                FROM corse c
-                JOIN veicolo v ON v.id = c.veicolo_id
-                WHERE c.id = $1
-              ) THEN true ELSE false END,
-              'cliente',
-              CASE WHEN $3 != (
-                SELECT v.driver_id
-                FROM corse c
-                JOIN veicolo v ON v.id = c.veicolo_id
-                WHERE c.id = $1
-              ) THEN true ELSE false END
-            )
-          )
+          VALUES ($1,$2,$3,$4,$5,jsonb_build_object('autista',false,'cliente',false))
           ON CONFLICT (client_msg_id) DO NOTHING
           RETURNING
             id,
@@ -188,9 +188,7 @@ const setupSocket = (ioServer) => {
             cliente_id,
             sender_id,
             testo AS text,
-            created_at,
-            read_status,
-            client_msg_id
+            created_at
           `,
           [corsaId, clienteId, userId, text.trim(), msgKey]
         );
@@ -199,8 +197,13 @@ const setupSocket = (ioServer) => {
 
         const msg = rows[0];
 
+        /* ================= REALTIME MESSAGE ================= */
         io.to(room).emit("new_message", msg);
 
+        /* ================= THREAD UPDATE (🔥 KEY PART) ================= */
+        await pushThreadUpdate(corsaId, clienteId);
+
+        /* ================= NOTIFICATION ================= */
         sendNotification({
           userId: clienteId,
           role: "cliente",
@@ -211,11 +214,13 @@ const setupSocket = (ioServer) => {
             text: msg.text,
           },
         });
+
       } catch (err) {
         console.error("❌ send_message:", err);
       }
     });
 
+    /* ================= DISCONNECT ================= */
     socket.on("disconnect", (reason) => {
       console.log("❌ DISCONNECT", { socketId: socket.id, userId, reason });
     });
@@ -226,6 +231,4 @@ export {
   setupSocket,
   getIO,
   sendNotification,
-  emitNuovaCorsa,
-  emitCorsaUpdate,
 };

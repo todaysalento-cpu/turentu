@@ -56,7 +56,7 @@ const setupSocket = (ioServer) => {
       decoded.role = decoded.role?.toLowerCase();
       socket.user = decoded;
       next();
-    } catch (err) {
+    } catch {
       return next(new Error("JWT_INVALID"));
     }
   });
@@ -65,15 +65,14 @@ const setupSocket = (ioServer) => {
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
 
-    console.log("🟢 SOCKET CONNECTED", { socketId: socket.id, userId, role });
+    console.log("🟢 CONNECTED", { userId, role });
 
     socket.join(`${role}_${userId}`);
 
-    if (role === "cliente") {
-      socket.join(`chat_threads_${userId}`);
-    } else {
-      socket.join(`chat_threads_driver_${userId}`);
-    }
+    socket.join(role === "cliente"
+      ? `chat_threads_${userId}`
+      : `chat_threads_driver_${userId}`
+    );
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
@@ -83,88 +82,21 @@ const setupSocket = (ioServer) => {
       if (!corsaId || !clienteId) return;
 
       const { rows } = await pool.query(
-        `
-        SELECT driver_id
-        FROM chat_threads
-        WHERE corsa_id = $1 AND cliente_id = $2
-        `,
+        `SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2`,
         [corsaId, clienteId]
       );
 
       const thread = rows[0];
       if (!thread) return;
 
-      const isCliente = role === "cliente" && Number(clienteId) === userId;
-      const isDriver = role === "autista" && Number(thread.driver_id) === userId;
-
-      if (!isCliente && !isDriver) return;
-
       socket.join(`chat_${corsaId}_${clienteId}`);
-    });
 
-    /* ================= TYPING ================= */
-    socket.on("typing", ({ corsa_id, cliente_id }) => {
-      io.to(`chat_${corsa_id}_${cliente_id}`).emit("typing", {
+      // 🔥 DELIVERY EVENT (IMPORTANTISSIMO)
+      io.to(`chat_${corsaId}_${clienteId}`).emit("messages_delivered", {
+        corsa_id: corsaId,
+        cliente_id: clienteId,
         userId,
-        corsa_id,
-        cliente_id,
       });
-    });
-
-    socket.on("stop_typing", ({ corsa_id, cliente_id }) => {
-      io.to(`chat_${corsa_id}_${cliente_id}`).emit("stop_typing", {
-        userId,
-        corsa_id,
-        cliente_id,
-      });
-    });
-
-    /* ================= MARK AS READ (FIXED) ================= */
-    socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
-      const corsaId = Number(corsa_id);
-      const clienteId = Number(cliente_id);
-
-      try {
-        /* 1. reset unread thread */
-        await pool.query(
-          `
-          UPDATE chat_threads
-          SET unread_count = 0
-          WHERE corsa_id = $1 AND cliente_id = $2
-          `,
-          [corsaId, clienteId]
-        );
-
-        /* 2. update read_status per messaggi */
-        const readKey = role === "cliente" ? "cliente" : "autista";
-
-        await pool.query(
-          `
-          UPDATE messaggi
-          SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
-          WHERE corsa_id = $1
-            AND cliente_id = $2
-            AND sender_id != $4
-          `,
-          [
-            corsaId,
-            clienteId,
-            `{${readKey}}`,
-            userId
-          ]
-        );
-
-        await pushThreadUpdate(corsaId, clienteId);
-
-        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
-          corsa_id: corsaId,
-          cliente_id: clienteId,
-          reader_id: userId,
-          role,
-        });
-      } catch (err) {
-        console.error("❌ mark_as_read error:", err);
-      }
     });
 
     /* ================= SEND MESSAGE ================= */
@@ -183,11 +115,7 @@ const setupSocket = (ioServer) => {
 
       try {
         const { rows: threadRows } = await pool.query(
-          `
-          SELECT driver_id
-          FROM chat_threads
-          WHERE corsa_id = $1 AND cliente_id = $2
-          `,
+          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
           [corsaId, clienteId]
         );
 
@@ -195,11 +123,6 @@ const setupSocket = (ioServer) => {
         if (!thread) return;
 
         const driverId = thread.driver_id;
-
-        const isCliente = role === "cliente" && Number(clienteId) === userId;
-        const isDriver = role === "autista" && Number(thread.driver_id) === userId;
-
-        if (!isCliente && !isDriver) return;
 
         const msgKey = client_msg_id || crypto.randomUUID();
 
@@ -219,7 +142,6 @@ const setupSocket = (ioServer) => {
             jsonb_build_object('autista',false,'cliente',false),
             jsonb_build_object('sent',true,'delivered',false,'read',false)
           )
-          ON CONFLICT (client_msg_id) DO NOTHING
           RETURNING *
           `,
           [corsaId, clienteId, userId, trimmed, msgKey]
@@ -230,61 +152,91 @@ const setupSocket = (ioServer) => {
         const msg = {
           ...rows[0],
           created_at: new Date(rows[0].created_at).getTime(),
+          status: rows[0].status,
+          read_status: rows[0].read_status,
         };
 
+        /* ================= THREAD UPDATE ================= */
         await pool.query(
           `
           UPDATE chat_threads
-          SET
-            last_message = $3,
-            unread_count = unread_count + 1,
-            updated_at = NOW()
-          WHERE corsa_id = $1 AND cliente_id = $2
+          SET last_message=$3,
+              unread_count=unread_count+1,
+              updated_at=NOW()
+          WHERE corsa_id=$1 AND cliente_id=$2
           `,
-          [
-            corsaId,
-            clienteId,
-            JSON.stringify({
-              text: trimmed,
-              created_at: msg.created_at,
-            }),
-          ]
+          [corsaId, clienteId, JSON.stringify({
+            text: trimmed,
+            created_at: msg.created_at,
+          })]
         );
 
+        /* ================= EMIT MESSAGE ================= */
         io.to(room).emit("new_message", msg);
 
         await pushThreadUpdate(corsaId, clienteId);
 
-        if (role === "cliente") {
-          sendNotification({
-            userId: driverId,
-            role: "autista",
-            notification: {
-              type: "new_message",
-              corsa_id: corsaId,
-              cliente_id: clienteId,
-              text: msg.text,
-            },
-          });
-        } else {
-          sendNotification({
-            userId: clienteId,
-            role: "cliente",
-            notification: {
-              type: "new_message",
-              corsa_id: corsaId,
-              cliente_id: clienteId,
-              text: msg.text,
-            },
-          });
-        }
+        /* ================= NOTIFICATION ================= */
+        sendNotification({
+          userId: role === "cliente" ? driverId : clienteId,
+          role: role === "cliente" ? "autista" : "cliente",
+          notification: {
+            type: "new_message",
+            corsa_id: corsaId,
+            cliente_id: clienteId,
+            text: msg.text,
+          },
+        });
+
       } catch (err) {
         console.error("❌ send_message:", err);
       }
     });
 
-    socket.on("disconnect", (reason) => {
-      console.log("❌ DISCONNECT", { socketId: socket.id, userId, reason });
+    /* ================= MARK AS READ ================= */
+    socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
+      const corsaId = Number(corsa_id);
+      const clienteId = Number(cliente_id);
+
+      try {
+        await pool.query(
+          `
+          UPDATE chat_threads
+          SET unread_count = 0
+          WHERE corsa_id=$1 AND cliente_id=$2
+          `,
+          [corsaId, clienteId]
+        );
+
+        const readKey = role === "cliente" ? "cliente" : "autista";
+
+        await pool.query(
+          `
+          UPDATE messaggi
+          SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
+          WHERE corsa_id=$1
+            AND cliente_id=$2
+            AND sender_id != $4
+          `,
+          [corsaId, clienteId, `{${readKey}}`, userId]
+        );
+
+        await pushThreadUpdate(corsaId, clienteId);
+
+        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
+          corsa_id: corsaId,
+          cliente_id: clienteId,
+          reader_id: userId,
+          role,
+        });
+
+      } catch (err) {
+        console.error("❌ mark_as_read:", err);
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log("❌ DISCONNECTED", { userId });
     });
   });
 };

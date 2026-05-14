@@ -5,170 +5,61 @@ import jwt from "jsonwebtoken";
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
-/* ======================= AUTH ======================= */
+/* ================= AUTH ================= */
 const authMiddleware = (req, res, next) => {
   try {
     const token =
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
-    if (!token) {
-      return res.status(401).json({ message: "No token" });
-    }
+    if (!token) return res.status(401).json({ message: "No token" });
 
     const decoded = jwt.verify(token, JWT_SECRET);
     decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
 
 /* =========================================================
-   THREAD LIST
+   INIT THREADS
 ========================================================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
 
   try {
-    let query;
-    let params;
+    const { rows } = await pool.query(
+      role === "autista"
+        ? `SELECT * FROM chat_threads WHERE driver_id=$1 ORDER BY updated_at DESC`
+        : `SELECT * FROM chat_threads WHERE cliente_id=$1 ORDER BY updated_at DESC`,
+      [userId]
+    );
 
-    if (role === "autista") {
-      query = `
-        SELECT *
-        FROM chat_threads
-        WHERE driver_id = $1
-        ORDER BY updated_at DESC
-      `;
-      params = [userId];
-    } else {
-      query = `
-        SELECT *
-        FROM chat_threads
-        WHERE cliente_id = $1
-        ORDER BY updated_at DESC
-      `;
-      params = [userId];
-    }
+    const threads = rows.map((t) => ({
+      id: `${t.corsa_id}_${t.cliente_id}`,
+      corsa_id: t.corsa_id,
+      cliente_id: t.cliente_id,
+      driver_id: t.driver_id,
+      last_message: typeof t.last_message === "string"
+        ? JSON.parse(t.last_message)
+        : t.last_message,
+      unreadCount: t.unread_count ?? 0,
+      updated_at: new Date(t.updated_at).getTime(),
+    }));
 
-    const { rows } = await pool.query(query, params);
-
-    const threads = rows.map((t) => {
-      let lastMessage = null;
-
-      try {
-        lastMessage =
-          typeof t.last_message === "string"
-            ? JSON.parse(t.last_message)
-            : t.last_message;
-      } catch {
-        lastMessage = null;
-      }
-
-      return {
-        id: `${t.corsa_id}_${t.cliente_id}`,
-        corsa_id: t.corsa_id,
-        cliente_id: t.cliente_id,
-        driver_id: t.driver_id,
-        last_message: lastMessage,
-        unreadCount: t.unread_count ?? 0,
-        updated_at: new Date(t.updated_at).getTime(),
-      };
-    });
-
-    return res.json(threads);
+    res.json(threads);
   } catch (err) {
     console.error("INIT ERROR:", err);
-    return res.status(500).json({ message: "init error" });
+    res.status(500).json({ message: "init error" });
   }
 });
 
 /* =========================================================
-   GET MESSAGES
-========================================================= */
-chatRouter.get("/messages", authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
-
-  const userId = Number(req.user.id);
-  const role = req.user.role;
-
-  try {
-    const corsaId = Number(corsa_id);
-    const clienteId = Number(cliente_id);
-
-    if (!corsaId || !clienteId) {
-      return res.status(400).json({ message: "invalid params" });
-    }
-
-    const { rows: threadRows } = await pool.query(
-      `
-      SELECT *
-      FROM chat_threads
-      WHERE corsa_id = $1 AND cliente_id = $2
-      `,
-      [corsaId, clienteId]
-    );
-
-    const thread = threadRows[0];
-
-    if (!thread) {
-      return res.status(404).json({ message: "thread not found" });
-    }
-
-    const isCliente = role === "cliente" && userId === thread.cliente_id;
-    const isDriver = role === "autista" && userId === thread.driver_id;
-
-    if (!isCliente && !isDriver) {
-      return res.status(403).json({ message: "forbidden" });
-    }
-
-    const values = [corsaId, clienteId, Number(limit)];
-
-    let cursorQuery = "";
-    if (cursor) {
-      values.push(new Date(Number(cursor)));
-      cursorQuery = `AND created_at < $4`;
-    }
-
-    const { rows } = await pool.query(
-      `
-      SELECT *
-      FROM messaggi
-      WHERE corsa_id = $1
-        AND cliente_id = $2
-        ${cursorQuery}
-      ORDER BY created_at DESC
-      LIMIT $3
-      `,
-      values
-    );
-
-    const messages = rows
-      .map((m) => ({
-        ...m,
-        created_at: new Date(m.created_at).getTime(),
-      }))
-      .reverse();
-
-    return res.json({
-      messages,
-      hasMore: rows.length === Number(limit),
-      nextCursor: rows[0]
-        ? new Date(rows[0].created_at).getTime()
-        : null,
-    });
-  } catch (err) {
-    console.error("MESSAGES ERROR:", err);
-    return res.status(500).json({ message: "messages error" });
-  }
-});
-
-/* =========================================================
-   SEND MESSAGE
+   SEND MESSAGE (FIXED + STATUS READY)
 ========================================================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
@@ -186,19 +77,12 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
     }
 
     const { rows: threadRows } = await pool.query(
-      `
-      SELECT *
-      FROM chat_threads
-      WHERE corsa_id = $1 AND cliente_id = $2
-      `,
+      `SELECT * FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
       [corsaId, clienteId]
     );
 
     const thread = threadRows[0];
-
-    if (!thread) {
-      return res.status(404).json({ message: "thread not found" });
-    }
+    if (!thread) return res.status(404).json({ message: "thread not found" });
 
     const isCliente = role === "cliente" && senderId === thread.cliente_id;
     const isDriver = role === "autista" && senderId === thread.driver_id;
@@ -223,52 +107,44 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         jsonb_build_object('autista',false,'cliente',false),
         jsonb_build_object('sent',true,'delivered',false,'read',false)
       )
-      ON CONFLICT (client_msg_id) DO NOTHING
       RETURNING *
       `,
       [corsaId, clienteId, senderId, trimmed, client_msg_id]
     );
 
-    if (!rows.length) {
-      return res.json({ ok: true, duplicate: true });
-    }
+    if (!rows.length) return res.json({ ok: true, duplicate: true });
 
     const message = {
       ...rows[0],
       created_at: new Date(rows[0].created_at).getTime(),
     };
 
+    /* ================= THREAD UPDATE ================= */
     await pool.query(
       `
       UPDATE chat_threads
-      SET
-        last_message = $3,
-        unread_count = unread_count + 1,
-        updated_at = NOW()
-      WHERE corsa_id = $1 AND cliente_id = $2
+      SET last_message=$3,
+          unread_count=unread_count+1,
+          updated_at=NOW()
+      WHERE corsa_id=$1 AND cliente_id=$2
       `,
       [
         corsaId,
         clienteId,
-        JSON.stringify({
-          text: trimmed,
-          created_at: message.created_at,
-        }),
+        JSON.stringify({ text: trimmed, created_at: message.created_at }),
       ]
     );
 
-    return res.json({
-      ok: true,
-      message,
-    });
+    res.json({ ok: true, message });
+
   } catch (err) {
     console.error("SEND ERROR:", err);
-    return res.status(500).json({ message: "send error" });
+    res.status(500).json({ message: "send error" });
   }
 });
 
 /* =========================================================
-   MARK AS READ (NEW - IMPORTANT)
+   MARK AS READ (REAL FIX)
 ========================================================= */
 chatRouter.post("/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
@@ -280,36 +156,64 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
 
-    if (!corsaId || !clienteId) {
-      return res.status(400).json({ message: "invalid params" });
-    }
-
     const readKey = role === "cliente" ? "cliente" : "autista";
 
+    /* ================= UPDATE MESSAGES ================= */
     await pool.query(
       `
       UPDATE messaggi
-      SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
-      WHERE corsa_id = $1
-        AND cliente_id = $2
+      SET 
+        read_status = jsonb_set(read_status, $3, 'true'::jsonb, true),
+        status = jsonb_set(status, '{read}', 'true'::jsonb, true)
+      WHERE corsa_id=$1
+        AND cliente_id=$2
         AND sender_id != $4
       `,
       [corsaId, clienteId, `{${readKey}}`, userId]
     );
 
+    /* ================= RESET THREAD ================= */
     await pool.query(
       `
       UPDATE chat_threads
-      SET unread_count = 0
-      WHERE corsa_id = $1 AND cliente_id = $2
+      SET unread_count=0
+      WHERE corsa_id=$1 AND cliente_id=$2
       `,
       [corsaId, clienteId]
     );
 
-    return res.json({ ok: true });
+    res.json({ ok: true });
+
   } catch (err) {
     console.error("READ ERROR:", err);
-    return res.status(500).json({ message: "read error" });
+    res.status(500).json({ message: "read error" });
+  }
+});
+
+/* =========================================================
+   DELIVERED (NEW OPTIONAL ENDPOINT)
+========================================================= */
+chatRouter.post("/delivered", authMiddleware, async (req, res) => {
+  const { corsa_id, cliente_id } = req.body;
+
+  try {
+    const corsaId = Number(corsa_id);
+    const clienteId = Number(cliente_id);
+
+    await pool.query(
+      `
+      UPDATE messaggi
+      SET status = jsonb_set(status, '{delivered}', 'true'::jsonb, true)
+      WHERE corsa_id=$1 AND cliente_id=$2
+      `,
+      [corsaId, clienteId]
+    );
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    console.error("DELIVERED ERROR:", err);
+    res.status(500).json({ message: "delivered error" });
   }
 });
 

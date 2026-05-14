@@ -69,9 +69,10 @@ const setupSocket = (ioServer) => {
 
     socket.join(`${role}_${userId}`);
 
-    socket.join(role === "cliente"
-      ? `chat_threads_${userId}`
-      : `chat_threads_driver_${userId}`
+    socket.join(
+      role === "cliente"
+        ? `chat_threads_${userId}`
+        : `chat_threads_driver_${userId}`
     );
 
     /* ================= JOIN CHAT ================= */
@@ -82,7 +83,7 @@ const setupSocket = (ioServer) => {
       if (!corsaId || !clienteId) return;
 
       const { rows } = await pool.query(
-        `SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2`,
+        `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
         [corsaId, clienteId]
       );
 
@@ -91,11 +92,10 @@ const setupSocket = (ioServer) => {
 
       socket.join(`chat_${corsaId}_${clienteId}`);
 
-      // 🔥 DELIVERY EVENT (IMPORTANTISSIMO)
-      io.to(`chat_${corsaId}_${clienteId}`).emit("messages_delivered", {
+      /* 🔥 FIX: DELIVERY EVENT coerente con frontend */
+      io.to(`chat_${corsaId}_${clienteId}`).emit("message_delivered", {
         corsa_id: corsaId,
         cliente_id: clienteId,
-        userId,
       });
     });
 
@@ -123,7 +123,6 @@ const setupSocket = (ioServer) => {
         if (!thread) return;
 
         const driverId = thread.driver_id;
-
         const msgKey = client_msg_id || crypto.randomUUID();
 
         const { rows } = await pool.query(
@@ -152,8 +151,6 @@ const setupSocket = (ioServer) => {
         const msg = {
           ...rows[0],
           created_at: new Date(rows[0].created_at).getTime(),
-          status: rows[0].status,
-          read_status: rows[0].read_status,
         };
 
         /* ================= THREAD UPDATE ================= */
@@ -165,10 +162,14 @@ const setupSocket = (ioServer) => {
               updated_at=NOW()
           WHERE corsa_id=$1 AND cliente_id=$2
           `,
-          [corsaId, clienteId, JSON.stringify({
-            text: trimmed,
-            created_at: msg.created_at,
-          })]
+          [
+            corsaId,
+            clienteId,
+            JSON.stringify({
+              text: trimmed,
+              created_at: msg.created_at,
+            }),
+          ]
         );
 
         /* ================= EMIT MESSAGE ================= */
@@ -223,7 +224,8 @@ const setupSocket = (ioServer) => {
 
         await pushThreadUpdate(corsaId, clienteId);
 
-        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
+        /* 🔥 FIX EVENT NAME */
+        io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
           corsa_id: corsaId,
           cliente_id: clienteId,
           reader_id: userId,

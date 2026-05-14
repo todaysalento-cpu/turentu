@@ -28,7 +28,6 @@ const authMiddleware = (req, res, next) => {
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
-
   const LIMIT = 30;
 
   try {
@@ -78,20 +77,20 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         const corsaId = r.corsa_id;
         const clienteId = r.cliente_id;
 
-        /* ===================== UNREAD (COERENTE CON SOCKET) ===================== */
+        /* ===================== UNREAD COERENTE CON SOCKET ===================== */
         const unread = await pool.query(
           `
           SELECT COUNT(*)::int AS count
           FROM messaggi
           WHERE corsa_id = $1
             AND cliente_id = $2
-            AND (read_status->>'cliente')::boolean = false
             AND sender_id != $3
+            AND (read_status->>'cliente')::boolean = false
           `,
           [corsaId, clienteId, userId]
         );
 
-        /* ===================== MESSAGES (NO SELECT *) ===================== */
+        /* ===================== MESSAGES ===================== */
         const messages = await pool.query(
           `
           SELECT
@@ -174,15 +173,15 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
         ? new Date(rows[0].created_at).getTime()
         : null,
     });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "pagination error" });
   }
 });
 
-/* ======================= SEND (HTTP FALLBACK ONLY) ======================= */
+/* ======================= SEND (HTTP FALLBACK) ======================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
-
   const sender_id = Number(req.user.id);
 
   try {
@@ -193,7 +192,36 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         cliente_id,
         sender_id,
         testo,
-        client_msg_id
+        client_msg_id,
+        read_status
       )
-      VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (client_msg_id)
+      VALUES (
+        $1,$2,$3,$4,$5,
+        '{"autista": false, "cliente": false}'::jsonb
+      )
+      ON CONFLICT (client_msg_id) DO NOTHING
+      RETURNING
+        id,
+        corsa_id,
+        cliente_id,
+        sender_id,
+        testo AS text,
+        created_at,
+        read_status,
+        client_msg_id
+      `,
+      [corsa_id, cliente_id, sender_id, text.trim(), client_msg_id]
+    );
+
+    if (!rows.length) {
+      return res.json({ ok: true, duplicate: true });
+    }
+
+    return res.json({ ok: true, message: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "send error" });
+  }
+});
+
+export default chatRouter;

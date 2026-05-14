@@ -3,7 +3,6 @@ import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
 
 const chatRouter = express.Router();
-
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
 /* ======================= AUTH ======================= */
@@ -75,9 +74,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         corsa_id: t.corsa_id,
         cliente_id: t.cliente_id,
         driver_id: t.driver_id,
-
         last_message: lastMessage,
-
         unreadCount: t.unread_count ?? 0,
         updated_at: new Date(t.updated_at).getTime(),
       };
@@ -130,8 +127,8 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     }
 
     const values = [corsaId, clienteId, Number(limit)];
-    let cursorQuery = "";
 
+    let cursorQuery = "";
     if (cursor) {
       values.push(new Date(Number(cursor)));
       cursorQuery = `AND created_at < $4`;
@@ -171,7 +168,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   SEND MESSAGE (FIXED)
+   SEND MESSAGE
 ========================================================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
@@ -267,6 +264,52 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("SEND ERROR:", err);
     return res.status(500).json({ message: "send error" });
+  }
+});
+
+/* =========================================================
+   MARK AS READ (NEW - IMPORTANT)
+========================================================= */
+chatRouter.post("/read", authMiddleware, async (req, res) => {
+  const { corsa_id, cliente_id } = req.body;
+
+  const userId = Number(req.user.id);
+  const role = req.user.role;
+
+  try {
+    const corsaId = Number(corsa_id);
+    const clienteId = Number(cliente_id);
+
+    if (!corsaId || !clienteId) {
+      return res.status(400).json({ message: "invalid params" });
+    }
+
+    const readKey = role === "cliente" ? "cliente" : "autista";
+
+    await pool.query(
+      `
+      UPDATE messaggi
+      SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
+      WHERE corsa_id = $1
+        AND cliente_id = $2
+        AND sender_id != $4
+      `,
+      [corsaId, clienteId, `{${readKey}}`, userId]
+    );
+
+    await pool.query(
+      `
+      UPDATE chat_threads
+      SET unread_count = 0
+      WHERE corsa_id = $1 AND cliente_id = $2
+      `,
+      [corsaId, clienteId]
+    );
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("READ ERROR:", err);
+    return res.status(500).json({ message: "read error" });
   }
 });
 

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { pool } from "./db/db.js";
+import crypto from "crypto";
 
 let io;
 
@@ -99,12 +100,6 @@ const setupSocket = (ioServer) => {
       if (!isCliente && !isDriver) return;
 
       socket.join(`chat_${corsaId}_${clienteId}`);
-
-      console.log("💬 JOIN CHAT", {
-        room: `chat_${corsaId}_${clienteId}`,
-        userId,
-        role,
-      });
     });
 
     /* ================= TYPING ================= */
@@ -124,27 +119,52 @@ const setupSocket = (ioServer) => {
       });
     });
 
-    /* ================= MARK AS READ ================= */
+    /* ================= MARK AS READ (FIXED) ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       const corsaId = Number(corsa_id);
       const clienteId = Number(cliente_id);
 
-      await pool.query(
-        `
-        UPDATE chat_threads
-        SET unread_count = 0
-        WHERE corsa_id = $1 AND cliente_id = $2
-        `,
-        [corsaId, clienteId]
-      );
+      try {
+        /* 1. reset unread thread */
+        await pool.query(
+          `
+          UPDATE chat_threads
+          SET unread_count = 0
+          WHERE corsa_id = $1 AND cliente_id = $2
+          `,
+          [corsaId, clienteId]
+        );
 
-      await pushThreadUpdate(corsaId, clienteId);
+        /* 2. update read_status per messaggi */
+        const readKey = role === "cliente" ? "cliente" : "autista";
 
-      io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
-        corsa_id: corsaId,
-        cliente_id: clienteId,
-        reader_id: userId,
-      });
+        await pool.query(
+          `
+          UPDATE messaggi
+          SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
+          WHERE corsa_id = $1
+            AND cliente_id = $2
+            AND sender_id != $4
+          `,
+          [
+            corsaId,
+            clienteId,
+            `{${readKey}}`,
+            userId
+          ]
+        );
+
+        await pushThreadUpdate(corsaId, clienteId);
+
+        io.to(`chat_${corsaId}_${clienteId}`).emit("messages_read", {
+          corsa_id: corsaId,
+          cliente_id: clienteId,
+          reader_id: userId,
+          role,
+        });
+      } catch (err) {
+        console.error("❌ mark_as_read error:", err);
+      }
     });
 
     /* ================= SEND MESSAGE ================= */
@@ -162,7 +182,6 @@ const setupSocket = (ioServer) => {
       const room = `chat_${corsaId}_${clienteId}`;
 
       try {
-        /* ================= THREAD ================= */
         const { rows: threadRows } = await pool.query(
           `
           SELECT driver_id
@@ -177,7 +196,6 @@ const setupSocket = (ioServer) => {
 
         const driverId = thread.driver_id;
 
-        /* ================= AUTH CHECK (CRITICO) ================= */
         const isCliente = role === "cliente" && Number(clienteId) === userId;
         const isDriver = role === "autista" && Number(thread.driver_id) === userId;
 
@@ -185,7 +203,6 @@ const setupSocket = (ioServer) => {
 
         const msgKey = client_msg_id || crypto.randomUUID();
 
-        /* ================= INSERT MESSAGE ================= */
         const { rows } = await pool.query(
           `
           INSERT INTO messaggi (
@@ -215,7 +232,6 @@ const setupSocket = (ioServer) => {
           created_at: new Date(rows[0].created_at).getTime(),
         };
 
-        /* ================= THREAD UPDATE ================= */
         await pool.query(
           `
           UPDATE chat_threads
@@ -235,12 +251,10 @@ const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= EMIT ================= */
         io.to(room).emit("new_message", msg);
 
         await pushThreadUpdate(corsaId, clienteId);
 
-        /* ================= NOTIFICATIONS ================= */
         if (role === "cliente") {
           sendNotification({
             userId: driverId,
@@ -269,7 +283,6 @@ const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= DISCONNECT ================= */
     socket.on("disconnect", (reason) => {
       console.log("❌ DISCONNECT", { socketId: socket.id, userId, reason });
     });

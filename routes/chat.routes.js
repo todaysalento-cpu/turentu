@@ -13,14 +13,23 @@ const authMiddleware = (req, res, next) => {
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
-    if (!token) return res.status(401).json({ message: "No token" });
+    if (!token) {
+      console.log("❌ AUTH NO TOKEN");
+      return res.status(401).json({ message: "No token" });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
     decoded.role = decoded.role?.toLowerCase();
 
+    console.log("🔐 AUTH OK", {
+      userId: decoded.id,
+      role: decoded.role,
+    });
+
     req.user = decoded;
     next();
-  } catch {
+  } catch (err) {
+    console.log("❌ AUTH INVALID", err.message);
     return res.status(401).json({ message: "Invalid token" });
   }
 };
@@ -31,6 +40,8 @@ const authMiddleware = (req, res, next) => {
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
+
+  console.log("📥 INIT THREADS", { userId, role });
 
   try {
     const { rows } = await pool.query(
@@ -67,9 +78,11 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       })
     );
 
+    console.log("📦 THREADS LOADED", threads.length);
+
     res.json(threads);
   } catch (err) {
-    console.error("INIT ERROR:", err);
+    console.error("❌ INIT ERROR:", err);
     res.status(500).json({ message: "init error" });
   }
 });
@@ -80,11 +93,14 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, limit = 30 } = req.query;
 
+  console.log("📥 GET MESSAGES", { corsa_id, cliente_id, limit });
+
   try {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
 
     if (!corsaId || !clienteId) {
+      console.log("⚠️ INVALID PARAMS");
       return res.status(400).json({ message: "invalid params" });
     }
 
@@ -99,6 +115,8 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       `,
       [corsaId, clienteId, Number(limit)]
     );
+
+    console.log("📦 MESSAGES LOADED", rows.length);
 
     const messages = rows
       .map((m) => ({
@@ -116,7 +134,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("MESSAGES ERROR:", err);
+    console.error("❌ MESSAGES ERROR:", err);
     res.status(500).json({ message: "messages error" });
   }
 });
@@ -130,27 +148,42 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
   const senderId = Number(req.user.id);
   const role = req.user.role;
 
+  console.log("📤 SEND REQUEST", {
+    senderId,
+    role,
+    corsa_id,
+    cliente_id,
+  });
+
   try {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
     const trimmed = text?.trim();
 
     if (!corsaId || !clienteId || !trimmed) {
+      console.log("⚠️ INVALID SEND PAYLOAD");
       return res.status(400).json({ message: "invalid params" });
     }
 
     const { rows: threadRows } = await pool.query(
-      `SELECT * FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+      `
+      SELECT * FROM chat_threads
+      WHERE corsa_id=$1 AND cliente_id=$2
+      `,
       [corsaId, clienteId]
     );
 
     const thread = threadRows[0];
-    if (!thread) return res.status(404).json({ message: "thread not found" });
+    if (!thread) {
+      console.log("❌ THREAD NOT FOUND");
+      return res.status(404).json({ message: "thread not found" });
+    }
 
     const isCliente = role === "cliente" && senderId === thread.cliente_id;
     const isDriver = role === "autista" && senderId === thread.driver_id;
 
     if (!isCliente && !isDriver) {
+      console.log("⛔ FORBIDDEN SEND");
       return res.status(403).json({ message: "forbidden" });
     }
 
@@ -172,13 +205,17 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 
     const message = rows[0];
 
-    /* ================= RECIPIENT ================= */
+    console.log("💾 MESSAGE SAVED", {
+      messageId: message.id,
+      senderId,
+    });
+
     const recipientId =
       role === "cliente"
         ? thread.driver_id
         : thread.cliente_id;
 
-    /* ================= CREATE RECEIPT ================= */
+    /* ================= RECEIPT CREATE ================= */
     await pool.query(
       `
       INSERT INTO message_receipts (message_id, user_id)
@@ -187,7 +224,12 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       [message.id, recipientId]
     );
 
-    /* ================= UPDATE THREAD META ================= */
+    console.log("📦 RECEIPT CREATED", {
+      messageId: message.id,
+      recipientId,
+    });
+
+    /* ================= THREAD UPDATE ================= */
     await pool.query(
       `
       UPDATE chat_threads
@@ -205,7 +247,8 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       ]
     );
 
-    /* ================= SOCKET ================= */
+    console.log("🧵 THREAD UPDATED");
+
     const io = getIO();
     const room = `chat_${corsaId}_${clienteId}`;
 
@@ -214,10 +257,15 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       created_at: new Date(message.created_at).getTime(),
     });
 
+    console.log("📡 EMIT NEW_MESSAGE", {
+      room,
+      messageId: message.id,
+    });
+
     res.json({ ok: true, message });
 
   } catch (err) {
-    console.error("SEND ERROR:", err);
+    console.error("❌ SEND ERROR:", err);
     res.status(500).json({ message: "send error" });
   }
 });
@@ -230,11 +278,17 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
 
   const userId = Number(req.user.id);
 
+  console.log("👁 READ REQUEST", {
+    userId,
+    corsa_id,
+    cliente_id,
+  });
+
   try {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
 
-    await pool.query(
+    const result = await pool.query(
       `
       UPDATE message_receipts mr
       SET read_at = NOW()
@@ -248,6 +302,8 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
       [userId, corsaId, clienteId]
     );
 
+    console.log("✅ READ UPDATED ROWS:", result.rowCount);
+
     const io = getIO();
 
     io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
@@ -257,10 +313,12 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
       read_at: Date.now(),
     });
 
+    console.log("📡 EMIT MESSAGE_READ");
+
     res.json({ ok: true });
 
   } catch (err) {
-    console.error("READ ERROR:", err);
+    console.error("❌ READ ERROR:", err);
     res.status(500).json({ message: "read error" });
   }
 });

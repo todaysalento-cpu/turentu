@@ -18,8 +18,15 @@ const authMiddleware = (req, res, next) => {
     decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;
+
+    console.log("🟢 AUTH OK:", {
+      userId: decoded.id,
+      role: decoded.role,
+    });
+
     next();
-  } catch {
+  } catch (err) {
+    console.error("🔴 AUTH ERROR:", err.message);
     return res.status(401).json({ message: "Invalid token" });
   }
 };
@@ -29,13 +36,19 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
 
+  console.log("📡 /chat/init HIT:", { userId, role });
+
   try {
-    const { rows } = await pool.query(
+    const query =
       role === "autista"
         ? `SELECT * FROM chat_threads WHERE driver_id=$1 ORDER BY updated_at DESC`
-        : `SELECT * FROM chat_threads WHERE cliente_id=$1 ORDER BY updated_at DESC`,
-      [userId]
-    );
+        : `SELECT * FROM chat_threads WHERE cliente_id=$1 ORDER BY updated_at DESC`;
+
+    console.log("🧠 THREAD QUERY:", query);
+
+    const { rows } = await pool.query(query, [userId]);
+
+    console.log("📦 RAW THREADS:", rows.length);
 
     const threads = rows.map((t) => {
       const last = t.last_message || {};
@@ -56,9 +69,11 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       };
     });
 
+    console.log("✅ THREADS RESPONSE:", threads.length);
+
     res.json(threads);
   } catch (err) {
-    console.error("INIT ERROR:", err);
+    console.error("❌ INIT ERROR:", err);
     res.status(500).json({ message: "init error" });
   }
 });
@@ -68,34 +83,42 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
 
+  console.log("📩 /messages HIT:", { corsa_id, cliente_id });
+
   if (!corsa_id || !cliente_id) {
+    console.warn("⚠️ MISSING PARAMS");
     return res.status(400).json({ message: "missing params" });
   }
 
   try {
-    const { rows } = await pool.query(
-      `
+    const query = `
       SELECT *
       FROM messaggi
       WHERE corsa_id = $1 AND cliente_id = $2
       ORDER BY created_at ASC
-      `,
-      [corsa_id, cliente_id]
-    );
+    `;
 
-    res.json({
-      messages: rows.map((m) => ({
-        id: m.id,
-        client_msg_id: m.client_msg_id,
-        corsa_id: m.corsa_id,
-        cliente_id: m.cliente_id,
-        sender_id: m.sender_id,
-        text: m.testo,
-        created_at: Number(m.created_at),
-      })),
-    });
+    console.log("🧠 MESSAGES QUERY:", query);
+
+    const { rows } = await pool.query(query, [corsa_id, cliente_id]);
+
+    console.log("📦 RAW MESSAGES:", rows.length);
+
+    const formatted = rows.map((m) => ({
+      id: m.id,
+      client_msg_id: m.client_msg_id,
+      corsa_id: m.corsa_id,
+      cliente_id: m.cliente_id,
+      sender_id: m.sender_id,
+      text: m.testo,
+      created_at: Number(m.created_at),
+    }));
+
+    console.log("✅ MESSAGES RESPONSE:", formatted.length);
+
+    res.json({ messages: formatted });
   } catch (err) {
-    console.error("MESSAGES ERROR:", err);
+    console.error("❌ MESSAGES ERROR:", err);
     res.status(500).json({ message: "messages error" });
   }
 });

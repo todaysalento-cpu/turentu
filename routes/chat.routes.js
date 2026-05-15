@@ -12,7 +12,9 @@ const authMiddleware = (req, res, next) => {
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
-    if (!token) return res.status(401).json({ message: "No token" });
+    if (!token) {
+      return res.status(401).json({ message: "No token" });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
     decoded.role = decoded.role?.toLowerCase();
@@ -44,8 +46,6 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         ? `SELECT * FROM chat_threads WHERE driver_id=$1 ORDER BY updated_at DESC`
         : `SELECT * FROM chat_threads WHERE cliente_id=$1 ORDER BY updated_at DESC`;
 
-    console.log("🧠 THREAD QUERY:", query);
-
     const { rows } = await pool.query(query, [userId]);
 
     console.log("📦 RAW THREADS:", rows.length);
@@ -59,18 +59,28 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         cliente_id: Number(t.cliente_id),
         driver_id: Number(t.driver_id),
 
+        // ✅ NORMALIZZATO
         last_message: {
-          text: last?.text ?? "",
-          created_at: last?.created_at ?? null,
+          text:
+            last?.text ||
+            last?.message ||
+            "",
+          created_at: last?.created_at || null,
         },
 
-        unreadCount: Number(t.unreadcount ?? t.unread_count ?? 0),
-        updated_at: new Date(t.updated_at).getTime(),
+        unreadCount: Number(
+          t.unreadcount ??
+          t.unread_count ??
+          0
+        ),
+
+        updated_at: Number(new Date(t.updated_at)),
       };
     });
 
     console.log("✅ THREADS RESPONSE:", threads.length);
 
+    // 🔥 IMPORTANTE: return array diretto coerente con frontend
     res.json(threads);
   } catch (err) {
     console.error("❌ INIT ERROR:", err);
@@ -98,8 +108,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       ORDER BY created_at ASC
     `;
 
-    console.log("🧠 MESSAGES QUERY:", query);
-
     const { rows } = await pool.query(query, [corsa_id, cliente_id]);
 
     console.log("📦 RAW MESSAGES:", rows.length);
@@ -107,16 +115,27 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     const formatted = rows.map((m) => ({
       id: m.id,
       client_msg_id: m.client_msg_id,
-      corsa_id: m.corsa_id,
-      cliente_id: m.cliente_id,
-      sender_id: m.sender_id,
-      text: m.testo,
+      corsa_id: Number(m.corsa_id),
+      cliente_id: Number(m.cliente_id),
+      sender_id: Number(m.sender_id),
+
+      // ✅ UNICO STANDARD
+      text: m.text || m.testo || "",
+
       created_at: Number(m.created_at),
+
+      status: {
+        sent: true,
+        delivered: false,
+        read: false,
+      },
     }));
 
     console.log("✅ MESSAGES RESPONSE:", formatted.length);
 
-    res.json({ messages: formatted });
+    // 🔥 FIX CRITICO: ritorno ARRAY diretto
+    res.json(formatted);
+
   } catch (err) {
     console.error("❌ MESSAGES ERROR:", err);
     res.status(500).json({ message: "messages error" });

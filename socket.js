@@ -47,6 +47,7 @@ export const setupSocket = (ioServer) => {
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", ({ corsa_id, cliente_id }) => {
+      if (!corsa_id || !cliente_id) return;
       socket.join(`chat_${corsa_id}_${cliente_id}`);
     });
 
@@ -58,8 +59,11 @@ export const setupSocket = (ioServer) => {
       if (!trimmed) return;
 
       try {
+        /* ================= THREAD CHECK ================= */
         const { rows: threadRows } = await pool.query(
-          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+          `SELECT driver_id, cliente_id
+           FROM chat_threads
+           WHERE corsa_id=$1 AND cliente_id=$2`,
           [corsa_id, cliente_id]
         );
 
@@ -68,6 +72,7 @@ export const setupSocket = (ioServer) => {
 
         const msgKey = client_msg_id || crypto.randomUUID();
 
+        /* ================= INSERT MESSAGE ================= */
         const { rows } = await pool.query(
           `
           INSERT INTO messaggi (
@@ -85,6 +90,11 @@ export const setupSocket = (ioServer) => {
 
         const msg = rows[0];
 
+        const normalizedMsg = {
+          ...msg,
+          created_at: Number(msg.created_at),
+        };
+
         /* ================= UPDATE THREAD ================= */
         await pool.query(
           `
@@ -98,37 +108,49 @@ export const setupSocket = (ioServer) => {
             cliente_id,
             JSON.stringify({
               text: trimmed,
-              created_at: msg.created_at,
+              created_at: normalizedMsg.created_at,
             }),
           ]
         );
 
         /* ================= EMIT MESSAGE ================= */
-        io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
+        io.to(`chat_${corsa_id}_${cliente_id}`).emit(
+          "new_message",
+          normalizedMsg
+        );
 
+        /* ================= DELIVERY LOGIC SAFE ================= */
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
         const recipientRole =
           role === "cliente" ? "autista" : "cliente";
 
-        /* ================= DELIVERY ================= */
-        await pool.query(
-          `
-          INSERT INTO message_receipts (message_id, user_id, delivered_at)
-          VALUES ($1,$2,NOW())
-          ON CONFLICT (message_id, user_id)
-          DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
-          `,
-          [msg.id, recipientId]
-        );
+        const recipientRoom = `${recipientRole}_${recipientId}`;
 
-        io.to(`${recipientRole}_${recipientId}`).emit("message_delivered", {
-          message_id: msg.id,
-          corsa_id,
-          cliente_id,
-          delivered_at: Date.now(),
-        });
+        const clients =
+          io.sockets.adapter.rooms.get(recipientRoom);
+
+        const deliveredAt = Date.now();
+
+        if (clients && clients.size > 0) {
+          await pool.query(
+            `
+            INSERT INTO message_receipts (message_id, user_id, delivered_at)
+            VALUES ($1,$2,NOW())
+            ON CONFLICT (message_id, user_id)
+            DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+            `,
+            [msg.id, recipientId]
+          );
+
+          io.to(recipientRoom).emit("message_delivered", {
+            message_id: msg.id,
+            corsa_id,
+            cliente_id,
+            delivered_at: deliveredAt,
+          });
+        }
       } catch (err) {
         console.error("SEND_MESSAGE ERROR:", err);
       }
@@ -137,6 +159,8 @@ export const setupSocket = (ioServer) => {
     /* ================= READ ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
+        if (!corsa_id || !cliente_id) return;
+
         const { rows } = await pool.query(
           `
           UPDATE message_receipts mr
@@ -153,6 +177,16 @@ export const setupSocket = (ioServer) => {
         );
 
         const messageIds = rows.map((r) => r.id);
+
+        /* ================= RESET UNREAD ================= */
+        await pool.query(
+          `
+          UPDATE chat_threads
+          SET unreadcount = 0
+          WHERE corsa_id=$1 AND cliente_id=$2
+          `,
+          [corsa_id, cliente_id]
+        );
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
           message_ids: messageIds,

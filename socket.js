@@ -4,11 +4,12 @@ import crypto from "crypto";
 
 let io;
 
-const setupSocket = (ioServer) => {
+export const setupSocket = (ioServer) => {
   io = ioServer;
 
   const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
+  /* ================= AUTH SOCKET ================= */
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("NO_TOKEN"));
@@ -23,6 +24,7 @@ const setupSocket = (ioServer) => {
     }
   });
 
+  /* ================= CONNECTION ================= */
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
 
@@ -69,7 +71,7 @@ const setupSocket = (ioServer) => {
 
         const msg = rows[0];
 
-        /* update thread */
+        /* ================= UPDATE THREAD ================= */
         await pool.query(
           `
           UPDATE chat_threads
@@ -87,26 +89,26 @@ const setupSocket = (ioServer) => {
           ]
         );
 
-        /* emit message */
+        /* ================= EMIT NEW MESSAGE ================= */
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
 
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        /* delivered */
-        io.to(`${role === "cliente" ? "autista" : "cliente"}_${recipientId}`)
-          .emit("message_delivered", {
-            message_id: msg.id,
-            corsa_id,
-            cliente_id,
-          });
+        const recipientRole = role === "cliente" ? "autista" : "cliente";
 
+        /* ================= DELIVERED ================= */
+        io.to(`${recipientRole}_${recipientId}`).emit("message_delivered", {
+          message_id: msg.id,
+          corsa_id,
+          cliente_id,
+        });
       } catch (err) {
         console.error("SEND_MESSAGE ERROR:", err);
       }
     });
 
-    /* ================= READ ================= */
+    /* ================= READ RECEIPT ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
         const { rows } = await pool.query(
@@ -118,21 +120,25 @@ const setupSocket = (ioServer) => {
             AND m.corsa_id = $1
             AND m.cliente_id = $2
             AND mr.user_id = $3
+            AND mr.read_at IS NULL
           RETURNING m.id
           `,
           [corsa_id, cliente_id, userId]
         );
 
+        const messageIds = rows.map((r) => r.id);
+
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
-          message_ids: rows.map((r) => r.id),
+          message_ids: messageIds,
           corsa_id,
           cliente_id,
         });
       } catch (err) {
-        console.error(err);
+        console.error("MARK_AS_READ ERROR:", err);
       }
     });
+
+    /* ================= DISCONNECT ================= */
+    socket.on("disconnect", () => {});
   });
 };
-
-export { setupSocket };

@@ -46,11 +46,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       cliente_id: t.cliente_id,
       driver_id: t.driver_id,
 
-      last_message:
-        typeof t.last_message === "string"
-          ? JSON.parse(t.last_message)
-          : t.last_message,
-
+      last_message: t.last_message,
       unreadCount: t.unread_count ?? 0,
       updated_at: new Date(t.updated_at).getTime(),
     }));
@@ -79,40 +75,16 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "invalid params" });
     }
 
-    const { rows: threadRows } = await pool.query(
-      `SELECT * FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
-      [corsaId, clienteId]
-    );
-
-    const thread = threadRows[0];
-    if (!thread) return res.status(404).json({ message: "thread not found" });
-
-    const isCliente = role === "cliente" && userId === thread.cliente_id;
-    const isDriver = role === "autista" && userId === thread.driver_id;
-
-    if (!isCliente && !isDriver) {
-      return res.status(403).json({ message: "forbidden" });
-    }
-
-    const values = [corsaId, clienteId, Number(limit)];
-
-    let cursorQuery = "";
-    if (cursor) {
-      values.push(new Date(Number(cursor)));
-      cursorQuery = `AND created_at < $4`;
-    }
-
     const { rows } = await pool.query(
       `
       SELECT *
       FROM messaggi
       WHERE corsa_id=$1
         AND cliente_id=$2
-        ${cursorQuery}
       ORDER BY created_at DESC
       LIMIT $3
       `,
-      values
+      [corsaId, clienteId, Number(limit)]
     );
 
     const messages = rows
@@ -137,7 +109,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   SEND MESSAGE (FIXED)
+   SEND MESSAGE (NEW ARCHITECTURE)
 ========================================================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
@@ -169,6 +141,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: "forbidden" });
     }
 
+    /* ================= INSERT MESSAGE ================= */
     const { rows } = await pool.query(
       `
       INSERT INTO messaggi (
@@ -176,15 +149,9 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         cliente_id,
         sender_id,
         testo,
-        client_msg_id,
-        read_status,
-        status
+        client_msg_id
       )
-      VALUES (
-        $1,$2,$3,$4,$5,
-        jsonb_build_object('autista',false,'cliente',false),
-        jsonb_build_object('sent',true,'delivered',false,'read',false)
-      )
+      VALUES ($1,$2,$3,$4,$5)
       RETURNING *
       `,
       [corsaId, clienteId, senderId, trimmed, client_msg_id]
@@ -195,6 +162,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       created_at: new Date(rows[0].created_at).getTime(),
     };
 
+    /* ================= THREAD UPDATE ================= */
     await pool.query(
       `
       UPDATE chat_threads
@@ -213,18 +181,11 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       ]
     );
 
-    /* ================= SOCKET EMIT (IMPORTANTISSIMO) ================= */
+    /* ================= SOCKET ================= */
     const io = getIO();
     const room = `chat_${corsaId}_${clienteId}`;
 
     io.to(room).emit("new_message", message);
-
-    /* 👉 delivery SOLO per altri utenti nella room */
-    socket.to?.(room)?.emit?.("message_delivered", {
-      corsa_id: corsaId,
-      cliente_id: clienteId,
-      message_id: message.id,
-    });
 
     res.json({ ok: true, message });
 
@@ -235,47 +196,49 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   MARK AS READ (OK)
+   MARK AS READ (NEW RECEIPTS SYSTEM)
 ========================================================= */
 chatRouter.post("/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
 
   const userId = Number(req.user.id);
-  const role = req.user.role;
 
   try {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
 
-    const readKey = role === "cliente" ? "cliente" : "autista";
-
+    /* ================= UPDATE RECEIPTS ================= */
     await pool.query(
       `
-      UPDATE messaggi
-      SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
-      WHERE corsa_id=$1
-        AND cliente_id=$2
-        AND sender_id != $4
+      UPDATE message_receipts mr
+      SET read_at = NOW()
+      FROM messaggi m
+      WHERE mr.message_id = m.id
+        AND m.corsa_id = $1
+        AND m.cliente_id = $2
+        AND mr.user_id = $3
+        AND mr.read_at IS NULL
       `,
-      [corsaId, clienteId, `{${readKey}}`, userId]
+      [corsaId, clienteId, userId]
     );
 
+    /* ================= RESET THREAD COUNT ================= */
     await pool.query(
       `
       UPDATE chat_threads
-      SET unread_count=0
+      SET unread_count = 0
       WHERE corsa_id=$1 AND cliente_id=$2
       `,
       [corsaId, clienteId]
     );
 
+    /* ================= SOCKET EMIT ================= */
     const io = getIO();
 
     io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
       corsa_id: corsaId,
       cliente_id: clienteId,
       reader_id: userId,
-      role,
       read_at: Date.now(),
     });
 

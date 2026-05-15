@@ -114,6 +114,7 @@ const setupSocket = (ioServer) => {
         const driverId = thread.driver_id;
         const msgKey = client_msg_id || crypto.randomUUID();
 
+        /* ================= INSERT MESSAGE ================= */
         const { rows } = await pool.query(
           `
           INSERT INTO messaggi (
@@ -121,15 +122,9 @@ const setupSocket = (ioServer) => {
             cliente_id,
             sender_id,
             testo,
-            client_msg_id,
-            read_status,
-            status
+            client_msg_id
           )
-          VALUES (
-            $1,$2,$3,$4,$5,
-            jsonb_build_object('autista',false,'cliente',false),
-            jsonb_build_object('sent',true,'delivered',false,'read',false)
-          )
+          VALUES ($1,$2,$3,$4,$5)
           RETURNING *
           `,
           [corsaId, clienteId, userId, trimmed, msgKey]
@@ -159,21 +154,38 @@ const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= MESSAGE EMIT ================= */
+        /* ================= MESSAGE EVENT ================= */
         io.to(room).emit("new_message", msg);
 
-        /* ================= DELIVERED (SOLO RICEVENTE) ================= */
-        socket.to(room).emit("message_delivered", {
-          corsa_id: corsaId,
-          cliente_id: clienteId,
-          message_id: msg.id,
-        });
+        /* ================= DELIVERY (REAL WHATSAPP STYLE) ================= */
+        const recipientId = role === "cliente" ? driverId : clienteId;
 
+        await pool.query(
+          `
+          INSERT INTO message_receipts (message_id, user_id, delivered_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (message_id, user_id, device_id)
+          DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+          `,
+          [msg.id, recipientId]
+        );
+
+        io.to(`${role === "cliente" ? "autista" : "cliente"}_${recipientId}`).emit(
+          "message_delivered",
+          {
+            message_id: msg.id,
+            corsa_id: corsaId,
+            cliente_id: clienteId,
+            delivered_at: Date.now(),
+          }
+        );
+
+        /* ================= THREAD UPDATE ================= */
         await pushThreadUpdate(corsaId, clienteId);
 
         /* ================= NOTIFICATION ================= */
         sendNotification({
-          userId: role === "cliente" ? driverId : clienteId,
+          userId: recipientId,
           role: role === "cliente" ? "autista" : "cliente",
           notification: {
             type: "new_message",
@@ -188,12 +200,26 @@ const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= MARK AS READ ================= */
+    /* ================= MARK AS READ (REAL WHATSAPP STYLE) ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       const corsaId = Number(corsa_id);
       const clienteId = Number(cliente_id);
 
       try {
+        /* mark read per-device/user */
+        await pool.query(
+          `
+          UPDATE message_receipts mr
+          SET read_at = NOW()
+          FROM messaggi m
+          WHERE m.id = mr.message_id
+            AND m.corsa_id = $1
+            AND m.cliente_id = $2
+            AND mr.user_id = $3
+          `,
+          [corsaId, clienteId, userId]
+        );
+
         await pool.query(
           `
           UPDATE chat_threads
@@ -203,26 +229,10 @@ const setupSocket = (ioServer) => {
           [corsaId, clienteId]
         );
 
-        const readKey = role === "cliente" ? "cliente" : "autista";
-
-        await pool.query(
-          `
-          UPDATE messaggi
-          SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
-          WHERE corsa_id=$1
-            AND cliente_id=$2
-            AND sender_id != $4
-          `,
-          [corsaId, clienteId, `{${readKey}}`, userId]
-        );
-
-        await pushThreadUpdate(corsaId, clienteId);
-
         io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
           corsa_id: corsaId,
           cliente_id: clienteId,
           reader_id: userId,
-          role,
           read_at: Date.now(),
         });
 

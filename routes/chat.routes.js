@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
+/* ================= AUTH ================= */
 const authMiddleware = (req, res, next) => {
   try {
     const token =
@@ -23,7 +24,7 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-/* INIT THREADS */
+/* ================= INIT THREADS ================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
@@ -36,39 +37,46 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       [userId]
     );
 
-    const threads = await Promise.all(
-      rows.map(async (t) => {
-        const { rows: unreadRows } = await pool.query(
-          `
-          SELECT COUNT(*)::int AS unread
-          FROM messaggi m
-          LEFT JOIN message_receipts mr
-            ON mr.message_id = m.id
-            AND mr.user_id = $3
-          WHERE m.corsa_id = $1
-            AND m.cliente_id = $2
-            AND m.sender_id != $3
-            AND mr.read_at IS NULL
-          `,
-          [t.corsa_id, t.cliente_id, userId]
-        );
-
-        return {
-          id: `${t.corsa_id}_${t.cliente_id}`,
-          corsa_id: t.corsa_id,
-          cliente_id: t.cliente_id,
-          driver_id: t.driver_id,
-          last_message: t.last_message,
-          unreadCount: unreadRows[0]?.unread || 0,
-          updated_at: new Date(t.updated_at).getTime(),
-        };
-      })
-    );
+    const threads = rows.map((t) => ({
+      id: `${t.corsa_id}_${t.cliente_id}`,
+      corsa_id: t.corsa_id,
+      cliente_id: t.cliente_id,
+      driver_id: t.driver_id,
+      last_message: t.last_message,
+      unreadCount: t.unreadcount ?? 0,
+      updated_at: new Date(t.updated_at).getTime(),
+    }));
 
     res.json(threads);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "init error" });
+  }
+});
+
+/* ================= MESSAGES (MANCAVA TUTTO) ================= */
+chatRouter.get("/messages", authMiddleware, async (req, res) => {
+  const { corsa_id, cliente_id } = req.query;
+
+  if (!corsa_id || !cliente_id) {
+    return res.status(400).json({ message: "missing params" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM messaggi
+      WHERE corsa_id = $1 AND cliente_id = $2
+      ORDER BY created_at ASC
+      `,
+      [corsa_id, cliente_id]
+    );
+
+    res.json({ messages: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "messages error" });
   }
 });
 

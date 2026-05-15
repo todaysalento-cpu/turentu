@@ -4,39 +4,6 @@ import crypto from "crypto";
 
 let io;
 
-const getIO = () => {
-  if (!io) throw new Error("Socket.io non inizializzato!");
-  return io;
-};
-
-const sendNotification = ({ userId, role, notification }) => {
-  if (!io) return;
-  io.to(`${role}_${userId}`).emit("new_notification", notification);
-};
-
-const pushThreadUpdate = async (corsaId, clienteId) => {
-  if (!io) return;
-
-  try {
-    const { rows } = await pool.query(
-      `
-      SELECT corsa_id, cliente_id, driver_id, last_message, updated_at
-      FROM chat_threads
-      WHERE corsa_id = $1 AND cliente_id = $2
-      `,
-      [corsaId, clienteId]
-    );
-
-    const thread = rows[0];
-    if (!thread) return;
-
-    io.to(`threads_cliente_${thread.cliente_id}`).emit("thread_update", thread);
-    io.to(`threads_autista_${thread.driver_id}`).emit("thread_update", thread);
-  } catch (err) {
-    console.error("pushThreadUpdate:", err);
-  }
-};
-
 const setupSocket = (ioServer) => {
   io = ioServer;
 
@@ -52,7 +19,7 @@ const setupSocket = (ioServer) => {
       socket.user = decoded;
       next();
     } catch {
-      return next(new Error("JWT_INVALID"));
+      next(new Error("JWT_INVALID"));
     }
   });
 
@@ -60,15 +27,14 @@ const setupSocket = (ioServer) => {
     const { id: userId, role } = socket.user;
 
     socket.join(`${role}_${userId}`);
-
     socket.join(`threads_${role}_${userId}`);
 
-    /* JOIN CHAT */
+    /* ================= JOIN CHAT ================= */
     socket.on("join_chat", ({ corsa_id, cliente_id }) => {
       socket.join(`chat_${corsa_id}_${cliente_id}`);
     });
 
-    /* SEND MESSAGE */
+    /* ================= SEND MESSAGE ================= */
     socket.on("send_message", async (payload) => {
       const { corsa_id, cliente_id, text, client_msg_id } = payload;
 
@@ -84,7 +50,6 @@ const setupSocket = (ioServer) => {
         const thread = threadRows[0];
         if (!thread) return;
 
-        const driverId = thread.driver_id;
         const msgKey = client_msg_id || crypto.randomUUID();
 
         const { rows } = await pool.query(
@@ -104,6 +69,7 @@ const setupSocket = (ioServer) => {
 
         const msg = rows[0];
 
+        /* update thread */
         await pool.query(
           `
           UPDATE chat_threads
@@ -121,46 +87,26 @@ const setupSocket = (ioServer) => {
           ]
         );
 
+        /* emit message */
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
 
-        const recipientId = role === "cliente" ? driverId : cliente_id;
+        const recipientId =
+          role === "cliente" ? thread.driver_id : cliente_id;
 
-        await pool.query(
-          `
-          INSERT INTO message_receipts (message_id, user_id, delivered_at)
-          VALUES ($1,$2,NOW())
-          ON CONFLICT (message_id, user_id)
-          DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
-          `,
-          [msg.id, recipientId]
-        );
-
+        /* delivered */
         io.to(`${role === "cliente" ? "autista" : "cliente"}_${recipientId}`)
           .emit("message_delivered", {
             message_id: msg.id,
             corsa_id,
             cliente_id,
-            delivered_at: Date.now(),
           });
 
-        pushThreadUpdate(corsa_id, cliente_id);
-
-        sendNotification({
-          userId: recipientId,
-          role: role === "cliente" ? "autista" : "cliente",
-          notification: {
-            type: "new_message",
-            corsa_id,
-            cliente_id,
-            text: trimmed,
-          },
-        });
       } catch (err) {
         console.error("SEND_MESSAGE ERROR:", err);
       }
     });
 
-    /* MARK AS READ */
+    /* ================= READ ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
         const { rows } = await pool.query(
@@ -172,24 +118,21 @@ const setupSocket = (ioServer) => {
             AND m.corsa_id = $1
             AND m.cliente_id = $2
             AND mr.user_id = $3
-            AND mr.read_at IS NULL
           RETURNING m.id
           `,
           [corsa_id, cliente_id, userId]
         );
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
-          message_ids: rows.map(r => r.id),
+          message_ids: rows.map((r) => r.id),
           corsa_id,
           cliente_id,
-          reader_id: userId,
-          read_at: Date.now(),
         });
       } catch (err) {
-        console.error("MARK_AS_READ ERROR:", err);
+        console.error(err);
       }
     });
   });
 };
 
-export { setupSocket, getIO, sendNotification };
+export { setupSocket };

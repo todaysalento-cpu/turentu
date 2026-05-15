@@ -37,26 +37,36 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       [userId]
     );
 
-    const threads = rows.map((t) => ({
-      id: `${t.corsa_id}_${t.cliente_id}`,
-      corsa_id: t.corsa_id,
-      cliente_id: t.cliente_id,
-      driver_id: t.driver_id,
-      last_message: t.last_message,
-      unreadCount: t.unreadcount ?? 0,
-      updated_at: new Date(t.updated_at).getTime(),
-    }));
+    const threads = rows.map((t) => {
+      const last = t.last_message || {};
+
+      return {
+        id: `${t.corsa_id}_${t.cliente_id}`,
+        corsa_id: Number(t.corsa_id),
+        cliente_id: Number(t.cliente_id),
+        driver_id: Number(t.driver_id),
+
+        last_message: {
+          text: last?.text ?? "",
+          created_at: last?.created_at ?? null,
+        },
+
+        unreadCount: Number(t.unreadcount ?? t.unread_count ?? 0),
+        updated_at: new Date(t.updated_at).getTime(),
+      };
+    });
 
     res.json(threads);
   } catch (err) {
-    console.error(err);
+    console.error("INIT ERROR:", err);
     res.status(500).json({ message: "init error" });
   }
 });
 
-/* ================= MESSAGES (MANCAVA TUTTO) ================= */
+/* ================= MESSAGES ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id } = req.query;
+  const corsa_id = Number(req.query.corsa_id);
+  const cliente_id = Number(req.query.cliente_id);
 
   if (!corsa_id || !cliente_id) {
     return res.status(400).json({ message: "missing params" });
@@ -73,9 +83,19 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       [corsa_id, cliente_id]
     );
 
-    res.json({ messages: rows });
+    res.json({
+      messages: rows.map((m) => ({
+        id: m.id,
+        client_msg_id: m.client_msg_id,
+        corsa_id: m.corsa_id,
+        cliente_id: m.cliente_id,
+        sender_id: m.sender_id,
+        text: m.testo,
+        created_at: Number(m.created_at),
+      })),
+    });
   } catch (err) {
-    console.error(err);
+    console.error("MESSAGES ERROR:", err);
     res.status(500).json({ message: "messages error" });
   }
 });

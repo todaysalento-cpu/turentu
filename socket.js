@@ -109,9 +109,20 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        const recipientRole = role === "cliente" ? "autista" : "cliente";
+        const recipientRole =
+          role === "cliente" ? "autista" : "cliente";
 
-        /* ================= DELIVERED ================= */
+        /* ================= DELIVERY ================= */
+        await pool.query(
+          `
+          INSERT INTO message_receipts (message_id, user_id, delivered_at)
+          VALUES ($1,$2,NOW())
+          ON CONFLICT (message_id, user_id)
+          DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+          `,
+          [msg.id, recipientId]
+        );
+
         io.to(`${recipientRole}_${recipientId}`).emit("message_delivered", {
           message_id: msg.id,
           corsa_id,
@@ -141,8 +152,10 @@ export const setupSocket = (ioServer) => {
           [corsa_id, cliente_id, userId]
         );
 
+        const messageIds = rows.map((r) => r.id);
+
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
-          message_ids: rows.map((r) => r.id),
+          message_ids: messageIds,
           corsa_id,
           cliente_id,
           reader_id: userId,
@@ -152,5 +165,8 @@ export const setupSocket = (ioServer) => {
         console.error("MARK_AS_READ ERROR:", err);
       }
     });
+
+    /* ================= DISCONNECT ================= */
+    socket.on("disconnect", () => {});
   });
 };

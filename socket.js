@@ -23,7 +23,7 @@ const pushThreadUpdate = async (corsaId, clienteId) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT corsa_id, cliente_id, driver_id, last_message, unread_count, updated_at
+      SELECT corsa_id, cliente_id, driver_id, last_message, updated_at
       FROM chat_threads
       WHERE corsa_id = $1 AND cliente_id = $2
       `,
@@ -135,12 +135,11 @@ const setupSocket = (ioServer) => {
           created_at: new Date(rows[0].created_at).getTime(),
         };
 
-        /* ================= THREAD UPDATE ================= */
+        /* ================= THREAD UPDATE (NO COUNTER) ================= */
         await pool.query(
           `
           UPDATE chat_threads
           SET last_message=$3,
-              unread_count=unread_count+1,
               updated_at=NOW()
           WHERE corsa_id=$1 AND cliente_id=$2
           `,
@@ -154,33 +153,33 @@ const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= MESSAGE EVENT ================= */
+        /* ================= EMIT MESSAGE ================= */
         io.to(room).emit("new_message", msg);
 
-        /* ================= DELIVERY (REAL WHATSAPP STYLE) ================= */
-        const recipientId = role === "cliente" ? driverId : clienteId;
+        /* ================= DELIVERY RECEIPT ================= */
+        const recipientId =
+          role === "cliente" ? driverId : clienteId;
 
         await pool.query(
           `
           INSERT INTO message_receipts (message_id, user_id, delivered_at)
           VALUES ($1, $2, NOW())
-          ON CONFLICT (message_id, user_id, device_id)
+          ON CONFLICT (message_id, user_id)
           DO UPDATE SET delivered_at = COALESCE(message_receipts.delivered_at, NOW())
           `,
           [msg.id, recipientId]
         );
 
-        io.to(`${role === "cliente" ? "autista" : "cliente"}_${recipientId}`).emit(
-          "message_delivered",
-          {
-            message_id: msg.id,
-            corsa_id: corsaId,
-            cliente_id: clienteId,
-            delivered_at: Date.now(),
-          }
-        );
+        io.to(
+          `${role === "cliente" ? "autista" : "cliente"}_${recipientId}`
+        ).emit("message_delivered", {
+          message_id: msg.id,
+          corsa_id: corsaId,
+          cliente_id: clienteId,
+          delivered_at: Date.now(),
+        });
 
-        /* ================= THREAD UPDATE ================= */
+        /* ================= THREAD PUSH ================= */
         await pushThreadUpdate(corsaId, clienteId);
 
         /* ================= NOTIFICATION ================= */
@@ -191,7 +190,7 @@ const setupSocket = (ioServer) => {
             type: "new_message",
             corsa_id: corsaId,
             cliente_id: clienteId,
-            text: msg.text,
+            text: trimmed,
           },
         });
 
@@ -200,13 +199,12 @@ const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= MARK AS READ (REAL WHATSAPP STYLE) ================= */
+    /* ================= MARK AS READ ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       const corsaId = Number(corsa_id);
       const clienteId = Number(cliente_id);
 
       try {
-        /* mark read per-device/user */
         await pool.query(
           `
           UPDATE message_receipts mr
@@ -216,17 +214,9 @@ const setupSocket = (ioServer) => {
             AND m.corsa_id = $1
             AND m.cliente_id = $2
             AND mr.user_id = $3
+            AND mr.read_at IS NULL
           `,
           [corsaId, clienteId, userId]
-        );
-
-        await pool.query(
-          `
-          UPDATE chat_threads
-          SET unread_count = 0
-          WHERE corsa_id=$1 AND cliente_id=$2
-          `,
-          [corsaId, clienteId]
         );
 
         io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {

@@ -26,7 +26,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =========================================================
-   INIT THREADS
+   INIT THREADS (UNREAD DERIVED FROM RECEIPTS)
 ========================================================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
@@ -40,16 +40,32 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       [userId]
     );
 
-    const threads = rows.map((t) => ({
-      id: `${t.corsa_id}_${t.cliente_id}`,
-      corsa_id: t.corsa_id,
-      cliente_id: t.cliente_id,
-      driver_id: t.driver_id,
+    const threads = await Promise.all(
+      rows.map(async (t) => {
+        const { rows: unreadRows } = await pool.query(
+          `
+          SELECT COUNT(*)::int AS unread
+          FROM message_receipts mr
+          JOIN messaggi m ON m.id = mr.message_id
+          WHERE mr.user_id = $1
+            AND mr.read_at IS NULL
+            AND m.corsa_id = $2
+            AND m.cliente_id = $3
+          `,
+          [userId, t.corsa_id, t.cliente_id]
+        );
 
-      last_message: t.last_message,
-      unreadCount: t.unread_count ?? 0,
-      updated_at: new Date(t.updated_at).getTime(),
-    }));
+        return {
+          id: `${t.corsa_id}_${t.cliente_id}`,
+          corsa_id: t.corsa_id,
+          cliente_id: t.cliente_id,
+          driver_id: t.driver_id,
+          last_message: t.last_message,
+          unreadCount: unreadRows[0]?.unread || 0,
+          updated_at: new Date(t.updated_at).getTime(),
+        };
+      })
+    );
 
     res.json(threads);
   } catch (err) {
@@ -62,10 +78,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
    GET MESSAGES
 ========================================================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
-  const { corsa_id, cliente_id, cursor, limit = 30 } = req.query;
-
-  const userId = Number(req.user.id);
-  const role = req.user.role;
+  const { corsa_id, cliente_id, limit = 30 } = req.query;
 
   try {
     const corsaId = Number(corsa_id);
@@ -109,7 +122,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   SEND MESSAGE (NEW ARCHITECTURE)
+   SEND MESSAGE (RECEIPTS ONLY)
 ========================================================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
@@ -157,17 +170,28 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       [corsaId, clienteId, senderId, trimmed, client_msg_id]
     );
 
-    const message = {
-      ...rows[0],
-      created_at: new Date(rows[0].created_at).getTime(),
-    };
+    const message = rows[0];
 
-    /* ================= THREAD UPDATE ================= */
+    /* ================= RECIPIENT ================= */
+    const recipientId =
+      role === "cliente"
+        ? thread.driver_id
+        : thread.cliente_id;
+
+    /* ================= CREATE RECEIPT ================= */
+    await pool.query(
+      `
+      INSERT INTO message_receipts (message_id, user_id)
+      VALUES ($1, $2)
+      `,
+      [message.id, recipientId]
+    );
+
+    /* ================= UPDATE THREAD META ================= */
     await pool.query(
       `
       UPDATE chat_threads
       SET last_message=$3,
-          unread_count=unread_count+1,
           updated_at=NOW()
       WHERE corsa_id=$1 AND cliente_id=$2
       `,
@@ -176,7 +200,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
         clienteId,
         JSON.stringify({
           text: trimmed,
-          created_at: message.created_at,
+          created_at: new Date(message.created_at).getTime(),
         }),
       ]
     );
@@ -185,7 +209,10 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
     const io = getIO();
     const room = `chat_${corsaId}_${clienteId}`;
 
-    io.to(room).emit("new_message", message);
+    io.to(room).emit("new_message", {
+      ...message,
+      created_at: new Date(message.created_at).getTime(),
+    });
 
     res.json({ ok: true, message });
 
@@ -196,7 +223,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   MARK AS READ (NEW RECEIPTS SYSTEM)
+   MARK AS READ (RECEIPTS ONLY)
 ========================================================= */
 chatRouter.post("/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
@@ -207,32 +234,20 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
     const corsaId = Number(corsa_id);
     const clienteId = Number(cliente_id);
 
-    /* ================= UPDATE RECEIPTS ================= */
     await pool.query(
       `
       UPDATE message_receipts mr
       SET read_at = NOW()
       FROM messaggi m
       WHERE mr.message_id = m.id
-        AND m.corsa_id = $1
-        AND m.cliente_id = $2
-        AND mr.user_id = $3
+        AND mr.user_id = $1
+        AND m.corsa_id = $2
+        AND m.cliente_id = $3
         AND mr.read_at IS NULL
       `,
-      [corsaId, clienteId, userId]
+      [userId, corsaId, clienteId]
     );
 
-    /* ================= RESET THREAD COUNT ================= */
-    await pool.query(
-      `
-      UPDATE chat_threads
-      SET unread_count = 0
-      WHERE corsa_id=$1 AND cliente_id=$2
-      `,
-      [corsaId, clienteId]
-    );
-
-    /* ================= SOCKET EMIT ================= */
     const io = getIO();
 
     io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {

@@ -1,7 +1,7 @@
 import express from "express";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
-import { getIO } from "../socket.js"; // 🔥 IMPORTANTE (adatta path se diverso)
+import { getIO } from "../socket.js";
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
@@ -137,7 +137,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   SEND MESSAGE
+   SEND MESSAGE (FIXED)
 ========================================================= */
 chatRouter.post("/send", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id, text, client_msg_id } = req.body;
@@ -206,9 +206,25 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
       [
         corsaId,
         clienteId,
-        JSON.stringify({ text: trimmed, created_at: message.created_at }),
+        JSON.stringify({
+          text: trimmed,
+          created_at: message.created_at,
+        }),
       ]
     );
+
+    /* ================= SOCKET EMIT (IMPORTANTISSIMO) ================= */
+    const io = getIO();
+    const room = `chat_${corsaId}_${clienteId}`;
+
+    io.to(room).emit("new_message", message);
+
+    /* 👉 delivery SOLO per altri utenti nella room */
+    socket.to?.(room)?.emit?.("message_delivered", {
+      corsa_id: corsaId,
+      cliente_id: clienteId,
+      message_id: message.id,
+    });
 
     res.json({ ok: true, message });
 
@@ -219,7 +235,7 @@ chatRouter.post("/send", authMiddleware, async (req, res) => {
 });
 
 /* =========================================================
-   MARK AS READ (🔥 FIX SOCKET)
+   MARK AS READ (OK)
 ========================================================= */
 chatRouter.post("/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
@@ -236,9 +252,7 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
     await pool.query(
       `
       UPDATE messaggi
-      SET 
-        read_status = jsonb_set(read_status, $3, 'true'::jsonb, true),
-        status = jsonb_set(status, '{read}', 'true'::jsonb, true)
+      SET read_status = jsonb_set(read_status, $3, 'true'::jsonb, true)
       WHERE corsa_id=$1
         AND cliente_id=$2
         AND sender_id != $4
@@ -255,7 +269,6 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
       [corsaId, clienteId]
     );
 
-    /* 🔥 SOCKET EMIT (QUESTO È IL FIX VERO) */
     const io = getIO();
 
     io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
@@ -263,6 +276,7 @@ chatRouter.post("/read", authMiddleware, async (req, res) => {
       cliente_id: clienteId,
       reader_id: userId,
       role,
+      read_at: Date.now(),
     });
 
     res.json({ ok: true });

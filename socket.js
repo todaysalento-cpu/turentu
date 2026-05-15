@@ -82,21 +82,7 @@ const setupSocket = (ioServer) => {
 
       if (!corsaId || !clienteId) return;
 
-      const { rows } = await pool.query(
-        `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
-        [corsaId, clienteId]
-      );
-
-      const thread = rows[0];
-      if (!thread) return;
-
       socket.join(`chat_${corsaId}_${clienteId}`);
-
-      /* ✅ DELIVERY EVENT coerente frontend */
-      io.to(`chat_${corsaId}_${clienteId}`).emit("message_delivered", {
-        corsa_id: corsaId,
-        cliente_id: clienteId,
-      });
     });
 
     /* ================= SEND MESSAGE ================= */
@@ -115,7 +101,10 @@ const setupSocket = (ioServer) => {
 
       try {
         const { rows: threadRows } = await pool.query(
-          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+          `
+          SELECT driver_id FROM chat_threads
+          WHERE corsa_id=$1 AND cliente_id=$2
+          `,
           [corsaId, clienteId]
         );
 
@@ -146,8 +135,6 @@ const setupSocket = (ioServer) => {
           [corsaId, clienteId, userId, trimmed, msgKey]
         );
 
-        if (!rows.length) return;
-
         const msg = {
           ...rows[0],
           created_at: new Date(rows[0].created_at).getTime(),
@@ -172,8 +159,15 @@ const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= EMIT MESSAGE ================= */
+        /* ================= MESSAGE EMIT ================= */
         io.to(room).emit("new_message", msg);
+
+        /* ================= DELIVERED (SOLO RICEVENTE) ================= */
+        socket.to(room).emit("message_delivered", {
+          corsa_id: corsaId,
+          cliente_id: clienteId,
+          message_id: msg.id,
+        });
 
         await pushThreadUpdate(corsaId, clienteId);
 
@@ -224,7 +218,6 @@ const setupSocket = (ioServer) => {
 
         await pushThreadUpdate(corsaId, clienteId);
 
-        /* ✅ FIX: evento unico e coerente */
         io.to(`chat_${corsaId}_${clienteId}`).emit("message_read", {
           corsa_id: corsaId,
           cliente_id: clienteId,

@@ -50,13 +50,70 @@ export const setupSocket = (ioServer) => {
     socket.join(`threads_${role}_${userId}`);
 
     /* =====================================================
-       JOIN CHAT
+       JOIN CHAT (FIXED + INIT WITH STATUS)
     ===================================================== */
 
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
       if (!corsa_id || !cliente_id) return;
 
-      socket.join(`chat_${corsa_id}_${cliente_id}`);
+      const room = `chat_${corsa_id}_${cliente_id}`;
+      socket.join(room);
+
+      try {
+        const { rows } = await pool.query(
+          `
+          SELECT 
+            m.id,
+            m.corsa_id,
+            m.cliente_id,
+            m.sender_id,
+            m.testo AS text,
+            m.client_msg_id,
+            m.created_at,
+
+            mr.delivered_at,
+            mr.read_at
+
+          FROM messaggi m
+
+          LEFT JOIN message_receipts mr
+            ON mr.message_id = m.id
+            AND mr.user_id = $3
+
+          WHERE m.corsa_id = $1
+            AND m.cliente_id = $2
+
+          ORDER BY m.created_at ASC
+          `,
+          [corsa_id, cliente_id, userId]
+        );
+
+        const messages = rows.map((m) => ({
+          id: String(m.id),
+          corsa_id: Number(m.corsa_id),
+          cliente_id: Number(m.cliente_id),
+          sender_id: Number(m.sender_id),
+
+          text: m.text ?? "",
+          client_msg_id: m.client_msg_id ?? null,
+
+          created_at: Number(new Date(m.created_at)),
+
+          status: {
+            sent: true,
+            delivered: !!m.delivered_at,
+            read: !!m.read_at,
+          },
+        }));
+
+        socket.emit("init_chat", {
+          corsa_id,
+          cliente_id,
+          messages,
+        });
+      } catch (err) {
+        console.error("INIT_CHAT_FAILED", err);
+      }
     });
 
     /* =====================================================
@@ -141,23 +198,19 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= NORMALIZED EMIT ================= */
+        /* ================= NEW MESSAGE (NORMALIZED) ================= */
 
         const normalized = {
           id: String(msg.id),
-
           client_msg_id: msg.client_msg_id ?? msgKey,
 
           corsa_id: Number(corsa_id),
           cliente_id: Number(cliente_id),
 
           sender_id: Number(userId),
-
           text: trimmed,
 
-          created_at: msg.created_at
-            ? Number(new Date(msg.created_at))
-            : Date.now(),
+          created_at: Number(new Date(msg.created_at)),
 
           status: {
             sent: true,
@@ -204,14 +257,13 @@ export const setupSocket = (ioServer) => {
     });
 
     /* =====================================================
-       READ FIXED (ROBUST + CONSISTENT)
+       READ (ROBUST + CONSISTENT)
     ===================================================== */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
         if (!corsa_id || !cliente_id) return;
 
-        // aggiorna receipts
         await pool.query(
           `
           UPDATE message_receipts mr
@@ -225,7 +277,6 @@ export const setupSocket = (ioServer) => {
           [corsa_id, cliente_id, userId]
         );
 
-        // recupera messaggi letti (source of truth)
         const { rows } = await pool.query(
           `
           SELECT m.id

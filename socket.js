@@ -5,7 +5,6 @@ import crypto from "crypto";
 let io;
 
 /* ================= LOGGER ================= */
-
 const log = (type, label, data = {}) => {
   console.log(
     JSON.stringify(
@@ -22,21 +21,18 @@ const log = (type, label, data = {}) => {
 };
 
 /* ================= IO ================= */
-
 export const getIO = () => {
   if (!io) throw new Error("Socket.io non inizializzato!");
   return io;
 };
 
 /* ================= NOTIFICATION ================= */
-
 export const sendNotification = ({ userId, role, notification }) => {
   if (!io) return;
   io.to(`${role}_${userId}`).emit("new_notification", notification);
 };
 
 /* ================= SOCKET ================= */
-
 export const setupSocket = (ioServer) => {
   io = ioServer;
 
@@ -45,7 +41,6 @@ export const setupSocket = (ioServer) => {
   log("SOCKET", "INIT");
 
   /* ================= AUTH ================= */
-
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("NO_TOKEN"));
@@ -61,7 +56,6 @@ export const setupSocket = (ioServer) => {
   });
 
   /* ================= CONNECTION ================= */
-
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
 
@@ -72,14 +66,12 @@ export const setupSocket = (ioServer) => {
     socket.join(threadsRoom);
 
     /* ================= JOIN CHAT ================= */
-
     socket.on("join_chat", ({ corsa_id, cliente_id }) => {
       const room = `chat_${corsa_id}_${cliente_id}`;
       socket.join(room);
     });
 
     /* ================= SEND MESSAGE ================= */
-
     socket.on("send_message", async (payload) => {
       try {
         const { corsa_id, cliente_id, text, client_msg_id } = payload;
@@ -122,7 +114,6 @@ export const setupSocket = (ioServer) => {
           role === "cliente" ? thread.driver_id : cliente_id;
 
         /* ================= RECEIPT ================= */
-
         await pool.query(
           `
           INSERT INTO message_receipts (
@@ -138,7 +129,6 @@ export const setupSocket = (ioServer) => {
         );
 
         /* ================= THREAD UPDATE ================= */
-
         await pool.query(
           `
           UPDATE chat_threads
@@ -156,12 +146,10 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= EMIT ================= */
-
+        /* ================= EMIT MESSAGE ================= */
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
 
         /* ================= DELIVERY ================= */
-
         const recipientRole = role === "cliente" ? "autista" : "cliente";
         const recipientRoom = `${recipientRole}_${recipientId}`;
 
@@ -189,47 +177,32 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= READ (FIXED + SAFE + LOGS) ================= */
-
+    /* ================= READ (🔥 FINAL FIX) ================= */
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
-        log("READ_EVENT", "INCOMING", {
-          corsa_id,
-          cliente_id,
-          userId,
-        });
-
-        const res = await pool.query(
+        // 1. mark read
+        const updateRes = await pool.query(
           `
-          SELECT m.id
+          UPDATE message_receipts mr
+          SET read_at = NOW()
           FROM messaggi m
-          JOIN message_receipts mr
-            ON mr.message_id = m.id
-          WHERE m.corsa_id=$1
+          WHERE m.id = mr.message_id
+            AND m.corsa_id=$1
             AND m.cliente_id=$2
             AND mr.user_id=$3
-            AND mr.read_at IS NULL
+          RETURNING mr.message_id
           `,
           [corsa_id, cliente_id, userId]
         );
 
-        const messageIds = res.rows.map((r) => r.id);
+        const messageIds = updateRes.rows.map(r => String(r.message_id));
 
-        log("READ_EVENT", "RESULT", {
-          count: messageIds.length,
+        log("READ_EVENT", "CONFIRMED", {
+          corsa_id,
+          cliente_id,
+          userId,
+          count: messageIds.length
         });
-
-        if (messageIds.length > 0) {
-          await pool.query(
-            `
-            UPDATE message_receipts
-            SET read_at = NOW()
-            WHERE message_id = ANY($1)
-              AND user_id = $2
-            `,
-            [messageIds, userId]
-          );
-        }
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
           message_ids: messageIds,

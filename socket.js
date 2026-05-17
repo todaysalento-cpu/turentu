@@ -87,7 +87,6 @@ export const setupSocket = (ioServer) => {
         const trimmed = text?.trim();
         if (!trimmed) return;
 
-        /* THREAD */
         const threadRes = await pool.query(
           `
           SELECT driver_id
@@ -102,7 +101,6 @@ export const setupSocket = (ioServer) => {
 
         const msgKey = client_msg_id || crypto.randomUUID();
 
-        /* INSERT MESSAGE */
         const msgRes = await pool.query(
           `
           INSERT INTO messaggi (
@@ -123,8 +121,6 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        /* ================= RECEIPT CREATION ================= */
-
         await pool.query(
           `
           INSERT INTO message_receipts (
@@ -138,8 +134,6 @@ export const setupSocket = (ioServer) => {
           `,
           [msg.id, recipientId]
         );
-
-        /* ================= THREAD UPDATE ================= */
 
         await pool.query(
           `
@@ -158,12 +152,7 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= EMIT MESSAGE ================= */
-
-        const room = `chat_${corsa_id}_${cliente_id}`;
-        io.to(room).emit("new_message", msg);
-
-        /* ================= DELIVERY ================= */
+        io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
 
         const recipientRole = role === "cliente" ? "autista" : "cliente";
         const recipientRoom = `${recipientRole}_${recipientId}`;
@@ -192,25 +181,39 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= READ ================= */
+    /* ================= READ (FIXED) ================= */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
-        const res = await pool.query(
+        // 1. aggiorna receipts
+        await pool.query(
           `
           UPDATE message_receipts mr
-          SET read_at=NOW()
+          SET read_at = NOW()
           FROM messaggi m
           WHERE m.id = mr.message_id
             AND m.corsa_id=$1
             AND m.cliente_id=$2
             AND mr.user_id=$3
-          RETURNING m.id
           `,
           [corsa_id, cliente_id, userId]
         );
 
-        const messageIds = res.rows.map((r) => r.id);
+        // 2. recupera ID affidabili (NON da RETURNING UPDATE)
+        const { rows } = await pool.query(
+          `
+          SELECT m.id
+          FROM messaggi m
+          JOIN message_receipts mr ON mr.message_id = m.id
+          WHERE m.corsa_id=$1
+            AND m.cliente_id=$2
+            AND mr.user_id=$3
+            AND mr.read_at IS NOT NULL
+          `,
+          [corsa_id, cliente_id, userId]
+        );
+
+        const messageIds = rows.map((r) => String(r.id));
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
           message_ids: messageIds,

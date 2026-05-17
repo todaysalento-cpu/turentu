@@ -34,58 +34,24 @@ const log = (type, label, data = null) => {
 const authMiddleware = (req, res, next) => {
   try {
     const requestId = crypto.randomUUID();
-
     req.requestId = requestId;
-
-    log("REQUEST", "AUTH START", {
-      requestId,
-      method: req.method,
-      url: req.originalUrl,
-      headers: {
-        authorization: req.headers.authorization ? "PRESENTE" : "ASSENTE",
-        cookie: req.cookies?.token ? "PRESENTE" : "ASSENTE",
-      },
-    });
 
     const token =
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
     if (!token) {
-      log("AUTH", "TOKEN MANCANTE", { requestId });
-
-      return res.status(401).json({
-        message: "No token",
-      });
+      return res.status(401).json({ message: "No token" });
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
     decoded.role = decoded.role?.toLowerCase();
-
     req.user = decoded;
 
-    log("AUTH", "AUTH OK", {
-      requestId,
-      user: {
-        id: decoded.id,
-        role: decoded.role,
-      },
-    });
-
     next();
-
   } catch (err) {
-
-    log("ERROR", "AUTH ERROR", {
-      requestId: req.requestId,
-      message: err.message,
-      stack: err.stack,
-    });
-
-    return res.status(401).json({
-      message: "Invalid token",
-    });
+    return res.status(401).json({ message: "Invalid token" });
   }
 };
 
@@ -94,22 +60,10 @@ const authMiddleware = (req, res, next) => {
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
-
-  const requestId = req.requestId;
-
   const userId = Number(req.user.id);
   const role = req.user.role;
 
-  const startedAt = Date.now();
-
-  log("CHAT", "/init START", {
-    requestId,
-    userId,
-    role,
-  });
-
   try {
-
     const query =
       role === "autista"
         ? `
@@ -125,73 +79,36 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
           ORDER BY updated_at DESC
         `;
 
-    log("DB", "QUERY THREADS", {
-      requestId,
-      query,
-      params: [userId],
-    });
-
     const { rows } = await pool.query(query, [userId]);
 
-    log("DB", "THREADS RAW RESULT", {
-      requestId,
-      count: rows.length,
-      rows,
-    });
-
     const threads = rows.map((t) => {
-
-      const last = t.last_message || {};
+      const threadId = `${t.corsa_id}_${t.cliente_id}`;
 
       return {
-        id: `${t.corsa_id}_${t.cliente_id}`,
+        id: threadId,
 
         corsa_id: Number(t.corsa_id),
         cliente_id: Number(t.cliente_id),
         driver_id: Number(t.driver_id),
 
-        last_message: {
-          text:
-            last?.text ||
-            last?.message ||
-            "",
+        origine: t.origine ?? "",
+        destinazione: t.destinazione ?? "",
 
-          created_at:
-            last?.created_at || null,
-        },
+        lastMessage: t.last_message?.text || "",
 
-        unreadCount: Number(
-          t.unreadcount ??
-          t.unread_count ??
-          0
-        ),
+        lastMessageTime: t.last_message?.created_at
+          ? Number(new Date(t.last_message.created_at))
+          : Number(new Date(t.updated_at)),
 
-        updated_at: Number(
-          new Date(t.updated_at)
-        ),
+        unreadCount: Number(t.unreadcount ?? t.unread_count ?? 0),
+
+        updated_at: Number(new Date(t.updated_at)),
       };
     });
 
-    log("CHAT", "/init RESPONSE", {
-      requestId,
-      threadsCount: threads.length,
-      threads,
-      durationMs: Date.now() - startedAt,
-    });
-
     return res.json(threads);
-
   } catch (err) {
-
-    log("ERROR", "/init ERROR", {
-      requestId,
-      message: err.message,
-      stack: err.stack,
-    });
-
-    return res.status(500).json({
-      message: "init error",
-    });
+    return res.status(500).json({ message: "init error" });
   }
 });
 
@@ -200,37 +117,14 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
-
-  const requestId = req.requestId;
-
-  const startedAt = Date.now();
-
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
 
-  log("CHAT", "/messages START", {
-    requestId,
-    query: req.query,
-    parsed: {
-      corsa_id,
-      cliente_id,
-    },
-  });
-
   if (!corsa_id || !cliente_id) {
-
-    log("WARN", "PARAMS MANCANTI", {
-      requestId,
-      query: req.query,
-    });
-
-    return res.status(400).json({
-      message: "missing params",
-    });
+    return res.status(400).json({ message: "missing params" });
   }
 
   try {
-
     const query = `
       SELECT *
       FROM messaggi
@@ -239,39 +133,30 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       ORDER BY created_at ASC
     `;
 
-    log("DB", "QUERY MESSAGES", {
-      requestId,
-      query,
-      params: [corsa_id, cliente_id],
-    });
+    const { rows } = await pool.query(query, [
+      corsa_id,
+      cliente_id,
+    ]);
 
-    const { rows } = await pool.query(
-      query,
-      [corsa_id, cliente_id]
-    );
-
-    log("DB", "MESSAGES RAW RESULT", {
-      requestId,
-      count: rows.length,
-      rows,
-    });
+    const threadId = `${corsa_id}_${cliente_id}`;
 
     const formatted = rows.map((m) => ({
-      id: m.id,
+      id: String(m.id),
 
-      client_msg_id: m.client_msg_id,
+      threadId, // 🔥 IMPORTANTISSIMO PER FRONTEND
+
+      client_msg_id: m.client_msg_id ?? null,
 
       corsa_id: Number(m.corsa_id),
       cliente_id: Number(m.cliente_id),
 
       sender_id: Number(m.sender_id),
 
-      text:
-        m.text ||
-        m.testo ||
-        "",
+      text: m.text || m.testo || "",
 
-      created_at: Number(m.created_at),
+      created_at: m.created_at
+        ? Number(new Date(m.created_at))
+        : Date.now(),
 
       status: {
         sent: true,
@@ -280,26 +165,9 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       },
     }));
 
-    log("CHAT", "/messages RESPONSE", {
-      requestId,
-      messagesCount: formatted.length,
-      formatted,
-      durationMs: Date.now() - startedAt,
-    });
-
     return res.json(formatted);
-
   } catch (err) {
-
-    log("ERROR", "/messages ERROR", {
-      requestId,
-      message: err.message,
-      stack: err.stack,
-    });
-
-    return res.status(500).json({
-      message: "messages error",
-    });
+    return res.status(500).json({ message: "messages error" });
   }
 });
 

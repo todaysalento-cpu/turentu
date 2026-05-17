@@ -121,6 +121,8 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
+        /* ================= RECEIPT ================= */
+
         await pool.query(
           `
           INSERT INTO message_receipts (
@@ -134,6 +136,8 @@ export const setupSocket = (ioServer) => {
           `,
           [msg.id, recipientId]
         );
+
+        /* ================= THREAD UPDATE ================= */
 
         await pool.query(
           `
@@ -152,7 +156,11 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
+        /* ================= EMIT ================= */
+
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
+
+        /* ================= DELIVERY ================= */
 
         const recipientRole = role === "cliente" ? "autista" : "cliente";
         const recipientRoom = `${recipientRole}_${recipientId}`;
@@ -181,39 +189,47 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= READ (FIXED) ================= */
+    /* ================= READ (FIXED + SAFE + LOGS) ================= */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
-        // 1. aggiorna receipts
-        await pool.query(
-          `
-          UPDATE message_receipts mr
-          SET read_at = NOW()
-          FROM messaggi m
-          WHERE m.id = mr.message_id
-            AND m.corsa_id=$1
-            AND m.cliente_id=$2
-            AND mr.user_id=$3
-          `,
-          [corsa_id, cliente_id, userId]
-        );
+        log("READ_EVENT", "INCOMING", {
+          corsa_id,
+          cliente_id,
+          userId,
+        });
 
-        // 2. recupera ID affidabili (NON da RETURNING UPDATE)
-        const { rows } = await pool.query(
+        const res = await pool.query(
           `
           SELECT m.id
           FROM messaggi m
-          JOIN message_receipts mr ON mr.message_id = m.id
+          JOIN message_receipts mr
+            ON mr.message_id = m.id
           WHERE m.corsa_id=$1
             AND m.cliente_id=$2
             AND mr.user_id=$3
-            AND mr.read_at IS NOT NULL
+            AND mr.read_at IS NULL
           `,
           [corsa_id, cliente_id, userId]
         );
 
-        const messageIds = rows.map((r) => String(r.id));
+        const messageIds = res.rows.map((r) => r.id);
+
+        log("READ_EVENT", "RESULT", {
+          count: messageIds.length,
+        });
+
+        if (messageIds.length > 0) {
+          await pool.query(
+            `
+            UPDATE message_receipts
+            SET read_at = NOW()
+            WHERE message_id = ANY($1)
+              AND user_id = $2
+            `,
+            [messageIds, userId]
+          );
+        }
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", {
           message_ids: messageIds,
@@ -222,6 +238,7 @@ export const setupSocket = (ioServer) => {
           reader_id: userId,
           read_at: Date.now(),
         });
+
       } catch (err) {
         log("ERROR", "READ_FAILED", { message: err.message });
       }

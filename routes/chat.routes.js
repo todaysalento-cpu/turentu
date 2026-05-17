@@ -11,12 +11,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 ======================================================= */
 
 const log = (type, label, data = null) => {
-  const time = new Date().toISOString();
-
   console.log(
     JSON.stringify(
       {
-        time,
+        time: new Date().toISOString(),
         type,
         label,
         ...(data && { data }),
@@ -102,7 +100,6 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
         updated_at: Number(new Date(t.updated_at)),
 
-        // ⚠️ ancora fallback (vera versione sarebbe receipts-based)
         unreadCount: Number(t.unreadcount ?? 0),
       };
     });
@@ -115,7 +112,36 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 });
 
 /* =======================================================
-   MESSAGES (🔥 FIXED WITH RECEIPTS)
+   NORMALIZER (IMPORTANT FIX)
+======================================================= */
+
+const normalizeMessage = (m, threadId) => ({
+  id: String(m.id ?? m.client_msg_id ?? "").trim(),
+
+  threadId,
+
+  client_msg_id: m.client_msg_id ?? null,
+
+  corsa_id: Number(m.corsa_id),
+  cliente_id: Number(m.cliente_id),
+
+  sender_id: Number(m.sender_id),
+
+  text: m.testo ?? "",
+
+  created_at: m.created_at
+    ? Number(new Date(m.created_at))
+    : Date.now(),
+
+  status: {
+    sent: true,
+    delivered: Boolean(m.delivered_at),
+    read: Boolean(m.read_at),
+  },
+});
+
+/* =======================================================
+   MESSAGES (FIXED + CLEAN)
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
@@ -128,9 +154,16 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   }
 
   try {
-    const query = `
+    const { rows } = await pool.query(
+      `
       SELECT 
-        m.*,
+        m.id,
+        m.corsa_id,
+        m.cliente_id,
+        m.sender_id,
+        m.testo,
+        m.client_msg_id,
+        m.created_at,
         mr.read_at,
         mr.delivered_at
       FROM messaggi m
@@ -140,42 +173,15 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       WHERE m.corsa_id = $1
         AND m.cliente_id = $2
       ORDER BY m.created_at ASC
-    `;
-
-    const { rows } = await pool.query(query, [
-      corsa_id,
-      cliente_id,
-      userId,
-    ]);
+      `,
+      [corsa_id, cliente_id, userId]
+    );
 
     const threadId = `${corsa_id}_${cliente_id}`;
 
-    const formatted = rows.map((m) => ({
-      id: String(m.id),
-
-      threadId,
-
-      client_msg_id: m.client_msg_id ?? null,
-
-      corsa_id: Number(m.corsa_id),
-      cliente_id: Number(m.cliente_id),
-
-      sender_id: Number(m.sender_id),
-
-      // 🔥 FIX DB FIELD (NO m.text)
-      text: m.testo ?? "",
-
-      created_at: m.created_at
-        ? Number(new Date(m.created_at))
-        : Date.now(),
-
-      // 🔥 REAL STATE FROM DB
-      status: {
-        sent: true,
-        delivered: !!m.delivered_at,
-        read: !!m.read_at,
-      },
-    }));
+    const formatted = rows.map((m) =>
+      normalizeMessage(m, threadId)
+    );
 
     return res.json(formatted);
   } catch (err) {

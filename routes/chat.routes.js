@@ -94,31 +94,34 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
         origine: t.origine ?? "",
         destinazione: t.destinazione ?? "",
 
-        lastMessage: t.last_message?.text || "",
+        lastMessage: t.last_message?.text ?? "",
 
         lastMessageTime: t.last_message?.created_at
           ? Number(new Date(t.last_message.created_at))
           : Number(new Date(t.updated_at)),
 
-        unreadCount: Number(t.unreadcount ?? t.unread_count ?? 0),
-
         updated_at: Number(new Date(t.updated_at)),
+
+        // ⚠️ ancora fallback (vera versione sarebbe receipts-based)
+        unreadCount: Number(t.unreadcount ?? 0),
       };
     });
 
     return res.json(threads);
   } catch (err) {
+    log("ERROR", "INIT_THREADS_FAILED", { message: err.message });
     return res.status(500).json({ message: "init error" });
   }
 });
 
 /* =======================================================
-   MESSAGES
+   MESSAGES (🔥 FIXED WITH RECEIPTS)
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
+  const userId = Number(req.user.id);
 
   if (!corsa_id || !cliente_id) {
     return res.status(400).json({ message: "missing params" });
@@ -126,16 +129,23 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT *
-      FROM messaggi
-      WHERE corsa_id = $1
-      AND cliente_id = $2
-      ORDER BY created_at ASC
+      SELECT 
+        m.*,
+        mr.read_at,
+        mr.delivered_at
+      FROM messaggi m
+      LEFT JOIN message_receipts mr
+        ON mr.message_id = m.id
+       AND mr.user_id = $3
+      WHERE m.corsa_id = $1
+        AND m.cliente_id = $2
+      ORDER BY m.created_at ASC
     `;
 
     const { rows } = await pool.query(query, [
       corsa_id,
       cliente_id,
+      userId,
     ]);
 
     const threadId = `${corsa_id}_${cliente_id}`;
@@ -143,7 +153,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     const formatted = rows.map((m) => ({
       id: String(m.id),
 
-      threadId, // 🔥 IMPORTANTISSIMO PER FRONTEND
+      threadId,
 
       client_msg_id: m.client_msg_id ?? null,
 
@@ -152,21 +162,24 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
       sender_id: Number(m.sender_id),
 
-      text: m.text || m.testo || "",
+      // 🔥 FIX DB FIELD (NO m.text)
+      text: m.testo ?? "",
 
       created_at: m.created_at
         ? Number(new Date(m.created_at))
         : Date.now(),
 
+      // 🔥 REAL STATE FROM DB
       status: {
         sent: true,
-        delivered: false,
-        read: false,
+        delivered: !!m.delivered_at,
+        read: !!m.read_at,
       },
     }));
 
     return res.json(formatted);
   } catch (err) {
+    log("ERROR", "MESSAGES_FAILED", { message: err.message });
     return res.status(500).json({ message: "messages error" });
   }
 });

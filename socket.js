@@ -34,13 +34,9 @@ export const getIO = () => {
 /* ================= NOTIFICATION ================= */
 
 export const sendNotification = ({ userId, role, notification }) => {
-  if (!io) {
-    log("WARN", "NOTIFICATION_SKIPPED_IO_NULL");
-    return;
-  }
+  if (!io) return;
 
   const room = `${role}_${userId}`;
-
   io.to(room).emit("new_notification", notification);
 };
 
@@ -95,22 +91,13 @@ export const setupSocket = (ioServer) => {
 
     log("SOCKET", "CONNECTED", { requestId, userId, role });
 
-    const userRoom = `${role}_${userId}`;
-    const threadsRoom = `threads_${role}_${userId}`;
-
-    socket.join(userRoom);
-    socket.join(threadsRoom);
-
-    log("ROOM", "JOINED", {
-      requestId,
-      rooms: [userRoom, threadsRoom],
-    });
+    socket.join(`${role}_${userId}`);
+    socket.join(`threads_${role}_${userId}`);
 
     /* ================= JOIN CHAT ================= */
 
     socket.on("join_chat", ({ corsa_id, cliente_id }) => {
       const room = `chat_${corsa_id}_${cliente_id}`;
-
       socket.join(room);
 
       log("CHAT", "JOINED_ROOM", {
@@ -132,7 +119,6 @@ export const setupSocket = (ioServer) => {
         const trimmed = text?.trim();
         if (!trimmed) return;
 
-        /* THREAD */
         const threadRes = await pool.query(
           `
           SELECT driver_id, cliente_id
@@ -145,7 +131,6 @@ export const setupSocket = (ioServer) => {
         const thread = threadRes.rows[0];
         if (!thread) return;
 
-        /* INSERT MESSAGE */
         const msgKey = client_msg_id || crypto.randomUUID();
 
         const msgRes = await pool.query(
@@ -165,18 +150,12 @@ export const setupSocket = (ioServer) => {
 
         const msg = msgRes.rows[0];
 
-        const normalizedMsg = {
-          ...msg,
-          created_at: Number(msg.created_at),
-        };
-
-        /* THREAD UPDATE */
+        /* THREAD UPDATE (solo metadata, NO unreadcount dependency futura) */
         await pool.query(
           `
           UPDATE chat_threads
           SET last_message=$3::jsonb,
-              updated_at=NOW(),
-              unreadcount = unreadcount + 1
+              updated_at=NOW()
           WHERE corsa_id=$1 AND cliente_id=$2
           `,
           [
@@ -184,14 +163,13 @@ export const setupSocket = (ioServer) => {
             cliente_id,
             JSON.stringify({
               text: trimmed,
-              created_at: normalizedMsg.created_at,
+              created_at: msg.created_at,
             }),
           ]
         );
 
-        /* EMIT MESSAGE */
         const room = `chat_${corsa_id}_${cliente_id}`;
-        io.to(room).emit("new_message", normalizedMsg);
+        io.to(room).emit("new_message", msg);
 
         /* DELIVERY */
         const recipientId =
@@ -260,17 +238,6 @@ export const setupSocket = (ioServer) => {
 
         const messageIds = res.rows.map((r) => r.id);
 
-        /* RESET UNREAD */
-        await pool.query(
-          `
-          UPDATE chat_threads
-          SET unreadcount = 0,
-              updated_at = NOW()
-          WHERE corsa_id=$1 AND cliente_id=$2
-          `,
-          [corsa_id, cliente_id]
-        );
-
         const room = `chat_${corsa_id}_${cliente_id}`;
 
         io.to(room).emit("message_read", {
@@ -282,18 +249,18 @@ export const setupSocket = (ioServer) => {
         });
 
         log("SOCKET", "READ_EMIT", {
-          requestId: socket.requestId,
+          requestId,
           room,
           count: messageIds.length,
         });
 
         log("CHAT", "READ_SUCCESS", {
-          requestId: socket.requestId,
+          requestId,
           durationMs: Date.now() - start,
         });
       } catch (err) {
         log("ERROR", "READ_FAILED", {
-          requestId: socket.requestId,
+          requestId,
           message: err.message,
         });
       }

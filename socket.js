@@ -32,7 +32,6 @@ export const getIO = () => {
 
 export const sendNotification = ({ userId, role, notification }) => {
   if (!io) return;
-
   io.to(`${role}_${userId}`).emit("new_notification", notification);
 };
 
@@ -49,16 +48,14 @@ export const setupSocket = (ioServer) => {
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-
     if (!token) return next(new Error("NO_TOKEN"));
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       decoded.role = decoded.role?.toLowerCase();
       socket.user = decoded;
-
       next();
-    } catch (err) {
+    } catch {
       next(new Error("JWT_INVALID"));
     }
   });
@@ -68,13 +65,17 @@ export const setupSocket = (ioServer) => {
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
 
-    socket.join(`${role}_${userId}`);
-    socket.join(`threads_${role}_${userId}`);
+    const userRoom = `${role}_${userId}`;
+    const threadsRoom = `threads_${role}_${userId}`;
+
+    socket.join(userRoom);
+    socket.join(threadsRoom);
 
     /* ================= JOIN CHAT ================= */
 
     socket.on("join_chat", ({ corsa_id, cliente_id }) => {
-      socket.join(`chat_${corsa_id}_${cliente_id}`);
+      const room = `chat_${corsa_id}_${cliente_id}`;
+      socket.join(room);
     });
 
     /* ================= SEND MESSAGE ================= */
@@ -86,6 +87,7 @@ export const setupSocket = (ioServer) => {
         const trimmed = text?.trim();
         if (!trimmed) return;
 
+        /* THREAD */
         const threadRes = await pool.query(
           `
           SELECT driver_id
@@ -118,23 +120,27 @@ export const setupSocket = (ioServer) => {
 
         const msg = msgRes.rows[0];
 
-        /* FIX: CREATE RECEIPT ROW FOR RECIPIENT */
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
+
+        /* ================= RECEIPT CREATION ================= */
 
         await pool.query(
           `
           INSERT INTO message_receipts (
             message_id,
-            user_id
+            user_id,
+            delivered_at,
+            read_at
           )
-          VALUES ($1,$2)
+          VALUES ($1,$2,NULL,NULL)
           ON CONFLICT DO NOTHING
           `,
           [msg.id, recipientId]
         );
 
-        /* UPDATE THREAD */
+        /* ================= THREAD UPDATE ================= */
+
         await pool.query(
           `
           UPDATE chat_threads
@@ -152,12 +158,15 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
-        io.to(`chat_${corsa_id}_${cliente_id}`).emit("new_message", msg);
+        /* ================= EMIT MESSAGE ================= */
 
-        /* DELIVERY */
-        const recipientRoom = `${
-          role === "cliente" ? "autista" : "cliente"
-        }_${recipientId}`;
+        const room = `chat_${corsa_id}_${cliente_id}`;
+        io.to(room).emit("new_message", msg);
+
+        /* ================= DELIVERY ================= */
+
+        const recipientRole = role === "cliente" ? "autista" : "cliente";
+        const recipientRoom = `${recipientRole}_${recipientId}`;
 
         const clients = io.sockets.adapter.rooms.get(recipientRoom);
 

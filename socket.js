@@ -14,8 +14,7 @@ export const getIO = () => {
 /* ================= NOTIFICATION ================= */
 
 export const sendNotification = ({ userId, role, notification }) => {
-  if (!io) return;
-  if (!userId || !role || !notification) return;
+  if (!io || !userId || !role || !notification) return;
 
   const room = `${role}_${userId}`;
 
@@ -42,7 +41,7 @@ export const setupSocket = (ioServer) => {
 
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      decoded.role = decoded.role?.toLowerCase();
+      decoded.role = decoded.role?.toLowerCase() || "cliente";
       socket.user = decoded;
       next();
     } catch {
@@ -82,18 +81,14 @@ export const setupSocket = (ioServer) => {
             m.testo AS text,
             m.client_msg_id,
             m.created_at,
-
             mr.delivered_at,
             mr.read_at
-
           FROM messaggi m
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
            AND mr.user_id = $3
-
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
-
           ORDER BY m.created_at ASC
           `,
           [corsa_id, cliente_id, userId]
@@ -112,8 +107,8 @@ export const setupSocket = (ioServer) => {
 
           status: {
             sent: true,
-            delivered: !!m.delivered_at,
-            read: !!m.read_at,
+            delivered: Boolean(m.delivered_at),
+            read: Boolean(m.read_at),
           },
         }));
 
@@ -122,7 +117,6 @@ export const setupSocket = (ioServer) => {
           cliente_id,
           messages,
         });
-
       } catch (err) {
         console.error("INIT_CHAT_FAILED", err);
       }
@@ -174,7 +168,8 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        /* receipt create */
+        /* ================= RECEIPT ================= */
+
         await pool.query(
           `
           INSERT INTO message_receipts (
@@ -184,12 +179,13 @@ export const setupSocket = (ioServer) => {
             read_at
           )
           VALUES ($1,$2,NULL,NULL)
-          ON CONFLICT DO NOTHING
+          ON CONFLICT (message_id, user_id) DO NOTHING
           `,
           [msg.id, recipientId]
         );
 
-        /* update thread */
+        /* ================= THREAD UPDATE ================= */
+
         await pool.query(
           `
           UPDATE chat_threads
@@ -231,14 +227,14 @@ export const setupSocket = (ioServer) => {
           normalized
         );
 
-        /* delivery */
+        /* ================= DELIVERY ================= */
+
         const recipientRole =
           role === "cliente" ? "autista" : "cliente";
 
         const recipientRoom = `${recipientRole}_${recipientId}`;
 
-        const clients =
-          io.sockets.adapter.rooms.get(recipientRoom);
+        const clients = io.sockets.adapter.rooms.get(recipientRoom);
 
         if (clients?.size > 0) {
           await pool.query(
@@ -257,14 +253,13 @@ export const setupSocket = (ioServer) => {
             delivered_at: Date.now(),
           });
         }
-
       } catch (err) {
         console.error("SEND_FAILED", err);
       }
     });
 
     /* =====================================================
-       MARK AS READ (FINAL FIX)
+       MARK AS READ
     ===================================================== */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
@@ -309,7 +304,6 @@ export const setupSocket = (ioServer) => {
           reader_id: userId,
           read_at: Date.now(),
         });
-
       } catch (err) {
         console.error("READ_FAILED", err);
       }

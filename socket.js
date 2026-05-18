@@ -269,67 +269,63 @@ export const setupSocket = (ioServer) => {
 
     /* ================= MARK AS READ ================= */
 
-    socket.on("mark_as_read", async ({ message_ids = [] }) => {
-      try {
-        const ids = Array.isArray(message_ids) ? message_ids : [];
+socket.on("mark_as_read", async ({ message_ids = [] }) => {
+  try {
+    const ids = (Array.isArray(message_ids) ? message_ids : [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id));
 
-        console.log("👁 MARK_AS_READ RECEIVED:", {
-          userId,
-          count: ids.length,
-          sample: ids.slice(0, 3),
-        });
-
-        if (!ids.length) return;
-
-        await pool.query(
-          `
-          UPDATE message_receipts
-          SET read_at = NOW()
-          WHERE message_id = ANY($1)
-            AND user_id = $2
-            AND read_at IS NULL
-          `,
-          [ids, userId]
-        );
-
-        const { rows } = await pool.query(
-          `
-          SELECT message_id
-          FROM message_receipts
-          WHERE message_id = ANY($1)
-            AND user_id = $2
-            AND read_at IS NOT NULL
-          `,
-          [ids, userId]
-        );
-
-        const messageIds = rows.map((r) => String(r.message_id));
-
-        const room = Array.from(socket.rooms).find((r) =>
-          r.startsWith("chat_")
-        );
-
-        console.log("📖 READ CONFIRMED:", {
-          room,
-          count: messageIds.length,
-        });
-
-        if (room) {
-          io.to(room).emit("message_read", {
-            message_ids: messageIds,
-            reader_id: userId,
-            read_at: Date.now(),
-          });
-        } else {
-          console.log("⚠️ NO CHAT ROOM FOUND FOR READ EMIT");
-        }
-      } catch (err) {
-        console.error("❌ READ_FAILED", err);
-      }
+    console.log("👁 MARK_AS_READ RECEIVED:", {
+      userId,
+      count: ids.length,
+      sample: ids.slice(0, 3),
     });
 
-    socket.on("disconnect", () => {
-      console.log("🔴 DISCONNECT:", userId);
+    if (!ids.length) return;
+
+    await pool.query(
+      `
+      UPDATE message_receipts
+      SET read_at = NOW()
+      WHERE message_id = ANY($1::int[])
+        AND user_id = $2
+        AND read_at IS NULL
+      `,
+      [ids, userId]
+    );
+
+    const { rows } = await pool.query(
+      `
+      SELECT message_id
+      FROM message_receipts
+      WHERE message_id = ANY($1::int[])
+        AND user_id = $2
+        AND read_at IS NOT NULL
+      `,
+      [ids, userId]
+    );
+
+    const messageIds = rows.map((r) => String(r.message_id));
+
+    /* 🔥 FIX ROOM SELECTION */
+    const rooms = [...socket.rooms].filter((r) =>
+      r.startsWith("chat_")
+    );
+
+    console.log("📖 READ CONFIRMED:", {
+      rooms,
+      count: messageIds.length,
     });
-  });
-};
+
+    for (const room of rooms) {
+      io.to(room).emit("message_read", {
+        message_ids: messageIds,
+        reader_id: userId,
+        read_at: Date.now(),
+      });
+    }
+
+  } catch (err) {
+    console.error("❌ READ_FAILED", err);
+  }
+});

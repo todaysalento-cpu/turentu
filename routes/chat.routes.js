@@ -55,7 +55,7 @@ const authMiddleware = (req, res, next) => {
 
 /* =======================================================
    INIT THREADS
-   (FIX: unreadCount NON affidabile -> rimosso)
+   (FIX: non più unreadCount statico)
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -80,31 +80,27 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(query, [userId]);
 
-    const threads = rows.map((t) => {
-      const threadId = `${t.corsa_id}_${t.cliente_id}`;
+    const threads = rows.map((t) => ({
+      id: `${t.corsa_id}_${t.cliente_id}`,
 
-      return {
-        id: threadId,
+      corsa_id: Number(t.corsa_id),
+      cliente_id: Number(t.cliente_id),
+      driver_id: Number(t.driver_id),
 
-        corsa_id: Number(t.corsa_id),
-        cliente_id: Number(t.cliente_id),
-        driver_id: Number(t.driver_id),
+      origine: t.origine ?? "",
+      destinazione: t.destinazione ?? "",
 
-        origine: t.origine ?? "",
-        destinazione: t.destinazione ?? "",
+      lastMessage: t.last_message?.text ?? "",
 
-        lastMessage: t.last_message?.text ?? "",
+      lastMessageTime: t.last_message?.created_at
+        ? Number(new Date(t.last_message.created_at))
+        : Number(new Date(t.updated_at)),
 
-        lastMessageTime: t.last_message?.created_at
-          ? Number(new Date(t.last_message.created_at))
-          : Number(new Date(t.updated_at)),
+      updated_at: Number(new Date(t.updated_at)),
 
-        updated_at: Number(new Date(t.updated_at)),
-
-        // ❌ NON usare più questo per badge realtime
-        unreadCount: 0,
-      };
-    });
+      // ❌ DEPRECATO (non usarlo per UI real-time)
+      unreadCount: 0,
+    }));
 
     return res.json(threads);
   } catch (err) {
@@ -115,11 +111,10 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
 /* =======================================================
    NORMALIZE MESSAGE
-   (FIX: id stabile)
 ======================================================= */
 
 const normalizeMessage = (m, threadId) => ({
-  id: String(m.id), // 🔥 FIX: NO fallback su client_msg_id
+  id: String(m.id),
 
   threadId,
 
@@ -145,6 +140,7 @@ const normalizeMessage = (m, threadId) => ({
 
 /* =======================================================
    MESSAGES
+   (FIX: guarantee receipts existence + consistency)
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
@@ -157,6 +153,18 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   }
 
   try {
+    /* 🔥 GUARANTEE RECEIPT EXISTS (important fix) */
+    await pool.query(
+      `
+      INSERT INTO message_receipts (message_id, user_id)
+      SELECT m.id, $3
+      FROM messaggi m
+      WHERE m.corsa_id = $1 AND m.cliente_id = $2
+      ON CONFLICT DO NOTHING
+      `,
+      [corsa_id, cliente_id, userId]
+    );
+
     const { rows } = await pool.query(
       `
       SELECT 

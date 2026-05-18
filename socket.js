@@ -72,7 +72,11 @@ export const setupSocket = (ioServer) => {
         const cId = Number(corsa_id);
         const clId = Number(cliente_id);
 
-        console.log("🟦 JOIN_CHAT EVENT:", { corsa_id: cId, cliente_id: clId, userId });
+        console.log("🟦 JOIN_CHAT EVENT:", {
+          corsa_id: cId,
+          cliente_id: clId,
+          userId,
+        });
 
         if (!cId || !clId) return;
 
@@ -104,7 +108,10 @@ export const setupSocket = (ioServer) => {
           [cId, clId, userId]
         );
 
-        console.log("📦 INIT_CHAT ROWS:", { count: rows.length });
+        console.log("📦 INIT_CHAT ROWS:", {
+          count: rows.length,
+          first: rows[0]?.id,
+        });
 
         const messages = rows.map((m) => ({
           id: String(m.id),
@@ -229,6 +236,11 @@ export const setupSocket = (ioServer) => {
 
         const clients = io.sockets.adapter.rooms.get(recipientRoom);
 
+        console.log("📡 DELIVERY CHECK:", {
+          recipientRoom,
+          online: clients?.size || 0,
+        });
+
         if (clients?.size > 0) {
           await pool.query(
             `
@@ -257,64 +269,64 @@ export const setupSocket = (ioServer) => {
 
     /* ================= MARK AS READ ================= */
 
-   /* ================= MARK AS READ ================= */
+    socket.on("mark_as_read", async ({ message_ids = [] }) => {
+      try {
+        const ids = Array.isArray(message_ids) ? message_ids : [];
 
-socket.on("mark_as_read", async ({ message_ids = [] }) => {
-  try {
-    const ids = Array.isArray(message_ids) ? message_ids : [];
+        console.log("👁 MARK_AS_READ RECEIVED:", {
+          userId,
+          count: ids.length,
+          sample: ids.slice(0, 3),
+        });
 
-    if (!ids.length) return;
+        if (!ids.length) return;
 
-    console.log("👁 MARK_AS_READ:", {
-      userId,
-      count: ids.length,
-      sample: ids.slice(0, 3),
+        await pool.query(
+          `
+          UPDATE message_receipts
+          SET read_at = NOW()
+          WHERE message_id = ANY($1)
+            AND user_id = $2
+            AND read_at IS NULL
+          `,
+          [ids, userId]
+        );
+
+        const { rows } = await pool.query(
+          `
+          SELECT message_id
+          FROM message_receipts
+          WHERE message_id = ANY($1)
+            AND user_id = $2
+            AND read_at IS NOT NULL
+          `,
+          [ids, userId]
+        );
+
+        const messageIds = rows.map((r) => String(r.message_id));
+
+        const room = Array.from(socket.rooms).find((r) =>
+          r.startsWith("chat_")
+        );
+
+        console.log("📖 READ CONFIRMED:", {
+          room,
+          count: messageIds.length,
+        });
+
+        if (room) {
+          io.to(room).emit("message_read", {
+            message_ids: messageIds,
+            reader_id: userId,
+            read_at: Date.now(),
+          });
+        } else {
+          console.log("⚠️ NO CHAT ROOM FOUND FOR READ EMIT");
+        }
+      } catch (err) {
+        console.error("❌ READ_FAILED", err);
+      }
     });
-
-    /* UPDATE RECEIPTS */
-    await pool.query(
-      `
-      UPDATE message_receipts
-      SET read_at = NOW()
-      WHERE message_id = ANY($1)
-        AND user_id = $2
-        AND read_at IS NULL
-      `,
-      [ids, userId]
-    );
-
-    /* GET CONFIRMED READS (ONLY THOSE UPDATED) */
-    const { rows } = await pool.query(
-      `
-      SELECT message_id
-      FROM message_receipts
-      WHERE message_id = ANY($1)
-        AND user_id = $2
-        AND read_at IS NOT NULL
-      `,
-      [ids, userId]
-    );
-
-    const messageIds = rows.map((r) => String(r.message_id));
-
-    const room = Array.from(socket.rooms).find((r) =>
-      r.startsWith("chat_")
-    );
-
-    console.log("📖 READ CONFIRMED:", {
-      room,
-      count: messageIds.length,
-    });
-
-    io.to(room).emit("message_read", {
-      message_ids: messageIds,
-      reader_id: userId,
-      read_at: Date.now(),
-    });
-  } catch (err) {
-    console.error("❌ READ_FAILED", err);
-  }
-});
 
     socket.on("disconnect", () => {
       console.log("🔴 DISCONNECT:", userId);

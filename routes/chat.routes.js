@@ -6,45 +6,34 @@ import crypto from "crypto";
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
-/* =======================================================
-   LOGGER
-======================================================= */
+/* ================= LOGGER ================= */
 
-const log = (type, label, data = null) => {
+const log = (label, data = {}) =>
   console.log(
     JSON.stringify(
       {
         time: new Date().toISOString(),
-        type,
         label,
-        ...(data && { data }),
+        ...data,
       },
       null,
       2
     )
   );
-};
 
-/* =======================================================
-   AUTH
-======================================================= */
+/* ================= AUTH ================= */
 
 const authMiddleware = (req, res, next) => {
   try {
-    const requestId = crypto.randomUUID();
-    req.requestId = requestId;
-
     const token =
       req.headers.authorization?.split(" ")[1] ||
       req.cookies?.token;
 
-    if (!token) {
-      return res.status(401).json({ message: "No token" });
-    }
+    if (!token) return res.status(401).json({ message: "No token" });
 
     const decoded = jwt.verify(token, JWT_SECRET);
-
     decoded.role = decoded.role?.toLowerCase();
+
     req.user = decoded;
 
     next();
@@ -54,8 +43,8 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =======================================================
-   INIT THREADS
-   (FIX: non più unreadCount statico)
+   INIT THREADS (CLEAN)
+   👉 NO unreadCount fake
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -91,20 +80,21 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       destinazione: t.destinazione ?? "",
 
       lastMessage: t.last_message?.text ?? "",
-
       lastMessageTime: t.last_message?.created_at
         ? Number(new Date(t.last_message.created_at))
         : Number(new Date(t.updated_at)),
 
       updated_at: Number(new Date(t.updated_at)),
-
-      // ❌ DEPRECATO (non usarlo per UI real-time)
-      unreadCount: 0,
     }));
+
+    log("INIT_THREADS_OK", {
+      userId,
+      count: threads.length,
+    });
 
     return res.json(threads);
   } catch (err) {
-    log("ERROR", "INIT_THREADS_FAILED", { message: err.message });
+    log("INIT_THREADS_FAILED", { error: err.message });
     return res.status(500).json({ message: "init error" });
   }
 });
@@ -115,7 +105,6 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
 const normalizeMessage = (m, threadId) => ({
   id: String(m.id),
-
   threadId,
 
   client_msg_id: m.client_msg_id ?? null,
@@ -139,8 +128,7 @@ const normalizeMessage = (m, threadId) => ({
 });
 
 /* =======================================================
-   MESSAGES
-   (FIX: guarantee receipts existence + consistency)
+   MESSAGES (READ SYSTEM FIXED)
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
@@ -153,7 +141,10 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   }
 
   try {
-    /* 🔥 GUARANTEE RECEIPT EXISTS (important fix) */
+    /* ======================================================
+       🔥 STEP 1 — ENSURE RECEIPTS EXIST
+    ====================================================== */
+
     await pool.query(
       `
       INSERT INTO message_receipts (message_id, user_id)
@@ -164,6 +155,10 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       `,
       [corsa_id, cliente_id, userId]
     );
+
+    /* ======================================================
+       🔥 STEP 2 — GET MESSAGES WITH STATUS
+    ====================================================== */
 
     const { rows } = await pool.query(
       `
@@ -190,13 +185,28 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     const threadId = `${corsa_id}_${cliente_id}`;
 
-    const formatted = rows.map((m) =>
+    const messages = rows.map((m) =>
       normalizeMessage(m, threadId)
     );
 
-    return res.json(formatted);
+    /* ======================================================
+       🔥 DEBUG LOG (IMPORTANTISSIMO)
+    ====================================================== */
+
+    const unread = messages.filter(
+      (m) => m.sender_id !== userId && !m.status.read
+    );
+
+    log("MESSAGES_LOADED", {
+      threadId,
+      total: messages.length,
+      unread: unread.length,
+      lastMessage: messages.at(-1)?.id,
+    });
+
+    return res.json(messages);
   } catch (err) {
-    log("ERROR", "MESSAGES_FAILED", { message: err.message });
+    log("MESSAGES_FAILED", { error: err.message });
     return res.status(500).json({ message: "messages error" });
   }
 });

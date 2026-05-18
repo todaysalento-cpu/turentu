@@ -26,22 +26,7 @@ const log = (label, data = {}) =>
     )
   );
 
-/* ================= NOTIFICATION ================= */
-
-export const sendNotification = ({ userId, role, notification }) => {
-  if (!io || !userId || !role || !notification) return;
-
-  const room = `${role}_${userId}`;
-
-  io.to(room).emit("new_notification", {
-    ...notification,
-    sentAt: Date.now(),
-  });
-
-  log("NOTIFICATION_SENT", { room, userId, role });
-};
-
-/* ================= SOCKET SETUP ================= */
+/* ================= SOCKET ================= */
 
 export const setupSocket = (ioServer) => {
   io = ioServer;
@@ -57,6 +42,7 @@ export const setupSocket = (ioServer) => {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       decoded.role = decoded.role?.toLowerCase() || "cliente";
+
       socket.user = decoded;
 
       log("AUTH_OK", {
@@ -82,33 +68,21 @@ export const setupSocket = (ioServer) => {
     log("SOCKET_CONNECTED", { userId, role, socketId: socket.id });
 
     /* =====================================================
-       JOIN CHAT
+       JOIN CHAT (ONLY REALTIME SUBSCRIPTION)
     ===================================================== */
 
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
+      const cId = Number(corsa_id);
+      const clId = Number(cliente_id);
+
+      if (!cId || !clId) return;
+
+      const room = `chat_${cId}_${clId}`;
+      socket.join(room);
+
+      log("JOIN_CHAT_RECEIVED", { userId, cId, clId });
+
       try {
-        const cId = Number(corsa_id);
-        const clId = Number(cliente_id);
-
-        if (!cId || !clId) return;
-
-        const room = `chat_${cId}_${clId}`;
-        socket.join(room);
-
-        log("JOIN_CHAT_RECEIVED", { userId, cId, clId });
-
-        /* 🔥 GUARANTEE RECEIPTS EXIST (CORE FIX) */
-        await pool.query(
-          `
-          INSERT INTO message_receipts (message_id, user_id)
-          SELECT m.id, $3
-          FROM messaggi m
-          WHERE m.corsa_id = $1 AND m.cliente_id = $2
-          ON CONFLICT DO NOTHING
-          `,
-          [cId, clId, userId]
-        );
-
         const { rows } = await pool.query(
           `
           SELECT 
@@ -134,8 +108,8 @@ export const setupSocket = (ioServer) => {
 
         const messages = rows.map((m) => ({
           id: String(m.id),
-          corsa_id: Number(m.corsa_id),
-          cliente_id: Number(m.cliente_id),
+          corsa_id: cId,
+          cliente_id: clId,
           sender_id: Number(m.sender_id),
           text: m.text ?? "",
           client_msg_id: m.client_msg_id ?? null,
@@ -147,15 +121,15 @@ export const setupSocket = (ioServer) => {
           },
         }));
 
-        log("INIT_CHAT_SENT", {
-          room,
-          messagesCount: messages.length,
-        });
-
         socket.emit("init_chat", {
           corsa_id: cId,
           cliente_id: clId,
           messages,
+        });
+
+        log("INIT_CHAT_SENT", {
+          room,
+          count: messages.length,
         });
       } catch (err) {
         log("INIT_CHAT_FAILED", { error: err.message });
@@ -163,7 +137,7 @@ export const setupSocket = (ioServer) => {
     });
 
     /* =====================================================
-       SEND MESSAGE
+       SEND MESSAGE (FIXED RECEIPT FLOW)
     ===================================================== */
 
     socket.on("send_message", async (payload) => {
@@ -213,6 +187,7 @@ export const setupSocket = (ioServer) => {
 
         const room = `chat_${cId}_${clId}`;
 
+        /* 🔥 EMIT MESSAGE */
         io.to(room).emit("new_message", {
           id: String(msg.id),
           corsa_id: cId,
@@ -228,7 +203,10 @@ export const setupSocket = (ioServer) => {
           },
         });
 
-        /* 🔥 GUARANTEE RECEIPT FOR RECIPIENT */
+        /* =====================================================
+           🔥 RECEIPT CREATION (ONLY HERE = CLEAN SOURCE OF TRUTH)
+        ===================================================== */
+
         await pool.query(
           `
           INSERT INTO message_receipts (message_id, user_id)
@@ -238,14 +216,13 @@ export const setupSocket = (ioServer) => {
           [msg.id, recipientId]
         );
 
-        const recipientRole =
-          role === "cliente" ? "autista" : "cliente";
+        const recipientRoom =
+          `${role === "cliente" ? "autista" : "cliente"}_${recipientId}`;
 
-        const recipientRoom = `${recipientRole}_${recipientId}`;
+        const isOnline =
+          io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
-        const clients = io.sockets.adapter.rooms.get(recipientRoom);
-
-        if (clients?.size > 0) {
+        if (isOnline) {
           await pool.query(
             `
             UPDATE message_receipts
@@ -262,10 +239,7 @@ export const setupSocket = (ioServer) => {
             delivered_at: Date.now(),
           });
 
-          log("MESSAGE_DELIVERED", {
-            message_id: msg.id,
-            recipientId,
-          });
+          log("DELIVERED", { messageId: msg.id });
         }
       } catch (err) {
         log("SEND_FAILED", { error: err.message });
@@ -273,12 +247,12 @@ export const setupSocket = (ioServer) => {
     });
 
     /* =====================================================
-       MARK AS READ
+       MARK AS READ (FINAL CLEAN VERSION)
     ===================================================== */
 
     socket.on("mark_as_read", async ({ message_ids = [] }) => {
       try {
-        const ids = (Array.isArray(message_ids) ? message_ids : [])
+        const ids = message_ids
           .map(Number)
           .filter(Number.isInteger);
 
@@ -296,7 +270,7 @@ export const setupSocket = (ioServer) => {
           [ids, userId]
         );
 
-        const updatedIds = result.rows.map((r) => String(r.message_id));
+        const updated = result.rows.map((r) => String(r.message_id));
 
         const rooms = [...socket.rooms].filter((r) =>
           r.startsWith("chat_")
@@ -304,22 +278,20 @@ export const setupSocket = (ioServer) => {
 
         for (const room of rooms) {
           io.to(room).emit("message_read", {
-            message_ids: updatedIds,
+            message_ids: updated,
             reader_id: userId,
             read_at: Date.now(),
           });
         }
 
-        log("MESSAGE_READ", {
+        log("READ_UPDATED", {
           userId,
-          updated: updatedIds.length,
+          count: updated.length,
         });
       } catch (err) {
         log("READ_FAILED", { error: err.message });
       }
     });
-
-    /* ===================================================== */
 
     socket.on("disconnect", () => {
       log("DISCONNECT", { userId });

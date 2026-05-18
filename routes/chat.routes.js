@@ -43,8 +43,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =======================================================
-   INIT THREADS (CLEAN)
-   👉 NO unreadCount fake
+   INIT THREADS
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -103,7 +102,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
    NORMALIZE MESSAGE
 ======================================================= */
 
-const normalizeMessage = (m, threadId) => ({
+const normalizeMessage = (m, threadId, isUnread = false) => ({
   id: String(m.id),
   threadId,
 
@@ -124,11 +123,12 @@ const normalizeMessage = (m, threadId) => ({
     sent: true,
     delivered: Boolean(m.delivered_at),
     read: Boolean(m.read_at),
+    unread: isUnread,
   },
 });
 
 /* =======================================================
-   MESSAGES (READ SYSTEM FIXED)
+   MESSAGES (CLEAN READ SYSTEM)
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
@@ -142,7 +142,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
   try {
     /* ======================================================
-       🔥 STEP 1 — ENSURE RECEIPTS EXIST
+       STEP 1 — ENSURE RECEIPTS EXIST
     ====================================================== */
 
     await pool.query(
@@ -157,7 +157,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     );
 
     /* ======================================================
-       🔥 STEP 2 — GET MESSAGES WITH STATUS
+       STEP 2 — FETCH MESSAGES + RECEIPTS
     ====================================================== */
 
     const { rows } = await pool.query(
@@ -185,22 +185,32 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     const threadId = `${corsa_id}_${cliente_id}`;
 
-    const messages = rows.map((m) =>
-      normalizeMessage(m, threadId)
+    /* ======================================================
+       STEP 3 — BUILD UNREAD IDS FROM RECEIPTS (SOURCE OF TRUTH)
+    ====================================================== */
+
+    const unreadIds = new Set(
+      rows
+        .filter((m) => m.sender_id !== userId && !m.read_at)
+        .map((m) => String(m.id))
     );
 
     /* ======================================================
-       🔥 DEBUG LOG (IMPORTANTISSIMO)
+       STEP 4 — NORMALIZE
     ====================================================== */
 
-    const unread = messages.filter(
-      (m) => m.sender_id !== userId && !m.status.read
+    const messages = rows.map((m) =>
+      normalizeMessage(
+        m,
+        threadId,
+        unreadIds.has(String(m.id))
+      )
     );
 
     log("MESSAGES_LOADED", {
       threadId,
       total: messages.length,
-      unread: unread.length,
+      unread: unreadIds.size,
       lastMessage: messages.at(-1)?.id,
     });
 

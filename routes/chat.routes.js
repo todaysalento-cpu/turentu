@@ -55,6 +55,7 @@ const authMiddleware = (req, res, next) => {
 
 /* =======================================================
    INIT THREADS
+   (FIX: unreadCount NON affidabile -> rimosso)
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -100,7 +101,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
         updated_at: Number(new Date(t.updated_at)),
 
-        unreadCount: Number(t.unreadcount ?? 0),
+        // ❌ NON usare più questo per badge realtime
+        unreadCount: 0,
       };
     });
 
@@ -112,11 +114,12 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 });
 
 /* =======================================================
-   NORMALIZER (IMPORTANT FIX)
+   NORMALIZE MESSAGE
+   (FIX: id stabile)
 ======================================================= */
 
 const normalizeMessage = (m, threadId) => ({
-  id: String(m.id ?? m.client_msg_id ?? "").trim(),
+  id: String(m.id), // 🔥 FIX: NO fallback su client_msg_id
 
   threadId,
 
@@ -141,7 +144,7 @@ const normalizeMessage = (m, threadId) => ({
 });
 
 /* =======================================================
-   MESSAGES (FIXED + CLEAN)
+   MESSAGES
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {

@@ -50,7 +50,7 @@ export const setupSocket = (ioServer) => {
     socket.join(`threads_${role}_${userId}`);
 
     /* =====================================================
-       JOIN CHAT (FIXED + INIT WITH STATUS)
+       JOIN CHAT (STATE FROM RECEIPTS ONLY)
     ===================================================== */
 
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
@@ -75,10 +75,9 @@ export const setupSocket = (ioServer) => {
             mr.read_at
 
           FROM messaggi m
-
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
-            AND mr.user_id = $3
+           AND mr.user_id = $3
 
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
@@ -117,7 +116,7 @@ export const setupSocket = (ioServer) => {
     });
 
     /* =====================================================
-       SEND MESSAGE
+       SEND MESSAGE (UNCHANGED LOGIC)
     ===================================================== */
 
     socket.on("send_message", async (payload) => {
@@ -162,7 +161,7 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        /* ================= RECEIPT ================= */
+        /* ================= RECEIPT CREATE ================= */
 
         await pool.query(
           `
@@ -198,7 +197,7 @@ export const setupSocket = (ioServer) => {
           ]
         );
 
-        /* ================= NEW MESSAGE (NORMALIZED) ================= */
+        /* ================= EMIT MESSAGE ================= */
 
         const normalized = {
           id: String(msg.id),
@@ -257,13 +256,14 @@ export const setupSocket = (ioServer) => {
     });
 
     /* =====================================================
-       READ (ROBUST + CONSISTENT)
+       READ (FIXED → MESSAGE_RECEIPTS ONLY)
     ===================================================== */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
         if (!corsa_id || !cliente_id) return;
 
+        /* 1. mark all receipts as read */
         await pool.query(
           `
           UPDATE message_receipts mr
@@ -277,12 +277,12 @@ export const setupSocket = (ioServer) => {
           [corsa_id, cliente_id, userId]
         );
 
+        /* 2. return ONLY updated receipts */
         const { rows } = await pool.query(
           `
-          SELECT m.id
-          FROM messaggi m
-          JOIN message_receipts mr
-            ON mr.message_id = m.id
+          SELECT mr.message_id
+          FROM message_receipts mr
+          JOIN messaggi m ON m.id = mr.message_id
           WHERE m.corsa_id=$1
             AND m.cliente_id=$2
             AND mr.user_id=$3
@@ -291,7 +291,7 @@ export const setupSocket = (ioServer) => {
           [corsa_id, cliente_id, userId]
         );
 
-        const messageIds = rows.map((r) => String(r.id));
+        const messageIds = rows.map((r) => String(r.message_id));
 
         io.to(`chat_${corsa_id}_${cliente_id}`).emit(
           "message_read",

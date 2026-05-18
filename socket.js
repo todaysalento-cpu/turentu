@@ -56,7 +56,6 @@ export const setupSocket = (ioServer) => {
     const { id: userId, role } = socket.user;
 
     socket.join(`${role}_${userId}`);
-    socket.join(`threads_${role}_${userId}`);
 
     console.log("🟢 SOCKET CONNECTED:", userId, role);
 
@@ -123,6 +122,7 @@ export const setupSocket = (ioServer) => {
           cliente_id,
           messages,
         });
+
       } catch (err) {
         console.error("INIT_CHAT_FAILED", err);
       }
@@ -174,7 +174,7 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : cliente_id;
 
-        /* receipt */
+        /* receipt create */
         await pool.query(
           `
           INSERT INTO message_receipts (
@@ -189,7 +189,7 @@ export const setupSocket = (ioServer) => {
           [msg.id, recipientId]
         );
 
-        /* thread update */
+        /* update thread */
         await pool.query(
           `
           UPDATE chat_threads
@@ -257,18 +257,21 @@ export const setupSocket = (ioServer) => {
             delivered_at: Date.now(),
           });
         }
+
       } catch (err) {
         console.error("SEND_FAILED", err);
       }
     });
 
     /* =====================================================
-       MARK AS READ
+       MARK AS READ (FINAL FIX)
     ===================================================== */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id }) => {
       try {
         if (!corsa_id || !cliente_id) return;
+
+        const room = `chat_${corsa_id}_${cliente_id}`;
 
         await pool.query(
           `
@@ -279,6 +282,7 @@ export const setupSocket = (ioServer) => {
             AND m.corsa_id=$1
             AND m.cliente_id=$2
             AND mr.user_id=$3
+            AND mr.read_at IS NULL
           `,
           [corsa_id, cliente_id, userId]
         );
@@ -298,16 +302,13 @@ export const setupSocket = (ioServer) => {
 
         const messageIds = rows.map((r) => String(r.message_id));
 
-        io.to(`chat_${corsa_id}_${cliente_id}`).emit(
-          "message_read",
-          {
-            message_ids: messageIds,
-            corsa_id,
-            cliente_id,
-            reader_id: userId,
-            read_at: Date.now(),
-          }
-        );
+        io.to(room).emit("message_read", {
+          message_ids: messageIds,
+          corsa_id,
+          cliente_id,
+          reader_id: userId,
+          read_at: Date.now(),
+        });
 
       } catch (err) {
         console.error("READ_FAILED", err);
@@ -317,6 +318,8 @@ export const setupSocket = (ioServer) => {
     socket.on("disconnect", () => {});
   });
 };
+
+/* ================= EXPORT ================= */
 
 export {
   setupSocket,

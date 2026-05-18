@@ -72,18 +72,10 @@ export const setupSocket = (ioServer) => {
         const cId = Number(corsa_id);
         const clId = Number(cliente_id);
 
-        console.log("🟦 JOIN_CHAT EVENT:", {
-          corsa_id: cId,
-          cliente_id: clId,
-          userId,
-        });
-
         if (!cId || !clId) return;
 
         const room = `chat_${cId}_${clId}`;
         socket.join(room);
-
-        console.log("📥 JOIN ROOM:", room);
 
         const { rows } = await pool.query(
           `
@@ -108,11 +100,6 @@ export const setupSocket = (ioServer) => {
           [cId, clId, userId]
         );
 
-        console.log("📦 INIT_CHAT ROWS:", {
-          count: rows.length,
-          first: rows[0]?.id,
-        });
-
         const messages = rows.map((m) => ({
           id: String(m.id),
           corsa_id: Number(m.corsa_id),
@@ -133,8 +120,6 @@ export const setupSocket = (ioServer) => {
           cliente_id: clId,
           messages,
         });
-
-        console.log("📤 INIT_CHAT SENT →", room);
       } catch (err) {
         console.error("❌ INIT_CHAT_FAILED", err);
       }
@@ -152,8 +137,6 @@ export const setupSocket = (ioServer) => {
         const trimmed = text?.trim();
         if (!trimmed) return;
 
-        console.log("✉️ SEND_MESSAGE:", { cId, clId, userId });
-
         const threadRes = await pool.query(
           `
           SELECT driver_id
@@ -164,10 +147,7 @@ export const setupSocket = (ioServer) => {
         );
 
         const thread = threadRes.rows[0];
-        if (!thread) {
-          console.log("⚠️ THREAD NOT FOUND");
-          return;
-        }
+        if (!thread) return;
 
         const msgKey = client_msg_id || crypto.randomUUID();
 
@@ -192,22 +172,6 @@ export const setupSocket = (ioServer) => {
         const recipientId =
           role === "cliente" ? thread.driver_id : clId;
 
-        console.log("📨 RECIPIENT:", { recipientId });
-
-        await pool.query(
-          `
-          INSERT INTO message_receipts (
-            message_id,
-            user_id,
-            delivered_at,
-            read_at
-          )
-          VALUES ($1,$2,NULL,NULL)
-          ON CONFLICT DO NOTHING
-          `,
-          [msg.id, recipientId]
-        );
-
         const room = `chat_${cId}_${clId}`;
 
         io.to(room).emit("new_message", {
@@ -225,21 +189,12 @@ export const setupSocket = (ioServer) => {
           },
         });
 
-        console.log("📤 MESSAGE EMITTED →", room);
-
-        /* DELIVERY */
-
         const recipientRole =
           role === "cliente" ? "autista" : "cliente";
 
         const recipientRoom = `${recipientRole}_${recipientId}`;
 
         const clients = io.sockets.adapter.rooms.get(recipientRoom);
-
-        console.log("📡 DELIVERY CHECK:", {
-          recipientRoom,
-          online: clients?.size || 0,
-        });
 
         if (clients?.size > 0) {
           await pool.query(
@@ -257,10 +212,6 @@ export const setupSocket = (ioServer) => {
             cliente_id: clId,
             delivered_at: Date.now(),
           });
-
-          console.log("📬 DELIVERED →", recipientRoom);
-        } else {
-          console.log("📭 OFFLINE USER (no delivery)");
         }
       } catch (err) {
         console.error("❌ SEND_FAILED", err);
@@ -269,63 +220,56 @@ export const setupSocket = (ioServer) => {
 
     /* ================= MARK AS READ ================= */
 
-socket.on("mark_as_read", async ({ message_ids = [] }) => {
-  try {
-    const ids = (Array.isArray(message_ids) ? message_ids : [])
-      .map((id) => Number(id))
-      .filter((id) => Number.isInteger(id));
+    socket.on("mark_as_read", async ({ message_ids = [] }) => {
+      try {
+        const ids = (Array.isArray(message_ids) ? message_ids : [])
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id));
 
-    console.log("👁 MARK_AS_READ RECEIVED:", {
-      userId,
-      count: ids.length,
-      sample: ids.slice(0, 3),
+        if (!ids.length) return;
+
+        await pool.query(
+          `
+          UPDATE message_receipts
+          SET read_at = NOW()
+          WHERE message_id = ANY($1::int[])
+            AND user_id = $2
+            AND read_at IS NULL
+          `,
+          [ids, userId]
+        );
+
+        const { rows } = await pool.query(
+          `
+          SELECT message_id
+          FROM message_receipts
+          WHERE message_id = ANY($1::int[])
+            AND user_id = $2
+            AND read_at IS NOT NULL
+          `,
+          [ids, userId]
+        );
+
+        const messageIds = rows.map((r) => String(r.message_id));
+
+        const rooms = [...socket.rooms].filter((r) =>
+          r.startsWith("chat_")
+        );
+
+        for (const room of rooms) {
+          io.to(room).emit("message_read", {
+            message_ids: messageIds,
+            reader_id: userId,
+            read_at: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.error("❌ READ_FAILED", err);
+      }
     });
 
-    if (!ids.length) return;
-
-    await pool.query(
-      `
-      UPDATE message_receipts
-      SET read_at = NOW()
-      WHERE message_id = ANY($1::int[])
-        AND user_id = $2
-        AND read_at IS NULL
-      `,
-      [ids, userId]
-    );
-
-    const { rows } = await pool.query(
-      `
-      SELECT message_id
-      FROM message_receipts
-      WHERE message_id = ANY($1::int[])
-        AND user_id = $2
-        AND read_at IS NOT NULL
-      `,
-      [ids, userId]
-    );
-
-    const messageIds = rows.map((r) => String(r.message_id));
-
-    /* 🔥 FIX ROOM SELECTION */
-    const rooms = [...socket.rooms].filter((r) =>
-      r.startsWith("chat_")
-    );
-
-    console.log("📖 READ CONFIRMED:", {
-      rooms,
-      count: messageIds.length,
+    socket.on("disconnect", () => {
+      console.log("🔴 DISCONNECT:", userId);
     });
-
-    for (const room of rooms) {
-      io.to(room).emit("message_read", {
-        message_ids: messageIds,
-        reader_id: userId,
-        read_at: Date.now(),
-      });
-    }
-
-  } catch (err) {
-    console.error("❌ READ_FAILED", err);
-  }
-});
+  });
+}; // 🔥 QUESTA ERA MANCANTE (causa errore)

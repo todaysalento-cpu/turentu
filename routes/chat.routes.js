@@ -84,6 +84,8 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
+    // ORDINAMENTO DESC: il più recente per primo. 
+    // Perfetto per FlatList con {inverted: true}
     const { rows } = await pool.query(
       `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, 
               EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
@@ -92,7 +94,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
        LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
        GROUP BY m.id
-       ORDER BY m.created_at ASC`,
+       ORDER BY m.created_at DESC`, 
       [corsa_id, cliente_id, userId]
     );
 
@@ -125,7 +127,6 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
-    // Restituiamo i message_id che sono stati aggiornati
     const { rows } = await pool.query(
       `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
        SELECT m.id, $3, 'api', NOW(), NOW()

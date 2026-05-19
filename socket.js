@@ -94,6 +94,7 @@ export const setupSocket = (ioServer) => {
       log("JOIN_CHAT", { userId, cId, clId });
 
       try {
+        // Query aggiornata: device_id rimosso, MAX e GROUP BY aggiunti
         const { rows } = await pool.query(
           `
           SELECT 
@@ -104,21 +105,21 @@ export const setupSocket = (ioServer) => {
             m.testo AS text,
             m.client_msg_id,
             m.created_at,
-            mr.delivered_at,
-            mr.read_at
+            MAX(mr.delivered_at) as delivered_at,
+            MAX(mr.read_at) as read_at
           FROM messaggi m
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
-           AND mr.device_id = 'api'
-           AND mr.user_id = CASE 
-             WHEN m.sender_id = $3 THEN (
-               CASE WHEN $3 = m.cliente_id THEN (SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2 LIMIT 1)
-               ELSE m.cliente_id END
-             )
-             ELSE $3
-           END
+            AND mr.user_id = CASE 
+              WHEN m.sender_id = $3 THEN (
+                CASE WHEN $3 = m.cliente_id THEN (SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2 LIMIT 1)
+                ELSE m.cliente_id END
+              )
+              ELSE $3
+            END
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
+          GROUP BY m.id
           ORDER BY m.created_at ASC
           `,
           [cId, clId, userId]
@@ -186,7 +187,6 @@ export const setupSocket = (ioServer) => {
         const recipientRoom = `${targetRole}_${recipientId}`;
         const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
-        // Emit nuovo messaggio nella stanza chat
         io.to(room).emit("new_message", {
           id: String(msg.id),
           corsa_id: cId,
@@ -198,7 +198,6 @@ export const setupSocket = (ioServer) => {
           status: { sent: true, delivered: isOnline, read: false },
         });
 
-        // Notifica incremento badge al destinatario
         io.to(recipientRoom).emit("unread_count_updated", {
           corsa_id: cId,
           cliente_id: clId,
@@ -246,6 +245,12 @@ export const setupSocket = (ioServer) => {
 
         if (result.rowCount > 0) {
           const room = `chat_${cId}_${clId}`;
+          
+          io.to(`${role}_${userId}`).emit("unread_count_reset", {
+            corsa_id: cId,
+            cliente_id: clId
+          });
+
           const threadRes = await pool.query(
             `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
             [cId, clId]

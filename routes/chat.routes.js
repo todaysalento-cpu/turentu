@@ -38,11 +38,14 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              COALESCE((
                SELECT COUNT(m.id)::int
                FROM messaggi m
-               LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $1
+               -- Rimossa dipendenza da device_id
                WHERE m.corsa_id = ct.corsa_id 
                  AND m.cliente_id = ct.cliente_id 
                  AND m.sender_id != $1
-                 AND mr.id IS NULL
+                 AND NOT EXISTS (
+                   SELECT 1 FROM message_receipts mr 
+                   WHERE mr.message_id = m.id AND mr.user_id = $1 AND mr.read_at IS NOT NULL
+                 )
              ), 0) as unread_count
       FROM chat_threads ct
       JOIN corse c ON ct.corsa_id = c.id
@@ -52,43 +55,23 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(query, [userId]);
 
-    // DEBUG: Loggiamo cosa arriva dal database
-    log("DEBUG_INIT_DB_ROWS", { 
-      totalRows: rows.length, 
-      firstRowSample: rows[0] ? { corsa_id: rows[0].corsa_id, unread_count: rows[0].unread_count } : null 
-    });
+    const threads = rows.map((t) => ({
+      id: `${t.corsa_id}_${t.cliente_id}`,
+      corsa_id: Number(t.corsa_id),
+      cliente_id: Number(t.cliente_id),
+      driver_id: Number(t.driver_id),
+      origine_address: t.origine_address ?? "N/D",
+      destinazione_address: t.destinazione_address ?? "N/D",
+      start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
+      unreadCount: Number(t.unread_count ?? 0),
+      lastMessage: t.last_message?.text ?? "",
+      lastMessageTime: t.last_message?.created_at ? Number(new Date(t.last_message.created_at)) : Number(new Date(t.updated_at)),
+      updated_at: Number(new Date(t.updated_at)),
+    }));
 
-    const threads = rows.map((t) => {
-      const unreadCount = Number(t.unread_count ?? 0);
-      
-      // DEBUG: Loggiamo la trasformazione per ogni thread
-      log("DEBUG_INIT_THREAD_MAP", { 
-        corsa_id: t.corsa_id, 
-        db_unread_count: t.unread_count, 
-        final_unreadCount: unreadCount 
-      });
-
-      return {
-        id: `${t.corsa_id}_${t.cliente_id}`,
-        corsa_id: Number(t.corsa_id),
-        cliente_id: Number(t.cliente_id),
-        driver_id: Number(t.driver_id),
-        origine_address: t.origine_address ?? "N/D",
-        destinazione_address: t.destinazione_address ?? "N/D",
-        start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
-        unreadCount: unreadCount,
-        lastMessage: t.last_message?.text ?? "",
-        lastMessageTime: t.last_message?.created_at
-          ? Number(new Date(t.last_message.created_at))
-          : Number(new Date(t.updated_at)),
-        updated_at: Number(new Date(t.updated_at)),
-      };
-    });
-
-    log("INIT_THREADS_OK", { userId, count: threads.length });
     return res.json(threads);
   } catch (err) {
-    log("INIT_THREADS_FAILED", { error: err.message, stack: err.stack });
+    log("INIT_THREADS_FAILED", { error: err.message });
     return res.status(500).json({ message: "init error" });
   }
 });
@@ -103,11 +86,14 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
+    // Query aggiornata: rimossa condizione device_id, usato MAX per gestire letture multi-device
     const { rows } = await pool.query(
-      `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, mr.read_at, mr.delivered_at
+      `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, 
+              MAX(mr.read_at) as read_at, MAX(mr.delivered_at) as delivered_at
        FROM messaggi m
-       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3 AND mr.device_id = 'api'
+       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
+       GROUP BY m.id
        ORDER BY m.created_at ASC`,
       [corsa_id, cliente_id, userId]
     );
@@ -120,7 +106,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       created_at: m.created_at ? Number(new Date(m.created_at)) : Date.now(),
       status: {
         sent: true,
-        delivered: Boolean(m.delivered_at),
+        delivered: Boolean(m.delivered_at) || Boolean(m.read_at),
         read: Boolean(m.read_at),
       },
     }));
@@ -147,7 +133,8 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
        FROM messaggi m
        WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
        ON CONFLICT (message_id, user_id, device_id) 
-       DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+       DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), 
+                     delivered_at = COALESCE(message_receipts.delivered_at, NOW())
        WHERE message_receipts.read_at IS NULL`,
       [corsa_id, cliente_id, userId]
     );

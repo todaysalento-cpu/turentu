@@ -35,10 +35,10 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              c.origine_address, 
              c.destinazione_address, 
              c.start_datetime,
+             u.nome as nome_cliente,
              COALESCE((
                SELECT COUNT(m.id)::int
                FROM messaggi m
-               -- Rimossa dipendenza da device_id
                WHERE m.corsa_id = ct.corsa_id 
                  AND m.cliente_id = ct.cliente_id 
                  AND m.sender_id != $1
@@ -49,6 +49,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              ), 0) as unread_count
       FROM chat_threads ct
       JOIN corse c ON ct.corsa_id = c.id
+      JOIN utente u ON ct.cliente_id = u.id
       WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
       ORDER BY ct.updated_at DESC
     `;
@@ -59,6 +60,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       id: `${t.corsa_id}_${t.cliente_id}`,
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
+      nome_cliente: t.nome_cliente,
       driver_id: Number(t.driver_id),
       origine_address: t.origine_address ?? "N/D",
       destinazione_address: t.destinazione_address ?? "N/D",
@@ -86,7 +88,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
-    // Query aggiornata: rimossa condizione device_id, usato MAX per gestire letture multi-device
     const { rows } = await pool.query(
       `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, 
               MAX(mr.read_at) as read_at, MAX(mr.delivered_at) as delivered_at

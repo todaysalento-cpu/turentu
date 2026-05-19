@@ -41,7 +41,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =======================================================
-   INIT THREADS (JOIN CON CORSE PER INDIRIZZI)
+   INIT THREADS (AGGIORNATO CON UNREAD COUNT DAL DB)
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -49,23 +49,25 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   const role = req.user.role;
 
   try {
-    // JOIN con la tabella 'corse' per recuperare origine_address, destinazione_address e start_datetime
-    const query =
-      role === "autista"
-        ? `
-          SELECT ct.*, c.origine_address, c.destinazione_address, c.start_datetime
-          FROM chat_threads ct
-          JOIN corse c ON ct.corsa_id = c.id
-          WHERE ct.driver_id=$1
-          ORDER BY ct.updated_at DESC
-        `
-        : `
-          SELECT ct.*, c.origine_address, c.destinazione_address, c.start_datetime
-          FROM chat_threads ct
-          JOIN corse c ON ct.corsa_id = c.id
-          WHERE ct.cliente_id=$1
-          ORDER BY ct.updated_at DESC
-        `;
+    const query = `
+      SELECT ct.*, 
+             c.origine_address, 
+             c.destinazione_address, 
+             c.start_datetime,
+             (
+               SELECT COUNT(*)::int
+               FROM messaggi m
+               LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $1
+               WHERE m.corsa_id = ct.corsa_id 
+                 AND m.cliente_id = ct.cliente_id 
+                 AND m.sender_id != $1
+                 AND mr.id IS NULL
+             ) as unread_count
+      FROM chat_threads ct
+      JOIN corse c ON ct.corsa_id = c.id
+      WHERE ${role === "autista" ? "ct.driver_id=$1" : "ct.cliente_id=$1"}
+      ORDER BY ct.updated_at DESC
+    `;
 
     const { rows } = await pool.query(query, [userId]);
 
@@ -74,11 +76,12 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       driver_id: Number(t.driver_id),
-
-      // Dati presi dalla tabella corse
+      
       origine_address: t.origine_address ?? "N/D",
       destinazione_address: t.destinazione_address ?? "N/D",
       start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
+      
+      unreadCount: t.unread_count || 0,
 
       lastMessage: t.last_message?.text ?? "",
       lastMessageTime: t.last_message?.created_at

@@ -80,9 +80,7 @@ export const setupSocket = (ioServer) => {
 
     log("SOCKET_CONNECTED", { userId, role });
 
-    /* =====================================================
-       JOIN CHAT
-    ===================================================== */
+    /* ================= JOIN CHAT ================= */
 
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
       const cId = Number(corsa_id);
@@ -96,11 +94,6 @@ export const setupSocket = (ioServer) => {
       log("JOIN_CHAT", { userId, cId, clId });
 
       try {
-        /* 
-          RIFINITURA LOGICA: Esattamente come nell'HTTP, incrociamo le ricevute.
-          Se il messaggio l'ho inviato io, guardo se lo ha letto l'altro utente.
-          Se il messaggio è dell'altro utente, guardo se lo ho letto io.
-        */
         const { rows } = await pool.query(
           `
           SELECT 
@@ -158,17 +151,13 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    /* =====================================================
-       SEND MESSAGE
-    ===================================================== */
+    /* ================= SEND MESSAGE ================= */
 
     socket.on("send_message", async (payload) => {
       try {
         const { corsa_id, cliente_id, text, client_msg_id } = payload;
-
         const cId = Number(corsa_id);
         const clId = Number(cliente_id);
-
         const trimmed = text?.trim();
         if (!trimmed) return;
 
@@ -183,28 +172,21 @@ export const setupSocket = (ioServer) => {
         const msgKey = client_msg_id || crypto.randomUUID();
 
         const msgRes = await pool.query(
-          `
-          INSERT INTO messaggi (
-            corsa_id, cliente_id, sender_id, testo, client_msg_id, created_at
-          )
-          VALUES ($1,$2,$3,$4,$5,NOW())
-          RETURNING *
-          `,
+          `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, client_msg_id, created_at)
+           VALUES ($1,$2,$3,$4,$5,NOW())
+           RETURNING *`,
           [cId, clId, userId, trimmed, msgKey]
         );
 
         const msg = msgRes.rows[0];
-
         const recipientId = role === "cliente" ? thread.driver_id : clId;
         const targetRole = role === "cliente" ? "autista" : "cliente";
 
         const room = `chat_${cId}_${clId}`;
         const recipientRoom = `${targetRole}_${recipientId}`;
-
         const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
-        /* ================= EMIT MESSAGE ================= */
-
+        // Emit nuovo messaggio nella stanza chat
         io.to(room).emit("new_message", {
           id: String(msg.id),
           corsa_id: cId,
@@ -213,43 +195,36 @@ export const setupSocket = (ioServer) => {
           text: trimmed,
           client_msg_id: msgKey,
           created_at: Number(new Date(msg.created_at)),
-          status: {
-            sent: true,
-            delivered: isOnline, 
-            read: false,
-          },
+          status: { sent: true, delivered: isOnline, read: false },
         });
 
-        /* ================= RECEIPT ================= */
+        // Notifica incremento badge al destinatario
+        io.to(recipientRoom).emit("unread_count_updated", {
+          corsa_id: cId,
+          cliente_id: clId,
+          increment: 1
+        });
 
         if (isOnline) {
           await pool.query(
-            `
-            INSERT INTO message_receipts (message_id, user_id, device_id, delivered_at)
-            VALUES ($1, $2, 'api', NOW())
-            ON CONFLICT (message_id, user_id, device_id) DO NOTHING
-            `,
+            `INSERT INTO message_receipts (message_id, user_id, device_id, delivered_at)
+             VALUES ($1, $2, 'api', NOW())
+             ON CONFLICT (message_id, user_id, device_id) DO NOTHING`,
             [msg.id, recipientId]
           );
-
-          const deliveryPayload = {
+          io.to(room).to(recipientRoom).emit("message_delivered", {
             message_id: String(msg.id),
             corsa_id: cId,
             cliente_id: clId,
             delivered_at: Date.now(),
-          };
-
-          io.to(room).to(recipientRoom).emit("message_delivered", deliveryPayload);
-          log("DELIVERED_REALTIME", { messageId: msg.id, room });
+          });
         }
       } catch (err) {
         log("SEND_FAILED", { error: err.message });
       }
     });
 
-    /* =====================================================
-       MARK AS READ
-    ===================================================== */
+    /* ================= MARK AS READ ================= */
 
     socket.on("mark_as_read", async ({ corsa_id, cliente_id, message_ids = [] }) => {
       try {
@@ -260,54 +235,40 @@ export const setupSocket = (ioServer) => {
         if (!ids.length || !cId || !clId) return;
 
         const result = await pool.query(
-          `
-          INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
-          SELECT unnest($1::int[]), $2, 'api', NOW(), NOW()
-          ON CONFLICT (message_id, user_id, device_id) 
-          DO UPDATE SET 
-            read_at = COALESCE(message_receipts.read_at, NOW()),
-            delivered_at = COALESCE(message_receipts.delivered_at, NOW())
-          WHERE message_receipts.read_at IS NULL
-          RETURNING message_id
-          `,
+          `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
+           SELECT unnest($1::int[]), $2, 'api', NOW(), NOW()
+           ON CONFLICT (message_id, user_id, device_id) 
+           DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+           WHERE message_receipts.read_at IS NULL
+           RETURNING message_id`,
           [ids, userId]
         );
 
-        const updated = result.rows.map((r) => String(r.message_id));
-        if (!updated.length) return;
+        if (result.rowCount > 0) {
+          const room = `chat_${cId}_${clId}`;
+          const threadRes = await pool.query(
+            `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+            [cId, clId]
+          );
+          const thread = threadRes.rows[0];
 
-        const room = `chat_${cId}_${clId}`;
-        
-        const threadRes = await pool.query(
-          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
-          [cId, clId]
-        );
-        const thread = threadRes.rows[0];
-
-        if (thread) {
-          const recipientId = role === "cliente" ? thread.driver_id : clId;
-          const targetRole = role === "cliente" ? "autista" : "cliente";
-          const recipientRoom = `${targetRole}_${recipientId}`;
-
-          io.to(room).to(recipientRoom).emit("message_read", {
-            message_ids: updated,
-            corsa_id: cId,
-            cliente_id: clId,
-            reader_id: userId,
-            read_at: Date.now(),
-          });
+          if (thread) {
+            const recipientId = role === "cliente" ? thread.driver_id : clId;
+            const targetRole = role === "cliente" ? "autista" : "cliente";
+            io.to(room).to(`${targetRole}_${recipientId}`).emit("message_read", {
+              message_ids: result.rows.map(r => String(r.message_id)),
+              corsa_id: cId,
+              cliente_id: clId,
+              reader_id: userId,
+              read_at: Date.now(),
+            });
+          }
         }
-
-        log("READ_UPDATED", { userId, count: updated.length, room });
       } catch (err) {
         log("READ_FAILED", { error: err.message });
       }
     });
 
-    /* ================= DISCONNECT ================= */
-
-    socket.on("disconnect", () => {
-      log("DISCONNECT", { userId });
-    });
+    socket.on("disconnect", () => log("DISCONNECT", { userId }));
   });
 };

@@ -97,8 +97,9 @@ export const setupSocket = (ioServer) => {
 
       try {
         /* 
-          CORREZIONE COERENZA: Per mostrare lo stato reale delle spunte (se l'altro ha letto i miei 
-          e se io ho letto i suoi), tiriamo in join le ricevute corrispondenti ai destinatari di ogni messaggio.
+          RIFINITURA LOGICA: Esattamente come nell'HTTP, incrociamo le ricevute.
+          Se il messaggio l'ho inviato io, guardo se lo ha letto l'altro utente.
+          Se il messaggio è dell'altro utente, guardo se lo ho letto io.
         */
         const { rows } = await pool.query(
           `
@@ -116,14 +117,18 @@ export const setupSocket = (ioServer) => {
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
            AND mr.device_id = 'api'
-           AND mr.user_id = CASE WHEN m.sender_id = m.cliente_id THEN 
-             (SELECT driver_id FROM chat_threads WHERE corsa_id = m.corsa_id AND cliente_id = m.cliente_id LIMIT 1)
-             ELSE m.cliente_id END
+           AND mr.user_id = CASE 
+             WHEN m.sender_id = $3 THEN (
+               CASE WHEN $3 = m.cliente_id THEN (SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2 LIMIT 1)
+               ELSE m.cliente_id END
+             )
+             ELSE $3
+           END
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
           ORDER BY m.created_at ASC
           `,
-          [cId, clId]
+          [cId, clId, userId]
         );
 
         const messages = rows.map((m) => ({
@@ -136,7 +141,7 @@ export const setupSocket = (ioServer) => {
           created_at: Number(new Date(m.created_at)),
           status: {
             sent: true,
-            delivered: Boolean(m.delivered_at),
+            delivered: Boolean(m.delivered_at) || Boolean(m.read_at),
             read: Boolean(m.read_at),
           },
         }));
@@ -217,10 +222,6 @@ export const setupSocket = (ioServer) => {
 
         /* ================= RECEIPT ================= */
 
-        /* 
-          COREZIONE COERENZA: Se l'utente è online, inseriamo la ricevuta di consegna immediata.
-          Se è offline, non inseriamo nulla (evitiamo righe con record parziali/nulli che rompono l'ON CONFLICT dell'HTTP).
-        */
         if (isOnline) {
           await pool.query(
             `
@@ -258,11 +259,6 @@ export const setupSocket = (ioServer) => {
         
         if (!ids.length || !cId || !clId) return;
 
-        /* 
-          CORREZIONE COERENZA CRITICA: Sostituito l'UPDATE con l'INSERT ... ON CONFLICT.
-          Esattamente come nel router HTTP, se la riga in message_receipts non esiste ancora 
-          (perché il messaggio era offline), un semplice UPDATE fallirebbe lasciando il messaggio non letto.
-        */
         const result = await pool.query(
           `
           INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)

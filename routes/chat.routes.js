@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
+/* ================= LOGGER ================= */
 const log = (label, data = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), label, ...data }, null, 2));
 
@@ -22,14 +23,13 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =======================================================
-   INIT THREADS - QUERY CORRETTA
+   INIT THREADS (DEBUGGED)
 ======================================================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
 
   try {
-    // Usiamo una subquery con NOT EXISTS per contare i messaggi non letti dall'utente corrente
     const query = `
       SELECT ct.*, 
              c.origine_address, 
@@ -53,32 +53,34 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     `;
 
     const { rows } = await pool.query(query, [userId]);
+    
+    // LOG DI DEBUG: Ispeziona la struttura di una riga dal database
+    log("DEBUG_QUERY_RAW_ROWS", { 
+        rowCount: rows.length, 
+        sampleRow: rows[0] || "No data" 
+    });
 
-    // Debug: logghiamo il primo risultato per verificare se unread_count arriva
-    if (rows.length > 0) {
-      log("DEBUG_INIT_DATA", { sample: rows[0] });
-    }
+    const threads = rows.map((t) => {
+      const threadData = {
+        id: `${t.corsa_id}_${t.cliente_id}`,
+        corsa_id: Number(t.corsa_id),
+        cliente_id: Number(t.cliente_id),
+        driver_id: Number(t.driver_id),
+        origine_address: t.origine_address ?? "N/D",
+        destinazione_address: t.destinazione_address ?? "N/D",
+        start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
+        
+        // Logga il valore di unread_count per ogni thread
+        unreadCount: Number(t.unread_count ?? 0), 
 
-    const threads = rows.map((t) => ({
-      id: `${t.corsa_id}_${t.cliente_id}`,
-      corsa_id: Number(t.corsa_id),
-      cliente_id: Number(t.cliente_id),
-      driver_id: Number(t.driver_id),
-      
-      origine_address: t.origine_address ?? "N/D",
-      destinazione_address: t.destinazione_address ?? "N/D",
-      start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
-      
-      // Assicuriamoci che unreadCount sia sempre un numero
-      unreadCount: Number(t.unread_count || 0),
-
-      lastMessage: t.last_message?.text ?? "",
-      lastMessageTime: t.last_message?.created_at
-        ? Number(new Date(t.last_message.created_at))
-        : Number(new Date(t.updated_at)),
-
-      updated_at: Number(new Date(t.updated_at)),
-    }));
+        lastMessage: t.last_message?.text ?? "",
+        lastMessageTime: t.last_message?.created_at
+          ? Number(new Date(t.last_message.created_at))
+          : Number(new Date(t.updated_at)),
+        updated_at: Number(new Date(t.updated_at)),
+      };
+      return threadData;
+    });
 
     log("INIT_THREADS_OK", { userId, count: threads.length });
     return res.json(threads);
@@ -103,7 +105,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, mr.read_at, mr.delivered_at
        FROM messaggi m
-       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3
+       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3 AND mr.device_id = 'api'
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
        ORDER BY m.created_at ASC`,
       [corsa_id, cliente_id, userId]
@@ -117,8 +119,8 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       created_at: m.created_at ? Number(new Date(m.created_at)) : Date.now(),
       status: {
         sent: true,
-        delivered: !!m.delivered_at,
-        read: !!m.read_at,
+        delivered: Boolean(m.delivered_at),
+        read: Boolean(m.read_at),
       },
     }));
 
@@ -133,21 +135,33 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
    MARK THREAD AS READ
 ======================================================= */
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
-  const corsa_id = Number(req.body.corsa_id);
-  const cliente_id = Number(req.body.cliente_id);
+  const { corsa_id, cliente_id } = req.body;
   const userId = Number(req.user.id);
+  const role = req.user.role;
+
+  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
     const { rowCount } = await pool.query(
-      `INSERT INTO message_receipts (message_id, user_id, read_at)
-       SELECT m.id, $3, NOW()
+      `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
+       SELECT m.id, $3, 'api', NOW(), NOW()
        FROM messaggi m
        WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
-       ON CONFLICT (message_id, user_id) DO UPDATE SET read_at = NOW()
+       ON CONFLICT (message_id, user_id, device_id) 
+       DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), delivered_at = COALESCE(message_receipts.delivered_at, NOW())
        WHERE message_receipts.read_at IS NULL`,
       [corsa_id, cliente_id, userId]
     );
 
+    log("MARK_READ_SUCCESS", { corsa_id, cliente_id, affectedRows: rowCount });
+
+    if (rowCount > 0) {
+      const { getIO } = await import("../socket.js");
+      const io = getIO();
+      // Notifica in tempo reale...
+      io.to(`chat_${corsa_id}_${cliente_id}`).emit("message_read", { corsa_id, cliente_id });
+    }
+    
     return res.json({ success: true, markedAsReadCount: rowCount });
   } catch (err) {
     log("MARK_AS_READ_FAILED", { error: err.message });

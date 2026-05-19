@@ -96,7 +96,10 @@ export const setupSocket = (ioServer) => {
       log("JOIN_CHAT", { userId, cId, clId });
 
       try {
-        /* CORREZIONE: Aggiunto AND mr.device_id = 'api' nella LEFT JOIN */
+        /* 
+          CORREZIONE COERENZA: Per mostrare lo stato reale delle spunte (se l'altro ha letto i miei 
+          e se io ho letto i suoi), tiriamo in join le ricevute corrispondenti ai destinatari di ogni messaggio.
+        */
         const { rows } = await pool.query(
           `
           SELECT 
@@ -112,13 +115,15 @@ export const setupSocket = (ioServer) => {
           FROM messaggi m
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
-           AND mr.user_id = $3
            AND mr.device_id = 'api'
+           AND mr.user_id = CASE WHEN m.sender_id = m.cliente_id THEN 
+             (SELECT driver_id FROM chat_threads WHERE corsa_id = m.corsa_id AND cliente_id = m.cliente_id LIMIT 1)
+             ELSE m.cliente_id END
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
           ORDER BY m.created_at ASC
           `,
-          [cId, clId, userId]
+          [cId, clId]
         );
 
         const messages = rows.map((m) => ({
@@ -212,17 +217,20 @@ export const setupSocket = (ioServer) => {
 
         /* ================= RECEIPT ================= */
 
-        /* CORREZIONE: Inseriamo esplicitamente 'api' come device_id per l'indice UNIQUE */
-        await pool.query(
-          `
-          INSERT INTO message_receipts (message_id, user_id, device_id, delivered_at)
-          VALUES ($1, $2, 'api', $3)
-          ON CONFLICT DO NOTHING
-          `,
-          [msg.id, recipientId, isOnline ? new Date() : null]
-        );
-
+        /* 
+          COREZIONE COERENZA: Se l'utente è online, inseriamo la ricevuta di consegna immediata.
+          Se è offline, non inseriamo nulla (evitiamo righe con record parziali/nulli che rompono l'ON CONFLICT dell'HTTP).
+        */
         if (isOnline) {
+          await pool.query(
+            `
+            INSERT INTO message_receipts (message_id, user_id, device_id, delivered_at)
+            VALUES ($1, $2, 'api', NOW())
+            ON CONFLICT (message_id, user_id, device_id) DO NOTHING
+            `,
+            [msg.id, recipientId]
+          );
+
           const deliveryPayload = {
             message_id: String(msg.id),
             corsa_id: cId,
@@ -250,15 +258,20 @@ export const setupSocket = (ioServer) => {
         
         if (!ids.length || !cId || !clId) return;
 
-        /* CORREZIONE: Aggiunto filtro esplicito AND device_id = 'api' */
+        /* 
+          CORREZIONE COERENZA CRITICA: Sostituito l'UPDATE con l'INSERT ... ON CONFLICT.
+          Esattamente come nel router HTTP, se la riga in message_receipts non esiste ancora 
+          (perché il messaggio era offline), un semplice UPDATE fallirebbe lasciando il messaggio non letto.
+        */
         const result = await pool.query(
           `
-          UPDATE message_receipts
-          SET read_at = NOW()
-          WHERE message_id = ANY($1::int[])
-            AND user_id = $2
-            AND device_id = 'api'
-            AND read_at IS NULL
+          INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
+          SELECT unnest($1::int[]), $2, 'api', NOW(), NOW()
+          ON CONFLICT (message_id, user_id, device_id) 
+          DO UPDATE SET 
+            read_at = COALESCE(message_receipts.read_at, NOW()),
+            delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+          WHERE message_receipts.read_at IS NULL
           RETURNING message_id
           `,
           [ids, userId]

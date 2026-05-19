@@ -116,7 +116,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     /* ======================================================
        STEP 1 — FETCH MESSAGES + RECEIPTS (SOLO LETTURA)
-       Allineato aggiungendo il controllo sul device_id
     ====================================================== */
     const { rows } = await pool.query(
       `
@@ -148,7 +147,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     let unreadCount = 0;
 
     const messages = rows.map((m) => {
-      // Se non l'ho inviato io e non c'è una data di lettura, è non letto
       const isUnread = m.sender_id !== userId && !m.read_at;
       if (isUnread) unreadCount++;
 
@@ -185,13 +183,14 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =======================================================
-   MARK THREAD AS READ (POST ASINCRONA)
+   MARK THREAD AS READ (CON EMISSIONE SOCKET IN REALTIME)
 ======================================================= */
 
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.body.corsa_id);
   const cliente_id = Number(req.body.cliente_id);
   const userId = Number(req.user.id);
+  const role = req.user.role;
 
   if (!corsa_id || !cliente_id) {
     return res.status(400).json({ message: "missing params" });
@@ -201,8 +200,8 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
     const threadId = `${corsa_id}_${cliente_id}`;
 
     /* 
-      Inserisce le ricevute di lettura includendo il campo statico 'api'
-      per soddisfare l'indice UNIQUE composto a 3 colonne sul database.
+      1. Esegui l'upsert strutturato. Aggiorna o inserisce le righe impostando
+         il flag 'api' necessario a soddisfare l'indice UNIQUE a 3 colonne.
     */
     const { rowCount } = await pool.query(
       `
@@ -226,6 +225,56 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
       userId,
       updatedRows: rowCount,
     });
+
+    /*
+      2. REALTIME EMISSION: Se l'applicazione ha effettivamente modificato dei record,
+         avvisiamo immediatamente l'altra parte tramite WebSocket per accendere le spunte blu.
+    */
+    if (rowCount > 0) {
+      // Estraiamo gli ID di tutti i messaggi ricevuti in questa chat per inviarli al socket
+      const readMessagesRes = await pool.query(
+        `
+        SELECT id FROM messaggi 
+        WHERE corsa_id = $1 AND cliente_id = $2 AND sender_id != $3
+        `,
+        [corsa_id, cliente_id, userId]
+      );
+      
+      const readIds = readMessagesRes.rows.map(r => String(r.id));
+
+      try {
+        // Import dinamico dell'istanza socket per evitare dipendenze circolari all'avvio
+        const { getIO } = await import("../socket.js"); 
+        const io = getIO();
+        
+        const room = `chat_${corsa_id}_${cliente_id}`;
+        
+        const threadRes = await pool.query(
+          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+          [corsa_id, cliente_id]
+        );
+        const thread = threadRes.rows[0];
+
+        if (thread) {
+          const recipientId = role === "cliente" ? thread.driver_id : cliente_id;
+          const targetRole = role === "cliente" ? "autista" : "cliente";
+          const recipientRoom = `${targetRole}_${recipientId}`;
+
+          // Spara l'evento sia dentro il canale del thread sia direttamente alla room privata dell'utente
+          io.to(room).to(recipientRoom).emit("message_read", {
+            message_ids: readIds,
+            corsa_id: corsa_id,
+            cliente_id: cliente_id,
+            reader_id: userId,
+            read_at: Date.now(),
+          });
+          
+          log("READ_REALTIME_EMITTED_FROM_HTTP", { threadId, count: readIds.length });
+        }
+      } catch (socketErr) {
+        log("SOCKET_EMIT_FROM_HTTP_FAILED", { error: socketErr.message });
+      }
+    }
 
     return res.json({ success: true, markedAsReadCount: rowCount });
   } catch (err) {

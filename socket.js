@@ -96,6 +96,7 @@ export const setupSocket = (ioServer) => {
       log("JOIN_CHAT", { userId, cId, clId });
 
       try {
+        /* CORREZIONE: Aggiunto AND mr.device_id = 'api' nella LEFT JOIN */
         const { rows } = await pool.query(
           `
           SELECT 
@@ -112,6 +113,7 @@ export const setupSocket = (ioServer) => {
           LEFT JOIN message_receipts mr
             ON mr.message_id = m.id
            AND mr.user_id = $3
+           AND mr.device_id = 'api'
           WHERE m.corsa_id = $1
             AND m.cliente_id = $2
           ORDER BY m.created_at ASC
@@ -189,7 +191,6 @@ export const setupSocket = (ioServer) => {
         const room = `chat_${cId}_${clId}`;
         const recipientRoom = `${targetRole}_${recipientId}`;
 
-        // Verifichiamo se il destinatario è online
         const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
         /* ================= EMIT MESSAGE ================= */
@@ -204,7 +205,6 @@ export const setupSocket = (ioServer) => {
           created_at: Number(new Date(msg.created_at)),
           status: {
             sent: true,
-            // Se è online mentre inviamo, nasce già come "delivered" in UI
             delivered: isOnline, 
             read: false,
           },
@@ -212,17 +212,17 @@ export const setupSocket = (ioServer) => {
 
         /* ================= RECEIPT ================= */
 
+        /* CORREZIONE: Inseriamo esplicitamente 'api' come device_id per l'indice UNIQUE */
         await pool.query(
           `
-          INSERT INTO message_receipts (message_id, user_id, delivered_at)
-          VALUES ($1, $2, $3)
+          INSERT INTO message_receipts (message_id, user_id, device_id, delivered_at)
+          VALUES ($1, $2, 'api', $3)
           ON CONFLICT DO NOTHING
           `,
           [msg.id, recipientId, isOnline ? new Date() : null]
         );
 
         if (isOnline) {
-          // BUG FIX: Notifichiamo l'avvenuta consegna sia alla chat room che alla room privata del destinatario
           const deliveryPayload = {
             message_id: String(msg.id),
             corsa_id: cId,
@@ -250,12 +250,14 @@ export const setupSocket = (ioServer) => {
         
         if (!ids.length || !cId || !clId) return;
 
+        /* CORREZIONE: Aggiunto filtro esplicito AND device_id = 'api' */
         const result = await pool.query(
           `
           UPDATE message_receipts
           SET read_at = NOW()
           WHERE message_id = ANY($1::int[])
             AND user_id = $2
+            AND device_id = 'api'
             AND read_at IS NULL
           RETURNING message_id
           `,
@@ -267,7 +269,6 @@ export const setupSocket = (ioServer) => {
 
         const room = `chat_${cId}_${clId}`;
         
-        // Recuperiamo il thread per sapere chi è l'altro utente a cui inviare la notifica
         const threadRes = await pool.query(
           `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
           [cId, clId]
@@ -279,8 +280,6 @@ export const setupSocket = (ioServer) => {
           const targetRole = role === "cliente" ? "autista" : "cliente";
           const recipientRoom = `${targetRole}_${recipientId}`;
 
-          // BUG FIX: Spariamo il segnale di lettura sia nel canale della chat, 
-          // sia direttamente alla stanza privata del destinatario (così aggiorna i contatori dei non letti nell'elenco chat)
           io.to(room).to(recipientRoom).emit("message_read", {
             message_ids: updated,
             corsa_id: cId,

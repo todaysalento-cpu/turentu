@@ -116,6 +116,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     /* ======================================================
        STEP 1 — FETCH MESSAGES + RECEIPTS (SOLO LETTURA)
+       Allineato aggiungendo il controllo sul device_id
     ====================================================== */
     const { rows } = await pool.query(
       `
@@ -133,6 +134,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       LEFT JOIN message_receipts mr
         ON mr.message_id = m.id
        AND mr.user_id = $3
+       AND mr.device_id = 'api'
       WHERE m.corsa_id = $1
         AND m.cliente_id = $2
       ORDER BY m.created_at ASC
@@ -199,18 +201,18 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
     const threadId = `${corsa_id}_${cliente_id}`;
 
     /* 
-      Inserisce le ricevute di lettura mancanti o aggiorna 
-      il read_at solo per i messaggi ricevuti dagli altri utenti.
+      Inserisce le ricevute di lettura includendo il campo statico 'api'
+      per soddisfare l'indice UNIQUE composto a 3 colonne sul database.
     */
     const { rowCount } = await pool.query(
       `
-      INSERT INTO message_receipts (message_id, user_id, read_at, delivered_at)
-      SELECT m.id, $3, NOW(), NOW()
+      INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
+      SELECT m.id, $3, 'api', NOW(), NOW()
       FROM messaggi m
       WHERE m.corsa_id = $1 
         AND m.cliente_id = $2 
         AND m.sender_id != $3
-      ON CONFLICT (message_id, user_id) 
+      ON CONFLICT (message_id, user_id, device_id) 
       DO UPDATE SET 
         read_at = COALESCE(message_receipts.read_at, NOW()),
         delivered_at = COALESCE(message_receipts.delivered_at, NOW())

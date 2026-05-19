@@ -21,7 +21,38 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-/* ================= MESSAGES (IL PUNTO CRITICO) ================= */
+/* ================= INIT THREADS (RIPRISTINATA) ================= */
+chatRouter.get("/init", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  try {
+    const query = `
+      SELECT ct.corsa_id, ct.cliente_id, ct.driver_id, ct.updated_at,
+             COALESCE((
+               SELECT COUNT(m.id)::int
+               FROM messaggi m
+               WHERE m.corsa_id = ct.corsa_id 
+                 AND m.cliente_id = ct.cliente_id 
+                 AND m.sender_id != $1
+                 AND NOT EXISTS (
+                   SELECT 1 FROM message_receipts mr 
+                   WHERE mr.message_id = m.id AND mr.user_id = $1 AND mr.read_at IS NOT NULL
+                 )
+             ), 0) as unread_count
+      FROM chat_threads ct
+      WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
+      ORDER BY ct.updated_at DESC
+    `;
+    const { rows } = await pool.query(query, [userId]);
+    res.json(rows.map(t => ({ ...t, unreadCount: Number(t.unread_count) })));
+  } catch (err) {
+    log("INIT_THREADS_FAILED", { error: err.message });
+    res.status(500).json({ message: "init error" });
+  }
+});
+
+/* ================= MESSAGES ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
@@ -30,7 +61,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
-    // LOG DI DEBUG: Verifichiamo chi sta interrogando e cosa cerca
     log("DEBUG_MESSAGES_QUERY", { userId, corsa_id, cliente_id });
 
     const { rows } = await pool.query(
@@ -45,9 +75,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       [corsa_id, cliente_id, userId]
     );
 
-    // LOG DI DEBUG: Controlliamo quanti messaggi hanno read_at presente
-    const readCount = rows.filter(r => r.read_at !== null).length;
-    log("DEBUG_MESSAGES_RESULT", { total: rows.length, readCount });
+    log("DEBUG_MESSAGES_RESULT", { total: rows.length, readCount: rows.filter(r => r.read_at).length });
 
     const messages = rows.map((m) => ({
       id: String(m.id),
@@ -74,7 +102,6 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // LOG DI DEBUG: Prima dell'insert
     log("DEBUG_MARK_READ_ATTEMPT", { userId, corsa_id, cliente_id });
 
     const { rowCount } = await pool.query(

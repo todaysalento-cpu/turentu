@@ -1,7 +1,6 @@
 import express from "express";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
@@ -35,7 +34,6 @@ const authMiddleware = (req, res, next) => {
     decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;
-
     next();
   } catch (err) {
     return res.status(401).json({ message: "Invalid token" });
@@ -43,7 +41,7 @@ const authMiddleware = (req, res, next) => {
 };
 
 /* =======================================================
-   INIT THREADS
+   INIT THREADS (JOIN CON CORSE PER INDIRIZZI)
 ======================================================= */
 
 chatRouter.get("/init", authMiddleware, async (req, res) => {
@@ -51,32 +49,36 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   const role = req.user.role;
 
   try {
+    // JOIN con la tabella 'corse' per recuperare origine_address, destinazione_address e start_datetime
     const query =
       role === "autista"
         ? `
-          SELECT *
-          FROM chat_threads
-          WHERE driver_id=$1
-          ORDER BY updated_at DESC
+          SELECT ct.*, c.origine_address, c.destinazione_address, c.start_datetime
+          FROM chat_threads ct
+          JOIN corse c ON ct.corsa_id = c.id
+          WHERE ct.driver_id=$1
+          ORDER BY ct.updated_at DESC
         `
         : `
-          SELECT *
-          FROM chat_threads
-          WHERE cliente_id=$1
-          ORDER BY updated_at DESC
+          SELECT ct.*, c.origine_address, c.destinazione_address, c.start_datetime
+          FROM chat_threads ct
+          JOIN corse c ON ct.corsa_id = c.id
+          WHERE ct.cliente_id=$1
+          ORDER BY ct.updated_at DESC
         `;
 
     const { rows } = await pool.query(query, [userId]);
 
     const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,
-
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       driver_id: Number(t.driver_id),
 
-      origine: t.origine ?? "",
-      destinazione: t.destinazione ?? "",
+      // Dati presi dalla tabella corse
+      origine_address: t.origine_address ?? "N/D",
+      destinazione_address: t.destinazione_address ?? "N/D",
+      start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
 
       lastMessage: t.last_message?.text ?? "",
       lastMessageTime: t.last_message?.created_at
@@ -86,11 +88,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       updated_at: Number(new Date(t.updated_at)),
     }));
 
-    log("INIT_THREADS_OK", {
-      userId,
-      count: threads.length,
-    });
-
+    log("INIT_THREADS_OK", { userId, count: threads.length });
     return res.json(threads);
   } catch (err) {
     log("INIT_THREADS_FAILED", { error: err.message });
@@ -99,7 +97,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 });
 
 /* =======================================================
-   MESSAGES (PURE READ ONLY GET)
+   MESSAGES
 ======================================================= */
 
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
@@ -107,73 +105,35 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const cliente_id = Number(req.query.cliente_id);
   const userId = Number(req.user.id);
 
-  if (!corsa_id || !cliente_id) {
-    return res.status(400).json({ message: "missing params" });
-  }
+  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
 
-    /* ======================================================
-       STEP 1 — FETCH MESSAGES + RECEIPTS (SOLO LETTURA)
-    ====================================================== */
     const { rows } = await pool.query(
       `
-      SELECT 
-        m.id,
-        m.corsa_id,
-        m.cliente_id,
-        m.sender_id,
-        m.testo,
-        m.client_msg_id,
-        m.created_at,
-        mr.read_at,
-        mr.delivered_at
+      SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, mr.read_at, mr.delivered_at
       FROM messaggi m
-      LEFT JOIN message_receipts mr
-        ON mr.message_id = m.id
-       AND mr.user_id = $3
-       AND mr.device_id = 'api'
-      WHERE m.corsa_id = $1
-        AND m.cliente_id = $2
+      LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3 AND mr.device_id = 'api'
+      WHERE m.corsa_id = $1 AND m.cliente_id = $2
       ORDER BY m.created_at ASC
       `,
       [corsa_id, cliente_id, userId]
     );
 
-    /* ======================================================
-       STEP 2 — NORMALIZE & UNREAD COUNT IN UN UNICO CICLO
-    ====================================================== */
-    let unreadCount = 0;
-
-    const messages = rows.map((m) => {
-      const isUnread = m.sender_id !== userId && !m.read_at;
-      if (isUnread) unreadCount++;
-
-      return {
-        id: String(m.id),
-        threadId,
-        client_msg_id: m.client_msg_id ?? null,
-        corsa_id: Number(m.corsa_id),
-        cliente_id: Number(m.cliente_id),
-        sender_id: Number(m.sender_id),
-        text: m.testo ?? "",
-        created_at: m.created_at ? Number(new Date(m.created_at)) : Date.now(),
-        status: {
-          sent: true,
-          delivered: Boolean(m.delivered_at),
-          read: Boolean(m.read_at),
-          unread: isUnread,
-        },
-      };
-    });
-
-    log("MESSAGES_LOADED", {
+    const messages = rows.map((m) => ({
+      id: String(m.id),
       threadId,
-      total: messages.length,
-      unread: unreadCount,
-      lastMessage: messages.at(-1)?.id,
-    });
+      sender_id: Number(m.sender_id),
+      text: m.testo ?? "",
+      created_at: m.created_at ? Number(new Date(m.created_at)) : Date.now(),
+      status: {
+        sent: true,
+        delivered: Boolean(m.delivered_at),
+        read: Boolean(m.read_at),
+        unread: m.sender_id !== userId && !m.read_at,
+      },
+    }));
 
     return res.json(messages);
   } catch (err) {
@@ -183,7 +143,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* =======================================================
-   MARK THREAD AS READ (CON EMISSIONE SOCKET IN REALTIME)
+   MARK THREAD AS READ
 ======================================================= */
 
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
@@ -192,63 +152,32 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
 
-  if (!corsa_id || !cliente_id) {
-    return res.status(400).json({ message: "missing params" });
-  }
+  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
-    const threadId = `${corsa_id}_${cliente_id}`;
-
-    /* 
-      1. Esegui l'upsert strutturato. Aggiorna o inserisce le righe impostando
-         il flag 'api' necessario a soddisfare l'indice UNIQUE a 3 colonne.
-    */
     const { rowCount } = await pool.query(
       `
       INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
       SELECT m.id, $3, 'api', NOW(), NOW()
       FROM messaggi m
-      WHERE m.corsa_id = $1 
-        AND m.cliente_id = $2 
-        AND m.sender_id != $3
+      WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
       ON CONFLICT (message_id, user_id, device_id) 
-      DO UPDATE SET 
-        read_at = COALESCE(message_receipts.read_at, NOW()),
-        delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+      DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), delivered_at = COALESCE(message_receipts.delivered_at, NOW())
       WHERE message_receipts.read_at IS NULL
       `,
       [corsa_id, cliente_id, userId]
     );
 
-    log("MESSAGES_MARKED_AS_READ", {
-      threadId,
-      userId,
-      updatedRows: rowCount,
-    });
-
-    /*
-      2. REALTIME EMISSION: Se l'applicazione ha effettivamente modificato dei record,
-         avvisiamo immediatamente l'altra parte tramite WebSocket per accendere le spunte blu.
-    */
     if (rowCount > 0) {
-      // Estraiamo gli ID di tutti i messaggi ricevuti in questa chat per inviarli al socket
       const readMessagesRes = await pool.query(
-        `
-        SELECT id FROM messaggi 
-        WHERE corsa_id = $1 AND cliente_id = $2 AND sender_id != $3
-        `,
+        `SELECT id FROM messaggi WHERE corsa_id = $1 AND cliente_id = $2 AND sender_id != $3`,
         [corsa_id, cliente_id, userId]
       );
-      
-      const readIds = readMessagesRes.rows.map(r => String(r.id));
+      const readIds = readMessagesRes.rows.map((r) => String(r.id));
 
       try {
-        // Import dinamico dell'istanza socket per evitare dipendenze circolari all'avvio
-        const { getIO } = await import("../socket.js"); 
+        const { getIO } = await import("../socket.js");
         const io = getIO();
-        
-        const room = `chat_${corsa_id}_${cliente_id}`;
-        
         const threadRes = await pool.query(
           `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
           [corsa_id, cliente_id]
@@ -258,28 +187,18 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
         if (thread) {
           const recipientId = role === "cliente" ? thread.driver_id : cliente_id;
           const targetRole = role === "cliente" ? "autista" : "cliente";
-          const recipientRoom = `${targetRole}_${recipientId}`;
-
-          // Spara l'evento sia dentro il canale del thread sia direttamente alla room privata dell'utente
-          io.to(room).to(recipientRoom).emit("message_read", {
-            message_ids: readIds,
-            corsa_id: corsa_id,
-            cliente_id: cliente_id,
-            reader_id: userId,
-            read_at: Date.now(),
-          });
-          
-          log("READ_REALTIME_EMITTED_FROM_HTTP", { threadId, count: readIds.length });
+          io.to(`chat_${corsa_id}_${cliente_id}`)
+            .to(`${targetRole}_${recipientId}`)
+            .emit("message_read", { message_ids: readIds, corsa_id, cliente_id, reader_id: userId, read_at: Date.now() });
         }
       } catch (socketErr) {
-        log("SOCKET_EMIT_FROM_HTTP_FAILED", { error: socketErr.message });
+        log("SOCKET_EMIT_FAILED", { error: socketErr.message });
       }
     }
-
     return res.json({ success: true, markedAsReadCount: rowCount });
   } catch (err) {
     log("MARK_AS_READ_FAILED", { error: err.message });
-    return res.status(500).json({ message: "read receipt update error" });
+    return res.status(500).json({ message: "error" });
   }
 });
 

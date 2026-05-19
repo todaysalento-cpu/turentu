@@ -52,21 +52,38 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(query, [userId]);
 
-    const threads = rows.map((t) => ({
-      id: `${t.corsa_id}_${t.cliente_id}`,
-      corsa_id: Number(t.corsa_id),
-      cliente_id: Number(t.cliente_id),
-      driver_id: Number(t.driver_id),
-      origine_address: t.origine_address ?? "N/D",
-      destinazione_address: t.destinazione_address ?? "N/D",
-      start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
-      unreadCount: Number(t.unread_count),
-      lastMessage: t.last_message?.text ?? "",
-      lastMessageTime: t.last_message?.created_at
-        ? Number(new Date(t.last_message.created_at))
-        : Number(new Date(t.updated_at)),
-      updated_at: Number(new Date(t.updated_at)),
-    }));
+    // DEBUG: Loggiamo cosa arriva dal database
+    log("DEBUG_INIT_DB_ROWS", { 
+      totalRows: rows.length, 
+      firstRowSample: rows[0] ? { corsa_id: rows[0].corsa_id, unread_count: rows[0].unread_count } : null 
+    });
+
+    const threads = rows.map((t) => {
+      const unreadCount = Number(t.unread_count ?? 0);
+      
+      // DEBUG: Loggiamo la trasformazione per ogni thread
+      log("DEBUG_INIT_THREAD_MAP", { 
+        corsa_id: t.corsa_id, 
+        db_unread_count: t.unread_count, 
+        final_unreadCount: unreadCount 
+      });
+
+      return {
+        id: `${t.corsa_id}_${t.cliente_id}`,
+        corsa_id: Number(t.corsa_id),
+        cliente_id: Number(t.cliente_id),
+        driver_id: Number(t.driver_id),
+        origine_address: t.origine_address ?? "N/D",
+        destinazione_address: t.destinazione_address ?? "N/D",
+        start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
+        unreadCount: unreadCount,
+        lastMessage: t.last_message?.text ?? "",
+        lastMessageTime: t.last_message?.created_at
+          ? Number(new Date(t.last_message.created_at))
+          : Number(new Date(t.updated_at)),
+        updated_at: Number(new Date(t.updated_at)),
+      };
+    });
 
     log("INIT_THREADS_OK", { userId, count: threads.length });
     return res.json(threads);

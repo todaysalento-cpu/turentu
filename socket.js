@@ -183,10 +183,14 @@ export const setupSocket = (ioServer) => {
 
         const msg = msgRes.rows[0];
 
-        const recipientId =
-          role === "cliente" ? thread.driver_id : clId;
+        const recipientId = role === "cliente" ? thread.driver_id : clId;
+        const targetRole = role === "cliente" ? "autista" : "cliente";
 
         const room = `chat_${cId}_${clId}`;
+        const recipientRoom = `${targetRole}_${recipientId}`;
+
+        // Verifichiamo se il destinatario è online
+        const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
         /* ================= EMIT MESSAGE ================= */
 
@@ -200,7 +204,8 @@ export const setupSocket = (ioServer) => {
           created_at: Number(new Date(msg.created_at)),
           status: {
             sent: true,
-            delivered: false,
+            // Se è online mentre inviamo, nasce già come "delivered" in UI
+            delivered: isOnline, 
             read: false,
           },
         });
@@ -209,35 +214,24 @@ export const setupSocket = (ioServer) => {
 
         await pool.query(
           `
-          INSERT INTO message_receipts (message_id, user_id)
-          VALUES ($1, $2)
+          INSERT INTO message_receipts (message_id, user_id, delivered_at)
+          VALUES ($1, $2, $3)
           ON CONFLICT DO NOTHING
           `,
-          [msg.id, recipientId]
+          [msg.id, recipientId, isOnline ? new Date() : null]
         );
 
-        const recipientRoom = `${role === "cliente" ? "autista" : "cliente"}_${recipientId}`;
-
-        const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
-
         if (isOnline) {
-          await pool.query(
-            `
-            UPDATE message_receipts
-            SET delivered_at = NOW()
-            WHERE message_id=$1 AND user_id=$2
-            `,
-            [msg.id, recipientId]
-          );
-
-          io.to(recipientRoom).emit("message_delivered", {
+          // BUG FIX: Notifichiamo l'avvenuta consegna sia alla chat room che alla room privata del destinatario
+          const deliveryPayload = {
             message_id: String(msg.id),
             corsa_id: cId,
             cliente_id: clId,
             delivered_at: Date.now(),
-          });
+          };
 
-          log("DELIVERED", { messageId: msg.id });
+          io.to(room).to(recipientRoom).emit("message_delivered", deliveryPayload);
+          log("DELIVERED_REALTIME", { messageId: msg.id, room });
         }
       } catch (err) {
         log("SEND_FAILED", { error: err.message });
@@ -248,10 +242,13 @@ export const setupSocket = (ioServer) => {
        MARK AS READ
     ===================================================== */
 
-    socket.on("mark_as_read", async ({ message_ids = [] }) => {
+    socket.on("mark_as_read", async ({ corsa_id, cliente_id, message_ids = [] }) => {
       try {
+        const cId = Number(corsa_id);
+        const clId = Number(cliente_id);
         const ids = message_ids.map(Number).filter(Number.isInteger);
-        if (!ids.length) return;
+        
+        if (!ids.length || !cId || !clId) return;
 
         const result = await pool.query(
           `
@@ -266,20 +263,34 @@ export const setupSocket = (ioServer) => {
         );
 
         const updated = result.rows.map((r) => String(r.message_id));
+        if (!updated.length) return;
 
-        const rooms = [...socket.rooms].filter((r) =>
-          r.startsWith("chat_")
+        const room = `chat_${cId}_${clId}`;
+        
+        // Recuperiamo il thread per sapere chi è l'altro utente a cui inviare la notifica
+        const threadRes = await pool.query(
+          `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
+          [cId, clId]
         );
+        const thread = threadRes.rows[0];
 
-        for (const room of rooms) {
-          io.to(room).emit("message_read", {
+        if (thread) {
+          const recipientId = role === "cliente" ? thread.driver_id : clId;
+          const targetRole = role === "cliente" ? "autista" : "cliente";
+          const recipientRoom = `${targetRole}_${recipientId}`;
+
+          // BUG FIX: Spariamo il segnale di lettura sia nel canale della chat, 
+          // sia direttamente alla stanza privata del destinatario (così aggiorna i contatori dei non letti nell'elenco chat)
+          io.to(room).to(recipientRoom).emit("message_read", {
             message_ids: updated,
+            corsa_id: cId,
+            cliente_id: clId,
             reader_id: userId,
             read_at: Date.now(),
           });
         }
 
-        log("READ_UPDATED", { userId, count: updated.length });
+        log("READ_UPDATED", { userId, count: updated.length, room });
       } catch (err) {
         log("READ_FAILED", { error: err.message });
       }

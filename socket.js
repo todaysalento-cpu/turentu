@@ -94,7 +94,6 @@ export const setupSocket = (ioServer) => {
       log("JOIN_CHAT", { userId, cId, clId });
 
       try {
-        // Query aggiornata: device_id rimosso, MAX e GROUP BY aggiunti
         const { rows } = await pool.query(
           `
           SELECT 
@@ -104,7 +103,7 @@ export const setupSocket = (ioServer) => {
             m.sender_id,
             m.testo AS text,
             m.client_msg_id,
-            m.created_at,
+            EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
             MAX(mr.delivered_at) as delivered_at,
             MAX(mr.read_at) as read_at
           FROM messaggi m
@@ -132,7 +131,7 @@ export const setupSocket = (ioServer) => {
           sender_id: Number(m.sender_id),
           text: m.text ?? "",
           client_msg_id: m.client_msg_id ?? null,
-          created_at: Number(new Date(m.created_at)),
+          created_at: Number(m.created_at_ms),
           status: {
             sent: true,
             delivered: Boolean(m.delivered_at) || Boolean(m.read_at),
@@ -175,7 +174,7 @@ export const setupSocket = (ioServer) => {
         const msgRes = await pool.query(
           `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, client_msg_id, created_at)
            VALUES ($1,$2,$3,$4,$5,NOW())
-           RETURNING *`,
+           RETURNING *, EXTRACT(EPOCH FROM created_at) * 1000 as created_at_ms`,
           [cId, clId, userId, trimmed, msgKey]
         );
 
@@ -194,7 +193,7 @@ export const setupSocket = (ioServer) => {
           sender_id: userId,
           text: trimmed,
           client_msg_id: msgKey,
-          created_at: Number(new Date(msg.created_at)),
+          created_at: Number(msg.created_at_ms),
           status: { sent: true, delivered: isOnline, read: false },
         });
 

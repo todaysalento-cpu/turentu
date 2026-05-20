@@ -102,16 +102,17 @@ router.get('/', async (req, res) => {
         LEFT JOIN utente a ON a.id = v.driver_id
         WHERE c.stato = 'in_corso'
       `),
-      // ===================== Autisti live =====================
+      // ===================== Autisti live (CORRETTO) =====================
       pool.query(`
         SELECT u.id,
                u.nome,
-               ST_Y(v.origine::geometry) AS lat,
-               ST_X(v.origine::geometry) AS lng,
+               ST_Y(pv.coord::geometry) AS lat,
+               ST_X(pv.coord::geometry) AS lng,
                CASE WHEN dv.start <= NOW() AND dv.fine >= NOW() THEN true ELSE false END AS disponibile
         FROM utente u
         LEFT JOIN veicolo v ON v.driver_id = u.id
         LEFT JOIN disponibilita_veicolo dv ON dv.veicolo_id = v.id
+        LEFT JOIN posizione_veicolo pv ON pv.veicolo_id = v.id AND pv.tipo = 'CORRENTE'
         WHERE LOWER(TRIM(u.tipo)) = 'autista'
       `)
     ]);

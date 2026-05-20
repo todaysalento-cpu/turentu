@@ -14,6 +14,14 @@ export const getIO = () => {
 const log = (label, data = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), label, ...data }, null, 2));
 
+/* ================= NOTIFICATIONS ================= */
+export const sendNotification = ({ userId, role, notification }) => {
+  if (!io || !userId || !role || !notification) return;
+  const room = `${role}_${userId}`;
+  io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
+  log("NOTIFICATION_SENT", { room, userId, role });
+};
+
 /* ================= SOCKET SETUP ================= */
 export const setupSocket = (ioServer) => {
   io = ioServer;
@@ -58,13 +66,19 @@ export const setupSocket = (ioServer) => {
 
         const messages = rows.map((m) => ({
           id: String(m.id),
+          corsa_id: cId,
+          cliente_id: clId,
           sender_id: Number(m.sender_id),
           text: m.text ?? null,
           audio_url: m.audio_url ?? null,
           tipo_messaggio: m.tipo_messaggio ?? 'text',
           client_msg_id: m.client_msg_id ?? null,
           created_at: Number(m.created_at_ms),
-          status: { sent: true, delivered: Boolean(m.delivered_at) || Boolean(m.read_at), read: Boolean(m.read_at) },
+          status: { 
+            sent: true, 
+            delivered: Boolean(m.delivered_at) || Boolean(m.read_at), 
+            read: Boolean(m.read_at) 
+          },
         }));
 
         socket.emit("init_chat", { corsa_id: cId, cliente_id: clId, messages });
@@ -73,15 +87,15 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    /* ================= SEND MESSAGE (Supporto Audio) ================= */
+    /* ================= SEND MESSAGE ================= */
     socket.on("send_message", async (payload) => {
       try {
         const { corsa_id, cliente_id, text, audio_url, tipo_messaggio, client_msg_id } = payload;
         const cId = Number(corsa_id);
         const clId = Number(cliente_id);
         
-        // Verifica contenuto valido
-        if (!text && !audio_url) return;
+        // Verifica contenuto minimo (testo o audio)
+        if (!text?.trim() && !audio_url) return;
 
         const threadRes = await pool.query(
           `SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`,
@@ -97,7 +111,7 @@ export const setupSocket = (ioServer) => {
           `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, testo, audio_url, tipo_messaggio, client_msg_id, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
            RETURNING *, EXTRACT(EPOCH FROM created_at) * 1000 as created_at_ms`,
-          [cId, clId, userId, text || null, audio_url || null, msgType, msgKey]
+          [cId, clId, userId, text?.trim() || null, audio_url || null, msgType, msgKey]
         );
 
         const msg = msgRes.rows[0];
@@ -106,7 +120,6 @@ export const setupSocket = (ioServer) => {
         const recipientRoom = `${targetRole}_${recipientId}`;
         const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
 
-        // Emetti il nuovo messaggio
         io.to(`chat_${cId}_${clId}`).emit("new_message", {
           id: String(msg.id),
           corsa_id: cId,
@@ -120,13 +133,51 @@ export const setupSocket = (ioServer) => {
           status: { sent: true, delivered: isOnline, read: false },
         });
 
-        // Notifica incremento contatore
         io.to(recipientRoom).emit("unread_count_updated", { corsa_id: cId, cliente_id: clId, increment: 1 });
       } catch (err) {
         log("SEND_FAILED", { error: err.message });
       }
     });
 
-    // ... (resta invariato il resto del file: mark_as_read, disconnect) ...
+    /* ================= MARK AS READ ================= */
+    socket.on("mark_as_read", async ({ corsa_id, cliente_id, message_ids = [] }) => {
+      try {
+        const cId = Number(corsa_id);
+        const clId = Number(cliente_id);
+        const ids = message_ids.map(Number).filter(Number.isInteger);
+        if (!ids.length || !cId || !clId) return;
+
+        const result = await pool.query(
+          `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
+           SELECT unnest($1::int[]), $2, 'api', NOW(), NOW()
+           ON CONFLICT (message_id, user_id, device_id) 
+           DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), delivered_at = COALESCE(message_receipts.delivered_at, NOW())
+           WHERE message_receipts.read_at IS NULL
+           RETURNING message_id`,
+          [ids, userId]
+        );
+
+        if (result.rowCount > 0) {
+          io.to(`${role}_${userId}`).emit("unread_count_reset", { corsa_id: cId, cliente_id: clId });
+          const threadRes = await pool.query(`SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`, [cId, clId]);
+          const thread = threadRes.rows[0];
+          if (thread) {
+            const recipientId = role === "cliente" ? thread.driver_id : clId;
+            const targetRole = role === "cliente" ? "autista" : "cliente";
+            io.to(`chat_${cId}_${clId}`).to(`${targetRole}_${recipientId}`).emit("message_read", {
+              message_ids: result.rows.map(r => String(r.message_id)),
+              corsa_id: cId,
+              cliente_id: clId,
+              reader_id: userId,
+              read_at: Date.now(),
+            });
+          }
+        }
+      } catch (err) {
+        log("READ_FAILED", { error: err.message });
+      }
+    });
+
+    socket.on("disconnect", () => log("DISCONNECT", { userId }));
   });
 };

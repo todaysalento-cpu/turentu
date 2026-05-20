@@ -4,15 +4,15 @@ import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// GET /admin/pagamenti
+// GET /admin/pagamenti - Aggiornato con LEFT JOIN per non perdere pagamenti
 router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
     const { rows: pagamenti } = await pool.query(`
       SELECT 
         p.corsa_id AS id,
         c.created_at,
-        u_cliente.nome AS cliente,
-        u_autista.nome AS autista,
+        COALESCE(u_cliente.nome, 'Cliente Ignoto') AS cliente,
+        COALESCE(u_autista.nome, 'Autista Ignoto') AS autista,
         p.importo AS prezzo_totale,
         p.commissione,
         p.guadagno_autista,
@@ -22,11 +22,11 @@ router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) 
           ELSE 'bloccato'
         END AS stato_pagamento
       FROM pagamenti p
-      JOIN prenotazioni pr ON p.prenotazione_id = pr.id
-      JOIN corse c ON p.corsa_id = c.id
-      JOIN utente u_cliente ON pr.cliente_id = u_cliente.id
-      JOIN veicolo v ON c.veicolo_id = v.id
-      JOIN utente u_autista ON v.driver_id = u_autista.id
+      LEFT JOIN corse c ON p.corsa_id = c.id
+      LEFT JOIN prenotazioni pr ON p.prenotazione_id = pr.id
+      LEFT JOIN utente u_cliente ON pr.cliente_id = u_cliente.id
+      LEFT JOIN veicolo v ON c.veicolo_id = v.id
+      LEFT JOIN utente u_autista ON v.driver_id = u_autista.id
       ORDER BY p.id DESC
       LIMIT 50
     `);
@@ -50,8 +50,6 @@ router.post('/:id/:action', authMiddleware, requireRole('Admin', 'admin'), async
   
   try {
     // Mapping corretto basato sui CHECK constraint della tabella 'pagamenti'
-    // 'rilascia' -> 'pagato'
-    // 'rimborso' -> 'rimborsato'
     const nuovoStato = action === 'rilascia' ? 'pagato' : 'rimborsato';
     
     // Aggiorniamo la tabella 'pagamenti' usando corsa_id
@@ -61,7 +59,7 @@ router.post('/:id/:action', authMiddleware, requireRole('Admin', 'admin'), async
     );
     
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Pagamento non trovato' });
+      return res.status(404).json({ error: 'Pagamento non trovato per questa corsa' });
     }
     
     res.json({ success: true, message: `Azione ${action} eseguita correttamente` });

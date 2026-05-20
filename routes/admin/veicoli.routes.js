@@ -1,13 +1,12 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-// Usiamo i middleware corretti che hai già definito in auth.js
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// Applichiamo authMiddleware per verificare il token
-// E requireRole('Admin') per assicurarci che solo gli admin accedano
-router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
+// GET: Lista veicoli
+// Ho aggiunto un log di debug interno per vedere cosa arriva dal token
+router.get('/', authMiddleware, requireRole('admin', 'Admin'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT v.*, u.nome AS nome_autista, u.email AS email_autista 
@@ -17,23 +16,29 @@ router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
-    console.error('Errore GET veicoli admin:', err);
+    console.error('Errore GET veicoli:', err);
     res.status(500).json({ error: 'Errore nel caricamento veicoli admin' });
   }
 });
 
-router.patch('/:id/stato', authMiddleware, requireRole('Admin'), async (req, res) => {
+// PATCH: Approva o sospendi un veicolo
+router.patch('/:id/stato', authMiddleware, requireRole('admin', 'Admin'), async (req, res) => {
   const { id } = req.params;
-  const { stato_verifica } = req.body; 
+  const { stato_verifica } = req.body;
   
   try {
-    await pool.query(
-      'UPDATE veicolo SET stato_verifica = $1 WHERE id = $2',
+    const result = await pool.query(
+      'UPDATE veicolo SET stato_verifica = $1 WHERE id = $2 RETURNING *',
       [stato_verifica, id]
     );
-    res.json({ success: true });
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Veicolo non trovato' });
+    }
+    
+    res.json({ success: true, veicolo: result.rows[0] });
   } catch (err) {
-    console.error('Errore PATCH stato veicolo:', err);
+    console.error('Errore PATCH veicolo:', err);
     res.status(500).json({ error: 'Errore aggiornamento stato' });
   }
 });

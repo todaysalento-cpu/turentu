@@ -4,7 +4,7 @@ import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// GET /admin/pagamenti - Aggiornato con LEFT JOIN per non perdere pagamenti
+// GET /admin/pagamenti - Escludiamo i record senza corsa_id per evitare crash
 router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
     const { rows: pagamenti } = await pool.query(`
@@ -27,6 +27,7 @@ router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) 
       LEFT JOIN utente u_cliente ON pr.cliente_id = u_cliente.id
       LEFT JOIN veicolo v ON c.veicolo_id = v.id
       LEFT JOIN utente u_autista ON v.driver_id = u_autista.id
+      WHERE p.corsa_id IS NOT NULL
       ORDER BY p.id DESC
       LIMIT 50
     `);
@@ -49,10 +50,8 @@ router.post('/:id/:action', authMiddleware, requireRole('Admin', 'admin'), async
   const { id, action } = req.params;
   
   try {
-    // Mapping corretto basato sui CHECK constraint della tabella 'pagamenti'
     const nuovoStato = action === 'rilascia' ? 'pagato' : 'rimborsato';
     
-    // Aggiorniamo la tabella 'pagamenti' usando corsa_id
     const result = await pool.query(
       'UPDATE pagamenti SET stato = $1, updated_at = NOW() WHERE corsa_id = $2', 
       [nuovoStato, id]

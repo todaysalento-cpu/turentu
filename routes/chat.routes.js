@@ -88,22 +88,24 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
-  const userId = Number(req.user.id);
 
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
+    
+    // JOIN con LEFT JOIN e GROUP BY per eliminare ambiguità da duplicati in message_receipts
     const { rows } = await pool.query(
       `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, 
               EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
-              MAX(mr.read_at) as read_at, MAX(mr.delivered_at) as delivered_at
+              (MAX(mr.read_at) IS NOT NULL) as is_read,
+              (MAX(mr.delivered_at) IS NOT NULL) as is_delivered
        FROM messaggi m
-       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3
+       LEFT JOIN message_receipts mr ON m.id = mr.message_id
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
-       GROUP BY m.id
+       GROUP BY m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at
        ORDER BY m.created_at DESC`, 
-      [corsa_id, cliente_id, userId]
+      [corsa_id, cliente_id]
     );
 
     const messages = rows.map((m) => ({
@@ -114,8 +116,8 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       created_at: Number(m.created_at_ms),
       status: {
         sent: true,
-        delivered: Boolean(m.delivered_at) || Boolean(m.read_at),
-        read: Boolean(m.read_at),
+        delivered: Boolean(m.is_delivered),
+        read: Boolean(m.is_read),
       },
     }));
 
@@ -135,15 +137,17 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
+    // Inserimento pulito: usa ON CONFLICT (message_id, user_id)
+    // Richiede vincolo UNIQUE(message_id, user_id) nel database
     const { rows } = await pool.query(
-      `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
-       SELECT m.id, $3, 'api', NOW(), NOW()
+      `INSERT INTO message_receipts (message_id, user_id, read_at, delivered_at)
+       SELECT m.id, $3, NOW(), NOW()
        FROM messaggi m
        WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
-       ON CONFLICT (message_id, user_id, device_id) 
-       DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), 
-                     delivered_at = COALESCE(message_receipts.delivered_at, NOW())
-       WHERE message_receipts.read_at IS NULL
+       ON CONFLICT (message_id, user_id) 
+       DO UPDATE SET 
+         read_at = COALESCE(message_receipts.read_at, EXCLUDED.read_at), 
+         delivered_at = COALESCE(message_receipts.delivered_at, EXCLUDED.delivered_at)
        RETURNING message_id`,
       [corsa_id, cliente_id, userId]
     );

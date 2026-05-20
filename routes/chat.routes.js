@@ -35,6 +35,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              c.origine_address, 
              c.destinazione_address, 
              c.start_datetime,
+             u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
               WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
@@ -55,20 +56,19 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              ), 0) as unread_count
       FROM chat_threads ct
       JOIN corse c ON ct.corsa_id = c.id
+      JOIN utente u ON ct.cliente_id = u.id
       WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
       ORDER BY ct.updated_at DESC
     `;
 
     const { rows } = await pool.query(query, [userId]);
     
-    // LOG DI DEBUG: Vedi cosa arriva dal DB
-    log("INIT_DEBUG", { firstRow: rows[0] });
-
     const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       driver_id: Number(t.driver_id),
+      nome_cliente: t.nome_cliente ?? "Cliente",
       origine_address: t.origine_address ?? "N/D",
       destinazione_address: t.destinazione_address ?? "N/D",
       start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
@@ -105,9 +105,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
        ORDER BY m.created_at DESC`, 
       [corsa_id, cliente_id, userId]
     );
-
-    // LOG DI DEBUG: Vedi quanti messaggi stai inviando
-    log("MESSAGES_DEBUG", { threadId, count: rows.length });
 
     const messages = rows.map((m) => ({
       id: String(m.id),
@@ -152,8 +149,6 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
     );
 
     if (rows.length > 0) {
-      log("MESSAGES_READ", { count: rows.length });
-      
       const { getIO } = await import("../socket.js");
       const io = getIO();
       const threadRes = await pool.query(

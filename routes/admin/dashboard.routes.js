@@ -86,13 +86,19 @@ router.get('/', async (req, res) => {
         ORDER BY guadagno DESC
         LIMIT 5
       `),
-      // ===================== Corse live =====================
+      // ===================== Corse live (AGGIORNATA CON DATI COMPLETI) =====================
       pool.query(`
         SELECT c.id,
-               cl.nome AS cliente,
-               a.nome AS autista,
+               COALESCE(cl.nome, 'Sconosciuto') AS cliente,
+               COALESCE(a.nome, 'Non assegnato') AS autista,
                c.prezzo_fisso AS prezzo,
                c.stato,
+               c.origine_address,
+               c.destinazione_address,
+               c.created_at,
+               c.posti_totali,
+               c.posti_prenotati,
+               c.tipo_corsa,
                ST_Y(c.origine::geometry) AS lat,
                ST_X(c.origine::geometry) AS lng
         FROM corse c
@@ -100,9 +106,10 @@ router.get('/', async (req, res) => {
         LEFT JOIN utente cl ON cl.id = p.cliente_id
         LEFT JOIN veicolo v ON v.id = c.veicolo_id
         LEFT JOIN utente a ON a.id = v.driver_id
-        WHERE c.stato = 'in_corso'
+        ORDER BY c.created_at DESC
+        LIMIT 20
       `),
-      // ===================== Autisti live (CORRETTO) =====================
+      // ===================== Autisti live =====================
       pool.query(`
         SELECT u.id,
                u.nome,
@@ -148,6 +155,11 @@ router.get('/', async (req, res) => {
         autista: r.autista,
         prezzo: Number(r.prezzo),
         stato: r.stato,
+        origine: r.origine_address,
+        destinazione: r.destinazione_address,
+        data: r.created_at,
+        posti: `${r.posti_prenotati}/${r.posti_totali}`,
+        tipo: r.tipo_corsa,
         lat: Number(r.lat) || 0,
         lng: Number(r.lng) || 0
       })),

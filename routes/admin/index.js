@@ -1,31 +1,35 @@
-// admin/index.js o router principale admin
 import express from 'express';
+
+// Route esistenti
 import dashboardRoutes from './dashboard.routes.js';
 import pagamentiRoutes from './pagamenti.routes.js';
-import gestioneRoutes from './gestione.routes.js';
 import reportRoutes from './report.routes.js';
 import impostazioniRoutes from './impostazioni.routes.js';
-
-// Nuove route
-import liveRoutes from './live.routes.js';
-import ultimeCorseRoutes from './ultime_corse.routes.js';
-import ultimiPagamentiRoutes from './ultimi_pagamenti.routes.js';
 import adminNotificationsRoutes from './notifications.routes.js';
+
+// Nuove route specifiche per la gestione amministrativa
+import utentiRoutes from './utenti.routes.js';       // ex gestione.routes.js
+import veicoliRoutes from './veicoli.routes.js';     // Nuova
+import corseRoutes from './corse.routes.js';         // Nuova
+import pendingRoutes from './pending.routes.js';     // Nuova
+import liveRoutes from './live.routes.js';
 
 const router = express.Router();
 
+// --- Dashboard e Statistiche ---
 router.use('/dashboard', dashboardRoutes);
-router.use('/pagamenti', pagamentiRoutes);
-router.use('/gestione', gestioneRoutes);
 router.use('/report', reportRoutes);
-router.use('/impostazioni', impostazioniRoutes);
-
-// Dashboard aggiuntive
 router.use('/live', liveRoutes);
-router.use('/ultime-corse', ultimeCorseRoutes);
-router.use('/ultimi-pagamenti', ultimiPagamentiRoutes);
 
-// Route notifiche admin
+// --- Gestione Entità (Il cuore del tuo Admin Management) ---
+router.use('/utenti', utentiRoutes);
+router.use('/veicoli', veicoliRoutes);
+router.use('/corse', corseRoutes);
+router.use('/pending', pendingRoutes);
+
+// --- Operazioni e Servizi ---
+router.use('/pagamenti', pagamentiRoutes);
+router.use('/impostazioni', impostazioniRoutes);
 router.use('/notifications', adminNotificationsRoutes);
 
 export default router;

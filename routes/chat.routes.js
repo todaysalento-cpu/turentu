@@ -35,6 +35,12 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              c.origine_address, 
              c.destinazione_address, 
              c.start_datetime,
+             (SELECT m.testo FROM messaggi m 
+              WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
+              ORDER BY m.created_at DESC LIMIT 1) as last_text,
+             (SELECT m.created_at FROM messaggi m 
+              WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
+              ORDER BY m.created_at DESC LIMIT 1) as last_time,
              COALESCE((
                SELECT COUNT(m.id)::int
                FROM messaggi m
@@ -63,8 +69,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       destinazione_address: t.destinazione_address ?? "N/D",
       start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
       unreadCount: Number(t.unread_count ?? 0),
-      lastMessage: t.last_message?.text ?? "",
-      lastMessageTime: t.last_message?.created_at ? Number(new Date(t.last_message.created_at)) : Number(new Date(t.updated_at)),
+      lastMessage: t.last_text ?? "",
+      lastMessageTime: t.last_time ? Number(new Date(t.last_time)) : Number(new Date(t.updated_at)),
       updated_at: Number(new Date(t.updated_at)),
     }));
 
@@ -75,7 +81,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   }
 });
 
-/* ================= MESSAGES (AGGIORNATO) ================= */
+/* ================= MESSAGES ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
@@ -85,8 +91,6 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
     
-    // Aggiornata JOIN: non filtra più per userId, ma prende lo stato di lettura 
-    // di chiunque NON sia il mittente del messaggio.
     const { rows } = await pool.query(
       `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, 
               MAX(mr.read_at) as read_at, 

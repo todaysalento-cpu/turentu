@@ -35,7 +35,6 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
              c.origine_address, 
              c.destinazione_address, 
              c.start_datetime,
-             EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              COALESCE((
                SELECT COUNT(m.id)::int
                FROM messaggi m
@@ -64,7 +63,9 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       destinazione_address: t.destinazione_address ?? "N/D",
       start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
       unreadCount: Number(t.unread_count ?? 0),
-      updated_at: Number(t.updated_at_ms),
+      lastMessage: t.last_message?.text ?? "",
+      lastMessageTime: t.last_message?.created_at ? Number(new Date(t.last_message.created_at)) : Number(new Date(t.updated_at)),
+      updated_at: Number(new Date(t.updated_at)),
     }));
 
     return res.json(threads);
@@ -74,28 +75,28 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   }
 });
 
-/* ================= MESSAGES ================= */
+/* ================= MESSAGES (AGGIORNATO) ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
-  const userId = Number(req.user.id);
 
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
     const threadId = `${corsa_id}_${cliente_id}`;
-    // ORDINAMENTO DESC: il più recente per primo. 
-    // Perfetto per FlatList con {inverted: true}
+    
+    // Aggiornata JOIN: non filtra più per userId, ma prende lo stato di lettura 
+    // di chiunque NON sia il mittente del messaggio.
     const { rows } = await pool.query(
-      `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, 
-              EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
-              MAX(mr.read_at) as read_at, MAX(mr.delivered_at) as delivered_at
+      `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at, 
+              MAX(mr.read_at) as read_at, 
+              MAX(mr.delivered_at) as delivered_at
        FROM messaggi m
-       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id = $3
+       LEFT JOIN message_receipts mr ON mr.message_id = m.id AND mr.user_id != m.sender_id
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
        GROUP BY m.id
-       ORDER BY m.created_at DESC`, 
-      [corsa_id, cliente_id, userId]
+       ORDER BY m.created_at ASC`,
+      [corsa_id, cliente_id]
     );
 
     const messages = rows.map((m) => ({
@@ -103,7 +104,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       threadId,
       sender_id: Number(m.sender_id),
       text: m.testo ?? "",
-      created_at: Number(m.created_at_ms),
+      created_at: m.created_at ? Number(new Date(m.created_at)) : Date.now(),
       status: {
         sent: true,
         delivered: Boolean(m.delivered_at) || Boolean(m.read_at),
@@ -127,7 +128,7 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
-    const { rows } = await pool.query(
+    const { rowCount } = await pool.query(
       `INSERT INTO message_receipts (message_id, user_id, device_id, read_at, delivered_at)
        SELECT m.id, $3, 'api', NOW(), NOW()
        FROM messaggi m
@@ -135,12 +136,11 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
        ON CONFLICT (message_id, user_id, device_id) 
        DO UPDATE SET read_at = COALESCE(message_receipts.read_at, NOW()), 
                      delivered_at = COALESCE(message_receipts.delivered_at, NOW())
-       WHERE message_receipts.read_at IS NULL
-       RETURNING message_id`,
+       WHERE message_receipts.read_at IS NULL`,
       [corsa_id, cliente_id, userId]
     );
 
-    if (rows.length > 0) {
+    if (rowCount > 0) {
       const { getIO } = await import("../socket.js");
       const io = getIO();
       const threadRes = await pool.query(
@@ -151,17 +151,12 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
       if (thread) {
         const recipientId = role === "cliente" ? thread.driver_id : cliente_id;
         const targetRole = role === "cliente" ? "autista" : "cliente";
-        
         io.to(`chat_${corsa_id}_${cliente_id}`)
           .to(`${targetRole}_${recipientId}`)
-          .emit("message_read", { 
-            corsa_id, 
-            cliente_id, 
-            message_ids: rows.map(r => String(r.message_id)) 
-          });
+          .emit("message_read", { corsa_id, cliente_id });
       }
     }
-    return res.json({ success: true, marked_ids: rows.map(r => String(r.message_id)) });
+    return res.json({ success: true, markedAsReadCount: rowCount });
   } catch (err) {
     log("MARK_AS_READ_FAILED", { error: err.message });
     return res.status(500).json({ message: "error" });

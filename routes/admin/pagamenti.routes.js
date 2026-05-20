@@ -1,13 +1,12 @@
-// routes/admin/pagamenti.routes.js
 import express from 'express';
 import { pool } from '../../db/db.js';
+import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
 // GET /admin/pagamenti
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
-
     const { rows: pagamenti } = await pool.query(`
       SELECT DISTINCT ON (c.id)
         c.id AS id,
@@ -31,30 +30,35 @@ router.get('/', async (req, res) => {
       LIMIT 50
     `);
 
-    const totale = pagamenti.reduce(
-      (sum, p) => sum + Number(p.prezzo_totale || 0),
-      0
-    );
-
-    const commissioni = pagamenti.reduce(
-      (sum, p) => sum + Number(p.commissione || 0),
-      0
-    );
-
+    const totale = pagamenti.reduce((sum, p) => sum + Number(p.prezzo_totale || 0), 0);
+    const commissioni = pagamenti.reduce((sum, p) => sum + Number(p.commissione || 0), 0);
     const bloccati = pagamenti
       .filter(p => p.stato_pagamento === 'bloccato')
       .reduce((sum, p) => sum + Number(p.prezzo_totale || 0), 0);
 
-    res.json({
-      totale,
-      commissioni,
-      bloccati,
-      pagamenti
-    });
-
+    res.json({ totale, commissioni, bloccati, pagamenti });
   } catch (err) {
     console.error('❌ Pagamenti admin error:', err.message);
     res.status(500).json({ error: 'Errore interno server' });
+  }
+});
+
+// NUOVA ROTTA POST per gestire azioni (rilascia/rimborso)
+router.post('/:id/:action', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
+  const { id, action } = req.params;
+  
+  try {
+    // Logica di aggiornamento (es. cambiare stato della corsa in base all'azione)
+    // Se 'rilascia', potresti voler impostare lo stato della corsa a 'pagato'
+    // Se 'rimborso', potresti voler impostare a 'rimborsato'
+    const nuovoStato = action === 'rilascia' ? 'pagato' : 'rimborsato';
+    
+    await pool.query('UPDATE corse SET stato = $1 WHERE id = $2', [nuovoStato, id]);
+    
+    res.json({ success: true, message: `Azione ${action} eseguita con successo` });
+  } catch (err) {
+    console.error('❌ Errore aggiornamento stato pagamento:', err);
+    res.status(500).json({ error: 'Errore aggiornamento database' });
   }
 });
 

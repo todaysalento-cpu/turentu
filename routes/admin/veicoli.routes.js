@@ -1,11 +1,13 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-import { adminMiddleware } from '../../middleware/admin.js';
+// Usiamo i middleware corretti che hai già definito in auth.js
+import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// GET: Lista veicoli con dettagli autista (Join necessario)
-router.get('/', adminMiddleware, async (req, res) => {
+// Applichiamo authMiddleware per verificare il token
+// E requireRole('Admin') per assicurarci che solo gli admin accedano
+router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT v.*, u.nome AS nome_autista, u.email AS email_autista 
@@ -15,14 +17,14 @@ router.get('/', adminMiddleware, async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
+    console.error('Errore GET veicoli admin:', err);
     res.status(500).json({ error: 'Errore nel caricamento veicoli admin' });
   }
 });
 
-// PATCH: Approva o sospendi un veicolo
-router.patch('/:id/stato', adminMiddleware, async (req, res) => {
+router.patch('/:id/stato', authMiddleware, requireRole('Admin'), async (req, res) => {
   const { id } = req.params;
-  const { stato_verifica } = req.body; // Esempio: 'approvato', 'sospeso'
+  const { stato_verifica } = req.body; 
   
   try {
     await pool.query(
@@ -31,6 +33,7 @@ router.patch('/:id/stato', adminMiddleware, async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
+    console.error('Errore PATCH stato veicolo:', err);
     res.status(500).json({ error: 'Errore aggiornamento stato' });
   }
 });

@@ -1,9 +1,13 @@
 import express from "express";
+import multer from "multer";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
+
+// Configurazione storage per i file audio
+const upload = multer({ dest: 'uploads/audio/' });
 
 /* ================= LOGGER ================= */
 const log = (label, data = {}) => {
@@ -32,9 +36,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   try {
     const query = `
       SELECT ct.*, 
-             c.origine_address, 
-             c.destinazione_address, 
-             c.start_datetime,
+             c.origine_address, c.destinazione_address, c.start_datetime,
              u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -67,11 +69,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       id: `${t.corsa_id}_${t.cliente_id}`,
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
-      driver_id: Number(t.driver_id),
       nome_cliente: t.nome_cliente ?? "Cliente",
-      origine_address: t.origine_address ?? "N/D",
-      destinazione_address: t.destinazione_address ?? "N/D",
-      start_datetime: t.start_datetime ? new Date(t.start_datetime).toISOString() : null,
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",
       updated_at: Number(t.last_time_ms ?? t.updated_at_ms),
@@ -84,7 +82,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
   }
 });
 
-/* ================= MESSAGES ================= */
+/* ================= GET MESSAGES ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
@@ -92,33 +90,27 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
-    const threadId = `${corsa_id}_${cliente_id}`;
-    
-    // JOIN con LEFT JOIN e GROUP BY per eliminare ambiguità da duplicati in message_receipts
     const { rows } = await pool.query(
-      `SELECT m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, 
+      `SELECT m.id, m.sender_id, m.testo, m.audio_url, m.tipo_messaggio, 
               EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
               (MAX(mr.read_at) IS NOT NULL) as is_read,
               (MAX(mr.delivered_at) IS NOT NULL) as is_delivered
        FROM messaggi m
        LEFT JOIN message_receipts mr ON m.id = mr.message_id
        WHERE m.corsa_id = $1 AND m.cliente_id = $2
-       GROUP BY m.id, m.corsa_id, m.cliente_id, m.sender_id, m.testo, m.created_at
+       GROUP BY m.id, m.sender_id, m.testo, m.audio_url, m.tipo_messaggio, m.created_at
        ORDER BY m.created_at DESC`, 
       [corsa_id, cliente_id]
     );
 
     const messages = rows.map((m) => ({
       id: String(m.id),
-      threadId,
       sender_id: Number(m.sender_id),
-      text: m.testo ?? "",
+      text: m.testo ?? null,
+      audio_url: m.audio_url ?? null,
+      tipo_messaggio: m.tipo_messaggio ?? 'text',
       created_at: Number(m.created_at_ms),
-      status: {
-        sent: true,
-        delivered: Boolean(m.is_delivered),
-        read: Boolean(m.is_read),
-      },
+      status: { sent: true, delivered: Boolean(m.is_delivered), read: Boolean(m.is_read) },
     }));
 
     return res.json(messages);
@@ -128,26 +120,44 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   }
 });
 
+/* ================= UPLOAD AUDIO ================= */
+chatRouter.post("/messages/audio", authMiddleware, upload.single('audio'), async (req, res) => {
+  const { corsa_id, cliente_id, client_msg_id } = req.body;
+  const sender_id = req.user.id;
+  
+  if (!req.file || !corsa_id || !cliente_id || !client_msg_id) {
+    return res.status(400).json({ message: "Parametri o file mancanti" });
+  }
+
+  try {
+    const audio_url = `/audio/${req.file.filename}`;
+    const { rows } = await pool.query(
+      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, audio_url, client_msg_id)
+       VALUES ($1, $2, $3, 'audio', $4, $5) RETURNING *`,
+      [corsa_id, cliente_id, sender_id, audio_url, client_msg_id]
+    );
+
+    return res.json(rows[0]);
+  } catch (err) {
+    log("UPLOAD_AUDIO_FAILED", { error: err.message });
+    return res.status(500).json({ message: "Errore salvataggio audio" });
+  }
+});
+
 /* ================= MARK THREAD AS READ ================= */
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
   const userId = Number(req.user.id);
   const role = req.user.role;
 
-  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
-
   try {
-    // Inserimento pulito: usa ON CONFLICT (message_id, user_id)
-    // Richiede vincolo UNIQUE(message_id, user_id) nel database
     const { rows } = await pool.query(
       `INSERT INTO message_receipts (message_id, user_id, read_at, delivered_at)
        SELECT m.id, $3, NOW(), NOW()
        FROM messaggi m
        WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
        ON CONFLICT (message_id, user_id) 
-       DO UPDATE SET 
-         read_at = COALESCE(message_receipts.read_at, EXCLUDED.read_at), 
-         delivered_at = COALESCE(message_receipts.delivered_at, EXCLUDED.delivered_at)
+       DO UPDATE SET read_at = COALESCE(message_receipts.read_at, EXCLUDED.read_at)
        RETURNING message_id`,
       [corsa_id, cliente_id, userId]
     );
@@ -155,27 +165,10 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
     if (rows.length > 0) {
       const { getIO } = await import("../socket.js");
       const io = getIO();
-      const threadRes = await pool.query(
-        `SELECT driver_id FROM chat_threads WHERE corsa_id = $1 AND cliente_id = $2`,
-        [corsa_id, cliente_id]
-      );
-      const thread = threadRes.rows[0];
-      if (thread) {
-        const recipientId = role === "cliente" ? thread.driver_id : cliente_id;
-        const targetRole = role === "cliente" ? "autista" : "cliente";
-        
-        io.to(`chat_${corsa_id}_${cliente_id}`)
-          .to(`${targetRole}_${recipientId}`)
-          .emit("message_read", { 
-            corsa_id, 
-            cliente_id, 
-            message_ids: rows.map(r => String(r.message_id)) 
-          });
-      }
+      io.emit("message_read", { corsa_id, cliente_id, message_ids: rows.map(r => String(r.message_id)) });
     }
-    return res.json({ success: true, marked_ids: rows.map(r => String(r.message_id)) });
+    return res.json({ success: true });
   } catch (err) {
-    log("MARK_AS_READ_FAILED", { error: err.message });
     return res.status(500).json({ message: "error" });
   }
 });

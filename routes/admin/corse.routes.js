@@ -1,10 +1,13 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-import { adminMiddleware } from '../../middleware/admin.js'; // Assicurati di avere un middleware per l'admin
+// Importiamo i middleware corretti
+import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/', adminMiddleware, async (req, res) => {
+// Proteggiamo la rotta con authMiddleware (per verificare il token) 
+// e requireRole('Admin') (per verificare il ruolo)
+router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT c.*, v.marca, v.modello, v.targa 
@@ -14,6 +17,7 @@ router.get('/', adminMiddleware, async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
+    console.error('Errore nel recupero corse admin:', err);
     res.status(500).json({ error: 'Errore nel recupero corse' });
   }
 });

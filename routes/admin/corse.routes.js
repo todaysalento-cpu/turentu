@@ -1,13 +1,11 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-// Importiamo i middleware corretti
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// Proteggiamo la rotta con authMiddleware (per verificare il token) 
-// e requireRole('Admin') (per verificare il ruolo)
-router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
+// Proteggiamo la rotta con authMiddleware e requireRole per Admin/admin
+router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT c.*, v.marca, v.modello, v.targa 

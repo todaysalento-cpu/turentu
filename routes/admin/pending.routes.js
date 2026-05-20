@@ -1,15 +1,13 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-// Importiamo i middleware corretti da auth.js
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-// Rotta per recuperare le entità in stato di "pending" (es. pagamenti o verifiche documenti)
-router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
+// Rotta per recuperare le entità in stato di "pending"
+// Aggiornato per accettare sia 'Admin' che 'admin'
+router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
-    // Esempio query: recupera elementi con stato 'pending'
-    // Adatta la query alla tua tabella specifica (es. pagamenti o verifiche)
     const result = await pool.query(`
       SELECT * 
       FROM pagamenti 
@@ -24,17 +22,22 @@ router.get('/', authMiddleware, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Esempio di rotta per approvare/rifiutare una richiesta
-router.patch('/:id/update-status', authMiddleware, requireRole('Admin'), async (req, res) => {
+// Rotta per approvare/rifiutare una richiesta
+router.patch('/:id/update-status', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   const { id } = req.params;
   const { nuovo_stato } = req.body; // Es: 'approvato' o 'rifiutato'
 
   try {
-    await pool.query(
-      'UPDATE pagamenti SET stato = $1 WHERE id = $2',
+    const result = await pool.query(
+      'UPDATE pagamenti SET stato = $1 WHERE id = $2 RETURNING *',
       [nuovo_stato, id]
     );
-    res.json({ success: true });
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Richiesta non trovata' });
+    }
+    
+    res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error('Errore aggiornamento stato pending:', err);
     res.status(500).json({ error: 'Errore aggiornamento stato' });

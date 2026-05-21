@@ -2,12 +2,14 @@ import express from "express";
 import multer from "multer";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
+import cloudinary from "../services/cloudinary.js"; // Importa il service che abbiamo creato
+import streamifier from "streamifier";
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
-// Configurazione storage per i file audio
-const upload = multer({ dest: 'uploads/audio/' });
+// Configurazione storage in memoria (nessun file salvato su disco locale)
+const upload = multer({ storage: multer.memoryStorage() });
 
 /* ================= LOGGER ================= */
 const log = (label, data = {}) => {
@@ -120,7 +122,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   }
 });
 
-/* ================= UPLOAD AUDIO ================= */
+/* ================= UPLOAD AUDIO (CLOUDINARY) ================= */
 chatRouter.post("/messages/audio", authMiddleware, upload.single('audio'), async (req, res) => {
   const { corsa_id, cliente_id, client_msg_id } = req.body;
   const sender_id = req.user.id;
@@ -130,11 +132,26 @@ chatRouter.post("/messages/audio", authMiddleware, upload.single('audio'), async
   }
 
   try {
-    const audio_url = `/audio/${req.file.filename}`;
+    // Funzione helper per caricare tramite stream
+    const uploadToCloudinary = (buffer) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: "video" }, // Cloudinary gestisce gli audio come video
+          (error, result) => {
+            if (result) resolve(result.secure_url);
+            else reject(error);
+          }
+        );
+        streamifier.createReadStream(buffer).pipe(stream);
+      });
+    };
+
+    const audioUrl = await uploadToCloudinary(req.file.buffer);
+
     const { rows } = await pool.query(
       `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, audio_url, client_msg_id)
        VALUES ($1, $2, $3, 'audio', $4, $5) RETURNING *`,
-      [corsa_id, cliente_id, sender_id, audio_url, client_msg_id]
+      [corsa_id, cliente_id, sender_id, audioUrl, client_msg_id]
     );
 
     return res.json(rows[0]);
@@ -148,7 +165,6 @@ chatRouter.post("/messages/audio", authMiddleware, upload.single('audio'), async
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
   const userId = Number(req.user.id);
-  const role = req.user.role;
 
   try {
     const { rows } = await pool.query(

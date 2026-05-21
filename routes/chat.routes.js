@@ -3,7 +3,7 @@ import multer from "multer";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
 // IMPORTANTE: Usa le parentesi graffe qui sotto
-import { cloudinary } from "../../services/cloudinary.js"; 
+import { cloudinary } from "../services/cloudinary.js"; 
 import streamifier from "streamifier";
 
 const chatRouter = express.Router();

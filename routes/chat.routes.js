@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
-import cloudinary from "../services/cloudinary.js"; // Importa il service che abbiamo creato
+import cloudinary from "../../services/cloudinary.js"; // Importa il service che abbiamo creato
 import streamifier from "streamifier";
 
 const chatRouter = express.Router();

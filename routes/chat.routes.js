@@ -2,13 +2,14 @@ import express from "express";
 import multer from "multer";
 import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
-import cloudinary from "../services/cloudinary.js"; // Importa il service che abbiamo creato
+// IMPORTANTE: Usa le parentesi graffe qui sotto
+import { cloudinary } from "../../services/cloudinary.js"; 
 import streamifier from "streamifier";
 
 const chatRouter = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
-// Configurazione storage in memoria (nessun file salvato su disco locale)
+// Configurazione storage in memoria
 const upload = multer({ storage: multer.memoryStorage() });
 
 /* ================= LOGGER ================= */
@@ -132,11 +133,10 @@ chatRouter.post("/messages/audio", authMiddleware, upload.single('audio'), async
   }
 
   try {
-    // Funzione helper per caricare tramite stream
     const uploadToCloudinary = (buffer) => {
       return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { resource_type: "video" }, // Cloudinary gestisce gli audio come video
+          { resource_type: "video" }, 
           (error, result) => {
             if (result) resolve(result.secure_url);
             else reject(error);

@@ -8,11 +8,37 @@ import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 const router = express.Router();
 router.use(authMiddleware);
 
+// -------------------- Helper notifiche --------------------
+function formatNotificationDate(input) {
+  const d = input instanceof Date ? input : new Date(input);
+  if (isNaN(d.getTime())) return '';
+
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+
+  const isToday = d.toDateString() === today.toDateString();
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dayName = d.toLocaleDateString('it-IT', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'long'
+  });
+
+  if (isToday) return `oggi alle ${time}`;
+  if (isTomorrow) return `domani alle ${time}`;
+  return `${dayName} all’${time}`;
+}
+
 // -------------------- GET pending --------------------
 router.get('/autista/:veicoloId', async (req, res) => {
   const client = await pool.connect();
+
   try {
     const veicoloId = Number(req.params.veicoloId);
+
     const result = await client.query(
       `SELECT p.*, u.nome AS cliente_nome
        FROM pending p
@@ -29,6 +55,7 @@ router.get('/autista/:veicoloId', async (req, res) => {
     }));
 
     res.json({ pendings });
+
   } catch (err) {
     console.error('❌ Error fetching pendings:', err);
     res.status(500).json({ error: err.message });
@@ -40,7 +67,6 @@ router.get('/autista/:veicoloId', async (req, res) => {
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
-  let request_id_to_broadcast = null;
 
   try {
     const id = Number(req.params.id);
@@ -57,7 +83,6 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     const selectedPending = pendingRes.rows[0];
-    request_id_to_broadcast = selectedPending.request_id;
 
     if (selectedPending.stato !== 'pending') {
       await client.query('ROLLBACK');
@@ -65,10 +90,10 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     // 🔥 BLOCCO doppia accettazione
-    if (request_id_to_broadcast) {
+    if (selectedPending.request_id) {
       const alreadyAccepted = await client.query(
         `SELECT id FROM pending WHERE request_id = $1 AND stato = 'accettata' FOR UPDATE`,
-        [request_id_to_broadcast]
+        [selectedPending.request_id]
       );
 
       if (alreadyAccepted.rows.length) {
@@ -93,6 +118,8 @@ router.post('/:id/accetta', async (req, res) => {
     const io = getIO();
 
     for (const p of result.rows) {
+
+      // 🔥 DRIVER
       const driverRes = await client.query(
         `SELECT v.driver_id, u.nome AS driver_nome
          FROM veicolo v
@@ -171,14 +198,6 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     await client.query('COMMIT');
-
-    // 🔥 BROADCAST GLOBALE: Rimuove il pending da TUTTI gli autisti
-    if (request_id_to_broadcast) {
-      io.emit('rimuovi_richieste_by_request_id', { 
-        request_id: request_id_to_broadcast 
-      });
-    }
-
     res.json({ ok: true });
 
   } catch (err) {
@@ -194,20 +213,25 @@ router.post('/:id/accetta', async (req, res) => {
 export async function notifyNewPending(pending) {
   try {
     const io = getIO();
+
     const driverRes = await pool.query(
       `SELECT driver_id FROM veicolo WHERE id = $1`,
       [pending.veicolo_id]
     );
 
     const driverId = driverRes.rows[0]?.driver_id;
+
+    // 🔥 SOCKET
     io.to(`autista_${driverId}`).emit('new_pending', { pending });
 
+    // 🔥 PUSH DRIVER
     await sendNotification({
       userId: driverId,
       title: 'Nuova richiesta',
       message: 'Hai una nuova corsa disponibile',
       type: 'pending'
     });
+
   } catch (err) {
     console.error('❌ notifyNewPending error:', err);
   }

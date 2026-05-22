@@ -39,8 +39,7 @@ router.get('/autista/:veicoloId', async (req, res) => {
   try {
     const veicoloId = Number(req.params.veicoloId);
 
-    // Filtriamo escludendo le richieste che fanno parte di un blocco 
-    // già accettato tramite il controllo sul request_id
+    // Filtriamo escludendo richieste già accettate o parte di blocchi gestiti
     const result = await client.query(
       `SELECT p.*, u.nome AS cliente_nome
        FROM pending p
@@ -126,7 +125,6 @@ router.post('/:id/accetta', async (req, res) => {
     const io = getIO();
 
     for (const p of result.rows) {
-
       // 🔥 DRIVER
       const driverRes = await client.query(
         `SELECT v.driver_id, u.nome AS driver_nome
@@ -180,23 +178,12 @@ router.post('/:id/accetta', async (req, res) => {
         destinazione_address: p.destinazione_address,
       };
 
-      // -------------------- SOCKET DRIVER --------------------
-      io.to(`autista_${driverId}`).emit('pending_update', {
-        id: p.id,
-        stato: 'accettata',
-        corsa: corsaCompleta
-      });
-
+      // -------------------- SOCKET DRIVER & CLIENTE --------------------
+      io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
+      io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });
 
-      // -------------------- SOCKET CLIENTE --------------------
-      io.to(`cliente_${p.cliente_id}`).emit('pending_update', {
-        id: p.id,
-        stato: 'accettata',
-        corsa_id: corsa.id,
-      });
-
-      // -------------------- 🔥 PUSH NOTIFICATION CLIENTE --------------------
+      // -------------------- PUSH NOTIFICATION --------------------
       await sendNotification({
         userId: p.cliente_id,
         title: 'Viaggio accettato',
@@ -210,6 +197,13 @@ router.post('/:id/accetta', async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
+    
+    // Se i posti sono finiti, rimuoviamo la richiesta dalla lista per pulizia
+    if (err.message === 'Posti insufficienti') {
+      await pool.query(`DELETE FROM pending WHERE id = $1`, [Number(req.params.id)]);
+      console.log(`🧹 Corsa ${req.params.id} rimossa: posti esauriti.`);
+    }
+
     console.error('❌ Pending accept error:', err);
     res.status(500).json({ error: err.message });
   } finally {
@@ -221,25 +215,16 @@ router.post('/:id/accetta', async (req, res) => {
 export async function notifyNewPending(pending) {
   try {
     const io = getIO();
-
-    const driverRes = await pool.query(
-      `SELECT driver_id FROM veicolo WHERE id = $1`,
-      [pending.veicolo_id]
-    );
-
+    const driverRes = await pool.query(`SELECT driver_id FROM veicolo WHERE id = $1`, [pending.veicolo_id]);
     const driverId = driverRes.rows[0]?.driver_id;
 
-    // 🔥 SOCKET
     io.to(`autista_${driverId}`).emit('new_pending', { pending });
-
-    // 🔥 PUSH DRIVER
     await sendNotification({
       userId: driverId,
       title: 'Nuova richiesta',
       message: 'Hai una nuova corsa disponibile',
       type: 'pending'
     });
-
   } catch (err) {
     console.error('❌ notifyNewPending error:', err);
   }

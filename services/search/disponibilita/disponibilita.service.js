@@ -1,6 +1,6 @@
 import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
-import { getDisponibilitaCache } from '../search/search.cache.js';
+import { getDisponibilitaCache } from './search.cache.js';
 
 /**
  * Restituisce tutti i turni di un autista. 

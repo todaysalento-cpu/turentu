@@ -1,5 +1,6 @@
 import { pool } from '../../db/db.js';
-
+import { CacheManager } from '../../utils/cacheManager.js';
+import { getVeicoliCache } from '../search/search.cache.js';
 
 // =========================
 // Aggiorna posizione CORRENTE (DB)
@@ -65,37 +66,43 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + cache
+// Aggiorna posizione CORRENTE + Cache (Via CacheManager)
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
-  const v = veicoliCache?.[veicoloId];
+  const v = getVeicoliCache().get(veicoloId);
   if (v) {
-    v.coordCorrente = { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() };
+    CacheManager.veicolo.update({
+      ...v,
+      coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
+    });
   }
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + cache
+// Aggiorna posizione PREDITTIVA + Cache (Via CacheManager)
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
-  const v = veicoliCache?.[veicoloId];
+  const v = getVeicoliCache().get(veicoloId);
   if (v) {
-    v.coordPredittiva = {
-      lat: coord.lat,
-      lon: coord.lon,
-      tipo: 'PREDITTIVA',
-      validUntil: new Date(new Date(fromTime).getTime() + tempoX),
-      timestamp: new Date()
-    };
+    CacheManager.veicolo.update({
+      ...v,
+      coordPredittiva: {
+        lat: coord.lat,
+        lon: coord.lon,
+        tipo: 'PREDITTIVA',
+        validUntil: new Date(new Date(fromTime).getTime() + tempoX),
+        timestamp: new Date()
+      }
+    });
   }
 }
 
 // =========================
 // Recupera posizione veicolo dalla cache (PREDITTIVA > CORRENTE > BASE > FALLBACK)
 export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
-  const v = veicoliCache?.[veicoloId];
+  const v = getVeicoliCache().get(veicoloId);
   if (!v) return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
 
   if (v.coordPredittiva && atTime <= new Date(v.coordPredittiva.validUntil)) return v.coordPredittiva;
@@ -109,8 +116,9 @@ export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
 // Recupera coordinate veicoli in batch dalla cache
 export function getVeicoliCoordBatchCache(richieste) {
   const map = {};
+  const now = new Date();
   for (const r of richieste) {
-    map[r.veicolo_id] = getVeicoloCoordCache(r.veicolo_id, r.atTime || new Date());
+    map[r.veicolo_id] = getVeicoloCoordCache(r.veicolo_id, r.atTime || now);
   }
   return map;
 }

@@ -3,8 +3,6 @@ import { pool } from '../../db/db.js';
 import * as prenotazioneService from '../prenotazione/prenotazione.service.js';
 import { aggiornaPosizionePredittiva } from '../veicolo/veicolo.service.js';
 import params from '../../config/params.js';
-// ✅ Importa il CacheManager
-import { CacheManager } from '../../utils/cacheManager.js';
 
 export async function createCorsaFromPending(pending, veicolo, client) {
   let localClient = false;
@@ -111,16 +109,6 @@ export async function createCorsaFromPending(pending, veicolo, client) {
 
     const corsa = res.rows[0];
     if (!corsa?.id) throw new Error('Insert corsa non ha restituito id');
-
-    // ✅ AGGIORNAMENTO CACHE (Write-Through)
-    // Passiamo le coordinate separate per permettere alla cache di calcolare i geohash
-    CacheManager.corsa.update({
-      ...corsa,
-      origine_lat: coordOrig.lat,
-      origine_lon: coordOrig.lon,
-      dest_lat: coordDest.lat,
-      dest_lon: coordDest.lon
-    });
 
     // --- PRENOTAZIONE AUTOMATICA ---
     const prenotazione = await prenotazioneService.prenotaCorsa(

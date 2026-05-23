@@ -9,27 +9,38 @@ let veicoliCache = new Map();
 let disponibilitaCache = new Map();
 let corseCache = new Map();
 
-// --- GETTER (Restituiscono iteratori o array convertiti) ---
+// --- GETTER ---
 export const getVeicoliCache = () => veicoliCache;
 export const getDisponibilitaCache = () => disponibilitaCache;
 export const getCorseCache = () => corseCache;
 
 // --- HELPERS ---
 const safeParseJSON = (str) => {
-  try { return JSON.parse(str); } 
+  try { return typeof str === 'string' ? JSON.parse(str) : (str || []); } 
   catch { return []; }
 };
 
-const encodeGeohash = (lat, lon) => ngeohash.encode(lat, lon, GEOHASH_PRECISION);
+const encodeGeohash = (lat, lon) => {
+  if (lat == null || lon == null) return null;
+  return ngeohash.encode(lat, lon, GEOHASH_PRECISION);
+};
 
-// --- METODI DI AGGIORNAMENTO PUNTUALE (Incrementali) ---
+// --- METODI DI AGGIORNAMENTO PUNTUALE (Write-Through) ---
 
 export const upsertVeicolo = (v) => {
   veicoliCache.set(v.id, {
     ...v,
     tipo: v.tipo ?? 'citycar',
     geohash: encodeGeohash(v.lat, v.lon),
-    servizi: Array.isArray(v.servizi) ? v.servizi : (v.servizi ? safeParseJSON(v.servizi) : [])
+    servizi: Array.isArray(v.servizi) ? v.servizi : safeParseJSON(v.servizi)
+  });
+};
+
+export const upsertDisponibilita = (d) => {
+  disponibilitaCache.set(d.id, {
+    ...d,
+    giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi),
+    inattivita: Array.isArray(d.inattivita) ? d.inattivita : safeParseJSON(d.inattivita)
   });
 };
 
@@ -42,22 +53,30 @@ export const upsertCorsa = (c) => {
 };
 
 export const removeVeicolo = (id) => veicoliCache.delete(id);
+export const removeDisponibilita = (id) => disponibilitaCache.delete(id);
 export const removeCorsa = (id) => corseCache.delete(id);
 
-// --- CARICAMENTO INIZIALE (Cold Start) ---
+// --- CARICAMENTO INIZIALE ---
 export async function loadCachesUltra() {
-  // Se la cache è già popolata, non ricaricare
   if (veicoliCache.size > 0) return;
 
   const client = await pool.connect();
   try {
     // 1. Veicoli
-    const vRes = await client.query(`SELECT id, modello, tipo, posti_totali, servizi, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
+    const vRes = await client.query(`
+      SELECT id, driver_id, modello, tipo, posti_totali, servizi, 
+             ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
+      FROM veicolo
+    `);
     vRes.rows.forEach(v => upsertVeicolo(v));
 
-    // 2. Disponibilità
-    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
-    dRes.rows.forEach(d => disponibilitaCache.set(d.id, d));
+    // 2. Disponibilità (con join per ottenere il driver_id)
+    const dRes = await client.query(`
+      SELECT d.*, v.driver_id 
+      FROM disponibilita_veicolo d
+      JOIN veicolo v ON v.id = d.veicolo_id
+    `);
+    dRes.rows.forEach(d => upsertDisponibilita(d));
 
     // 3. Corse
     const cRes = await client.query(`
@@ -70,7 +89,7 @@ export async function loadCachesUltra() {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    console.log(`📦 Cache caricate: Veicoli:${veicoliCache.size}, Corse:${corseCache.size}`);
+    console.log(`📦 Cache caricate: Veicoli:${veicoliCache.size}, Disp:${disponibilitaCache.size}, Corse:${corseCache.size}`);
   } finally {
     client.release();
   }

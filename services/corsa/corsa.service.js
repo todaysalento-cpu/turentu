@@ -60,17 +60,8 @@ export async function createCorsaFromPending(pending, veicolo, client) {
         : 'condivisa';
 
     // --- ADDRESS ---
-    const origine_address =
-      pending.origine_address ??
-      pending.localitaOrigine ??
-      pending.origineAddress ??
-      'N/D';
-
-    const destinazione_address =
-      pending.destinazione_address ??
-      pending.localitaDestinazione ??
-      pending.destinazioneAddress ??
-      'N/D';
+    const origine_address = pending.origine_address ?? pending.localitaOrigine ?? pending.origineAddress ?? 'N/D';
+    const destinazione_address = pending.destinazione_address ?? pending.localitaDestinazione ?? pending.destinazioneAddress ?? 'N/D';
 
     // --- DISTANZA ---
     let distanzaKm = Number(String(pending.distanza ?? 0).replace(',', '.').trim());
@@ -91,29 +82,17 @@ export async function createCorsaFromPending(pending, veicolo, client) {
           $14,$15,NOW()
        ) RETURNING *`,
       [
-        veicolo.id,
-        startDatetime,
-        arrivoDatetime,
-        tipoCorsa,
-        `${durataMin} minutes`,
-        postiDisponibili,
-        postiTotali,
-        pending.prezzo ?? pending.prezzo_fisso ?? 0,
-        distanzaKm,
-        coordOrig.lon,
-        coordOrig.lat,
-        coordDest.lon,
-        coordDest.lat,
-        origine_address,
-        destinazione_address
+        veicolo.id, startDatetime, arrivoDatetime, tipoCorsa, `${durataMin} minutes`,
+        postiDisponibili, postiTotali, pending.prezzo ?? pending.prezzo_fisso ?? 0,
+        distanzaKm, coordOrig.lon, coordOrig.lat, coordDest.lon, coordDest.lat,
+        origine_address, destinazione_address
       ]
     );
 
     const corsa = res.rows[0];
     if (!corsa?.id) throw new Error('Insert corsa non ha restituito id');
 
-    // ✅ AGGIORNAMENTO CACHE (Write-Through)
-    // Passiamo le coordinate separate per permettere alla cache di calcolare i geohash
+    // ✅ AGGIORNAMENTO CACHE CORSA
     CacheManager.corsa.update({
       ...corsa,
       origine_lat: coordOrig.lat,
@@ -121,6 +100,17 @@ export async function createCorsaFromPending(pending, veicolo, client) {
       dest_lat: coordDest.lat,
       dest_lon: coordDest.lon
     });
+
+    // ✅ AGGIORNAMENTO CACHE DISPONIBILITÀ
+    // Ricarichiamo il record dal DB per mantenere la cache sincronizzata dopo la variazione posti
+    const dispRes = await client.query(
+      `SELECT d.*, v.driver_id FROM disponibilita_veicolo d 
+       JOIN veicolo v ON v.id = d.veicolo_id 
+       WHERE d.veicolo_id = $1`, [veicolo.id]
+    );
+    if (dispRes.rows.length > 0) {
+      CacheManager.disponibilita.update(dispRes.rows[0]);
+    }
 
     // --- PRENOTAZIONE AUTOMATICA ---
     const prenotazione = await prenotazioneService.prenotaCorsa(
@@ -130,24 +120,18 @@ export async function createCorsaFromPending(pending, veicolo, client) {
       client
     );
 
-    // 🔥 FIX IMPORTANTE: collega pagamento alla corsa
+    // 🔥 Collega pagamento alla corsa
     await client.query(
-      `UPDATE pagamenti
-       SET corsa_id = $1
-       WHERE prenotazione_id = $2`,
+      `UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`,
       [corsa.id, prenotazione.id]
     );
 
     // --- POSIZIONE PREDITTIVA ---
     if (corsa.destinazione && corsa.arrivo_datetime) {
       const tempoX = params.tempoPosizioneX ?? 2 * 60 * 60 * 1000;
-
       await aggiornaPosizionePredittiva(
-        veicolo.id,
-        { lat: coordDest.lat, lon: coordDest.lon },
-        corsa.arrivo_datetime,
-        tempoX,
-        client
+        veicolo.id, { lat: coordDest.lat, lon: coordDest.lon },
+        corsa.arrivo_datetime, tempoX, client
       );
     }
 

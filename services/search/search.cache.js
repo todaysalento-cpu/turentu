@@ -29,7 +29,7 @@ const encodeGeohash = (lat, lon) => {
   return ngeohash.encode(lat, lon, GEOHASH_PRECISION);
 };
 
-// --- METODI DI AGGIORNAMENTO PUNTUALE (Con LOG di Debug) ---
+// --- AGGIORNAMENTO PUNTUALE (Entità Singola) ---
 
 export const upsertVeicolo = (v) => {
   const esiste = veicoliCache.has(v.id);
@@ -49,7 +49,7 @@ export const upsertDisponibilita = (d) => {
     giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi),
     inattivita: Array.isArray(d.inattivita) ? d.inattivita : safeParseJSON(d.inattivita)
   });
-  console.log(`[CACHE][DISP] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${d.id}, Driver: ${d.driver_id}`);
+  console.log(`[CACHE][DISP] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${d.id}`);
 };
 
 export const upsertCorsa = (c) => {
@@ -61,6 +61,8 @@ export const upsertCorsa = (c) => {
   });
   console.log(`[CACHE][CORSA] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${c.id}`);
 };
+
+// --- RIMOZIONE PUNTUALE ---
 
 export const removeVeicolo = (id) => {
   if (veicoliCache.delete(id)) console.log(`[CACHE][VEICOLO] Rimosso ID: ${id}`);
@@ -74,13 +76,21 @@ export const removeCorsa = (id) => {
   if (corseCache.delete(id)) console.log(`[CACHE][CORSA] Rimossa ID: ${id}`);
 };
 
-// --- CARICAMENTO INIZIALE ---
-export async function loadCachesUltra() {
-  if (veicoliCache.size > 0) return;
+// --- CARICAMENTO E RICARICAMENTO TOTALE ---
+
+export async function loadCachesUltra(force = false) {
+  // Se la cache non è vuota e non forziamo, usciamo
+  if (!force && veicoliCache.size > 0) return;
 
   const client = await pool.connect();
   try {
-    console.log("[CACHE] Inizio caricamento dati dal DB...");
+    console.log(`[CACHE] ${force ? 'Ricaricamento forzato' : 'Inizio caricamento'} dal DB...`);
+    
+    if (force) {
+      veicoliCache.clear();
+      disponibilitaCache.clear();
+      corseCache.clear();
+    }
     
     // 1. Veicoli
     const vRes = await client.query(`
@@ -117,12 +127,9 @@ export async function loadCachesUltra() {
   }
 }
 
-// --- UTILI ---
 export function filterCorse({ veicoloId, clienteId }) {
   let result = getCorseCache();
-  
   if (veicoloId) result = result.filter(c => c.veicolo_id === veicoloId);
   if (clienteId) result = result.filter(c => c.cliente_id === clienteId);
-  
   return result.slice(0, TOP_RESULTS);
 }

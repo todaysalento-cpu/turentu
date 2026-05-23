@@ -1,3 +1,4 @@
+// services/veicolo/veicolo.service.js
 import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
 import { getVeicoliCache } from '../search/search.cache.js';
@@ -16,7 +17,7 @@ export async function aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, cli
     await client.query(
       `INSERT INTO posizione_veicolo (veicolo_id, coord, timestamp, valid_until, tipo)
        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), NOW(), $4, 'CORRENTE')`,
-      [veicoloId, coord.lon, coord.lat, validUntil ? new Date(validUntil) : null]
+      [veicoloId, Number(coord.lon), Number(coord.lat), validUntil ? new Date(validUntil) : null]
     );
 
     if (localClient) await client.query('COMMIT');
@@ -42,6 +43,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
   try {
     if (localClient) await client.query('BEGIN');
 
+    // Utilizziamo un approccio di inserimento atomico
     await client.query(
       `INSERT INTO posizione_veicolo (veicolo_id, coord, timestamp, valid_until, tipo)
        SELECT $1, ST_SetSRID(ST_MakePoint($2,$3),4326), $4, $5, 'PREDITTIVA'
@@ -52,7 +54,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
            AND timestamp <= $5
            AND (valid_until IS NULL OR valid_until >= $4)
        )`,
-      [veicoloId, coord.lon, coord.lat, fromTime, validUntil]
+      [veicoloId, Number(coord.lon), Number(coord.lat), fromTime, validUntil]
     );
 
     if (localClient) await client.query('COMMIT');
@@ -66,31 +68,36 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + Cache (Via CacheManager)
+// Aggiorna posizione CORRENTE + Cache
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
   const v = getVeicoliCache().get(veicoloId);
   if (v) {
     CacheManager.veicolo.update({
-      ...v,
-      coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
+      ...v, // Preserva le altre proprietà (es. coordPredittiva esistente)
+      coordCorrente: { 
+        lat: Number(coord.lat), 
+        lon: Number(coord.lon), 
+        tipo: 'CORRENTE', 
+        timestamp: new Date() 
+      }
     });
   }
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + Cache (Via CacheManager)
+// Aggiorna posizione PREDITTIVA + Cache
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
   const v = getVeicoliCache().get(veicoloId);
   if (v) {
     CacheManager.veicolo.update({
-      ...v,
+      ...v, // Preserva le altre proprietà (es. coordCorrente esistente)
       coordPredittiva: {
-        lat: coord.lat,
-        lon: coord.lon,
+        lat: Number(coord.lat),
+        lon: Number(coord.lon),
         tipo: 'PREDITTIVA',
         validUntil: new Date(new Date(fromTime).getTime() + tempoX),
         timestamp: new Date()
@@ -100,13 +107,18 @@ export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTim
 }
 
 // =========================
-// Recupera posizione veicolo dalla cache (PREDITTIVA > CORRENTE > BASE > FALLBACK)
+// Recupera posizione veicolo dalla cache
 export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
   const v = getVeicoliCache().get(veicoloId);
   if (!v) return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
 
-  if (v.coordPredittiva && atTime <= new Date(v.coordPredittiva.validUntil)) return v.coordPredittiva;
+  // Verifica validità predittiva
+  if (v.coordPredittiva && atTime <= new Date(v.coordPredittiva.validUntil)) {
+    return v.coordPredittiva;
+  }
+  // Fallback a corrente
   if (v.coordCorrente) return v.coordCorrente;
+  // Fallback a dati base veicolo
   if (v.lat != null && v.lon != null) return { lat: v.lat, lon: v.lon, tipo: 'BASE' };
 
   return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };

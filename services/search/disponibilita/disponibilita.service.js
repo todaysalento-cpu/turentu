@@ -2,16 +2,14 @@ import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
 import { getDisponibilitaCache } from '../search.cache.js';
 
-/**
- * Restituisce tutti i turni di un autista. 
- * Ora utilizza la cache in memoria per una risposta istantanea.
- */
 export async function getDisponibilita(driver_id) {
-  // Accesso alla Map di cache
-  const tuttiITurni = Array.from(getDisponibilitaCache().values());
+  const cache = getDisponibilitaCache();
+  const tuttiITurni = Array.from(cache.values());
   
-  // Filtriamo i turni associati a questo driver
+  console.log(`[BACKEND] getDisponibilita - Cache size: ${cache.size}, Filtro driver_id: ${driver_id}`);
+  
   const turniDriver = tuttiITurni.filter(d => d.driver_id === driver_id);
+  console.log(`[BACKEND] getDisponibilita - Trovati ${turniDriver.length} turni per driver ${driver_id}`);
 
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -19,17 +17,12 @@ export async function getDisponibilita(driver_id) {
 
   return turniDriver.map(d => {
     let disponibile = true;
-
-    // --- Normalizza giorni esclusi
-    const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) 
-      ? d.giorni_esclusi.map(Number) 
-      : [];
+    const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
 
     if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
       disponibile = false;
     }
 
-    // --- Controlla periodi di inattività
     if (Array.isArray(d.inattivita)) {
       for (const i of d.inattivita) {
         const start = new Date(i.start);
@@ -41,7 +34,6 @@ export async function getDisponibilita(driver_id) {
       }
     }
 
-    // --- Controlla orario turno
     const startDate = new Date(d.start);
     const endDate = new Date(d.fine);
     const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
@@ -55,16 +47,15 @@ export async function getDisponibilita(driver_id) {
   });
 }
 
-/**
- * Crea o aggiorna un turno con logica Write-Through Cache
- */
 export async function createDisponibilita(turno) {
+  console.log("[BACKEND] createDisponibilita - Ricevuto:", turno);
   let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
 
   start = parseTimeString(start);
   fine  = parseTimeString(fine);
 
   if (!start || !fine || start >= fine) {
+    console.error("[BACKEND] createDisponibilita - Orario non valido");
     throw new Error('Orario non valido: start deve essere prima di fine');
   }
 
@@ -84,17 +75,14 @@ export async function createDisponibilita(turno) {
   );
 
   const nuovoTurno = res.rows[0];
+  console.log("[BACKEND] createDisponibilita - Inserito/Aggiornato:", nuovoTurno.id);
   
-  // ✅ Aggiornamento Cache
   CacheManager.disponibilita.update(nuovoTurno);
-
   return nuovoTurno;
 }
 
-/**
- * Aggiorna un turno esistente e la cache
- */
 export async function updateDisponibilita(id, update) {
+  console.log(`[BACKEND] updateDisponibilita - ID: ${id}, Payload:`, update);
   const fields = [];
   const values = [];
   let idx = 1;
@@ -119,26 +107,18 @@ export async function updateDisponibilita(id, update) {
   );
 
   const turnoAggiornato = res.rows[0];
+  console.log("[BACKEND] updateDisponibilita - Successo:", turnoAggiornato.id);
   
-  // ✅ Aggiornamento Cache
   CacheManager.disponibilita.update(turnoAggiornato);
-
   return turnoAggiornato;
 }
 
-/**
- * Elimina un turno e rimuove dalla cache
- */
 export async function deleteDisponibilita(id) {
+  console.log(`[BACKEND] deleteDisponibilita - ID: ${id}`);
   await pool.query('DELETE FROM disponibilita_veicolo WHERE id=$1', [id]);
-  
-  // ✅ Rimozione Cache
   CacheManager.disponibilita.delete(id);
 }
 
-/**
- * Helper: converte hh:mm o ISO string in timestamp ISO
- */
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();

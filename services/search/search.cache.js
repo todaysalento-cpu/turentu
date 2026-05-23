@@ -10,10 +10,12 @@ const disponibilitaCache = new Map();
 const corseCache = new Map();
 
 // --- GETTER ESPORTATI ---
+// Utilizza questi per accedere alle Map tramite .get(id)
 export const getVeicoliMap = () => veicoliCache;
 export const getDisponibilitaMap = () => disponibilitaCache;
 export const getCorseMap = () => corseCache;
 
+// Utilizza questi se ti serve l'array completo per filtri/mappature
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
 export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
@@ -79,7 +81,6 @@ export const removeCorsa = (id) => {
 // --- CARICAMENTO E RICARICAMENTO TOTALE ---
 
 export async function loadCachesUltra(force = false) {
-  // Se la cache non è vuota e non forziamo, usciamo
   if (!force && veicoliCache.size > 0) return;
 
   const client = await pool.connect();
@@ -122,6 +123,7 @@ export async function loadCachesUltra(force = false) {
     console.log(`📦 [CACHE] Caricamento completato: Veicoli:${veicoliCache.size}, Disp:${disponibilitaCache.size}, Corse:${corseCache.size}`);
   } catch (err) {
     console.error("[CACHE] Errore critico caricamento:", err);
+    throw err; // Rilancia per gestire l'errore nel chiamante
   } finally {
     client.release();
   }

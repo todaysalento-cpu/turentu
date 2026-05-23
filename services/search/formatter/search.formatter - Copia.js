@@ -1,14 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
-import { TOP_RESULTS, getVeicoliMap } from '../search.cache.js';
+import { TOP_RESULTS } from '../search.cache.js';
 
 const safeParseJSON = (str) => {
   try { return JSON.parse(str); } 
   catch { return []; }
 };
 
-async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
+async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, veicoliCache) {
   let durataRichiesta = 0;
   let distanzaRichiesta = 0;
 
@@ -27,13 +27,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
     ...corseFiltrate.map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
-  // Recuperiamo la Map una sola volta fuori dal ciclo per efficienza
-  const veicoliMap = getVeicoliMap();
-
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
-      // CORREZIONE: Accesso tramite .get() sulla Map
-      const v = veicoliMap.get(item.veicolo_id);
+      const v = veicoliCache[item.veicolo_id];
       const isCorsa = item.origine_lat !== undefined;
 
       const coordOrigine = isCorsa
@@ -96,7 +92,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
         id: uuidv4(),
         veicolo_id: item.veicolo_id,
         modello: v?.modello ?? 'N/D',
-        tipoVeicolo: v?.tipo ?? 'citycar',
+        tipoVeicolo: v?.tipo ?? 'citycar', // 🔹 aggiunto tipo per icone frontend
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
         coordOrigine,
         coordDestinazione,

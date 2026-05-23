@@ -4,18 +4,16 @@ import { pool } from '../../db/db.js';
 const GEOHASH_PRECISION = 5;
 export const TOP_RESULTS = 10;
 
-// --- STRUTTURE CACHE (Map private per mantenere l'O(1) in scrittura/lettura) ---
+// --- STRUTTURE CACHE ---
 const veicoliCache = new Map();
 const disponibilitaCache = new Map();
 const corseCache = new Map();
 
 // --- GETTER ESPORTATI ---
-// Restituiscono le Map originali (per .size e lookup O(1))
 export const getVeicoliMap = () => veicoliCache;
 export const getDisponibilitaMap = () => disponibilitaCache;
 export const getCorseMap = () => corseCache;
 
-// Restituiscono Array (per compatibilità con .filter())
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
 export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
@@ -31,37 +29,50 @@ const encodeGeohash = (lat, lon) => {
   return ngeohash.encode(lat, lon, GEOHASH_PRECISION);
 };
 
-// --- METODI DI AGGIORNAMENTO PUNTUALE (Write-Through) ---
+// --- METODI DI AGGIORNAMENTO PUNTUALE (Con LOG di Debug) ---
 
 export const upsertVeicolo = (v) => {
+  const esiste = veicoliCache.has(v.id);
   veicoliCache.set(v.id, {
     ...v,
     tipo: v.tipo ?? 'citycar',
     geohash: encodeGeohash(v.lat, v.lon),
     servizi: Array.isArray(v.servizi) ? v.servizi : safeParseJSON(v.servizi)
   });
+  console.log(`[CACHE][VEICOLO] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${v.id}`);
 };
 
 export const upsertDisponibilita = (d) => {
-  // Nota: d.id è la chiave primaria della tabella disponibilita_veicolo
+  const esiste = disponibilitaCache.has(d.id);
   disponibilitaCache.set(d.id, {
     ...d,
     giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi),
     inattivita: Array.isArray(d.inattivita) ? d.inattivita : safeParseJSON(d.inattivita)
   });
+  console.log(`[CACHE][DISP] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${d.id}, Driver: ${d.driver_id}`);
 };
 
 export const upsertCorsa = (c) => {
+  const esiste = corseCache.has(c.id);
   corseCache.set(c.id, {
     ...c,
     geohashOrigine: encodeGeohash(c.origine_lat, c.origine_lon),
     geohashDest: encodeGeohash(c.dest_lat, c.dest_lon)
   });
+  console.log(`[CACHE][CORSA] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${c.id}`);
 };
 
-export const removeVeicolo = (id) => veicoliCache.delete(id);
-export const removeDisponibilita = (id) => disponibilitaCache.delete(id);
-export const removeCorsa = (id) => corseCache.delete(id);
+export const removeVeicolo = (id) => {
+  if (veicoliCache.delete(id)) console.log(`[CACHE][VEICOLO] Rimosso ID: ${id}`);
+};
+
+export const removeDisponibilita = (id) => {
+  if (disponibilitaCache.delete(id)) console.log(`[CACHE][DISP] Rimossa ID: ${id}`);
+};
+
+export const removeCorsa = (id) => {
+  if (corseCache.delete(id)) console.log(`[CACHE][CORSA] Rimossa ID: ${id}`);
+};
 
 // --- CARICAMENTO INIZIALE ---
 export async function loadCachesUltra() {
@@ -69,6 +80,8 @@ export async function loadCachesUltra() {
 
   const client = await pool.connect();
   try {
+    console.log("[CACHE] Inizio caricamento dati dal DB...");
+    
     // 1. Veicoli
     const vRes = await client.query(`
       SELECT id, driver_id, modello, tipo, posti_totali, servizi, 
@@ -96,7 +109,9 @@ export async function loadCachesUltra() {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    console.log(`📦 Cache caricate: Veicoli:${veicoliCache.size}, Disp:${disponibilitaCache.size}, Corse:${corseCache.size}`);
+    console.log(`📦 [CACHE] Caricamento completato: Veicoli:${veicoliCache.size}, Disp:${disponibilitaCache.size}, Corse:${corseCache.size}`);
+  } catch (err) {
+    console.error("[CACHE] Errore critico caricamento:", err);
   } finally {
     client.release();
   }
@@ -104,7 +119,7 @@ export async function loadCachesUltra() {
 
 // --- UTILI ---
 export function filterCorse({ veicoloId, clienteId }) {
-  let result = getCorseCache(); // Ritorna l'array
+  let result = getCorseCache();
   
   if (veicoloId) result = result.filter(c => c.veicolo_id === veicoloId);
   if (clienteId) result = result.filter(c => c.cliente_id === clienteId);

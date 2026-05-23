@@ -1,12 +1,9 @@
 import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
-// IMPORTANTE: Assicurati di esportare getDisponibilitaMap da search.cache.js
-import { getDisponibilitaMap } from '../search.cache.js'; 
+import { getDisponibilitaMap } from '../search.cache.js';
 
 export async function getDisponibilita(driver_id) {
-  const cacheMap = getDisponibilitaMap(); 
-  
-  // Ora .size e .values() funzionano correttamente sulla Map
+  const cacheMap = getDisponibilitaMap();
   const tuttiITurni = Array.from(cacheMap.values());
   
   console.log(`[BACKEND] getDisponibilita - Cache size: ${cacheMap.size}, Filtro driver_id: ${driver_id}`);
@@ -58,9 +55,10 @@ export async function createDisponibilita(turno) {
   fine  = parseTimeString(fine);
 
   if (!start || !fine || start >= fine) {
-    throw new Error('Orario non valido');
+    throw new Error('Orario non valido: start deve essere prima di fine');
   }
 
+  // Esegui inserimento
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo
       (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
@@ -76,23 +74,57 @@ export async function createDisponibilita(turno) {
     [veicolo_id, start, fine, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
   );
 
-  const nuovoTurno = res.rows[0];
-  console.log("[BACKEND] createDisponibilita - ID creato:", nuovoTurno.id);
+  let nuovoTurno = res.rows[0];
+
+  // Recupera il driver_id per mantenere la cache coerente per il filtraggio futuro
+  const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [nuovoTurno.veicolo_id]);
+  nuovoTurno.driver_id = vRes.rows[0]?.driver_id;
+
+  console.log("[BACKEND] createDisponibilita - ID creato/aggiornato:", nuovoTurno.id, "per driver:", nuovoTurno.driver_id);
   
-  // Aggiorna la cache
   CacheManager.disponibilita.update(nuovoTurno);
   return nuovoTurno;
 }
 
-// ... (updateDisponibilita e deleteDisponibilita rimangono simili)
 export async function updateDisponibilita(id, update) {
-    // Stessa logica di prima...
-    // Assicurati di usare CacheManager.disponibilita.update(turnoAggiornato);
+  console.log(`[BACKEND] updateDisponibilita - ID: ${id}`);
+  const fields = [];
+  const values = [];
+  let idx = 1;
+
+  if (update.start) update.start = parseTimeString(update.start);
+  if (update.fine) update.fine = parseTimeString(update.fine);
+  if (update.giorni_esclusi) update.giorni_esclusi = update.giorni_esclusi.map(Number);
+  
+  const payload = { ...update };
+  if (payload.inattivita) payload.inattivita = JSON.stringify(payload.inattivita);
+
+  for (const key in payload) {
+    fields.push(`${key} = $${idx}`);
+    values.push(payload[key]);
+    idx++;
+  }
+  values.push(id);
+
+  const res = await pool.query(
+    `UPDATE disponibilita_veicolo SET ${fields.join(', ')} WHERE id=$${idx} RETURNING *`,
+    values
+  );
+
+  let turnoAggiornato = res.rows[0];
+  
+  // Re-integra il driver_id
+  const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [turnoAggiornato.veicolo_id]);
+  turnoAggiornato.driver_id = vRes.rows[0]?.driver_id;
+
+  CacheManager.disponibilita.update(turnoAggiornato);
+  return turnoAggiornato;
 }
 
 export async function deleteDisponibilita(id) {
-    await pool.query('DELETE FROM disponibilita_veicolo WHERE id=$1', [id]);
-    CacheManager.disponibilita.delete(id);
+  console.log(`[BACKEND] deleteDisponibilita - ID: ${id}`);
+  await pool.query('DELETE FROM disponibilita_veicolo WHERE id=$1', [id]);
+  CacheManager.disponibilita.delete(id);
 }
 
 function parseTimeString(timeStr) {

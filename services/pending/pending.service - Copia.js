@@ -2,6 +2,14 @@ import { pool } from '../../db/db.js';
 
 /**
  * Crea pending a partire da slot selezionati
+ * @param {Object} params - Parametri per i pending
+ * @param {number} params.clienteId
+ * @param {Array} params.slots - Array di slot { veicolo_id, start }
+ * @param {string|interval} params.durata
+ * @param {number} params.posti_richiesti
+ * @param {string} params.tipo_corsa
+ * @param {number} params.prezzo - Prezzo della corsa
+ * @returns {Array} pending creati
  */
 export async function createPendingFromSlot({ clienteId, slots, durata, posti_richiesti, tipo_corsa, prezzo = 0 }) {
   const client = await pool.connect();
@@ -35,15 +43,13 @@ export async function createPendingFromSlot({ clienteId, slots, durata, posti_ri
 
 /**
  * Cleanup dei pending scaduti
- * @returns {number} Numero di record eliminati
  */
-export async function cleanupExpired() {
+export async function cleanupExpiredPending() {
   const client = await pool.connect();
   try {
-    const res = await client.query(
+    await client.query(
       `DELETE FROM pending WHERE expires_at < NOW() AND stato='pending'`
     );
-    return res.rowCount;
   } finally {
     client.release();
   }
@@ -51,6 +57,9 @@ export async function cleanupExpired() {
 
 /**
  * Recupera un pending per ID
+ * @param {number} pendingId
+ * @param {Object} [client] - opzionale per transazione
+ * @returns {Object|null} pending trovato
  */
 export async function getPendingById(pendingId, client = null) {
   const conn = client || await pool.connect();
@@ -67,6 +76,9 @@ export async function getPendingById(pendingId, client = null) {
 
 /**
  * Aggiorna lo stato di un pending
+ * @param {number} pendingId
+ * @param {string} stato - nuovo stato
+ * @param {Object} client - connessione opzionale per transazione
  */
 export async function updatePendingStatus(pendingId, stato, client) {
   const conn = client || await pool.connect();
@@ -80,8 +92,14 @@ export async function updatePendingStatus(pendingId, stato, client) {
   }
 }
 
+// ---------------------------
+// FUNZIONI AGGIUNTIVE PER NOTIFICHE / DASHBOARD
+// ---------------------------
+
 /**
  * Conta i pending attivi per un cliente
+ * @param {number} clienteId
+ * @returns {number} numero di pending
  */
 export async function countPendingByCliente(clienteId) {
   const client = await pool.connect();
@@ -98,6 +116,7 @@ export async function countPendingByCliente(clienteId) {
 
 /**
  * Conta tutti i pending attivi (per admin)
+ * @returns {number} numero di pending
  */
 export async function countAllPending() {
   const client = await pool.connect();

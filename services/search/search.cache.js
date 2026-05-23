@@ -4,12 +4,18 @@ import { pool } from '../../db/db.js';
 const GEOHASH_PRECISION = 5;
 export const TOP_RESULTS = 10;
 
-// --- STRUTTURE CACHE (Map private per mantenere l'O(1) in scrittura) ---
+// --- STRUTTURE CACHE (Map private per mantenere l'O(1) in scrittura/lettura) ---
 const veicoliCache = new Map();
 const disponibilitaCache = new Map();
 const corseCache = new Map();
 
-// --- GETTER (Restituiscono sempre Array per compatibilità con .filter()) ---
+// --- GETTER ESPORTATI ---
+// Restituiscono le Map originali (per .size e lookup O(1))
+export const getVeicoliMap = () => veicoliCache;
+export const getDisponibilitaMap = () => disponibilitaCache;
+export const getCorseMap = () => corseCache;
+
+// Restituiscono Array (per compatibilità con .filter())
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
 export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
@@ -37,6 +43,7 @@ export const upsertVeicolo = (v) => {
 };
 
 export const upsertDisponibilita = (d) => {
+  // Nota: d.id è la chiave primaria della tabella disponibilita_veicolo
   disponibilitaCache.set(d.id, {
     ...d,
     giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi),
@@ -97,8 +104,7 @@ export async function loadCachesUltra() {
 
 // --- UTILI ---
 export function filterCorse({ veicoloId, clienteId }) {
-  // Ora getCorseCache() restituisce già un array, quindi il .filter() è sempre garantito
-  let result = getCorseCache();
+  let result = getCorseCache(); // Ritorna l'array
   
   if (veicoloId) result = result.filter(c => c.veicolo_id === veicoloId);
   if (clienteId) result = result.filter(c => c.cliente_id === clienteId);

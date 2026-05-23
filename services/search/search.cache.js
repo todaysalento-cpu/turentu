@@ -4,15 +4,15 @@ import { pool } from '../../db/db.js';
 const GEOHASH_PRECISION = 5;
 export const TOP_RESULTS = 10;
 
-// --- STRUTTURE CACHE (Map per accesso O(1)) ---
-let veicoliCache = new Map();
-let disponibilitaCache = new Map();
-let corseCache = new Map();
+// --- STRUTTURE CACHE (Map private per mantenere l'O(1) in scrittura) ---
+const veicoliCache = new Map();
+const disponibilitaCache = new Map();
+const corseCache = new Map();
 
-// --- GETTER ---
-export const getVeicoliCache = () => veicoliCache;
-export const getDisponibilitaCache = () => disponibilitaCache;
-export const getCorseCache = () => corseCache;
+// --- GETTER (Restituiscono sempre Array per compatibilità con .filter()) ---
+export const getVeicoliCache = () => Array.from(veicoliCache.values());
+export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
+export const getCorseCache = () => Array.from(corseCache.values());
 
 // --- HELPERS ---
 const safeParseJSON = (str) => {
@@ -70,7 +70,7 @@ export async function loadCachesUltra() {
     `);
     vRes.rows.forEach(v => upsertVeicolo(v));
 
-    // 2. Disponibilità (con join per ottenere il driver_id)
+    // 2. Disponibilità
     const dRes = await client.query(`
       SELECT d.*, v.driver_id 
       FROM disponibilita_veicolo d
@@ -97,7 +97,8 @@ export async function loadCachesUltra() {
 
 // --- UTILI ---
 export function filterCorse({ veicoloId, clienteId }) {
-  let result = Array.from(corseCache.values());
+  // Ora getCorseCache() restituisce già un array, quindi il .filter() è sempre garantito
+  let result = getCorseCache();
   
   if (veicoloId) result = result.filter(c => c.veicolo_id === veicoloId);
   if (clienteId) result = result.filter(c => c.cliente_id === clienteId);

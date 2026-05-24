@@ -1,10 +1,10 @@
-// services/corsa/corsa.service.js
 import { pool } from '../../db/db.js';
 import * as prenotazioneService from '../prenotazione/prenotazione.service.js';
 import { aggiornaPosizionePredittiva } from '../veicolo/veicolo.service.js';
 import params from '../../config/params.js';
-// ✅ Importa il CacheManager
 import { CacheManager } from '../../utils/cacheManager.js';
+// 🔥 Import aggiunto per protezione distanza
+import { getDurataDistanza } from '../../utils/maps.util.js'; 
 
 export async function createCorsaFromPending(pending, veicolo, client) {
   let localClient = false;
@@ -63,9 +63,23 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     const origine_address = pending.origine_address ?? pending.localitaOrigine ?? pending.origineAddress ?? 'N/D';
     const destinazione_address = pending.destinazione_address ?? pending.localitaDestinazione ?? pending.destinazioneAddress ?? 'N/D';
 
-    // --- DISTANZA ---
+    // --- 🔥 DISTANZA (CON LOGICA DI SICUREZZA) ---
     let distanzaKm = Number(String(pending.distanza ?? 0).replace(',', '.').trim());
-    if (isNaN(distanzaKm)) distanzaKm = 0;
+    
+    // Se la distanza è 0 o invalida, tentiamo il recupero con le coordinate
+    if (isNaN(distanzaKm) || distanzaKm <= 0) {
+      try {
+        const geo = await getDurataDistanza(
+          { lat: coordOrig.lat, lon: coordOrig.lon },
+          { lat: coordDest.lat, lon: coordDest.lon }
+        );
+        distanzaKm = Number(geo.distanzaKm ?? 0);
+        console.log(`🛠 [FIX Service] Distanza recuperata per corsa ${veicolo.id}: ${distanzaKm} km`);
+      } catch (e) {
+        console.warn("Impossibile recuperare distanza in corsa.service.js:", e);
+        distanzaKm = 0;
+      }
+    }
 
     // --- CREAZIONE CORSA ---
     const res = await client.query(
@@ -102,7 +116,6 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     });
 
     // ✅ AGGIORNAMENTO CACHE DISPONIBILITÀ
-    // Ricarichiamo il record dal DB per mantenere la cache sincronizzata dopo la variazione posti
     const dispRes = await client.query(
       `SELECT d.*, v.driver_id FROM disponibilita_veicolo d 
        JOIN veicolo v ON v.id = d.veicolo_id 

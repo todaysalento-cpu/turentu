@@ -10,12 +10,10 @@ const disponibilitaCache = new Map();
 const corseCache = new Map();
 
 // --- GETTER ESPORTATI ---
-// Utilizza questi per accedere alle Map tramite .get(id)
 export const getVeicoliMap = () => veicoliCache;
 export const getDisponibilitaMap = () => disponibilitaCache;
 export const getCorseMap = () => corseCache;
 
-// Utilizza questi se ti serve l'array completo per filtri/mappature
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
 export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
@@ -31,62 +29,61 @@ const encodeGeohash = (lat, lon) => {
   return ngeohash.encode(lat, lon, GEOHASH_PRECISION);
 };
 
-// --- AGGIORNAMENTO PUNTUALE (Entità Singola) ---
+// --- AGGIORNAMENTO INTELLIGENTE (Merge con dati esistenti) ---
 
 export const upsertVeicolo = (v) => {
+  const oldData = veicoliCache.get(v.id) || {};
   const esiste = veicoliCache.has(v.id);
+  
   veicoliCache.set(v.id, {
-    ...v,
-    tipo: v.tipo ?? 'citycar',
-    geohash: encodeGeohash(v.lat, v.lon),
-    servizi: Array.isArray(v.servizi) ? v.servizi : safeParseJSON(v.servizi)
+    ...oldData,      // Mantiene i campi vecchi non sovrascritti
+    ...v,            // Sovrascrive con i nuovi dati (es. posti_totali aggiornati)
+    tipo: v.tipo ?? oldData.tipo ?? 'citycar',
+    geohash: encodeGeohash(v.lat ?? oldData.lat, v.lon ?? oldData.lon),
+    servizi: Array.isArray(v.servizi) ? v.servizi : safeParseJSON(v.servizi ?? oldData.servizi)
   });
-  console.log(`[CACHE][VEICOLO] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${v.id}`);
+  
+  console.log(`[CACHE][VEICOLO] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${v.id} | Posti: ${v.posti_totali ?? oldData.posti_totali}`);
 };
 
 export const upsertDisponibilita = (d) => {
+  const oldData = disponibilitaCache.get(d.id) || {};
   const esiste = disponibilitaCache.has(d.id);
+  
   disponibilitaCache.set(d.id, {
+    ...oldData,
     ...d,
-    giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi),
-    inattivita: Array.isArray(d.inattivita) ? d.inattivita : safeParseJSON(d.inattivita)
+    giorni_esclusi: Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : safeParseJSON(d.giorni_esclusi ?? oldData.giorni_esclusi),
+    inattivita: Array.isArray(d.inattivita) ? d.inattivita : safeParseJSON(d.inattivita ?? oldData.inattivita)
   });
   console.log(`[CACHE][DISP] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${d.id}`);
 };
 
 export const upsertCorsa = (c) => {
+  const oldData = corseCache.get(c.id) || {};
   const esiste = corseCache.has(c.id);
+  
   corseCache.set(c.id, {
+    ...oldData,
     ...c,
-    geohashOrigine: encodeGeohash(c.origine_lat, c.origine_lon),
-    geohashDest: encodeGeohash(c.dest_lat, c.dest_lon)
+    geohashOrigine: encodeGeohash(c.origine_lat ?? oldData.origine_lat, c.origine_lon ?? oldData.origine_lon),
+    geohashDest: encodeGeohash(c.dest_lat ?? oldData.dest_lat, c.dest_lon ?? oldData.dest_lon)
   });
   console.log(`[CACHE][CORSA] ${esiste ? 'Aggiornato' : 'Inserito'} ID: ${c.id}`);
 };
 
-// --- RIMOZIONE PUNTUALE ---
+// --- RIMOZIONE ---
+export const removeVeicolo = (id) => { if (veicoliCache.delete(id)) console.log(`[CACHE][VEICOLO] Rimosso ID: ${id}`); };
+export const removeDisponibilita = (id) => { if (disponibilitaCache.delete(id)) console.log(`[CACHE][DISP] Rimossa ID: ${id}`); };
+export const removeCorsa = (id) => { if (corseCache.delete(id)) console.log(`[CACHE][CORSA] Rimossa ID: ${id}`); };
 
-export const removeVeicolo = (id) => {
-  if (veicoliCache.delete(id)) console.log(`[CACHE][VEICOLO] Rimosso ID: ${id}`);
-};
-
-export const removeDisponibilita = (id) => {
-  if (disponibilitaCache.delete(id)) console.log(`[CACHE][DISP] Rimossa ID: ${id}`);
-};
-
-export const removeCorsa = (id) => {
-  if (corseCache.delete(id)) console.log(`[CACHE][CORSA] Rimossa ID: ${id}`);
-};
-
-// --- CARICAMENTO E RICARICAMENTO TOTALE ---
-
+// --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
   if (!force && veicoliCache.size > 0) return;
 
   const client = await pool.connect();
   try {
-    console.log(`[CACHE] ${force ? 'Ricaricamento forzato' : 'Inizio caricamento'} dal DB...`);
-    
+    console.log(`[CACHE] Caricamento in corso...`);
     if (force) {
       veicoliCache.clear();
       disponibilitaCache.clear();
@@ -120,10 +117,10 @@ export async function loadCachesUltra(force = false) {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    console.log(`📦 [CACHE] Caricamento completato: Veicoli:${veicoliCache.size}, Disp:${disponibilitaCache.size}, Corse:${corseCache.size}`);
+    console.log(`📦 [CACHE] Sincronizzazione completata.`);
   } catch (err) {
-    console.error("[CACHE] Errore critico caricamento:", err);
-    throw err; // Rilancia per gestire l'errore nel chiamante
+    console.error("[CACHE] Errore critico:", err);
+    throw err;
   } finally {
     client.release();
   }

@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { CacheManager } from '../cache/cache.manager.js';
+import { CacheManager } from '../utils/cache.manager.js';
 import fs from 'fs';
 import path from 'path';
 

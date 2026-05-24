@@ -3,58 +3,55 @@ import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache 
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 
-/**
- * Cerca slot e corse disponibili in base alla richiesta del cliente
- * @param {Object} richiesta - dati della richiesta { coordOrig, coordDest, posti_richiesti, tipo_corsa, ecc. }
- * @returns {Array} risultati formattati per frontend
- */
 export async function cercaSlotUltra(richiesta) {
-  // Assicura che la cache sia caricata in Redis
+  console.log(`\n🔍 [SERVICE] Inizio ricerca slot | Richiesta posti: ${richiesta.posti_richiesti}`);
+  
+  // 1. Assicura che la cache sia caricata
   await loadCachesUltra();
 
-  // Leggi le cache da Redis (getter ora asincroni)
   const veicoliCache = await getVeicoliCache();
   const disponibilitaCache = await getDisponibilitaCache();
   const corseCache = await getCorseCache();
 
   if (!veicoliCache || !disponibilitaCache || !corseCache) {
+    console.error("❌ [SERVICE] Errore: Cache non caricata correttamente");
     throw new Error('Cache non caricata correttamente');
   }
 
-  // Filtra slot e corse compatibili usando l'engine
+  // DIAGNOSTICA: Controllo pre-filtro del veicolo specifico (es. ID 66)
+  const veicoloTest = veicoliCache.find(v => v.id == 66);
+  if (veicoloTest) {
+    console.log(`📋 [DEBUG SERVICE] Veicolo 66 in cache:`, {
+      posti_totali: veicoloTest.posti_totali,
+      type_posti: typeof veicoloTest.posti_totali
+    });
+  }
+
+  // 2. Filtra slot e corse compatibili
+  // Passiamo i dati normalizzando i posti richiesti a numero
+  const richiestaNormalizzata = {
+    ...richiesta,
+    posti_richiesti: Number(richiesta.posti_richiesti)
+  };
+
   const { slots, corse } = filterDisponibilita(
-    richiesta,
+    richiestaNormalizzata,
     veicoliCache,
     disponibilitaCache,
     corseCache
   );
 
-  // Se non ci sono risultati, ritorna array vuoto
+  console.log(`📊 [SERVICE] Filtro completato | Slots trovati: ${slots?.length || 0} | Corse trovate: ${corse?.length || 0}`);
+
+  // 3. Controllo risultati
   if ((!slots || slots.length === 0) && (!corse || corse.length === 0)) {
+    console.log("⚠️ [SERVICE] Nessun risultato compatibile trovato");
     return [];
   }
 
-  // Genera i risultati formattati per il frontend
+  // 4. Formattazione risultati
   const risultati = formatResults(richiesta, slots, corse, veicoliCache);
-
+  
+  console.log(`✅ [SERVICE] Risultati formattati pronti: ${risultati.length}`);
   return risultati;
-}
-
-/**
- * Funzione helper: cerca slot per cliente specifico (può essere estensione futura)
- */
-export async function cercaSlotPerCliente(clienteId, richiesta) {
-  const risultati = await cercaSlotUltra(richiesta);
-  // eventualmente filtra per clienteId se serve logica personalizzata
-  return risultati;
-}
-
-/**
- * Funzione helper: cerca slot per autista / veicolo specifico
- */
-export async function cercaSlotPerAutista(veicoloId) {
-  await loadCachesUltra();
-  const corseCache = await getCorseCache();
-  if (!corseCache) return [];
-  return corseCache.filter(c => c.veicolo_id === veicoloId);
 }

@@ -1,4 +1,3 @@
-// utils/pricing.util.js
 import { pool } from '../db/db.js';
 
 export async function getTariffe(veicolo_id, tipo) {
@@ -15,56 +14,69 @@ export async function getTariffe(veicolo_id, tipo) {
 }
 
 export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot) {
+  // Conversione sicura dei dati in ingresso
   const kmPercorso = Number(corsa.km ?? corsa.distanza ?? 0);
-  const richiesti = postiRichiesti ?? 1;
+  const richiesti = Number(postiRichiesti) || 1;
   const tipoTariffa = 'standard';
 
   let prezzoKm = 0;
   let prezzoPasseggero = 0;
 
-  console.log(`📌 Calcolo prezzo [veicolo_id=${corsa.veicolo_id}, stato=${statoSlot}, km=${kmPercorso}]`);
+  console.log(`📌 [DEBUG PRICING] Inizio calcolo: VeicoloID=${corsa.veicolo_id}, Stato=${statoSlot}, Km=${kmPercorso}, Richiesti=${richiesti}`);
 
   try {
     const tariffe = await getTariffe(corsa.veicolo_id, tipoTariffa);
     prezzoKm = tariffe.prezzoKm;
     prezzoPasseggero = tariffe.prezzoPasseggero;
   } catch (err) {
-    console.warn(`⚠️ Tariffe mancanti per veicolo ${corsa.veicolo_id}.`);
+    console.warn(`⚠️ [DEBUG PRICING] Tariffe mancanti per veicolo ${corsa.veicolo_id}.`);
   }
 
-  // Fallback di emergenza: se tutto è 0 ma ci sono km, usiamo una tariffa base simbolica
+  // Fallback di sicurezza: se la tariffa è 0 ma ci sono km, usiamo 0.50 come base
   const safePrezzoKm = prezzoKm > 0 ? prezzoKm : (kmPercorso > 0 ? 0.50 : 0);
 
   switch (statoSlot) {
     case 'libero': {
       const prezzoLibero = kmPercorso * safePrezzoKm;
-      console.log(`🟢 Stato 'libero': ${kmPercorso} * ${safePrezzoKm} = ${prezzoLibero}`);
+      console.log(`🟢 [LIBERO] Formula: ${kmPercorso} * ${safePrezzoKm} = ${prezzoLibero}`);
       return prezzoLibero;
     }
 
     case 'prenotabile': {
-      const postiPrenotati = corsa.posti_prenotati ?? 0;
-      const primoPren = corsa.primo_posto ?? 0;
+      // Normalizzazione valori corsa
+      const postiPrenotati = Number(corsa.posti_prenotati) || 0;
+      const primoPren = Number(corsa.primo_posto) || 0;
+      
+      // Calcolo totale passeggeri per la condivisione
       const totalePasseggeri = Math.max(1, primoPren + postiPrenotati + richiesti);
 
-      // Calcolo base + variabile
+      // Calcolo componenti
       const costoBase = kmPercorso * safePrezzoKm;
-      const costoVariabile = prezzoPasseggero * (totalePasseggeri - primoPren);
+      // Il costo variabile si applica ai passeggeri oltre al primo (primoPren)
+      const costoVariabile = prezzoPasseggero * Math.max(0, (postiPrenotati + richiesti));
       
-      // Totale veicolo garantisce che il costo base non venga mai ignorato
       const prezzoTotaleVeicolo = costoBase + costoVariabile;
       const prezzoFinale = (prezzoTotaleVeicolo / totalePasseggeri) * richiesti;
 
-      console.log(`🟡 Stato 'prenotabile': TotaleVeicolo=${prezzoTotaleVeicolo}, PrezzoFinale=${prezzoFinale}`);
-      return Math.max(0.10, prezzoFinale); // Prezzo minimo garantito
+      console.log(`🟡 [PRENOTABILE] Dettagli Calcolo:`);
+      console.log(`   -> Componenti: PrimoPosto=${primoPren}, Prenotati=${postiPrenotati}, Richiesti=${richiesti}`);
+      console.log(`   -> Totale Passeggeri attesi=${totalePasseggeri}`);
+      console.log(`   -> Costo Base (Km): ${costoBase} (da ${kmPercorso}km * ${safePrezzoKm})`);
+      console.log(`   -> Costo Variabile: ${costoVariabile} (da ${prezzoPasseggero} * ${postiPrenotati + richiesti})`);
+      console.log(`   -> Prezzo Totale Veicolo: ${prezzoTotaleVeicolo}`);
+      console.log(`   -> Risultato Finale: ${prezzoFinale}`);
+      
+      return Math.max(0.10, prezzoFinale);
     }
 
     case 'pubblicato': {
       const prezzoPub = (prezzoPasseggero > 0 ? prezzoPasseggero : safePrezzoKm) * richiesti;
+      console.log(`🔵 [PUBBLICATO] Prezzo: ${prezzoPub}`);
       return prezzoPub;
     }
 
     default:
+      console.warn(`⚠️ [WARNING] Stato slot sconosciuto: ${statoSlot}`);
       return 0;
   }
 }

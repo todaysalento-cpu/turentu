@@ -7,7 +7,6 @@ import {
 } from '../services/corsa/corse.service.js';
 import { getAddress } from '../utils/geo.util.js';
 import { getIO } from '../socket.js';
-import { CacheManager } from '../utils/cacheManager.js'; // Import del CacheManager
 
 export const corseRouter = express.Router();
 corseRouter.use(authMiddleware);
@@ -28,14 +27,17 @@ async function populateAddresses(corsa) {
 }
 
 // ======================================================
-// 1️⃣ CORSE AUTISTA
+// 1️⃣ CORSE AUTISTA (FIX: NO ID IN URL)
 // ======================================================
 corseRouter.get('/autista', async (req, res) => {
   try {
-    const autistaId = req.user.id;
+    const autistaId = req.user.id; // 🔥 DA JWT
     const status = req.query.status || '';
 
+    console.log(`[GET] /autista id=${autistaId} status=${status}`);
+
     let corse = await getCorseByAutista(autistaId, status);
+
     corse = await Promise.all(corse.map(populateAddresses));
 
     res.json(corse);
@@ -51,6 +53,7 @@ corseRouter.get('/autista', async (req, res) => {
 corseRouter.get('/autista/today', async (req, res) => {
   try {
     const autistaId = req.user.id;
+
     let corse = await getCorseByAutista(autistaId, 'today');
 
     corse = await Promise.all(corse.map(populateAddresses));
@@ -67,16 +70,18 @@ corseRouter.get('/autista/today', async (req, res) => {
 // ======================================================
 corseRouter.post('/:id/accetta', async (req, res) => {
   const corsaId = Number(req.params.id);
-  if (isNaN(corsaId)) return res.status(400).json({ error: 'ID corsa non valido' });
+
+  if (isNaN(corsaId)) {
+    return res.status(400).json({ error: 'ID corsa non valido' });
+  }
 
   try {
     let corsa = await accettaCorsa(corsaId);
-    if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
+    if (!corsa) {
+      return res.status(404).json({ error: 'Corsa non trovata' });
+    }
 
     corsa = await populateAddresses(corsa);
-
-    // AGGIORNAMENTO CACHE (Corsa accettata)
-    CacheManager.corsa.update(corsa);
 
     const io = getIO();
     io.to(`autista_${corsa.veicolo_id}`).emit('nuova_corsa', corsa);
@@ -93,11 +98,9 @@ corseRouter.post('/:id/accetta', async (req, res) => {
 // ======================================================
 corseRouter.post('/:id/start', async (req, res) => {
   const corsaId = Number(req.params.id);
+
   try {
     const corsa = await toggleCorsa(corsaId, 'start');
-    
-    // AGGIORNAMENTO CACHE (Corsa iniziata)
-    CacheManager.corsa.update(corsa);
 
     const io = getIO();
     io.to(`autista_${corsa.veicolo_id}`).emit('corsaUpdate', corsa);
@@ -114,11 +117,9 @@ corseRouter.post('/:id/start', async (req, res) => {
 // ======================================================
 corseRouter.post('/:id/end', async (req, res) => {
   const corsaId = Number(req.params.id);
+
   try {
     const corsa = await toggleCorsa(corsaId, 'end');
-    
-    // AGGIORNAMENTO CACHE (Corsa conclusa)
-    CacheManager.corsa.update(corsa);
 
     const io = getIO();
     io.to(`autista_${corsa.veicolo_id}`).emit('corsaUpdate', corsa);

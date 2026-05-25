@@ -3,6 +3,9 @@ import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache 
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 
+/**
+ * Cerca slot e corse disponibili in base alla richiesta del cliente
+ */
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca slot | Richiesta posti: ${richiesta.posti_richiesti}`);
   
@@ -18,7 +21,7 @@ export async function cercaSlotUltra(richiesta) {
     throw new Error('Cache non caricata correttamente');
   }
 
-  // DIAGNOSTICA: Controllo pre-filtro del veicolo specifico (es. ID 66)
+  // DIAGNOSTICA: Controllo pre-filtro del veicolo specifico
   const veicoloTest = veicoliCache.find(v => v.id == 66);
   if (veicoloTest) {
     console.log(`📋 [DEBUG SERVICE] Veicolo 66 in cache:`, {
@@ -28,7 +31,6 @@ export async function cercaSlotUltra(richiesta) {
   }
 
   // 2. Filtra slot e corse compatibili
-  // Passiamo i dati normalizzando i posti richiesti a numero
   const richiestaNormalizzata = {
     ...richiesta,
     posti_richiesti: Number(richiesta.posti_richiesti)
@@ -49,9 +51,32 @@ export async function cercaSlotUltra(richiesta) {
     return [];
   }
 
-  // 4. Formattazione risultati
-  const risultati = formatResults(richiesta, slots, corse, veicoliCache);
-  
-  console.log(`✅ [SERVICE] Risultati formattati pronti: ${risultati.length}`);
-  return risultati;
+  // 4. Formattazione risultati (Corretto: aggiunto await)
+  try {
+    const risultati = await formatResults(richiestaNormalizzata, slots, corse, veicoliCache);
+    
+    // Validazione finale: assicuriamoci di ritornare un array
+    const risultatiFinali = Array.isArray(risultati) ? risultati : [];
+    
+    console.log(`✅ [SERVICE] Risultati formattati pronti: ${risultatiFinali.length}`);
+    return risultatiFinali;
+    
+  } catch (err) {
+    console.error("💥 [SERVICE] Errore critico durante la formattazione:", err);
+    return []; // Ritorniamo array vuoto in caso di errore per non far crashare la UI
+  }
+}
+
+/**
+ * Funzioni helper
+ */
+export async function cercaSlotPerCliente(clienteId, richiesta) {
+  return await cercaSlotUltra(richiesta);
+}
+
+export async function cercaSlotPerAutista(veicoloId) {
+  await loadCachesUltra();
+  const corseCache = await getCorseCache();
+  if (!corseCache) return [];
+  return corseCache.filter(c => c.veicolo_id === veicoloId);
 }

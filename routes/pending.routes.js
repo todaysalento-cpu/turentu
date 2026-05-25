@@ -8,69 +8,6 @@ import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 const router = express.Router();
 router.use(authMiddleware);
 
-// -------------------- Helper notifiche --------------------
-function formatNotificationDate(input) {
-  const d = input instanceof Date ? input : new Date(input);
-  if (isNaN(d.getTime())) return '';
-
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-
-  const isToday = d.toDateString() === today.toDateString();
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dayName = d.toLocaleDateString('it-IT', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'long'
-  });
-
-  if (isToday) return `oggi alle ${time}`;
-  if (isTomorrow) return `domani alle ${time}`;
-  return `${dayName} all’${time}`;
-}
-
-// -------------------- GET pending --------------------
-router.get('/autista/:veicoloId', async (req, res) => {
-  const client = await pool.connect();
-
-  try {
-    const veicoloId = Number(req.params.veicoloId);
-
-    // Filtriamo escludendo richieste già accettate o parte di blocchi gestiti
-    const result = await client.query(
-      `SELECT p.*, u.nome AS cliente_nome
-       FROM pending p
-       JOIN utente u ON u.id = p.cliente_id
-       WHERE p.veicolo_id = $1 
-       AND p.stato = 'pending'
-       AND NOT EXISTS (
-           SELECT 1 FROM pending p2 
-           WHERE p2.request_id = p.request_id 
-           AND p2.stato = 'accettata'
-       )
-       ORDER BY p.id ASC`,
-      [veicoloId]
-    );
-
-    const pendings = result.rows.map(p => ({
-      ...p,
-      cliente: p.cliente_nome || 'Cliente N/D',
-      prezzo: Number(p.prezzo ?? 0),
-    }));
-
-    res.json({ pendings });
-
-  } catch (err) {
-    console.error('❌ Error fetching pendings:', err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
-
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
@@ -125,7 +62,6 @@ router.post('/:id/accetta', async (req, res) => {
     const io = getIO();
 
     for (const p of result.rows) {
-      // 🔥 DRIVER
       const driverRes = await client.query(
         `SELECT v.driver_id, u.nome AS driver_nome
          FROM veicolo v
@@ -151,7 +87,12 @@ router.post('/:id/accetta', async (req, res) => {
           corsa = existing.rows[0];
           prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
         } else {
-          const veicolo = { id: p.veicolo_id, posti: 4 };
+          // 🔥 FIX: Recupero posti REALI dal DB invece di hard-coding '4'
+          const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
+          const postiReali = vRes.rows[0]?.posti_totali ?? 4;
+          
+          const veicolo = { id: p.veicolo_id, posti: postiReali };
+          
           const resCorsa = await createCorsaFromPending(p, veicolo, client);
           corsa = resCorsa.corsa;
           prenotazione = resCorsa.prenotazione;
@@ -178,12 +119,11 @@ router.post('/:id/accetta', async (req, res) => {
         destinazione_address: p.destinazione_address,
       };
 
-      // -------------------- SOCKET DRIVER & CLIENTE --------------------
+      // -------------------- NOTIFICHE --------------------
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
       io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });
 
-      // -------------------- PUSH NOTIFICATION --------------------
       await sendNotification({
         userId: p.cliente_id,
         title: 'Viaggio accettato',
@@ -194,40 +134,17 @@ router.post('/:id/accetta', async (req, res) => {
 
     await client.query('COMMIT');
     res.json({ ok: true });
-
   } catch (err) {
     await client.query('ROLLBACK');
-    
-    // Se i posti sono finiti, rimuoviamo la richiesta dalla lista per pulizia
     if (err.message === 'Posti insufficienti') {
       await pool.query(`DELETE FROM pending WHERE id = $1`, [Number(req.params.id)]);
       console.log(`🧹 Corsa ${req.params.id} rimossa: posti esauriti.`);
     }
-
     console.error('❌ Pending accept error:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
-
-// -------------------- NEW PENDING --------------------
-export async function notifyNewPending(pending) {
-  try {
-    const io = getIO();
-    const driverRes = await pool.query(`SELECT driver_id FROM veicolo WHERE id = $1`, [pending.veicolo_id]);
-    const driverId = driverRes.rows[0]?.driver_id;
-
-    io.to(`autista_${driverId}`).emit('new_pending', { pending });
-    await sendNotification({
-      userId: driverId,
-      title: 'Nuova richiesta',
-      message: 'Hai una nuova corsa disponibile',
-      type: 'pending'
-    });
-  } catch (err) {
-    console.error('❌ notifyNewPending error:', err);
-  }
-}
 
 export { router as pendingRouter };

@@ -1,4 +1,3 @@
-// engine/availability.engine.js
 import ngeohash from 'ngeohash';
 import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
@@ -9,6 +8,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const richiestaStart = new Date(richiesta.start_datetime);
   const day = richiestaStart.getDay();
   const currentMinutes = richiestaStart.getHours() * 60 + richiestaStart.getMinutes();
+  const postiRichiesti = Number(richiesta.posti_richiesti);
 
   // Geohash origine richiesta
   const richiestaHashOrig = richiesta.coord
@@ -18,22 +18,19 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     ? [...ngeohash.neighbors(richiestaHashOrig), richiestaHashOrig]
     : [];
 
-  // Geohash destinazione richiesta
-  const richiestaHashDest = richiesta.coordDest
-    ? ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION)
-    : null;
-  const hashViciniDest = richiestaHashDest
-    ? [...ngeohash.neighbors(richiestaHashDest), richiestaHashDest]
-    : [];
-
   // =========================
   // FILTRO SLOT (VEICOLI LIBERI)
   // =========================
   const slots = disponibilitaCache
     .filter(dv => {
-      const v = veicoliCache[dv.veicolo_id];
+      // CORREZIONE: Usiamo .find() poiché veicoliCache è un Array
+      const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
+      
       if (!v) return false;
-      if (v.posti_totali < richiesta.posti_richiesti) return false;
+      
+      // CORREZIONE: Conversione esplicita a Number per sicurezza
+      if (Number(v.posti_totali) < postiRichiesti) return false;
+      
       if (dv.giorni_esclusi?.includes(day)) return false;
 
       // Controlla se il veicolo è già occupato da una corsa
@@ -46,7 +43,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       });
       if (occupato) return false;
 
-      // Controlla orario turno (solo ore e minuti)
+      // Controlla orario turno
       const startDate = new Date(dv.start);
       const endDate   = new Date(dv.fine);
       const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
@@ -71,7 +68,8 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   // FILTRO CORSE CON GEOHASH
   // =========================
   const corse = corseCache.filter(c => {
-    if (richiesta.posti_richiesti > c.posti_disponibili) return false;
+    // CORREZIONE: Confronto numerico sicuro
+    if (postiRichiesti > Number(c.posti_disponibili)) return false;
 
     if (richiesta.coord && richiesta.coordDest) {
       const origOk = [c.geohashOrigine, ...ngeohash.neighbors(c.geohashOrigine)].includes(

@@ -148,7 +148,7 @@ veicoloRouter.post('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- PUT AGGIORNATO CON INVALIDAZIONE CACHE ---
+// --- PUT AGGIORNATO CON RECUPERO DOCUMENTI E INVALIDAZIONE CACHE ---
 veicoloRouter.put('/:id', async (req, res) => {
   try {
     const veicoloId = Number(req.params.id);
@@ -157,6 +157,8 @@ veicoloRouter.put('/:id', async (req, res) => {
     if (validationError) return res.status(400).json({ error: validationError });
 
     const coordData = await buildCoord(data.lat, data.lon, data.localita);
+    
+    // 1. Esegui l'update nel database
     const result = await pool.query(`
       UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8,
       coord = COALESCE(ST_GeomFromEWKT($9), coord), localita=$10, image_url=$11
@@ -167,12 +169,19 @@ veicoloRouter.put('/:id', async (req, res) => {
 
     if (!result.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
 
-    // 1. Invalidazione forzata per pulire dati obsoleti dalla cache
-    await CacheManager.veicolo.delete(veicoloId);
-    // 2. Aggiornamento con il nuovo oggetto ritornato dal DB
-    await CacheManager.veicolo.update(result.rows[0]);
+    // 2. RECUPERA I DOCUMENTI AGGIORNATI
+    const docRes = await pool.query(`SELECT tipo, url, stato FROM documenti_autista WHERE veicolo_id=$1`, [veicoloId]);
+    const documenti = {};
+    docRes.rows.forEach(d => documenti[d.tipo] = { url: d.url, stato: d.stato });
 
-    res.json(result.rows[0]);
+    // 3. COMBINA I DATI prima di mandarli al frontend
+    const veicoloAggiornato = { ...result.rows[0], documenti };
+
+    // 4. Gestione Cache
+    await CacheManager.veicolo.delete(veicoloId);
+    await CacheManager.veicolo.update(veicoloAggiornato);
+
+    res.json(veicoloAggiornato); 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

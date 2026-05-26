@@ -3,6 +3,7 @@ import multer from 'multer';
 import { pool } from '../db/db.js';
 import { uploadFile } from '../helpers/cloudinary.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { CacheManager } from '../utils/cacheManager.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -90,6 +91,12 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
         salvati.push(tipo);
         console.log(`✅ [DATABASE] Salvato con successo:`, dbRes.rows[0].id);
       }
+    }
+
+    // 4. Invalidazione cache dopo l'aggiornamento riuscito
+    if (salvati.length > 0) {
+      console.log(`🧹 [CACHE] Invalidazione cache per veicolo_id: ${veicolo_id}`);
+      await CacheManager.veicolo.delete(veicolo_id);
     }
 
     console.log(`🎉 [UPLOAD DOCUMENTI] Elaborazione completata. Documenti aggiornati: ${salvati.join(', ')}`);

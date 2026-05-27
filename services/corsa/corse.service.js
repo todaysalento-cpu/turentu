@@ -63,11 +63,10 @@ export async function accettaCorsa(corsa_id) {
 
 /* ===================== 3️⃣ START / END CORSA ===================== */
 export async function toggleCorsa(corsa_id, action) {
-  console.log(`[DEBUG] >> Inizio toggleCorsa | ID: ${corsa_id} | Azione: ${action}`);
+  console.log(`\n📌 [TOGGLE-CORSA] Inizio operazione | ID: ${corsa_id} | Azione: ${action}`);
 
   if (!['start', 'end'].includes(action)) {
-    console.error(`[DEBUG] !! Azione non valida: ${action}`);
-    throw new Error('Azione non valida');
+    throw new Error('Azione non valida: deve essere start o end');
   }
 
   const client = await pool.connect();
@@ -76,7 +75,7 @@ export async function toggleCorsa(corsa_id, action) {
     await client.query('SET search_path TO public');
 
     const newStato = action === 'start' ? 'in_corso' : 'completata';
-    console.log(`[DEBUG] Transazione: Imposto stato a '${newStato}'`);
+    console.log(`[TOGGLE-CORSA] Transazione: Imposto stato corsa a '${newStato}'`);
 
     const corsaRes = await client.query(
       `UPDATE public.corse SET "stato" = $1 WHERE id = $2 RETURNING *`,
@@ -87,47 +86,65 @@ export async function toggleCorsa(corsa_id, action) {
     const corsa = corsaRes.rows[0];
 
     if (action === 'end') {
-      console.log(`[DEBUG] Elaborazione pagamenti per Corsa ${corsa_id}...`);
+      console.log(`[PAGAMENTO] Inizio verifica pagamenti autorizzati per Corsa ${corsa_id}...`);
+      
       const prenRes = await client.query(
-        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.importo, p.corsa_id, p.stato, COALESCE(pr.posti_prenotati, 1) AS posti_prenotati
+        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.importo, p.stato, 
+                COALESCE(pr.posti_prenotati, 1) AS posti_prenotati
          FROM public.pagamenti p
-         LEFT JOIN public.prenotazioni pr ON pr.id = p.prenotazione_id
-         WHERE (p.corsa_id = $1 OR pr.corsa_id = $1) AND p.stato = 'autorizzazione'`,
+         JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
+         WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
         [corsa_id]
       );
 
+      console.log(`[PAGAMENTO] Trovati ${prenRes.rows.length} pagamenti in attesa di cattura.`);
+
       for (const pren of prenRes.rows) {
-        if (!pren.stripe_payment_intent) continue;
-        let importoFinale = corsa.tipo_corsa === 'privata' ? Number(pren.importo) : await calcolaPrezzo({ ...corsa, distanza: Number(corsa.distanza) || 0 }, pren.posti_prenotati || 1, 'prenotabile');
+        if (!pren.stripe_payment_intent) {
+          console.warn(`[PAGAMENTO] Saltato ${pren.pagamento_id}: Manca stripe_payment_intent.`);
+          continue;
+        }
+
+        // Calcolo importo finale (se non è privata, ricalcoliamo in base alla distanza)
+        const importoFinale = corsa.tipo_corsa === 'privata' 
+          ? Number(pren.importo) 
+          : await calcolaPrezzo({ ...corsa, distanza: Number(corsa.distanza) || 0 }, pren.posti_prenotati, 'prenotabile');
+        
+        console.log(`[PAGAMENTO] Processo pagamento ${pren.pagamento_id} | Intent: ${pren.stripe_payment_intent} | Importo: €${importoFinale}`);
         
         try {
           const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
+          console.log(`[STRIPE] Stato Intent ${pi.id}: ${pi.status}`);
+
           if (pi.status === 'requires_capture') {
-            await stripe.paymentIntents.capture(pren.stripe_payment_intent, { amount_to_capture: Math.round(importoFinale * 100) });
-            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1, updated_at = NOW() WHERE id = $2`, [importoFinale, pren.pagamento_id]);
-            console.log(`[DEBUG] Pagamento ${pren.pagamento_id} catturato.`);
+            await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
+              amount_to_capture: Math.round(importoFinale * 100) 
+            });
+            
+            await client.query(
+              `UPDATE public.pagamenti SET stato = 'pagato', importo = $1, updated_at = NOW() WHERE id = $2`, 
+              [importoFinale, pren.pagamento_id]
+            );
+            console.log(`[SUCCESS] Pagamento ${pren.pagamento_id} CATTURATO.`);
+          } else if (pi.status === 'succeeded') {
+            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', updated_at = NOW() WHERE id = $1`, [pren.pagamento_id]);
+            console.log(`[INFO] Pagamento ${pren.pagamento_id} già catturato in precedenza.`);
           }
         } catch (err) {
-          console.error(`[DEBUG] Errore Stripe:`, err);
+          console.error(`[ERROR] Errore Stripe su pagamento ${pren.pagamento_id}:`, err.message);
           await client.query(`UPDATE public.pagamenti SET stato = 'fallito', updated_at = NOW() WHERE id = $1`, [pren.pagamento_id]);
         }
       }
     }
 
     await client.query('COMMIT');
-    const risultato = {
-      id: corsa.id,
-      stato: newStato,
-      veicolo_id: corsa.veicolo_id,
-      tipo_corsa: corsa.tipo_corsa
-    };
-
-    console.log(`[DEBUG] << Fine toggleCorsa con successo. Ritorno:`, risultato);
-    return risultato;
+    console.log(`[TOGGLE-CORSA] Operazione terminata con successo.`);
+    
+    return { id: corsa.id, stato: newStato };
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(`[DEBUG] !! Errore CRITICO in toggleCorsa:`, err);
+    console.error(`[CRITICAL] Errore durante toggleCorsa:`, err);
     throw err;
   } finally {
     client.release();

@@ -24,14 +24,11 @@ export async function getCorseByAutista(driver_id, status = '') {
   const client = await pool.connect();
   try {
     await client.query('SET search_path TO public');
-    // Abbiamo aggiunto la subquery per calcolare i posti reali in tempo reale
+    // Utilizziamo la subquery per i posti reali e il JOIN per i dati del veicolo
     let query = `
-      SELECT c.id, c.veicolo_id, v.driver_id, v.modello AS veicolo, c.tipo_corsa, 
-             c.start_datetime, c.arrivo_datetime, c.durata, c.distanza,
+      SELECT c.*, v.driver_id, v.modello AS veicolo,
              ST_Y(c.origine::geometry) AS origine_lat, ST_X(c.origine::geometry) AS origine_lon,
              ST_Y(c.destinazione::geometry) AS destinazione_lat, ST_X(c.destinazione::geometry) AS destinazione_lon,
-             c.origine_address, c.destinazione_address, c."stato", c.prezzo_fisso AS prezzo,
-             c.posti_disponibili, c.posti_totali,
              (SELECT COALESCE(SUM(p.posti_richiesti), 0) 
               FROM public.prenotazioni p 
               WHERE p.corsa_id = c.id) AS posti_prenotati_reali
@@ -85,6 +82,16 @@ export async function toggleCorsa(corsa_id, action) {
     const corsa = corsaRes.rows[0];
 
     if (action === 'end') {
+      // Calcolo dinamico: ottieni il totale posti occupati REALI
+      const postiOccupatiRes = await client.query(
+        `SELECT COALESCE(SUM(posti_richiesti), 0) as totale FROM public.prenotazioni WHERE corsa_id = $1`,
+        [corsa_id]
+      );
+      const totalePostiOccupati = Number(postiOccupatiRes.rows[0].totale);
+
+      // Arricchisci per il pricing
+      const corsaPerPricing = { ...corsa, posti_prenotati: totalePostiOccupati };
+
       const prenRes = await client.query(
         `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, p.importo
          FROM public.pagamenti p
@@ -96,14 +103,14 @@ export async function toggleCorsa(corsa_id, action) {
         if (!pren.stripe_payment_intent) continue;
 
         const postiRes = await client.query(
-            'SELECT posti_richiesti FROM prenotazioni WHERE id = $1',
+            'SELECT posti_richiesti FROM public.prenotazioni WHERE id = $1',
             [pren.prenotazione_id]
         );
         const postiRichiesti = postiRes.rows[0]?.posti_richiesti || 1;
 
         const importoFinale = corsa.tipo_corsa === 'privata' 
           ? Number(pren.importo) 
-          : await calcolaPrezzo(corsa, postiRichiesti, 'prenotabile');
+          : await calcolaPrezzo(corsaPerPricing, postiRichiesti, 'prenotabile');
         
         try {
           const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
@@ -114,6 +121,7 @@ export async function toggleCorsa(corsa_id, action) {
             await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, [importoFinale, pren.pagamento_id]);
           }
         } catch (err) {
+          console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
           await client.query(`UPDATE public.pagamenti SET stato = 'fallito' WHERE id = $1`, [pren.pagamento_id]);
         }
       }

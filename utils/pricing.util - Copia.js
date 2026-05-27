@@ -22,60 +22,56 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot) {
   let prezzoKm = 0;
   let prezzoPasseggero = 0;
 
+  console.log(`📌 [DEBUG PRICING] Inizio calcolo: VeicoloID=${corsa.veicolo_id}, Stato=${statoSlot}, Km=${kmPercorso}, Richiesti=${richiesti}`);
+
   try {
     const tariffe = await getTariffe(corsa.veicolo_id, tipoTariffa);
     prezzoKm = tariffe.prezzoKm;
     prezzoPasseggero = tariffe.prezzoPasseggero;
   } catch (err) {
-    console.warn(`⚠️ [PRICING] Tariffe mancanti per veicolo ${corsa.veicolo_id}.`);
+    console.warn(`⚠️ [DEBUG PRICING] Tariffe mancanti per veicolo ${corsa.veicolo_id}.`);
   }
 
+  // Fallback di sicurezza: se la tariffa è 0 ma ci sono km, usiamo 0.50 come base
   const safePrezzoKm = prezzoKm > 0 ? prezzoKm : (kmPercorso > 0 ? 0.50 : 0);
 
   switch (statoSlot) {
     case 'libero': {
       const prezzoLibero = kmPercorso * safePrezzoKm;
+      console.log(`🟢 [LIBERO] Formula: ${kmPercorso} * ${safePrezzoKm} = ${prezzoLibero}`);
       return prezzoLibero;
     }
 
     case 'prenotabile': {
-      // 1. RECUPERO DATI REALI DAL DB
-      // Contiamo il totale dei posti già prenotati e i posti della prima prenotazione
-      const { rows } = await pool.query(`
-        SELECT 
-          COALESCE(SUM(posti_richiesti), 0) as totale_reale,
-          (SELECT posti_richiesti 
-           FROM prenotazioni 
-           WHERE corsa_id = $1 
-           ORDER BY id ASC 
-           LIMIT 1) as posti_prima_pren
-        FROM prenotazioni 
-        WHERE corsa_id = $1`,
-        [corsa.id]
-      );
+      // Normalizzazione valori corsa
+      const postiPrenotati = Number(corsa.posti_prenotati) || 0;
+      const primoPren = Number(corsa.primo_posto) || 0;
+      
+      // Calcolo totale passeggeri per la condivisione
+      const totalePasseggeri = Math.max(1, primoPren + postiPrenotati + richiesti);
 
-      const postiGiaVenduti = Number(rows[0].totale_reale);
-      const postiPrimaPren = Number(rows[0].posti_prima_pren) || 0;
-      
-      const totalePasseggeri = postiGiaVenduti + richiesti;
-      
-      // LOGICA: Il costo variabile si applica solo ai passeggeri successivi alla prima prenotazione
-      const passeggeriExtra = Math.max(0, (postiGiaVenduti + richiesti) - postiPrimaPren);
-      
-      // 2. CALCOLO COMPONENTI
+      // Calcolo componenti
       const costoBase = kmPercorso * safePrezzoKm;
-      const costoVariabile = prezzoPasseggero * passeggeriExtra;
+      // Il costo variabile si applica ai passeggeri oltre al primo (primoPren)
+      const costoVariabile = prezzoPasseggero * Math.max(0, (postiPrenotati + richiesti));
       
       const prezzoTotaleVeicolo = costoBase + costoVariabile;
       const prezzoFinale = (prezzoTotaleVeicolo / totalePasseggeri) * richiesti;
 
-      console.log(`🟡 [PRICING REALE] CorsaID=${corsa.id} | Reali=${totalePasseggeri} | Extra=${passeggeriExtra} | Finale=${prezzoFinale}`);
+      console.log(`🟡 [PRENOTABILE] Dettagli Calcolo:`);
+      console.log(`   -> Componenti: PrimoPosto=${primoPren}, Prenotati=${postiPrenotati}, Richiesti=${richiesti}`);
+      console.log(`   -> Totale Passeggeri attesi=${totalePasseggeri}`);
+      console.log(`   -> Costo Base (Km): ${costoBase} (da ${kmPercorso}km * ${safePrezzoKm})`);
+      console.log(`   -> Costo Variabile: ${costoVariabile} (da ${prezzoPasseggero} * ${postiPrenotati + richiesti})`);
+      console.log(`   -> Prezzo Totale Veicolo: ${prezzoTotaleVeicolo}`);
+      console.log(`   -> Risultato Finale: ${prezzoFinale}`);
       
       return Math.max(0.10, prezzoFinale);
     }
 
     case 'pubblicato': {
       const prezzoPub = (prezzoPasseggero > 0 ? prezzoPasseggero : safePrezzoKm) * richiesti;
+      console.log(`🔵 [PUBBLICATO] Prezzo: ${prezzoPub}`);
       return prezzoPub;
     }
 

@@ -52,7 +52,7 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     const origine_address = pending.origine_address ?? pending.localitaOrigine ?? pending.origineAddress ?? 'N/D';
     const destinazione_address = pending.destinazione_address ?? pending.localitaDestinazione ?? pending.destinazioneAddress ?? 'N/D';
 
-    // --- 🔥 DISTANZA CON LOGICA DI SICUREZZA ---
+    // --- 🔥 DISTANZA ---
     let distanzaKm = Number(String(pending.distanza ?? 0).replace(',', '.').trim());
     if (isNaN(distanzaKm) || distanzaKm <= 0) {
       try {
@@ -63,24 +63,24 @@ export async function createCorsaFromPending(pending, veicolo, client) {
       }
     }
 
-    // --- CREAZIONE CORSA ---
-    // FIX: primo_posto ora usa postiRichiesti per una corretta logica di pricing
+    // --- CREAZIONE CORSA (PULITA) ---
+    // Rimosso primo_posto e posti_prenotati: la logica ora è gestita dinamicamente dal servizio prenotazioni
     const res = await client.query(
       `INSERT INTO corse (
           veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato,
-          durata, posti_disponibili, posti_totali, primo_posto, prezzo_fisso,
+          durata, posti_disponibili, posti_totali, prezzo_fisso,
           distanza, origine, destinazione, origine_address, destinazione_address, created_at
        ) VALUES (
           $1,$2,$3,$4,'prenotabile',
-          $5,$6,$7,$8,$9,
-          $10,
-          ST_SetSRID(ST_MakePoint($11,$12),4326),
-          ST_SetSRID(ST_MakePoint($13,$14),4326),
-          $15,$16,NOW()
+          $5,$6,$7,$8,
+          $9,
+          ST_SetSRID(ST_MakePoint($10,$11),4326),
+          ST_SetSRID(ST_MakePoint($12,$13),4326),
+          $14,$15,NOW()
        ) RETURNING *`,
       [
         veicolo.id, startDatetime, arrivoDatetime, tipoCorsa, `${durataMin} minutes`,
-        postiDisponibili, postiTotali, postiRichiesti, (pending.prezzo ?? pending.prezzo_fisso ?? 0),
+        postiDisponibili, postiTotali, (pending.prezzo ?? pending.prezzo_fisso ?? 0),
         distanzaKm, coordOrig.lon, coordOrig.lat, coordDest.lon, coordDest.lat,
         origine_address, destinazione_address
       ]
@@ -96,6 +96,7 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     if (dispRes.rows.length > 0) CacheManager.disponibilita.update(dispRes.rows[0]);
 
     // --- PRENOTAZIONE E PAGAMENTO ---
+    // Il servizio prenotaCorsa ora popola solo 'prenotazioni' ed è l'unica fonte di verità
     const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, postiRichiesti, client);
     await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
 

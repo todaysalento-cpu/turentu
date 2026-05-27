@@ -3,7 +3,6 @@ import { CacheManager } from '../../utils/cacheManager.js';
 
 /**
  * Prenota corsa direttamente e aggiorna la cache
- * Ora basata esclusivamente sulla tabella 'prenotazioni' per la logica di conteggio
  */
 export async function prenotaCorsa(corsa, clienteId, postiRichiesti, client) {
   let localClient = false;
@@ -20,9 +19,12 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, client) {
     if (!corsa.tipo_corsa) throw new Error("La corsa deve avere il campo tipo_corsa valorizzato");
     if (!postiRichiesti || postiRichiesti <= 0) throw new Error("Il numero di posti richiesti deve essere maggiore di 0");
 
-    // 1. Blocca la riga per evitare race condition durante la verifica disponibilità
+    // 1. Blocca la riga per evitare race condition
     const res = await client.query(
-      `SELECT posti_disponibili FROM corse WHERE id=$1 FOR UPDATE`,
+      `SELECT posti_disponibili, posti_prenotati, posti_totali, primo_posto
+       FROM corse
+       WHERE id=$1
+       FOR UPDATE`,
       [corsa.id]
     );
 
@@ -31,18 +33,12 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, client) {
     const { posti_disponibili } = res.rows[0];
     if (posti_disponibili < postiRichiesti) throw new Error('Posti insufficienti');
 
-    // 2. Inserisci la prenotazione REALE (Fonte di verità)
-    const prenRes = await client.query(
-      `INSERT INTO prenotazioni (corsa_id, cliente_id, posti_richiesti) 
-       VALUES ($1, $2, $3) RETURNING *`,
-      [corsa.id, clienteId, postiRichiesti]
-    );
-
-    // 3. Aggiorna SOLO posti_disponibili nella tabella corse
-    // Non tocchiamo più posti_prenotati o primo_posto, delegando il calcolo a pricing.util.js
+    // 2. Aggiorna la corsa e usa RETURNING per ottenere i dati aggiornati
     const updateRes = await client.query(
       `UPDATE corse
-       SET posti_disponibili = posti_disponibili - $1
+       SET posti_disponibili = posti_disponibili - $1,
+           posti_prenotati = posti_prenotati + $1,
+           primo_posto = CASE WHEN primo_posto = 0 THEN $1 ELSE primo_posto END
        WHERE id = $2
        RETURNING *, 
                  ST_Y(origine::geometry) AS origine_lat, ST_X(origine::geometry) AS origine_lon,
@@ -52,7 +48,16 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, client) {
 
     const corsaAggiornata = updateRes.rows[0];
 
+    // 3. Inserisci prenotazione
+    const prenRes = await client.query(
+      `INSERT INTO prenotazioni 
+        (corsa_id, cliente_id, posti_prenotati, posti_richiesti) 
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [corsa.id, clienteId, postiRichiesti, postiRichiesti]
+    );
+
     // 🔥 SINCRONIZZAZIONE CACHE
+    // Usiamo il CacheManager per riflettere lo stato aggiornato in memoria
     CacheManager.corsa.update(corsaAggiornata);
 
     if (localClient) await client.query('COMMIT');

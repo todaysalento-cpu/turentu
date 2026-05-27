@@ -5,7 +5,7 @@ import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { sendNotification, getIO } from '../socket.js';
 import { sendPush } from '../services/notifications/push.service.js';
-import { getDurataDistanza } from '../utils/maps.util.js';
+import { getDurataDistanza } from '../utils/maps.util.js'; // 🔥 Import aggiunto
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
@@ -67,11 +67,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       if (!origine?.lat || !origine?.lon || !destinazione?.lat || !destinazione?.lon) throw new Error("Coordinate mancanti");
       if (!localitaOrigine || !localitaDestinazione) throw new Error("Indirizzi mancanti");
 
+      // 🔥 LOGICA RICALCOLO DISTANZA DI SICUREZZA
       let dist = Number(distanzaKm ?? 0);
       if (dist <= 0) {
         try {
           const geo = await getDurataDistanza(origine, destinazione);
           dist = Number(geo.distanzaKm ?? 0);
+          console.log(`🛠 [FIX] Distanza ricalcolata per pending: ${dist} km`);
         } catch (e) {
           console.error("Errore ricalcolo distanza:", e);
         }
@@ -79,9 +81,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
       const durataInterval = `${durataMinuti} minutes`;
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-      const prezzoSlot = prezzo / slots.length;
 
-      // 1. Inserimento in pending
       const result = await pool.query(
         `INSERT INTO pending
         (veicolo_id, cliente_id, start_datetime, durata, posti_richiesti,
@@ -93,21 +93,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
                  $13,$14,'pending',$15,$16::uuid,$17)
          RETURNING *`,
         [veicolo_id, clienteId, start_datetime, durataInterval, posti_richiesti, type, 
-         prezzoSlot, dist, origine.lon, origine.lat, destinazione.lon, 
+         prezzo / slots.length, dist, origine.lon, origine.lat, destinazione.lon, 
          destinazione.lat, localitaOrigine, localitaDestinazione, paymentIntent.id, requestId, expiresAt]
       );
 
-      const pendingRecord = result.rows[0];
-      pendingRows.push(pendingRecord);
+      pendingRows.push(result.rows[0]);
 
-      // 2. 🔥 AGGIUNTA: Tracciamento immediato in pagamenti
-      await pool.query(
-        `INSERT INTO pagamenti (prenotazione_id, importo, stato, stripe_payment_intent, updated_at) 
-         VALUES ($1, $2, 'autorizzazione', $3, NOW())`,
-        [pendingRecord.id, prezzoSlot, paymentIntent.id]
-      );
-
-      // 3. Notifiche
+      // --- Notifiche (Driver & Cliente) ---
       const messageDriver = generatePendingMessage({ role: 'autista', startAddress: localitaOrigine, endAddress: localitaDestinazione, startDatetime: start_datetime });
       const messageCliente = generatePendingMessage({ role: 'cliente', startAddress: localitaOrigine, endAddress: localitaDestinazione, startDatetime: start_datetime });
 

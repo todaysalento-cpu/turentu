@@ -1,6 +1,6 @@
 import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
-import { getVeicoliMap } from '../search/search.cache.js'; // IMPORT CORRETTO
+import { getVeicoliMap, upsertVeicolo } from '../search/search.cache.js'; 
 
 // =========================
 // Aggiorna posizione CORRENTE (DB)
@@ -51,7 +51,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
            AND tipo='PREDITTIVA'
            AND timestamp <= $5
            AND (valid_until IS NULL OR valid_until >= $4)
-      )`,
+     )`,
       [veicoloId, coord.lon, coord.lat, fromTime, validUntil]
     );
 
@@ -66,26 +66,31 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + Cache (Via CacheManager)
+// Aggiorna posizione CORRENTE + Cache (CacheManager + Geohash)
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
-  const v = getVeicoliMap().get(veicoloId); // UTILIZZO CORRETTO DELLA MAP
+  const v = getVeicoliMap().get(veicoloId);
   if (v) {
+    // 1. Aggiorna lo stato di dettaglio
     CacheManager.veicolo.update({
       ...v,
       coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
     });
+
+    // 2. Sincronizza la cache di ricerca (ricalcola Geohash)
+    upsertVeicolo({ ...v, lat: coord.lat, lon: coord.lon });
   }
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + Cache (Via CacheManager)
+// Aggiorna posizione PREDITTIVA + Cache (CacheManager + Geohash)
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
-  const v = getVeicoliMap().get(veicoloId); // UTILIZZO CORRETTO DELLA MAP
+  const v = getVeicoliMap().get(veicoloId);
   if (v) {
+    // 1. Aggiorna lo stato di dettaglio
     CacheManager.veicolo.update({
       ...v,
       coordPredittiva: {
@@ -96,13 +101,16 @@ export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTim
         timestamp: new Date()
       }
     });
+
+    // 2. Sincronizza la cache di ricerca (ricalcola Geohash)
+    upsertVeicolo({ ...v, lat: coord.lat, lon: coord.lon });
   }
 }
 
 // =========================
-// Recupera posizione veicolo dalla cache (PREDITTIVA > CORRENTE > BASE > FALLBACK)
+// Recupera posizione veicolo dalla cache
 export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
-  const v = getVeicoliMap().get(veicoloId); // UTILIZZO CORRETTO DELLA MAP
+  const v = getVeicoliMap().get(veicoloId);
   if (!v) return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
 
   if (v.coordPredittiva && atTime <= new Date(v.coordPredittiva.validUntil)) return v.coordPredittiva;

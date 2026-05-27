@@ -14,6 +14,22 @@ router.use((req, res, next) => {
   next();
 });
 
+// -------------------- GET Lista Pending per Autista --------------------
+// Aggiunta questa rotta per evitare l'errore 404 che ricevevi
+router.get('/autista/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      "SELECT * FROM pending WHERE veicolo_id = $1 AND stato = 'pending'",
+      [id]
+    );
+    res.json({ pendings: result.rows });
+  } catch (err) {
+    console.error('❌ Errore nel GET /autista/:id', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
   console.log(`🚀 [DEBUG] Tentativo di accettazione per ID: ${req.params.id}`);
@@ -37,9 +53,7 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     const selectedPending = pendingRes.rows[0];
-
     if (selectedPending.stato !== 'pending') {
-      console.warn(`⚠️ [DEBUG] Pending ${id} stato non valido: ${selectedPending.stato}`);
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Non disponibile' });
     }
@@ -49,57 +63,40 @@ router.post('/:id/accetta', async (req, res) => {
         `SELECT id FROM pending WHERE request_id = $1 AND stato = 'accettata' FOR UPDATE`,
         [selectedPending.request_id]
       );
-
       if (alreadyAccepted.rows.length) {
-        console.warn(`⚠️ [DEBUG] Tentativo di doppia accettazione per request_id: ${selectedPending.request_id}`);
         await client.query('ROLLBACK');
         return res.status(400).json({ message: 'Già accettata' });
       }
     }
 
     const result = await client.query(
-      `UPDATE pending 
-       SET stato = 'accettata' 
-       WHERE id = $1 
-       RETURNING *,
-         ST_X(origine::geometry) AS origine_lon,
-         ST_Y(origine::geometry) AS origine_lat,
-         ST_X(destinazione::geometry) AS destinazione_lon,
-         ST_Y(destinazione::geometry) AS destinazione_lat`,
+      `UPDATE pending SET stato = 'accettata' WHERE id = $1 
+       RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
+       ST_X(destinazione::geometry) AS destinazione_lon, ST_Y(destinazione::geometry) AS destinazione_lat`,
       [id]
     );
 
     for (const p of result.rows) {
       const driverRes = await client.query(
-        `SELECT v.driver_id, u.nome AS driver_nome
-         FROM veicolo v
-         JOIN utente u ON u.id = v.driver_id
-         WHERE v.id = $1`,
-        [p.veicolo_id]
+        `SELECT v.driver_id, u.nome AS driver_nome FROM veicolo v 
+         JOIN utente u ON u.id = v.driver_id WHERE v.id = $1`, [p.veicolo_id]
       );
 
       const driverId = driverRes.rows[0]?.driver_id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
 
       let corsa;
-
       if (!p.corsa_id) {
         const existing = await client.query(
-          `SELECT * FROM corse 
-           WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
+          `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
           [p.veicolo_id, p.start_datetime]
         );
-
         if (existing.rows.length) {
           corsa = existing.rows[0];
           await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
         } else {
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
-          const postiReali = vRes.rows[0]?.posti_totali ?? 4;
-          
-          const veicolo = { id: p.veicolo_id, posti: postiReali };
-          const resCorsa = await createCorsaFromPending(p, veicolo, client);
-          
+          const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client);
           corsa = resCorsa.corsa;
           await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
         }
@@ -110,44 +107,22 @@ router.post('/:id/accetta', async (req, res) => {
       }
 
       if (p.payment_intent_id) {
-        await client.query(
-          `UPDATE pagamenti 
-           SET corsa_id = $1 
-           WHERE stripe_payment_intent = $2 AND corsa_id IS NULL`,
-          [corsa.id, p.payment_intent_id]
-        );
+        await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE stripe_payment_intent = $2 AND corsa_id IS NULL`, [corsa.id, p.payment_intent_id]);
       }
-
       notificheDaInviare.push({ p, corsa, driverId, driverNome });
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [DEBUG] Transazione completata per pending ${id}`);
-
+    
+    // Invio notifiche post-commit
     const io = getIO();
     for (const data of notificheDaInviare) {
       const { p, corsa, driverId, driverNome } = data;
-      const corsaCompleta = {
-        ...corsa,
-        corsa_id: corsa.id,
-        veicolo_id: p.veicolo_id,
-        pending_id: p.id,
-        origine: { lat: p.origine_lat, lon: p.origine_lon },
-        destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon },
-        origine_address: p.origine_address,
-        destinazione_address: p.destinazione_address,
-      };
-
+      const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
       io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });
-
-      sendNotification({
-        userId: p.cliente_id,
-        title: 'Viaggio accettato',
-        message: `Il tuo viaggio è stato accettato da ${driverNome}`,
-        type: 'pending'
-      });
+      sendNotification({ userId: p.cliente_id, title: 'Viaggio accettato', message: `Il tuo viaggio è stato accettato da ${driverNome}`, type: 'pending' });
     }
 
     res.json({ ok: true });

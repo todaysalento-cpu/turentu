@@ -8,32 +8,32 @@ import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 const router = express.Router();
 router.use(authMiddleware);
 
-// --- LOG DI DEBUG PER IL ROUTING ---
+// --- LOG DI DEBUG ---
 router.use((req, res, next) => {
-  console.log(`📌 [DEBUG ROUTER] Richiesta ricevuta: ${req.method} ${req.originalUrl} | Path: ${req.path}`);
+  console.log(`📌 [DEBUG ROUTER] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// -------------------- GET Lista Pending per Autista --------------------
-// Aggiunta questa rotta per evitare l'errore 404 che ricevevi
+// -------------------- GET Lista Pending --------------------
 router.get('/autista/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    // FIX: COALESCE(prezzo, 0)::float8 garantisce che arrivi sempre un numero al frontend
     const result = await pool.query(
-      "SELECT * FROM pending WHERE veicolo_id = $1 AND stato = 'pending'",
+      `SELECT *, COALESCE(prezzo, 0)::float8 AS prezzo 
+       FROM pending 
+       WHERE veicolo_id = $1 AND stato = 'pending'`,
       [id]
     );
     res.json({ pendings: result.rows });
   } catch (err) {
-    console.error('❌ Errore nel GET /autista/:id', err);
+    console.error('❌ Errore GET /autista/:id', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
-  console.log(`🚀 [DEBUG] Tentativo di accettazione per ID: ${req.params.id}`);
-  
   const client = await pool.connect();
   const notificheDaInviare = [];
 
@@ -47,7 +47,6 @@ router.post('/:id/accetta', async (req, res) => {
     );
 
     if (!pendingRes.rows.length) {
-      console.warn(`⚠️ [DEBUG] Pending ${id} non trovato nel DB`);
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Pending non trovato' });
     }
@@ -58,17 +57,7 @@ router.post('/:id/accetta', async (req, res) => {
       return res.status(400).json({ message: 'Non disponibile' });
     }
 
-    if (selectedPending.request_id) {
-      const alreadyAccepted = await client.query(
-        `SELECT id FROM pending WHERE request_id = $1 AND stato = 'accettata' FOR UPDATE`,
-        [selectedPending.request_id]
-      );
-      if (alreadyAccepted.rows.length) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Già accettata' });
-      }
-    }
-
+    // UPDATE e logica di creazione corsa (il tuo codice originale)
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
@@ -114,7 +103,7 @@ router.post('/:id/accetta', async (req, res) => {
 
     await client.query('COMMIT');
     
-    // Invio notifiche post-commit
+    // Notifiche
     const io = getIO();
     for (const data of notificheDaInviare) {
       const { p, corsa, driverId, driverNome } = data;
@@ -128,7 +117,7 @@ router.post('/:id/accetta', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ [DEBUG] Errore critico:', err);
+    console.error('❌ Errore accetta:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

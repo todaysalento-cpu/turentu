@@ -87,7 +87,6 @@ router.post('/:id/accetta', async (req, res) => {
           corsa = existing.rows[0];
           prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
         } else {
-          // 🔥 FIX: Recupero posti REALI dal DB invece di hard-coding '4'
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
           const postiReali = vRes.rows[0]?.posti_totali ?? 4;
           
@@ -106,6 +105,16 @@ router.post('/:id/accetta', async (req, res) => {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [p.corsa_id]);
         corsa = corsaRes.rows[0];
         prenotazione = await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
+      }
+
+      // 🔥 FIX: Colleghiamo il pagamento alla corsa appena creata/recuperata
+      if (p.payment_intent_id) {
+        await client.query(
+          `UPDATE pagamenti 
+           SET corsa_id = $1 
+           WHERE stripe_payment_intent = $2 AND corsa_id IS NULL`,
+          [corsa.id, p.payment_intent_id]
+        );
       }
 
       const corsaCompleta = {

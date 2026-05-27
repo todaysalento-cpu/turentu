@@ -27,10 +27,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
     ...corseFiltrate.map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
+  // Recuperiamo la Map una sola volta fuori dal ciclo per efficienza
   const veicoliMap = getVeicoliMap();
 
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
+      // CORREZIONE: Accesso tramite .get() sulla Map
       const v = veicoliMap.get(item.veicolo_id);
       const isCorsa = item.origine_lat !== undefined;
 
@@ -47,6 +49,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
         : (richiesta.start_datetime ? new Date(richiesta.start_datetime) : null);
 
       let durataMs;
+
       if (!oraPartenza) {
         durataMs = durataRichiesta;
       } else if (isCorsa) {
@@ -64,7 +67,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
       }
 
       const durataMinuti = Math.ceil(durataMs / 60000);
-      const oraArrivo = oraPartenza ? new Date(oraPartenza.getTime() + durataMs) : null;
+      const oraArrivo = oraPartenza
+        ? new Date(oraPartenza.getTime() + durataMs)
+        : null;
 
       let localitaOrigine = 'N/D';
       let localitaDestinazione = 'N/D';
@@ -74,14 +79,11 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
 
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
 
-      // ✅ AGGIORNAMENTO: Utilizzo dei posti reali calcolati dinamicamente
-      const postiOccupatiReali = item.posti_prenotati_reali ?? 0;
-
       const prezzo = await calcolaPrezzo(
         {
           km: distanzaKm,
           tipo_corsa: item.tipo_corsa,
-          posti_prenotati: postiOccupatiReali,
+          posti_prenotati: item.posti_prenotati ?? 0,
           primo_posto: item.primo_posto ?? 0,
           veicolo_id: item.veicolo_id
         },
@@ -106,7 +108,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate) {
         durataMinuti,
         distanzaKm,
         postiTotali: v?.posti_totali ?? 0,
-        postiOccupati: postiOccupatiReali,
         postiRichiesti: richiesta.posti_richiesti,
         prezzo,
         stato: item.stato,

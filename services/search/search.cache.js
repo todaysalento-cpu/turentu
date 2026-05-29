@@ -11,12 +11,18 @@ export const CacheStore = {
 
 export const TOP_RESULTS = 10;
 
-// --- GETTER ---
+// --- GETTER DIRETTI ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
 export const getCorseMap = () => CacheStore.corseCache;
 export const getPendingMap = () => CacheStore.pendingCache;
 export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioniCache);
+
+// --- RIPRISTINO FUNZIONI DI COMPATIBILITÀ (Fix per 'does not provide an export') ---
+export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
+export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 
 // --- GESTIONE RECENSIONI ---
 export const updateRecensioneCache = (conducenteId, media, totale) => {

@@ -3,7 +3,7 @@ import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
 import { TOP_RESULTS, getVeicoliMap, getRecensioniCache } from '../search.cache.js';
 // Importa la funzione di slicing che abbiamo definito nel motore geometrico
-import { getSottoPercorso } from '../../engine/availability.engine.js'; 
+import { getSottoPercorso } from '../engine/availability.engine.js'; 
 
 const safeParseJSON = (str) => {
   try { return JSON.parse(str); } 

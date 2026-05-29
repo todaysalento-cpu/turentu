@@ -3,6 +3,8 @@ import * as turf from '@turf/turf';
 import polyline from 'polyline'; 
 import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
+// Importiamo l'indice dalla cache
+import { GeoIndex } from '../cache/cache.js'; 
 
 const GEOHASH_PRECISION = 4;
 
@@ -24,17 +26,25 @@ export function getSottoPercorso(polylineString, salita, discesa) {
 }
 
 /**
- * Motore di ricerca Disponibilità e Ridesharing
+ * Motore di ricerca Disponibilità e Ridesharing ottimizzato con GeoIndex
  */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const tolKm = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  const reqHashFull = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  const hashVicini = [...ngeohash.neighbors(reqHashFull), reqHashFull];
+  // 1. FILTRO CANDIDATI VIA GEOINDEX (Molto veloce)
+  const reqHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  const hashDaCercare = [...ngeohash.neighbors(reqHash), reqHash];
+  
+  const candidateIds = new Set();
+  hashDaCercare.forEach(h => {
+    if (GeoIndex.has(h)) {
+      GeoIndex.get(h).forEach(id => candidateIds.add(id));
+    }
+  });
 
-  // 1. FILTRO SLOT
+  // 2. FILTRO SLOT (Manteniamo la logica esistente)
   const slots = disponibilitaCache
     .filter(dv => {
       const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
@@ -44,45 +54,38 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 2. FILTRO CORSE
-  const corse = corseCache.filter(c => {
-    const postiOccupati = Number(c.picco_occupazione || 0);
-    if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
+  // 3. FILTRO CORSE (Ora itera solo sui candidati)
+  const corse = Array.from(candidateIds)
+    .map(id => corseCache.get(id))
+    .filter(c => {
+      if (!c) return false;
+      const postiOccupati = Number(c.picco_occupazione || 0);
+      if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
-    // --- NUOVA LOGICA: Il Geohash è un "indizio", non un muro ---
-    const pathHashes = Array.isArray(c.path_geohashes) ? c.path_geohashes : [];
-    const pathHashesTruncated = pathHashes.map(h => h.substring(0, GEOHASH_PRECISION));
-    const hasGeohashMatch = pathHashesTruncated.some(h => hashVicini.includes(h));
-
-    if (!c.percorso_polyline) return false;
-    
-    try {
-      const decoded = polyline.decode(c.percorso_polyline);
-      if (!decoded || decoded.length < 2) return false;
-
-      const line = turf.lineString(decoded.map(coord => [coord[1], coord[0]]));
-      const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
-      const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+      if (!c.percorso_polyline) return false;
       
-      const distSalita = turf.pointToLineDistance(salita, line);
-      const distDiscesa = turf.pointToLineDistance(discesa, line);
+      try {
+        const decoded = polyline.decode(c.percorso_polyline);
+        if (!decoded || decoded.length < 2) return false;
 
-      // Se il Geohash non match ma la corsa è fisicamente vicina (distanza < tolKm), la teniamo lo stesso!
-      if (!hasGeohashMatch && (distSalita > tolKm || distDiscesa > tolKm)) {
-          return false; 
+        const line = turf.lineString(decoded.map(coord => [coord[1], coord[0]]));
+        const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
+        const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+        
+        const distSalita = turf.pointToLineDistance(salita, line);
+        const distDiscesa = turf.pointToLineDistance(discesa, line);
+
+        const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+        if (!isTest && (distSalita > tolKm || distDiscesa > tolKm)) return false;
+
+        c.percorsoVisualizzato = getSottoPercorso(c.percorso_polyline, richiesta.coord, richiesta.coordDest);
+      } catch (err) {
+        console.error(`[ENGINE ERROR] Errore decodifica polyline corsa ${c.id}:`, err);
+        return false;
       }
 
-      const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
-      if (!isTest && (distSalita > tolKm || distDiscesa > tolKm)) return false;
-
-      c.percorsoVisualizzato = getSottoPercorso(c.percorso_polyline, richiesta.coord, richiesta.coordDest);
-    } catch (err) {
-      console.error(`[ENGINE ERROR] Errore decodifica polyline corsa ${c.id}:`, err);
-      return false;
-    }
-
-    return (c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta) <= maxStops;
-  });
+      return (c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta) <= maxStops;
+    });
 
   return { slots, corse };
 }

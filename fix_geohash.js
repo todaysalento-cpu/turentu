@@ -1,54 +1,74 @@
+import 'dotenv/config'; 
+import { pool } from './db/db.js';
+import { getRouteGeometry } from './utils/maps.util.js'; 
 import ngeohash from 'ngeohash';
 import polyline from 'polyline';
-import { pool } from './db/db.js';
 
-async function rigeneraTuttiGeohash() {
-    console.log("🔍 Ricerca corse da aggiornare o ottimizzare...");
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fixDefinitivo() {
+    console.log("🚀 Avvio riallineamento corse...");
     
-    // Recuperiamo id, polilinea e distanza per calcolare meglio gli hash
-    const result = await pool.query(`SELECT id, percorso_polyline, distanza FROM corse WHERE percorso_polyline IS NOT NULL`);
-    const rows = result.rows; 
+    // CORREZIONE: Usiamo ST_Y e ST_X per convertire il formato binario geography di PostGIS
+    const query = `
+        SELECT id, 
+               ST_Y(origine::geometry) as lat_o, ST_X(origine::geometry) as lon_o,
+               ST_Y(destinazione::geometry) as lat_d, ST_X(destinazione::geometry) as lon_d
+        FROM corse 
+        WHERE origine IS NOT NULL AND destinazione IS NOT NULL
+    `;
     
-    console.log(`🚀 Trovate ${rows.length} corse da elaborare.`);
+    const result = await pool.query(query);
+    const rows = result.rows;
+    console.log(`📦 Trovate ${rows.length} corse da elaborare.`);
 
     for (const row of rows) {
         try {
-            const decoded = polyline.decode(row.percorso_polyline);
+            // Formattazione per la funzione getRouteGeometry
+            const origine = { lat: row.lat_o, lon: row.lon_o };
+            const destinazione = { lat: row.lat_d, lon: row.lon_d };
+
+            // 1. Scarichiamo la geometria dettagliata
+            const route = await getRouteGeometry(origine, destinazione);
             
-            // LOGICA DINAMICA:
-            // Se la distanza è 0 o mancante, usiamo un fallback di 10 punti.
-            // Altrimenti, 1 punto ogni 50km, con un minimo di 2 e un massimo di 20 punti.
-            const km = parseFloat(row.distanza) || 0;
-            const puntiTarget = km > 0 ? Math.min(20, Math.max(2, Math.floor(km / 50))) : 10;
+            // 2. Decodifichiamo la polilinea
+            const decoded = polyline.decode(route.polyline);
             
+            // 3. Calcolo dinamico geohash
+            const km = route.distanza / 1000;
+            const puntiTarget = Math.min(25, Math.max(3, Math.floor(km / 40)));
             const step = Math.max(1, Math.floor(decoded.length / puntiTarget));
             
-            const hashes = decoded
-                .filter((_, i) => i % step === 0)
-                .map(c => ngeohash.encode(c[0], c[1], 5));
-            
-            // Aggiungiamo sempre l'ultimo punto per precisione sull'arrivo
-            if (decoded.length > 0) {
-                const lastPoint = decoded[decoded.length - 1];
-                hashes.push(ngeohash.encode(lastPoint[0], lastPoint[1], 5));
+            const hashes = [];
+            for (let i = 0; i < decoded.length; i += step) {
+                hashes.push(ngeohash.encode(decoded[i][0], decoded[i][1], 6));
             }
             
+            // Aggiunta forzata inizio e fine
+            hashes.push(ngeohash.encode(decoded[0][0], decoded[0][1], 6));
+            hashes.push(ngeohash.encode(decoded[decoded.length - 1][0], decoded[decoded.length - 1][1], 6));
+            
             const uniqueHashes = [...new Set(hashes)];
+
+            // 4. Update nel DB
+            await pool.query(
+                'UPDATE corse SET percorso_polyline = $1, path_geohashes = $2, distanza = $3 WHERE id = $4',
+                [route.polyline, uniqueHashes, km, row.id]
+            );
             
-            // Aggiornamento nel DB
-            await pool.query('UPDATE corse SET path_geohashes = $1 WHERE id = $2', [uniqueHashes, row.id]);
+            console.log(`✅ Corsa ${row.id}: Aggiornata con ${uniqueHashes.length} geohash.`);
             
-            console.log(`✅ Corsa ${row.id} (${km.toFixed(0)}km): ${uniqueHashes.length} geohash.`);
+            await delay(100); 
+            
         } catch (err) {
-            console.error(`💥 Errore sulla corsa ${row.id}:`, err);
+            console.error(`💥 Errore corsa ${row.id}: ${err.message}`);
         }
     }
 }
 
-// Avvio esecuzione
-rigeneraTuttiGeohash()
+fixDefinitivo()
     .then(() => {
-        console.log("🏁 Migrazione completata con successo!");
+        console.log("🏁 Migrazione completata!");
         process.exit(0);
     })
     .catch(err => {

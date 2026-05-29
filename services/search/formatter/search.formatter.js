@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
-import { TOP_RESULTS, veicoliCache, getRecensioniCache } from '../search.cache.js';
+import * as CacheModule from '../search.cache.js'; // Importa tutto il modulo come namespace
 import { getSottoPercorso } from '../engine/availability.engine.js'; 
 
 const safeParseJSON = (str) => {
@@ -9,6 +9,9 @@ const safeParseJSON = (str) => {
   catch { return []; }
 };
 
+/**
+ * Formatta i risultati con protezione contro dipendenze circolari
+ */
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
   let distanzaRichiesta = 0;
@@ -28,29 +31,25 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     ...(corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
-  const veicoliMap = injectedVeicoliMap || veicoliCache;
-  const recensioniCache = getRecensioniCache();
+  // PROTEZIONE: Se injectedVeicoliMap non è passato, usa il getter del modulo
+  const veicoliMap = injectedVeicoliMap || (typeof CacheModule.getVeicoliMap === 'function' ? CacheModule.getVeicoliMap() : CacheModule.veicoliCache);
+  const recensioniCache = typeof CacheModule.getRecensioniCache === 'function' ? CacheModule.getRecensioniCache() : {};
 
-  // 🔥 DIAGNOSTICA STATO CACHE (Eseguita una sola volta)
-  console.log(`🔍 [FORMATTER] Cache Size: ${veicoliMap.size}`);
-  if (veicoliMap.size > 0) {
-      const sampleKey = veicoliMap.keys().next().value;
-      console.log(`🔍 [FORMATTER] Tipo chiave in cache: ${typeof sampleKey}, Esempio: ${sampleKey}`);
+  // DIAGNOSTICA: Verifica se la mappa è valida
+  if (!veicoliMap || typeof veicoliMap.get !== 'function') {
+      console.error(`❌ [FORMATTER] Cache non valida! Tipo: ${typeof veicoliMap}`, veicoliMap);
+      return []; // Ritorno di sicurezza
   }
 
+  console.log(`🔍 [FORMATTER] Cache Size operativa: ${veicoliMap.size}`);
+
   return await Promise.all(
-    allItems.slice(0, TOP_RESULTS).map(async (item) => {
-      // Normalizziamo l'ID
+    allItems.slice(0, CacheModule.TOP_RESULTS || 10).map(async (item) => {
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
       
-      // 🔥 LOG DI DEBUG DETTAGLIATO
       if (!v) {
-        console.warn(`⚠️ [FORMATTER DEBUG] ID ${veicoloId} (tipo: ${typeof veicoloId}) non trovato.`);
-        // Verifica se esiste un ID simile (per evitare problemi di stringhe numeriche)
-        const keys = Array.from(veicoliMap.keys());
-        const found = keys.find(k => Number(k) === veicoloId);
-        if (found) console.warn(`💡 [FORMATTER DEBUG] Trovata chiave corrispondente ma diversa: ${typeof found} ${found}`);
+        console.warn(`⚠️ [FORMATTER DEBUG] ID ${veicoloId} non trovato in cache.`);
       }
 
       const isCorsa = item.origine_lat !== undefined;

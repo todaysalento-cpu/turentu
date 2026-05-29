@@ -37,14 +37,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
 
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
-      const v = veicoliMap.get(item.veicolo_id);
+      // 🔥 FIX: Conversione a Number per allineare l'ID con la chiave della Map
+      const veicoloId = Number(item.veicolo_id);
+      const v = veicoliMap.get(veicoloId);
       
-      // 🔥 DEBUG LOG: Verifica se il veicolo esiste nella cache e cosa contiene
       if (!v) {
-        console.warn(`⚠️ [FORMATTER] Veicolo ID ${item.veicolo_id} NON trovato nella cache.`);
-      } else {
-        // Log solo se necessario, puoi commentarlo dopo il test
-        // console.log(`🔍 [FORMATTER] Veicolo ${item.veicolo_id}: Marca="${v.marca}", Modello="${v.modello}"`);
+        console.warn(`⚠️ [FORMATTER] Veicolo ID ${veicoloId} NON trovato nella cache.`);
       }
 
       const isCorsa = item.origine_lat !== undefined;
@@ -77,7 +75,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       const postiTotali = Number(v?.posti_totali ?? 0);
 
       const prezzo = await calcolaPrezzo(
-        { km: distanzaKm, tipo_corsa: item.tipo_corsa, posti_occupati: postiOccupatiReali, posti_totali: postiTotali, veicolo_id: item.veicolo_id },
+        { km: distanzaKm, tipo_corsa: item.tipo_corsa, posti_occupati: postiOccupatiReali, posti_totali: postiTotali, veicolo_id: veicoloId },
         richiesta.posti_richiesti,
         item.stato
       );
@@ -85,7 +83,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       // Normalizzazione per il Frontend
       return {
         id: item.id || uuidv4(),
-        veicolo_id: item.veicolo_id,
+        veicolo_id: veicoloId,
         marca: v?.marca ?? null,
         modello: v?.modello ?? null,
         tipoVeicolo: v?.tipo ?? 'citycar',

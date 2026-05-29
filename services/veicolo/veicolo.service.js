@@ -1,11 +1,11 @@
 import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
-import { veicoliCache, upsertVeicolo } from '../search/search.cache.js'; 
+// AGGIORNAMENTO: Importiamo CacheStore dal file della cache
+import { CacheStore, upsertVeicolo } from '../search/search.cache.js'; 
 
-// --- RIPRISTINO INTERFACCIA COMPATIBILE ---
-// Aggiungiamo questa piccola funzione locale per mantenere la compatibilità 
-// con il resto del sistema che si aspetta getVeicoliMap()
-const getVeicoliMap = () => veicoliCache;
+// --- GETTER AGGIORNATO ---
+// Puntiamo alla proprietà corretta all'interno del singleton CacheStore
+const getVeicoliMap = () => CacheStore.veicoliCache;
 
 // =========================
 // Aggiorna posizione CORRENTE (DB)
@@ -75,7 +75,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
-  const v = getVeicoliMap().get(Number(veicoloId)); // Assicuriamo il tipo Number
+  const v = getVeicoliMap().get(Number(veicoloId));
   if (v) {
     const updatedVeicolo = {
       ...v, 
@@ -94,7 +94,7 @@ export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
-  const v = getVeicoliMap().get(Number(veicoloId)); // Assicuriamo il tipo Number
+  const v = getVeicoliMap().get(Number(veicoloId));
   if (v) {
     const updatedVeicolo = {
       ...v, 

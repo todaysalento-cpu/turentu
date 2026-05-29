@@ -24,7 +24,7 @@ export function getSottoPercorso(polylineString, salita, discesa) {
 }
 
 /**
- * Motore di ricerca Disponibilità e Ridesharing con Logging di Debug
+ * Motore di ricerca Disponibilità e Ridesharing con Normalizzazione Dati DB
  */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
@@ -44,7 +44,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 2. FILTRO CORSE (Aggiornato con Log di Debug)
+  // 2. FILTRO CORSE con normalizzazione geohash
   const corse = corseCache.filter(c => {
     console.log(`🔍 [ENGINE] Analisi Corsa ID: ${c.id}`);
 
@@ -55,10 +55,17 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         return false;
     }
 
-    // B. Geohash
-    const pathHashes = Array.isArray(c.path_geohashes) ? c.path_geohashes : [];
+    // B. Normalizzazione e Filtro Geohash
+    // Converte il formato Postgres "{a,b}" o array standard in array di stringhe
+    let pathHashes = [];
+    if (Array.isArray(c.path_geohashes)) {
+        pathHashes = c.path_geohashes;
+    } else if (typeof c.path_geohashes === 'string') {
+        pathHashes = c.path_geohashes.replace(/[{}]/g, '').split(',');
+    }
+
     if (!pathHashes.some(h => hashVicini.includes(h))) {
-        console.log(`   ❌ Scartata: Geohash non matchano (req: ${reqHash})`);
+        console.log(`   ❌ Scartata: Geohash [${pathHashes}] non matchano req: ${reqHash}`);
         return false;
     }
 
@@ -99,6 +106,9 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   return { slots, corse };
 }
 
+/**
+ * RANKING
+ */
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };

@@ -7,9 +7,10 @@ import params from '../../../config/params.js';
 const GEOHASH_PRECISION = 5;
 
 /**
- * Taglia la polilinea originale basandosi sui punti di salita/discesa richiesti
+ * Taglia la polilinea originale basandosi sui punti di salita/discesa richiesti.
+ * Esportata per essere utilizzata dal formatter dei risultati.
  */
-function getSottoPercorso(polylineString, salita, discesa) {
+export function getSottoPercorso(polylineString, salita, discesa) {
   try {
     const decoded = polyline.decode(polylineString);
     // Turf lavora con [lon, lat], quindi mappiamo correttamente

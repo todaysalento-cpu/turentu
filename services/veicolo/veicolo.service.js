@@ -66,34 +66,33 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + Cache
+// Aggiorna posizione CORRENTE + Cache (MANTENENDO MARCA/MODELLO)
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
   const v = getVeicoliMap().get(veicoloId);
   if (v) {
     const updatedVeicolo = {
-      ...v,
+      ...v, // COPIA INTEGRALE: mantiene marca, modello, driver_id, posti_totali, ecc.
       lat: coord.lat,
       lon: coord.lon,
       coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
     };
 
-    // Aggiornamento sincronizzato per mantenere driver_id e posizione
     CacheManager.veicolo.update(updatedVeicolo);
     upsertVeicolo(updatedVeicolo);
   }
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + Cache
+// Aggiorna posizione PREDITTIVA + Cache (MANTENENDO MARCA/MODELLO)
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
   const v = getVeicoliMap().get(veicoloId);
   if (v) {
     const updatedVeicolo = {
-      ...v,
+      ...v, // COPIA INTEGRALE: assicura che marca e modello non vengano persi
       lat: coord.lat,
       lon: coord.lon,
       coordPredittiva: {

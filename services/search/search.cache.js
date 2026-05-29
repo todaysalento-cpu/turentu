@@ -9,17 +9,20 @@ const veicoliCache = new Map();
 const disponibilitaCache = new Map();
 const corseCache = new Map();
 const recensioniCache = new Map(); 
+const pendingCache = new Map(); // ✅ Aggiunta cache per prenotazioni in sospeso
 
 // --- ESPORTAZIONE MAPPE ---
 export const getVeicoliMap = () => veicoliCache;
 export const getDisponibilitaMap = () => disponibilitaCache;
 export const getCorseMap = () => corseCache;
 export const getRecensioniCache = () => Object.fromEntries(recensioniCache);
+export const getPendingMap = () => pendingCache; // ✅ Esportazione mappa pending
 
 // --- ESPORTAZIONE ARRAY ---
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
 export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
+export const getPendingCache = () => Array.from(pendingCache.values()); // ✅ Esportazione array pending
 
 // --- GESTIONE RECENSIONI ---
 export const updateRecensioneCache = (conducenteId, media, totale) => {
@@ -48,6 +51,10 @@ export const removeVeicolo = (veicoloId) => veicoliCache.delete(veicoloId);
 export const upsertDisponibilita = (d) => disponibilitaCache.set(d.id, d);
 export const removeDisponibilita = (disponibilitaId) => disponibilitaCache.delete(disponibilitaId);
 
+// --- ✅ GESTIONE PENDING (Prenotazioni in sospeso) ---
+export const upsertPending = (p) => pendingCache.set(p.id, p);
+export const removePending = (id) => pendingCache.delete(id);
+
 // --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
   if (!force && veicoliCache.size > 0 && corseCache.size > 0) return;
@@ -55,7 +62,6 @@ export async function loadCachesUltra(force = false) {
   const client = await pool.connect();
   try {
     // 1. Carica Corse
-    // CORRETTO: Sostituito 'start_index' con 'start_index_polyline' che è la colonna corretta
     const cRes = await client.query(`
       SELECT c.*, 
              ST_Y(c.origine::geometry) AS origine_lat, ST_X(c.origine::geometry) AS origine_lon, 
@@ -71,7 +77,6 @@ export async function loadCachesUltra(force = false) {
       WHERE c.stato IN ('prenotabile', 'in_corso')
     `);
     
-    // Pulizia preventiva cache se forziamo il reload
     if (force) corseCache.clear();
     cRes.rows.forEach(c => upsertCorsa(c));
 
@@ -87,7 +92,7 @@ export async function loadCachesUltra(force = false) {
     console.log(`📦 [CACHE] Sincronizzazione completata: ${corseCache.size} corse, ${veicoliCache.size} veicoli, ${recensioniCache.size} recensioni.`);
   } catch (err) {
     console.error("❌ Errore critico nel caricamento cache:", err);
-    throw err; // Rilanciamo l'errore per bloccare l'avvio del server se la cache è essenziale
+    throw err;
   } finally {
     client.release();
   }

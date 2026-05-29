@@ -10,7 +10,7 @@ const safeParseJSON = (str) => {
 };
 
 /**
- * Formatta i risultati con ripartizione bilanciata (5 corse + 5 slot)
+ * Formatta i risultati con protezione robusta per le date e ripartizione bilanciata
  */
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
@@ -37,22 +37,17 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     stato: 'libero' 
   }));
 
-  // Bilanciamento: prendi fino a 5 corse e 5 slot
   let corseScelte = corseNormalizzate.slice(0, 5);
   let slotScelti = slotsNormalizzati.slice(0, 5);
 
-  // Se una delle due liste è corta, riempi con l'altra per arrivare a 10
   if (corseScelte.length < 5) {
-    const needed = 5 - corseScelte.length;
-    slotScelti = slotsNormalizzati.slice(0, 5 + needed);
+    slotScelti = slotsNormalizzati.slice(0, 10 - corseScelte.length);
   } else if (slotScelti.length < 5) {
-    const needed = 5 - slotScelti.length;
-    corseScelte = corseNormalizzate.slice(0, 5 + needed);
+    corseScelte = corseNormalizzate.slice(0, 10 - slotScelti.length);
   }
 
   const allItems = [...corseScelte, ...slotScelti].slice(0, CacheModule.TOP_RESULTS || 10);
 
-  // --- PROTEZIONE CACHE ---
   const veicoliMap = injectedVeicoliMap || (typeof CacheModule.getVeicoliMap === 'function' ? CacheModule.getVeicoliMap() : CacheModule.veicoliCache);
   const recensioniCache = typeof CacheModule.getRecensioniCache === 'function' ? CacheModule.getRecensioniCache() : {};
 
@@ -65,26 +60,32 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     allItems.map(async (item) => {
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
-      
       const isCorsa = item.origine_lat !== undefined;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
+      // --- CALCOLO DATE SICURO ---
+      let oraPartenza = isCorsa 
+        ? new Date(item.start_datetime) 
+        : new Date(richiesta.start_datetime || Date.now());
+
+      if (isNaN(oraPartenza.getTime())) oraPartenza = new Date();
+
+      let durataMs = isCorsa 
+        ? (typeof item.durata === 'string' 
+            ? item.durata.split(':').reduce((acc, time) => (60 * acc) + +time, 0) * 1000 
+            : (Number(item.durata) || 0) * 1000)
+        : durataRichiesta;
+
+      let oraArrivo = new Date(oraPartenza.getTime() + Number(durataMs));
+      if (isNaN(oraArrivo.getTime())) oraArrivo = new Date(oraPartenza.getTime() + 3600000); // +1 ora fallback
+
+      // --- CALCOLO DATI ---
       const percorsoVisualizzato = isCorsa && item.percorso_polyline 
         ? getSottoPercorso(item.percorso_polyline, richiesta.coord, richiesta.coordDest)
         : null;
 
       const localitaOrigine = await getLocalitaSafe(richiesta.coord);
       const localitaDestinazione = await getLocalitaSafe(richiesta.coordDest);
-
-      const oraPartenza = isCorsa
-        ? (item.start_datetime ? new Date(item.start_datetime) : new Date())
-        : (richiesta.start_datetime ? new Date(richiesta.start_datetime) : new Date());
-
-      let durataMs = isCorsa 
-        ? (typeof item.durata === 'string' ? item.durata.split(':').reduce((acc, time) => (60 * acc) + +time, 0) * 1000 : (item.durata || 0) * 1000)
-        : durataRichiesta;
-
-      const oraArrivo = new Date(oraPartenza.getTime() + durataMs);
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
       const postiOccupatiReali = Number(item.picco_occupazione ?? 0);
       const postiTotali = Number(v?.posti_totali ?? 0);

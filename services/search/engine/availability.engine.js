@@ -1,6 +1,5 @@
 import ngeohash from 'ngeohash';
 import * as turf from '@turf/turf';
-import polyline from 'polyline'; 
 import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
 import { GeoIndex } from '../search.cache.js'; 
@@ -8,7 +7,8 @@ import { GeoIndex } from '../search.cache.js';
 const GEOHASH_PRECISION = 4;
 
 /**
- * Taglia la polilinea usando le coordinate già decodificate
+ * Taglia la polilinea usando le coordinate già decodificate dalla cache.
+ * Elimina la necessità di chiamare polyline.decode() durante la ricerca.
  */
 export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
@@ -24,7 +24,8 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
 }
 
 /**
- * Motore di ricerca Disponibilità e Ridesharing super-ottimizzato
+ * Motore di ricerca Disponibilità e Ridesharing super-ottimizzato.
+ * Utilizza l'intersezione dei Set nel GeoIndex per identificare corse che coprono la tratta.
  */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
@@ -35,18 +36,21 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       ? corseCache 
       : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  // 1. FILTRO CANDIDATI VIA GEOINDEX
-  const reqHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  const hashDaCercare = [...ngeohash.neighbors(reqHash), reqHash];
-  
-  const candidateIds = new Set();
-  hashDaCercare.forEach(h => {
-    if (GeoIndex.has(h)) {
-      GeoIndex.get(h).forEach(id => candidateIds.add(id));
-    }
-  });
+  // 1. LOGICA INTERSEZIONE: Cerchiamo corse che coprono origine E destinazione
+  const hashOrigine = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  const hashDestinazione = ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION);
 
-  // 2. FILTRO SLOT
+  // Otteniamo i set di corse che passano nelle zone richieste
+  const setOrigine = GeoIndex.get(hashOrigine) || new Set();
+  const setDestinazione = GeoIndex.get(hashDestinazione) || new Set();
+
+  // Intersezione: ID che compaiono in entrambi i set (corse che percorrono l'intera tratta)
+  let candidateIds = new Set([...setOrigine].filter(id => setDestinazione.has(id)));
+  
+  // Fallback: se nessuna corsa copre esattamente entrambi gli estremi, usiamo quelle che coprono almeno l'origine
+  if (candidateIds.size === 0) candidateIds = setOrigine;
+
+  // 2. FILTRO SLOT (Logica di vicinanza veicoli)
   const slots = disponibilitaCache
     .filter(dv => {
       const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
@@ -56,7 +60,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 3. FILTRO CORSE (Usa BBox e DecodedCoords pre-calcolate)
+  // 3. FILTRO CORSE (Usa candidati pre-filtrati e BBox per velocità massima)
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
@@ -65,7 +69,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       const postiOccupati = Number(c.picco_occupazione || 0);
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
-      // FILTRO BBOX: Esclusione matematica immediata
+      // FILTRO BBOX: Esclusione matematica immediata prima di caricare Turf.js
       if (c.bbox && (
           richiesta.coord.lat < c.bbox.minLat - 0.1 || richiesta.coord.lat > c.bbox.maxLat + 0.1 ||
           richiesta.coord.lon < c.bbox.minLon - 0.1 || richiesta.coord.lon > c.bbox.maxLon + 0.1

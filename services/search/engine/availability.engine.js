@@ -4,7 +4,7 @@ import polyline from 'polyline';
 import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
 // Importiamo l'indice dalla cache
-import { GeoIndex } from '../cache/cache.js'; 
+import { GeoIndex } from '../search/search.cache.js'; 
 
 const GEOHASH_PRECISION = 4;
 

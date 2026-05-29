@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
 import { TOP_RESULTS, getVeicoliMap, getRecensioniCache } from '../search.cache.js';
-// Importa la funzione di slicing che abbiamo definito nel motore geometrico
+// Importa la funzione di slicing dal motore geometrico
 import { getSottoPercorso } from '../engine/availability.engine.js'; 
 
 const safeParseJSON = (str) => {
@@ -33,7 +33,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     ...(corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
-  const veicoliMap = injectedVeicoliMap || getVeicoliMap();
+  // 🛡️ PROTEZIONE: Assicuriamo che veicoliMap sia sempre una Map funzionante
+  const rawVeicoli = injectedVeicoliMap || getVeicoliMap();
+  const veicoliMap = (rawVeicoli instanceof Map) 
+    ? rawVeicoli 
+    : new Map(Object.entries(rawVeicoli || {}));
+
   const recensioniCache = getRecensioniCache();
 
   return await Promise.all(
@@ -83,7 +88,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         coordDestinazione: richiesta.coordDest,
         localitaOrigine,
         localitaDestinazione,
-        percorsoVisualizzato, // <-- Nuova proprietà per il frontend
+        percorsoVisualizzato, 
         
         oraPartenza,
         oraArrivo,

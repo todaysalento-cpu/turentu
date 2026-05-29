@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
-import { TOP_RESULTS, getVeicoliMap, getRecensioniCache } from '../search.cache.js';
+import { TOP_RESULTS, veicoliCache, getRecensioniCache } from '../search.cache.js';
 import { getSottoPercorso } from '../engine/availability.engine.js'; 
 
 const safeParseJSON = (str) => {
@@ -31,18 +31,19 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     ...(corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
-  const rawVeicoli = injectedVeicoliMap || getVeicoliMap();
-  const veicoliMap = (rawVeicoli instanceof Map) ? rawVeicoli : new Map(Object.entries(rawVeicoli || {}));
+  // Utilizziamo la cache Singleton importata direttamente
+  const veicoliMap = injectedVeicoliMap || veicoliCache;
   const recensioniCache = getRecensioniCache();
 
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
-      // 🔥 FIX: Conversione a Number per allineare l'ID con la chiave della Map
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
       
+      // 🔥 LOG DI DEBUG AGGIUNTO
       if (!v) {
-        console.warn(`⚠️ [FORMATTER] Veicolo ID ${veicoloId} NON trovato nella cache.`);
+        console.warn(`⚠️ [FORMATTER DEBUG] Veicolo ID ${veicoloId} NON trovato.`);
+        console.warn(`📊 [FORMATTER DEBUG] Stato Cache: Size=${veicoliMap.size}, Prime 5 chiavi: ${Array.from(veicoliMap.keys()).slice(0, 5).join(', ')}`);
       }
 
       const isCorsa = item.origine_lat !== undefined;
@@ -80,7 +81,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         item.stato
       );
 
-      // Normalizzazione per il Frontend
       return {
         id: item.id || uuidv4(),
         veicolo_id: veicoloId,

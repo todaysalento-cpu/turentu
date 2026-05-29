@@ -3,14 +3,10 @@ import * as turf from '@turf/turf';
 import polyline from 'polyline'; 
 import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
-// Importiamo l'indice dalla cache
 import { GeoIndex } from '../search.cache.js'; 
 
 const GEOHASH_PRECISION = 4;
 
-/**
- * Taglia la polilinea originale basandosi sui punti di salita/discesa richiesti.
- */
 export function getSottoPercorso(polylineString, salita, discesa) {
   try {
     const decoded = polyline.decode(polylineString);
@@ -25,15 +21,17 @@ export function getSottoPercorso(polylineString, salita, discesa) {
   }
 }
 
-/**
- * Motore di ricerca Disponibilità e Ridesharing ottimizzato con GeoIndex
- */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const tolKm = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  // 1. FILTRO CANDIDATI VIA GEOINDEX (Molto veloce)
+  // PROTEZIONE: Assicuriamo che corseCache sia una Map per usare .get()
+  const corseMap = corseCache instanceof Map 
+      ? corseCache 
+      : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
+
+  // 1. FILTRO CANDIDATI VIA GEOINDEX
   const reqHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const hashDaCercare = [...ngeohash.neighbors(reqHash), reqHash];
   
@@ -44,7 +42,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     }
   });
 
-  // 2. FILTRO SLOT (Manteniamo la logica esistente)
+  // 2. FILTRO SLOT
   const slots = disponibilitaCache
     .filter(dv => {
       const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
@@ -54,14 +52,14 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 3. FILTRO CORSE (Ora itera solo sui candidati)
+  // 3. FILTRO CORSE (Itera solo sui candidati)
   const corse = Array.from(candidateIds)
-    .map(id => corseCache.get(id))
+    .map(id => corseMap.get(id))
     .filter(c => {
       if (!c) return false;
+      
       const postiOccupati = Number(c.picco_occupazione || 0);
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
-
       if (!c.percorso_polyline) return false;
       
       try {
@@ -90,9 +88,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   return { slots, corse };
 }
 
-/**
- * RANKING
- */
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };

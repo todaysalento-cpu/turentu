@@ -43,8 +43,18 @@ export const upsertCorsa = (c) => {
 
 export const removeCorsa = (corsaId) => corseCache.delete(corsaId);
 
-// --- UPSERT & REMOVE VEICOLO ---
-export const upsertVeicolo = (v) => veicoliCache.set(v.id, { ...v });
+// --- UPSERT & REMOVE VEICOLO (AGGIORNATO: MERGE INTELLIGENTE) ---
+export const upsertVeicolo = (v) => {
+  const oldData = veicoliCache.get(v.id) || {};
+  veicoliCache.set(v.id, { 
+    ...oldData, 
+    ...v,
+    // Mantiene i valori originali se l'aggiornamento parziale li omette
+    marca: v.marca ?? oldData.marca ?? null,
+    modello: v.modello ?? oldData.modello ?? null
+  });
+};
+
 export const removeVeicolo = (veicoloId) => veicoliCache.delete(veicoloId);
 
 // --- UPSERT & REMOVE DISPONIBILITÀ ---
@@ -80,12 +90,13 @@ export async function loadCachesUltra(force = false) {
     if (force) corseCache.clear();
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // 2. Carica Veicoli (Inclusi marca e modello)
+    // 2. Carica Veicoli (Rimosso COALESCE per mantenere null reale e pulito)
     const vRes = await client.query(`
-      SELECT id, driver_id, COALESCE(marca, 'N/D') as marca, COALESCE(modello, 'N/D') as modello, 
+      SELECT id, driver_id, marca, modello, 
              posti_totali, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
       FROM veicolo
     `);
+    
     if (force) veicoliCache.clear();
     vRes.rows.forEach(v => upsertVeicolo(v));
 
@@ -99,6 +110,7 @@ export async function loadCachesUltra(force = false) {
       FROM disponibilita_veicolo d
       JOIN veicolo v ON d.veicolo_id = v.id
     `);
+    
     if (force) disponibilitaCache.clear();
     dRes.rows.forEach(d => upsertDisponibilita(d));
 

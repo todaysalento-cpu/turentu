@@ -43,16 +43,21 @@ export const upsertCorsa = (c) => {
 
 export const removeCorsa = (corsaId) => corseCache.delete(corsaId);
 
-// --- UPSERT & REMOVE VEICOLO (AGGIORNATO: MERGE INTELLIGENTE) ---
+// --- UPSERT & REMOVE VEICOLO (AGGIORNATO CON LOG E MERGE) ---
 export const upsertVeicolo = (v) => {
   const oldData = veicoliCache.get(v.id) || {};
-  veicoliCache.set(v.id, { 
+  const newData = { 
     ...oldData, 
     ...v,
-    // Mantiene i valori originali se l'aggiornamento parziale li omette
     marca: v.marca ?? oldData.marca ?? null,
     modello: v.modello ?? oldData.modello ?? null
-  });
+  };
+  veicoliCache.set(v.id, newData);
+  
+  // Debug log per monitorare la persistenza di marca e modello
+  if (v.id === 65 || v.id === 82) { // Monitora veicoli specifici che davano problemi
+    console.log(`🔍 [DEBUG CACHE] Veicolo ${v.id} aggiornato: Marca=${newData.marca}, Modello=${newData.modello}`);
+  }
 };
 
 export const removeVeicolo = (veicoloId) => veicoliCache.delete(veicoloId);
@@ -90,13 +95,18 @@ export async function loadCachesUltra(force = false) {
     if (force) corseCache.clear();
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // 2. Carica Veicoli (Rimosso COALESCE per mantenere null reale e pulito)
+    // 2. Carica Veicoli (LOG AGGIUNTO)
     const vRes = await client.query(`
       SELECT id, driver_id, marca, modello, 
              posti_totali, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
       FROM veicolo
     `);
     
+    console.log(`📥 [DB DEBUG] Caricati ${vRes.rows.length} veicoli dal database.`);
+    if (vRes.rows.length > 0) {
+        console.log(`📥 [DB DEBUG] Campione primo veicolo:`, vRes.rows[0]);
+    }
+
     if (force) veicoliCache.clear();
     vRes.rows.forEach(v => upsertVeicolo(v));
 
@@ -114,7 +124,7 @@ export async function loadCachesUltra(force = false) {
     if (force) disponibilitaCache.clear();
     dRes.rows.forEach(d => upsertDisponibilita(d));
 
-    console.log(`📦 [CACHE] Sincronizzazione completata: ${corseCache.size} corse, ${veicoliCache.size} veicoli, ${disponibilitaCache.size} slot, ${recensioniCache.size} recensioni.`);
+    console.log(`📦 [CACHE] Sincronizzazione completata: ${corseCache.size} corse, ${veicoliCache.size} veicoli.`);
   } catch (err) {
     console.error("❌ Errore critico nel caricamento cache:", err);
     throw err;

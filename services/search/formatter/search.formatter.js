@@ -38,6 +38,15 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
       const v = veicoliMap.get(item.veicolo_id);
+      
+      // 🔥 DEBUG LOG: Verifica se il veicolo esiste nella cache e cosa contiene
+      if (!v) {
+        console.warn(`⚠️ [FORMATTER] Veicolo ID ${item.veicolo_id} NON trovato nella cache.`);
+      } else {
+        // Log solo se necessario, puoi commentarlo dopo il test
+        // console.log(`🔍 [FORMATTER] Veicolo ${item.veicolo_id}: Marca="${v.marca}", Modello="${v.modello}"`);
+      }
+
       const isCorsa = item.origine_lat !== undefined;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
@@ -77,7 +86,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       return {
         id: item.id || uuidv4(),
         veicolo_id: item.veicolo_id,
-        // Dati puliti: inviamo null se mancano, gestendo la visualizzazione nel frontend
         marca: v?.marca ?? null,
         modello: v?.modello ?? null,
         tipoVeicolo: v?.tipo ?? 'citycar',

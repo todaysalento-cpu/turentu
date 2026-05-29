@@ -8,22 +8,14 @@ const GEOHASH_PRECISION = 5;
 
 /**
  * Taglia la polilinea originale basandosi sui punti di salita/discesa richiesti.
- * Esportata per essere utilizzata dal formatter dei risultati.
  */
 export function getSottoPercorso(polylineString, salita, discesa) {
   try {
     const decoded = polyline.decode(polylineString);
-    // Turf lavora con [lon, lat], quindi mappiamo correttamente
     const line = turf.lineString(decoded.map(c => [c[1], c[0]]));
-    
-    // Trova i punti sulla linea più vicini alla richiesta (snapping)
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
-    
-    // Taglia la linea tra i due punti
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
-    
-    // Ritorna le coordinate nel formato [lat, lon] per il frontend
     return slice.geometry.coordinates.map(c => [c[1], c[0]]);
   } catch (e) {
     console.error("Errore nel taglio della polilinea:", e);
@@ -32,7 +24,7 @@ export function getSottoPercorso(polylineString, salita, discesa) {
 }
 
 /**
- * Motore di ricerca Disponibilità e Ridesharing
+ * Motore di ricerca Disponibilità e Ridesharing con Logging di Debug
  */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
@@ -52,20 +44,28 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 2. FILTRO CORSE
+  // 2. FILTRO CORSE (Aggiornato con Log di Debug)
   const corse = corseCache.filter(c => {
-    const postiOccupati = Number(c.picco_occupazione || 0);
-    if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
+    console.log(`🔍 [ENGINE] Analisi Corsa ID: ${c.id}`);
 
+    // A. Posti
+    const postiOccupati = Number(c.picco_occupazione || 0);
+    if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) {
+        console.log(`   ❌ Scartata: Posti ${postiOccupati + postiRichiesti} > ${c.posti_totali}`);
+        return false;
+    }
+
+    // B. Geohash
     const pathHashes = Array.isArray(c.path_geohashes) ? c.path_geohashes : [];
-    if (!pathHashes.some(h => hashVicini.includes(h))) return false;
+    if (!pathHashes.some(h => hashVicini.includes(h))) {
+        console.log(`   ❌ Scartata: Geohash non matchano (req: ${reqHash})`);
+        return false;
+    }
 
     if (!c.percorso_polyline) return false;
     
     try {
       const decoded = polyline.decode(c.percorso_polyline);
-      if (!decoded || decoded.length < 2) return false;
-
       const line = turf.lineString(decoded.map(coord => [coord[1], coord[0]]));
       const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
       const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
@@ -73,42 +73,44 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       const distSalita = turf.pointToLineDistance(salita, line);
       const distDiscesa = turf.pointToLineDistance(discesa, line);
 
-      const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
-      if (!isTest && (distSalita > tolKm || distDiscesa > tolKm)) return false;
+      // C. Tolleranza Geografica
+      if (distSalita > tolKm || distDiscesa > tolKm) {
+        console.log(`   ❌ Scartata: Distanza linea (Salita: ${distSalita.toFixed(2)}km, Discesa: ${distDiscesa.toFixed(2)}km) > ${tolKm}km`);
+        return false;
+      }
 
-      // Inietta il sotto-percorso calcolato per l'utente
+      // D. Fermate
+      const fermateExtra = calcolaNuoveFermate(c, richiesta);
+      if ((c.numero_prenotazioni_attive || 0) + fermateExtra > maxStops) {
+        console.log(`   ❌ Scartata: Troppe fermate (${(c.numero_prenotazioni_attive || 0) + fermateExtra})`);
+        return false;
+      }
+
+      console.log(`   ✅ Corsa ${c.id} COMPATIBILE`);
       c.percorsoVisualizzato = getSottoPercorso(c.percorso_polyline, richiesta.coord, richiesta.coordDest);
+      return true;
 
     } catch (err) {
-      console.error(`[ENGINE ERROR] Errore decodifica polyline corsa ${c.id}:`, err);
+      console.error(`   💥 [ENGINE ERROR] Corsa ${c.id}:`, err);
       return false;
     }
-
-    return (c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta) <= maxStops;
   });
 
   return { slots, corse };
 }
 
-/**
- * RANKING
- */
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };
     const rB = recensioniCache[b.conducente_id] || { media: 3.0, totale: 0 };
-    const bonusA = rA.totale > 20 ? 0.2 : 0;
-    const bonusB = rB.totale > 20 ? 0.2 : 0;
-    return (rB.media + bonusB) - (rA.media + bonusA);
+    return (rB.media) - (rA.media);
   });
 }
 
 function calcolaNuoveFermate(corsa, richiesta) {
   let extra = 0;
-  const fermateEsistenti = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
-  
-  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coord.lon, richiesta.coord.lat])) < 0.5)) extra++;
-  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
-
+  const f = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
+  if (!f.some(x => turf.distance(turf.point([x.lon, x.lat]), turf.point([richiesta.coord.lon, richiesta.coord.lat])) < 0.5)) extra++;
+  if (!f.some(x => turf.distance(turf.point([x.lon, x.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
   return extra;
 }

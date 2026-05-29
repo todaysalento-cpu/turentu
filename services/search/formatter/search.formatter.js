@@ -77,8 +77,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       return {
         id: item.id || uuidv4(),
         veicolo_id: item.veicolo_id,
-        marca: v?.marca ?? 'N/D',
-        modello: v?.modello ?? 'N/D',
+        // Dati puliti: inviamo null se mancano, gestendo la visualizzazione nel frontend
+        marca: v?.marca ?? null,
+        modello: v?.modello ?? null,
         tipoVeicolo: v?.tipo ?? 'citycar',
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
         

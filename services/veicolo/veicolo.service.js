@@ -1,6 +1,11 @@
 import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
-import { getVeicoliMap, upsertVeicolo } from '../search/search.cache.js'; 
+import { veicoliCache, upsertVeicolo } from '../search/search.cache.js'; 
+
+// --- RIPRISTINO INTERFACCIA COMPATIBILE ---
+// Aggiungiamo questa piccola funzione locale per mantenere la compatibilità 
+// con il resto del sistema che si aspetta getVeicoliMap()
+const getVeicoliMap = () => veicoliCache;
 
 // =========================
 // Aggiorna posizione CORRENTE (DB)
@@ -66,14 +71,14 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + Cache (MANTENENDO MARCA/MODELLO)
+// Aggiorna posizione CORRENTE + Cache
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
-  const v = getVeicoliMap().get(veicoloId);
+  const v = getVeicoliMap().get(Number(veicoloId)); // Assicuriamo il tipo Number
   if (v) {
     const updatedVeicolo = {
-      ...v, // COPIA INTEGRALE: mantiene marca, modello, driver_id, posti_totali, ecc.
+      ...v, 
       lat: coord.lat,
       lon: coord.lon,
       coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
@@ -85,14 +90,14 @@ export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + Cache (MANTENENDO MARCA/MODELLO)
+// Aggiorna posizione PREDITTIVA + Cache
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
-  const v = getVeicoliMap().get(veicoloId);
+  const v = getVeicoliMap().get(Number(veicoloId)); // Assicuriamo il tipo Number
   if (v) {
     const updatedVeicolo = {
-      ...v, // COPIA INTEGRALE: assicura che marca e modello non vengano persi
+      ...v, 
       lat: coord.lat,
       lon: coord.lon,
       coordPredittiva: {
@@ -110,11 +115,10 @@ export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTim
 }
 
 // =========================
-// Recupera posizione con validazione log
+// Recupera posizione con validazione
 export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
-  const v = getVeicoliMap().get(veicoloId);
+  const v = getVeicoliMap().get(Number(veicoloId));
   if (!v) {
-      console.warn(`[CACHE WARNING] Veicolo ${veicoloId} non trovato.`);
       return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
   }
 

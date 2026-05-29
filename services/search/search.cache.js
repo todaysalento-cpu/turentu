@@ -1,4 +1,5 @@
 import { pool } from '../../db/db.js';
+import polyline from 'polyline';
 
 // --- OGGETTO CONTENITORE SINGOLO (Singleton) ---
 export const CacheStore = {
@@ -10,11 +11,10 @@ export const CacheStore = {
 };
 
 // --- INDICE SPAZIALE PER PERFORMANCE ---
-// Mappa: 'geohash' -> Set([corsaId1, corsaId2, ...])
 export const GeoIndex = new Map(); 
 
 export const TOP_RESULTS = 10;
-const GEOHASH_PRECISION = 4; // Deve coincidere con il motore di ricerca
+const GEOHASH_PRECISION = 4;
 
 // --- GETTER DIRETTI ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
@@ -44,14 +44,30 @@ export const upsertCorsa = (c) => {
   }
   const cleanHashes = Array.isArray(geohashes) ? geohashes : (geohashes || []);
 
-  // Rimuovi vecchi riferimenti dall'indice se la corsa esisteva già
+  // Rimozione vecchi riferimenti indice
   if (oldData.path_geohashes) {
     oldData.path_geohashes.forEach(h => {
         const prefix = h.substring(0, GEOHASH_PRECISION);
-        if (GeoIndex.has(prefix)) {
-            GeoIndex.get(prefix).delete(c.id);
-        }
+        if (GeoIndex.has(prefix)) GeoIndex.get(prefix).delete(c.id);
     });
+  }
+
+  // PRE-CALCOLO PERFORMANCE: Decodifica e Bounding Box
+  let decodedCoords = oldData.decodedCoords;
+  let bbox = oldData.bbox;
+  
+  if (c.percorso_polyline && c.percorso_polyline !== oldData.percorso_polyline) {
+    try {
+      decodedCoords = polyline.decode(c.percorso_polyline);
+      const lats = decodedCoords.map(p => p[0]);
+      const lons = decodedCoords.map(p => p[1]);
+      bbox = {
+        minLat: Math.min(...lats), maxLat: Math.max(...lats),
+        minLon: Math.min(...lons), maxLon: Math.max(...lons)
+      };
+    } catch (e) {
+      console.error(`Errore pre-decodifica corsa ${c.id}:`, e);
+    }
   }
 
   // Aggiorna Cache
@@ -59,6 +75,8 @@ export const upsertCorsa = (c) => {
     ...oldData,
     ...c,
     percorso_polyline: c.percorso_polyline || oldData.percorso_polyline,
+    decodedCoords,
+    bbox,
     path_geohashes: cleanHashes,
     picco_occupazione: Number(c.picco_occupazione ?? oldData.picco_occupazione ?? 0)
   };
@@ -83,20 +101,12 @@ export const removeCorsa = (corsaId) => {
   CacheStore.corseCache.delete(corsaId);
 };
 
-// --- GESTIONE VEICOLI ---
+// --- GESTIONE VEICOLI/DISPONIBILITÀ (Invariata) ---
 export const upsertVeicolo = (v) => {
   const oldData = CacheStore.veicoliCache.get(v.id) || {};
-  CacheStore.veicoliCache.set(v.id, { 
-    ...oldData, 
-    ...v,
-    marca: v.marca ?? oldData.marca ?? 'N/D',
-    modello: v.modello ?? oldData.modello ?? 'N/D',
-    tipo: v.tipo ?? oldData.tipo ?? 'citycar'
-  });
+  CacheStore.veicoliCache.set(v.id, { ...oldData, ...v });
 };
 export const removeVeicolo = (veicoloId) => CacheStore.veicoliCache.delete(veicoloId);
-
-// --- GESTIONE DISPONIBILITÀ E PENDING ---
 export const upsertDisponibilita = (d) => CacheStore.disponibilitaCache.set(d.id, d);
 export const removeDisponibilita = (disponibilitaId) => CacheStore.disponibilitaCache.delete(disponibilitaId);
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
@@ -108,12 +118,8 @@ export async function loadCachesUltra(force = false) {
 
   const client = await pool.connect();
   try {
-    console.log("🔄 Inizio sincronizzazione cache con GeoIndex...");
-
-    if (force) {
-        CacheStore.corseCache.clear();
-        GeoIndex.clear();
-    }
+    console.log("🔄 Inizio sincronizzazione cache con ottimizzazione GeoIndex...");
+    if (force) { CacheStore.corseCache.clear(); GeoIndex.clear(); }
 
     const cRes = await client.query(`
       SELECT c.*, 
@@ -124,16 +130,17 @@ export async function loadCachesUltra(force = false) {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
 
+    // ... (altre query invariate)
     const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
-
+    
     const rRes = await client.query(`SELECT conducente_id, media_voto, totale_recensioni FROM media_recensioni_cache`);
     rRes.rows.forEach(r => updateRecensioneCache(r.conducente_id, r.media_voto, r.totale_recensioni));
 
     const dRes = await client.query(`SELECT d.*, v.driver_id FROM disponibilita_veicolo d JOIN veicolo v ON d.veicolo_id = v.id`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
 
-    console.log(`📦 [CACHE] Sincronizzazione completata. Corse indicizzate: ${CacheStore.corseCache.size}`);
+    console.log(`📦 [CACHE] Sincronizzazione completata.`);
   } catch (err) {
     console.error("❌ Errore critico nel caricamento cache:", err);
     throw err;

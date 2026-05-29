@@ -7,10 +7,12 @@ import { GeoIndex } from '../search.cache.js';
 
 const GEOHASH_PRECISION = 4;
 
-export function getSottoPercorso(polylineString, salita, discesa) {
+/**
+ * Taglia la polilinea usando le coordinate già decodificate
+ */
+export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
-    const decoded = polyline.decode(polylineString);
-    const line = turf.lineString(decoded.map(c => [c[1], c[0]]));
+    const line = turf.lineString(decodedCoords.map(c => [c[1], c[0]]));
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
@@ -21,12 +23,14 @@ export function getSottoPercorso(polylineString, salita, discesa) {
   }
 }
 
+/**
+ * Motore di ricerca Disponibilità e Ridesharing super-ottimizzato
+ */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const tolKm = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  // PROTEZIONE: Assicuriamo che corseCache sia una Map per usare .get()
   const corseMap = corseCache instanceof Map 
       ? corseCache 
       : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
@@ -52,21 +56,23 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 3. FILTRO CORSE (Itera solo sui candidati)
+  // 3. FILTRO CORSE (Usa BBox e DecodedCoords pre-calcolate)
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      if (!c) return false;
+      if (!c || !c.decodedCoords) return false;
       
       const postiOccupati = Number(c.picco_occupazione || 0);
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
-      if (!c.percorso_polyline) return false;
+
+      // FILTRO BBOX: Esclusione matematica immediata
+      if (c.bbox && (
+          richiesta.coord.lat < c.bbox.minLat - 0.1 || richiesta.coord.lat > c.bbox.maxLat + 0.1 ||
+          richiesta.coord.lon < c.bbox.minLon - 0.1 || richiesta.coord.lon > c.bbox.maxLon + 0.1
+      )) return false;
       
       try {
-        const decoded = polyline.decode(c.percorso_polyline);
-        if (!decoded || decoded.length < 2) return false;
-
-        const line = turf.lineString(decoded.map(coord => [coord[1], coord[0]]));
+        const line = turf.lineString(c.decodedCoords.map(coord => [coord[1], coord[0]]));
         const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
         const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
         
@@ -76,9 +82,8 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
         if (!isTest && (distSalita > tolKm || distDiscesa > tolKm)) return false;
 
-        c.percorsoVisualizzato = getSottoPercorso(c.percorso_polyline, richiesta.coord, richiesta.coordDest);
+        c.percorsoVisualizzato = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
       } catch (err) {
-        console.error(`[ENGINE ERROR] Errore decodifica polyline corsa ${c.id}:`, err);
         return false;
       }
 

@@ -9,9 +9,6 @@ const safeParseJSON = (str) => {
   catch { return []; }
 };
 
-/**
- * Formatta i risultati normalizzando i nomi dei campi per il frontend
- */
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
   let distanzaRichiesta = 0;
@@ -22,7 +19,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       durataRichiesta = Number(result.durataMs ?? 0);
       distanzaRichiesta = Number(result.distanzaKm ?? 0);
     } catch (err) {
-      console.warn('Errore calcolo durata/distanza richiesta:', err);
+      console.warn('Errore calcolo durata/distanza:', err);
     }
   }
 
@@ -31,19 +28,29 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     ...(corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
   ];
 
-  // Utilizziamo la cache Singleton importata direttamente
   const veicoliMap = injectedVeicoliMap || veicoliCache;
   const recensioniCache = getRecensioniCache();
 
+  // 🔥 DIAGNOSTICA STATO CACHE (Eseguita una sola volta)
+  console.log(`🔍 [FORMATTER] Cache Size: ${veicoliMap.size}`);
+  if (veicoliMap.size > 0) {
+      const sampleKey = veicoliMap.keys().next().value;
+      console.log(`🔍 [FORMATTER] Tipo chiave in cache: ${typeof sampleKey}, Esempio: ${sampleKey}`);
+  }
+
   return await Promise.all(
     allItems.slice(0, TOP_RESULTS).map(async (item) => {
+      // Normalizziamo l'ID
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
       
-      // 🔥 LOG DI DEBUG AGGIUNTO
+      // 🔥 LOG DI DEBUG DETTAGLIATO
       if (!v) {
-        console.warn(`⚠️ [FORMATTER DEBUG] Veicolo ID ${veicoloId} NON trovato.`);
-        console.warn(`📊 [FORMATTER DEBUG] Stato Cache: Size=${veicoliMap.size}, Prime 5 chiavi: ${Array.from(veicoliMap.keys()).slice(0, 5).join(', ')}`);
+        console.warn(`⚠️ [FORMATTER DEBUG] ID ${veicoloId} (tipo: ${typeof veicoloId}) non trovato.`);
+        // Verifica se esiste un ID simile (per evitare problemi di stringhe numeriche)
+        const keys = Array.from(veicoliMap.keys());
+        const found = keys.find(k => Number(k) === veicoloId);
+        if (found) console.warn(`💡 [FORMATTER DEBUG] Trovata chiave corrispondente ma diversa: ${typeof found} ${found}`);
       }
 
       const isCorsa = item.origine_lat !== undefined;
@@ -60,15 +67,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         ? (item.start_datetime ? new Date(item.start_datetime) : new Date())
         : (richiesta.start_datetime ? new Date(richiesta.start_datetime) : new Date());
 
-      let durataMs;
-      if (isCorsa && typeof item.durata === 'string' && item.durata.includes(':')) {
-        const parts = item.durata.split(':').map(Number);
-        durataMs = (parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0)) * 1000;
-      } else if (isCorsa && typeof item.durata === 'number') {
-        durataMs = item.durata * 1000;
-      } else {
-        durataMs = durataRichiesta;
-      }
+      let durataMs = isCorsa 
+        ? (typeof item.durata === 'string' ? item.durata.split(':').reduce((acc, time) => (60 * acc) + +time, 0) * 1000 : (item.durata || 0) * 1000)
+        : durataRichiesta;
 
       const oraArrivo = new Date(oraPartenza.getTime() + durataMs);
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
@@ -88,14 +89,11 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         tipoVeicolo: v?.tipo ?? 'citycar',
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
-        
         localitaOrigine,
         localitaDestinazione,
         percorsoVisualizzato, 
-        
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
-        
         distanzaKm,
         postiTotali,
         postiOccupati: postiOccupatiReali,

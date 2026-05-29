@@ -1,5 +1,5 @@
 // ======================= services/search/search.service.js =======================
-import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache } from './search.cache.js';
+import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache, CacheStore } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 
@@ -9,10 +9,10 @@ import { formatResults } from './formatter/search.formatter.js';
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
   
-  // 1. Assicura che la cache sia caricata (unica operazione asincrona di I/O)
+  // 1. Assicura che la cache sia caricata
   await loadCachesUltra();
 
-  // 2. Lettura sincrona dalla memoria (Performance elevata)
+  // 2. Lettura sincrona dalla memoria
   const veicoli = getVeicoliCache();
   const disponibilita = getDisponibilitaCache();
   const corse = getCorseCache();
@@ -22,15 +22,15 @@ export async function cercaSlotUltra(richiesta) {
     throw new Error('Cache non caricata correttamente');
   }
 
-  // 3. Normalizzazione richiesta spaziale (fondamentale per il matching dinamico)
+  // 3. Normalizzazione richiesta spaziale
   const richiestaNormalizzata = {
     ...richiesta,
     posti_richiesti: Number(richiesta.posti_richiesti),
-    lat: Number(richiesta.lat),
-    lon: Number(richiesta.lon)
+    lat: Number(richiesta.coord?.lat ?? richiesta.lat),
+    lon: Number(richiesta.coord?.lon ?? richiesta.lon)
   };
 
-  // 4. Motore di ricerca dinamico (ora valuta la sovrapposizione geometrica dei segmenti)
+  // 4. Motore di ricerca dinamico
   const { slots, corse: corseCompatibili } = filterDisponibilita(
     richiestaNormalizzata,
     veicoli,
@@ -48,9 +48,15 @@ export async function cercaSlotUltra(richiesta) {
 
   // 6. Formattazione risultati
   try {
-    const risultati = await formatResults(richiestaNormalizzata, slots, corseCompatibili, veicoli);
-    const risultatiFinali = Array.isArray(risultati) ? risultati : [];
+    // FIX: Passiamo la Map (CacheStore.veicoliCache) invece dell'array
+    const risultati = await formatResults(
+      richiestaNormalizzata, 
+      slots, 
+      corseCompatibili, 
+      CacheStore.veicoliCache 
+    );
     
+    const risultatiFinali = Array.isArray(risultati) ? risultati : [];
     console.log(`✅ [SERVICE] Risultati pronti: ${risultatiFinali.length}`);
     return risultatiFinali;
     
@@ -71,6 +77,5 @@ export async function cercaSlotPerAutista(veicoloId) {
   await loadCachesUltra();
   const corse = getCorseCache();
   if (!corse) return [];
-  // Filtriamo in modo sincrono dalla cache
   return corse.filter(c => c.veicolo_id == veicoloId);
 }

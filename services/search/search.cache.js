@@ -55,7 +55,7 @@ export const removeDisponibilita = (disponibilitaId) => disponibilitaCache.delet
 export const upsertPending = (p) => pendingCache.set(p.id, p);
 export const removePending = (id) => pendingCache.delete(id);
 
-// --- CARICAMENTO AGGIORNATO ---
+// --- CARICAMENTO AGGIORNATO E SICURO ---
 export async function loadCachesUltra(force = false) {
   if (!force && veicoliCache.size > 0 && corseCache.size > 0) return;
 
@@ -80,10 +80,10 @@ export async function loadCachesUltra(force = false) {
     if (force) corseCache.clear();
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // 2. Carica Veicoli (AGGIORNATO CON MARCA E MODELLO)
+    // 2. Carica Veicoli (Inclusi marca e modello)
     const vRes = await client.query(`
-      SELECT id, driver_id, marca, modello, posti_totali, 
-             ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
+      SELECT id, driver_id, COALESCE(marca, 'N/D') as marca, COALESCE(modello, 'N/D') as modello, 
+             posti_totali, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
       FROM veicolo
     `);
     if (force) veicoliCache.clear();
@@ -93,7 +93,7 @@ export async function loadCachesUltra(force = false) {
     const rRes = await client.query(`SELECT conducente_id, media_voto, totale_recensioni FROM media_recensioni_cache`);
     rRes.rows.forEach(r => updateRecensioneCache(r.conducente_id, r.media_voto, r.totale_recensioni));
 
-    // 4. Carica Disponibilità (GLI SLOT LIBERI)
+    // 4. Carica Disponibilità
     const dRes = await client.query(`
       SELECT d.*, v.driver_id 
       FROM disponibilita_veicolo d

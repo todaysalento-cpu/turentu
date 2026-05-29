@@ -1,6 +1,6 @@
 import { pool } from '../../db/db.js';
 
-// --- ISTANZE CACHE GLOBALI ---
+// --- ISTANZE CACHE GLOBALI (Singleton) ---
 export const veicoliCache = new Map();
 export const disponibilitaCache = new Map();
 export const corseCache = new Map();
@@ -9,9 +9,17 @@ export const pendingCache = new Map();
 
 export const TOP_RESULTS = 10;
 
-// --- ESPORTAZIONI UTILITY ---
+// --- RIPRISTINO GETTER PER COMPATIBILITÀ (Fix SyntaxError) ---
+export const getVeicoliMap = () => veicoliCache;
+export const getDisponibilitaMap = () => disponibilitaCache;
+export const getCorseMap = () => corseCache;
+export const getPendingMap = () => pendingCache;
+
+// --- ESPORTAZIONI ARRAY (Utility per il sistema) ---
 export const getVeicoliCache = () => Array.from(veicoliCache.values());
+export const getDisponibilitaCache = () => Array.from(disponibilitaCache.values());
 export const getCorseCache = () => Array.from(corseCache.values());
+export const getPendingCache = () => Array.from(pendingCache.values());
 export const getRecensioniCache = () => Object.fromEntries(recensioniCache);
 
 // --- GESTIONE RECENSIONI ---

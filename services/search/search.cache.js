@@ -80,8 +80,12 @@ export async function loadCachesUltra(force = false) {
     if (force) corseCache.clear();
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // 2. Carica Veicoli
-    const vRes = await client.query(`SELECT id, driver_id, modello, posti_totali, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
+    // 2. Carica Veicoli (AGGIORNATO CON MARCA E MODELLO)
+    const vRes = await client.query(`
+      SELECT id, driver_id, marca, modello, posti_totali, 
+             ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon 
+      FROM veicolo
+    `);
     if (force) veicoliCache.clear();
     vRes.rows.forEach(v => upsertVeicolo(v));
 

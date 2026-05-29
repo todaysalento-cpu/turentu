@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
-import * as CacheModule from '../search.cache.js'; // Importa tutto il modulo come namespace
+import * as CacheModule from '../search.cache.js';
 import { getSottoPercorso } from '../engine/availability.engine.js'; 
 
 const safeParseJSON = (str) => {
@@ -10,7 +10,7 @@ const safeParseJSON = (str) => {
 };
 
 /**
- * Formatta i risultati con protezione contro dipendenze circolari
+ * Formatta i risultati con ripartizione bilanciata (5 corse + 5 slot)
  */
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
@@ -26,32 +26,46 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     }
   }
 
-  const allItems = [
-    ...(slotsFiltrati || []).map(s => ({ ...s, stato: 'libero' })),
-    ...(corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }))
-  ];
+  // --- LOGICA DI RIPARTIZIONE BILANCIATA (5 corse + 5 slot) ---
+  const corseNormalizzate = (corseFiltrate || []).map(c => ({ 
+    ...c, 
+    stato: c.stato === 'libero' ? 'libero' : 'prenotabile' 
+  }));
 
-  // PROTEZIONE: Se injectedVeicoliMap non è passato, usa il getter del modulo
+  const slotsNormalizzati = (slotsFiltrati || []).map(s => ({ 
+    ...s, 
+    stato: 'libero' 
+  }));
+
+  // Bilanciamento: prendi fino a 5 corse e 5 slot
+  let corseScelte = corseNormalizzate.slice(0, 5);
+  let slotScelti = slotsNormalizzati.slice(0, 5);
+
+  // Se una delle due liste è corta, riempi con l'altra per arrivare a 10
+  if (corseScelte.length < 5) {
+    const needed = 5 - corseScelte.length;
+    slotScelti = slotsNormalizzati.slice(0, 5 + needed);
+  } else if (slotScelti.length < 5) {
+    const needed = 5 - slotScelti.length;
+    corseScelte = corseNormalizzate.slice(0, 5 + needed);
+  }
+
+  const allItems = [...corseScelte, ...slotScelti].slice(0, CacheModule.TOP_RESULTS || 10);
+
+  // --- PROTEZIONE CACHE ---
   const veicoliMap = injectedVeicoliMap || (typeof CacheModule.getVeicoliMap === 'function' ? CacheModule.getVeicoliMap() : CacheModule.veicoliCache);
   const recensioniCache = typeof CacheModule.getRecensioniCache === 'function' ? CacheModule.getRecensioniCache() : {};
 
-  // DIAGNOSTICA: Verifica se la mappa è valida
   if (!veicoliMap || typeof veicoliMap.get !== 'function') {
-      console.error(`❌ [FORMATTER] Cache non valida! Tipo: ${typeof veicoliMap}`, veicoliMap);
-      return []; // Ritorno di sicurezza
+      console.error(`❌ [FORMATTER] Cache non valida!`);
+      return [];
   }
 
-  console.log(`🔍 [FORMATTER] Cache Size operativa: ${veicoliMap.size}`);
-
   return await Promise.all(
-    allItems.slice(0, CacheModule.TOP_RESULTS || 10).map(async (item) => {
+    allItems.map(async (item) => {
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
       
-      if (!v) {
-        console.warn(`⚠️ [FORMATTER DEBUG] ID ${veicoloId} non trovato in cache.`);
-      }
-
       const isCorsa = item.origine_lat !== undefined;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 

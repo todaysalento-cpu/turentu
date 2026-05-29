@@ -7,7 +7,19 @@ import params from '../../../config/params.js';
 const GEOHASH_PRECISION = 5;
 
 /**
- * Taglia la polilinea originale basandosi sui punti di salita/discesa richiesti.
+ * Genera un'area di ricerca espansa per minimizzare i falsi negativi
+ */
+function getAreaRicercaEspansa(lat, lon) {
+    const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION);
+    const vicini = ngeohash.neighbors(hash);
+    // Espansione: includiamo anche i vicini dei vicini (copertura ~15-20km)
+    const extra = [];
+    vicini.forEach(v => extra.push(...ngeohash.neighbors(v)));
+    return [...new Set([hash, ...vicini, ...extra])];
+}
+
+/**
+ * Taglia la polilinea originale
  */
 export function getSottoPercorso(polylineString, salita, discesa) {
   try {
@@ -23,52 +35,46 @@ export function getSottoPercorso(polylineString, salita, discesa) {
   }
 }
 
-/**
- * Motore di ricerca Disponibilità e Ridesharing con Normalizzazione Dati DB
- */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const tolKm = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
+  const dataOggi = new Date();
 
-  const reqHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  const hashVicini = [...ngeohash.neighbors(reqHash), reqHash];
+  // Area di ricerca espansa per ottimizzare la selezione
+  const hashVicini = getAreaRicercaEspansa(richiesta.coord.lat, richiesta.coord.lon);
 
   // 1. FILTRO SLOT
   const slots = disponibilitaCache
     .filter(dv => {
       const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
       if (!v || Number(v.posti_totali) < postiRichiesti) return false;
-      const distanzaKm = richiesta.coord ? haversineDistance({ lat: v.lat, lon: v.lon }, richiesta.coord) : 0;
-      return distanzaKm <= tolKm;
+      return haversineDistance({ lat: v.lat, lon: v.lon }, richiesta.coord) <= tolKm;
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 2. FILTRO CORSE con normalizzazione geohash
+  // 2. FILTRO CORSE (Logica Ibrida)
   const corse = corseCache.filter(c => {
-    console.log(`🔍 [ENGINE] Analisi Corsa ID: ${c.id}`);
+    if (new Date(c.start_datetime) < dataOggi) return false;
 
     // A. Posti
-    const postiOccupati = Number(c.picco_occupazione || 0);
-    if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) {
-        console.log(`   ❌ Scartata: Posti ${postiOccupati + postiRichiesti} > ${c.posti_totali}`);
-        return false;
-    }
+    if ((Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
 
-    // B. Normalizzazione e Filtro Geohash
-    // Converte il formato Postgres "{a,b}" o array standard in array di stringhe
+    // B. Pre-filtro Geohash (Ottimizzazione)
     let pathHashes = [];
     if (Array.isArray(c.path_geohashes)) {
         pathHashes = c.path_geohashes;
     } else if (typeof c.path_geohashes === 'string') {
-        pathHashes = c.path_geohashes.replace(/[{}]/g, '').split(',');
+        pathHashes = c.path_geohashes.replace(/[{}]/g, '').split(',').filter(h => h.length > 0);
     }
 
-    if (!pathHashes.some(h => hashVicini.includes(h))) {
-        console.log(`   ❌ Scartata: Geohash [${pathHashes}] non matchano req: ${reqHash}`);
+    // Se la corsa ha hash, verifichiamo il match. 
+    // Se NON matchano, usciamo subito per risparmiare calcoli complessi (Performance)
+    if (pathHashes.length > 0 && !pathHashes.some(h => hashVicini.includes(h))) {
         return false;
     }
 
+    // C. Controllo Geometrico Preciso (Verità assoluta)
     if (!c.percorso_polyline) return false;
     
     try {
@@ -77,28 +83,20 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
       const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
       
-      const distSalita = turf.pointToLineDistance(salita, line);
-      const distDiscesa = turf.pointToLineDistance(discesa, line);
-
-      // C. Tolleranza Geografica
-      if (distSalita > tolKm || distDiscesa > tolKm) {
-        console.log(`   ❌ Scartata: Distanza linea (Salita: ${distSalita.toFixed(2)}km, Discesa: ${distDiscesa.toFixed(2)}km) > ${tolKm}km`);
+      if (turf.pointToLineDistance(salita, line) > tolKm || 
+          turf.pointToLineDistance(discesa, line) > tolKm) {
         return false;
       }
 
       // D. Fermate
-      const fermateExtra = calcolaNuoveFermate(c, richiesta);
-      if ((c.numero_prenotazioni_attive || 0) + fermateExtra > maxStops) {
-        console.log(`   ❌ Scartata: Troppe fermate (${(c.numero_prenotazioni_attive || 0) + fermateExtra})`);
+      if ((c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta) > maxStops) {
         return false;
       }
 
-      console.log(`   ✅ Corsa ${c.id} COMPATIBILE`);
       c.percorsoVisualizzato = getSottoPercorso(c.percorso_polyline, richiesta.coord, richiesta.coordDest);
       return true;
 
     } catch (err) {
-      console.error(`   💥 [ENGINE ERROR] Corsa ${c.id}:`, err);
       return false;
     }
   });
@@ -106,9 +104,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   return { slots, corse };
 }
 
-/**
- * RANKING
- */
+// Helper invariati
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };

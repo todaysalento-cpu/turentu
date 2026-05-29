@@ -1,0 +1,17 @@
+// scripts/fixGeohashes.js
+import db from '../src/config/db.js'; // Assicurati che il percorso sia quello giusto
+import { rigeneraTuttiGeohash } from '../src/services/geo.service.js'; // Assicurati che il percorso sia quello giusto
+
+async function run() {
+    try {
+        console.log("🚀 Inizio migrazione Geohash su tutte le corse...");
+        await rigeneraTuttiGeohash(db);
+        console.log("✅ Migrazione completata con successo!");
+    } catch (err) {
+        console.error("💥 Errore durante la migrazione:", err);
+    } finally {
+        process.exit();
+    }
+}
+
+run();

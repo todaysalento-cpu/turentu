@@ -36,9 +36,11 @@ export async function getRouteGeometry(origine, destinazione) {
   const d = normalizeCoord(destinazione);
 
   try {
+    // Aggiunto &overview=full per ottenere la polilinea dettagliata
     const url = `https://maps.googleapis.com/maps/api/directions/json` +
       `?origin=${o.lat},${o.lon}` +
       `&destination=${d.lat},${d.lon}` +
+      `&overview=full` + 
       `&key=${GOOGLE_MAPS_API_KEY}`;
 
     const res = await fetch(url);

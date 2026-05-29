@@ -47,12 +47,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       const isCorsa = item.origine_lat !== undefined;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
-      // 1. CALCOLO SOTTO-PERCORSO (Il percorso specifico per il cliente)
+      // 1. CALCOLO SOTTO-PERCORSO
       const percorsoVisualizzato = isCorsa && item.percorso_polyline 
         ? getSottoPercorso(item.percorso_polyline, richiesta.coord, richiesta.coordDest)
         : null;
 
-      // 2. RECUPERO LOCALITÀ (Basato sulla richiesta specifica del cliente)
+      // 2. RECUPERO LOCALITÀ
       const localitaOrigine = await getLocalitaSafe(richiesta.coord);
       const localitaDestinazione = await getLocalitaSafe(richiesta.coordDest);
 
@@ -60,9 +60,16 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         ? (item.start_datetime ? new Date(item.start_datetime) : null)
         : (richiesta.start_datetime ? new Date(richiesta.start_datetime) : null);
 
-      let durataMs = (isCorsa && item.durata) 
-        ? item.durata.split(':').map(Number).reduce((acc, val, i) => acc + (val * [3600, 60, 1][i]), 0) * 1000 
-        : durataRichiesta;
+      // 🛡️ PROTEZIONE: Parsing robusto della durata
+      let durataMs;
+      if (isCorsa && typeof item.durata === 'string' && item.durata.includes(':')) {
+        const parts = item.durata.split(':').map(Number);
+        durataMs = (parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0)) * 1000;
+      } else if (isCorsa && typeof item.durata === 'number') {
+        durataMs = item.durata * 1000;
+      } else {
+        durataMs = durataRichiesta;
+      }
 
       const oraArrivo = oraPartenza ? new Date(oraPartenza.getTime() + durataMs) : null;
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
@@ -83,7 +90,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         tipoVeicolo: v?.tipo ?? 'citycar',
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
         
-        // Dati localizzati sulla RICHIESTA
         coordOrigine: richiesta.coord,
         coordDestinazione: richiesta.coordDest,
         localitaOrigine,

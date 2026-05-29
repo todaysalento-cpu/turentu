@@ -46,12 +46,12 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
       `INSERT INTO posizione_veicolo (veicolo_id, coord, timestamp, valid_until, tipo)
        SELECT $1, ST_SetSRID(ST_MakePoint($2,$3),4326), $4, $5, 'PREDITTIVA'
        WHERE NOT EXISTS (
-         SELECT 1 FROM posizione_veicolo
-         WHERE veicolo_id = $1
-           AND tipo='PREDITTIVA'
-           AND timestamp <= $5
-           AND (valid_until IS NULL OR valid_until >= $4)
-     )`,
+          SELECT 1 FROM posizione_veicolo
+          WHERE veicolo_id = $1
+            AND tipo='PREDITTIVA'
+            AND timestamp <= $5
+            AND (valid_until IS NULL OR valid_until >= $4)
+       )`,
       [veicoloId, coord.lon, coord.lat, fromTime, validUntil]
     );
 
@@ -66,33 +66,36 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 }
 
 // =========================
-// Aggiorna posizione CORRENTE + Cache (CacheManager + Geohash)
+// Aggiorna posizione CORRENTE + Cache
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
   const v = getVeicoliMap().get(veicoloId);
   if (v) {
-    // 1. Aggiorna lo stato di dettaglio
-    CacheManager.veicolo.update({
+    const updatedVeicolo = {
       ...v,
+      lat: coord.lat,
+      lon: coord.lon,
       coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
-    });
+    };
 
-    // 2. Sincronizza la cache di ricerca (ricalcola Geohash)
-    upsertVeicolo({ ...v, lat: coord.lat, lon: coord.lon });
+    // Aggiornamento sincronizzato per mantenere driver_id e posizione
+    CacheManager.veicolo.update(updatedVeicolo);
+    upsertVeicolo(updatedVeicolo);
   }
 }
 
 // =========================
-// Aggiorna posizione PREDITTIVA + Cache (CacheManager + Geohash)
+// Aggiorna posizione PREDITTIVA + Cache
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
   const v = getVeicoliMap().get(veicoloId);
   if (v) {
-    // 1. Aggiorna lo stato di dettaglio
-    CacheManager.veicolo.update({
+    const updatedVeicolo = {
       ...v,
+      lat: coord.lat,
+      lon: coord.lon,
       coordPredittiva: {
         lat: coord.lat,
         lon: coord.lon,
@@ -100,18 +103,21 @@ export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTim
         validUntil: new Date(new Date(fromTime).getTime() + tempoX),
         timestamp: new Date()
       }
-    });
+    };
 
-    // 2. Sincronizza la cache di ricerca (ricalcola Geohash)
-    upsertVeicolo({ ...v, lat: coord.lat, lon: coord.lon });
+    CacheManager.veicolo.update(updatedVeicolo);
+    upsertVeicolo(updatedVeicolo);
   }
 }
 
 // =========================
-// Recupera posizione veicolo dalla cache
+// Recupera posizione con validazione log
 export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
   const v = getVeicoliMap().get(veicoloId);
-  if (!v) return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
+  if (!v) {
+      console.warn(`[CACHE WARNING] Veicolo ${veicoloId} non trovato.`);
+      return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
+  }
 
   if (v.coordPredittiva && atTime <= new Date(v.coordPredittiva.validUntil)) return v.coordPredittiva;
   if (v.coordCorrente) return v.coordCorrente;
@@ -120,8 +126,6 @@ export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
   return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
 }
 
-// =========================
-// Recupera coordinate veicoli in batch dalla cache
 export function getVeicoliCoordBatchCache(richieste) {
   const map = {};
   const now = new Date();

@@ -4,32 +4,12 @@ import { authMiddleware } from '../middleware/auth.js';
 import { sendNotification, getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
+// Import necessari per la sincronizzazione della cache
+import { upsertCorsa } from '../services/search/search.cache.js';
+import { CacheManager } from '../utils/cacheManager.js';
 
 const router = express.Router();
 router.use(authMiddleware);
-
-// --- LOG DI DEBUG ---
-router.use((req, res, next) => {
-  console.log(`📌 [DEBUG ROUTER] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
-// -------------------- GET Lista Pending --------------------
-router.get('/autista/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      `SELECT *, COALESCE(prezzo, 0)::float8 AS prezzo 
-       FROM pending 
-       WHERE veicolo_id = $1 AND stato = 'pending'`,
-      [id]
-    );
-    res.json({ pendings: result.rows });
-  } catch (err) {
-    console.error('❌ Errore GET /autista/:id', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
@@ -90,14 +70,17 @@ router.post('/:id/accetta', async (req, res) => {
         await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
       }
 
-      // 🔥 FIX: Recupero ID prenotazione reale per soddisfare la Foreign Key
+      // 🔥 AGGIORNAMENTO CACHE (Motore di ricerca e CacheManager)
+      upsertCorsa(corsa);
+      CacheManager.corsa.update(corsa);
+
+      // Logica pagamenti
       const prenotazioneRes = await client.query(
         `SELECT id FROM prenotazioni WHERE cliente_id = $1 AND corsa_id = $2 ORDER BY id DESC LIMIT 1`,
         [p.cliente_id, corsa.id]
       );
       const prenotazioneId = prenotazioneRes.rows[0]?.id;
 
-      // 🔥 FIX: Inserimento/Aggiornamento pagamenti sicuro
       if (p.payment_intent_id && prenotazioneId) {
         await client.query(
           `INSERT INTO pagamenti (prenotazione_id, importo, stato, stripe_payment_intent, corsa_id, updated_at)

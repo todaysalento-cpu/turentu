@@ -2,6 +2,8 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CacheManager } from '../utils/cacheManager.js';
+// 🔥 Import per la sincronizzazione del motore di ricerca
+import { upsertVeicolo, removeVeicolo } from '../services/search/search.cache.js'; 
 import fs from 'fs';
 import path from 'path';
 
@@ -88,21 +90,6 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 
 veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
 
-veicoloRouter.get('/check-targa', async (req, res) => {
-  try {
-    const { targa, id } = req.query;
-    if (!targa) return res.status(400).json({ error: 'Targa mancante' });
-    let query = 'SELECT id FROM veicolo WHERE targa=$1';
-    const params = [targa.trim().toUpperCase()];
-    if (id) {
-      params.push(Number(id));
-      query += ' AND id<>$2';
-    }
-    const result = await pool.query(query, params);
-    res.json({ inUse: result.rowCount > 0 });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 veicoloRouter.get('/', async (req, res) => {
   try {
     const veicoloRes = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE driver_id=$1 ORDER BY id DESC`, [req.user.id]);
@@ -120,35 +107,31 @@ veicoloRouter.get('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-veicoloRouter.get('/:id', async (req, res) => {
-  try {
-    const veicoloRes = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
-    if (!veicoloRes.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
-    const docRes = await pool.query(`SELECT tipo, url, stato FROM documenti_autista WHERE veicolo_id=$1`, [req.params.id]);
-    const documenti = {};
-    docRes.rows.forEach(d => documenti[d.tipo] = { url: d.url, stato: d.stato });
-    res.json({ ...veicoloRes.rows[0], documenti });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
+// ---------------------------------------------------
+// CREATE / UPDATE / DELETE CON SINCRONIZZAZIONE CACHE
+// ---------------------------------------------------
 veicoloRouter.post('/', async (req, res) => {
   try {
     const data = normalizeInput(req.body);
     const validationError = validateVeicolo(data);
     if (validationError) return res.status(400).json({ error: validationError });
     const coordData = await buildCoord(data.lat, data.lon, data.localita);
+    
     const result = await pool.query(`
       INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url)
       VALUES ($1,$2,$3,$4,$5,$6, $7::jsonb, $8,$9, ST_GeomFromEWKT($10), $11, $12)
       RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat`,
       [req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, coordData.ewkt, data.localita, data.image_url]
     );
+    
+    // Sincronizzazione Cache
     await CacheManager.veicolo.update(result.rows[0]);
+    upsertVeicolo(result.rows[0]);
+    
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- PUT AGGIORNATO CON RECUPERO DOCUMENTI E INVALIDAZIONE CACHE ---
 veicoloRouter.put('/:id', async (req, res) => {
   try {
     const veicoloId = Number(req.params.id);
@@ -158,7 +141,6 @@ veicoloRouter.put('/:id', async (req, res) => {
 
     const coordData = await buildCoord(data.lat, data.lon, data.localita);
     
-    // 1. Esegui l'update nel database
     const result = await pool.query(`
       UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8,
       coord = COALESCE(ST_GeomFromEWKT($9), coord), localita=$10, image_url=$11
@@ -169,17 +151,16 @@ veicoloRouter.put('/:id', async (req, res) => {
 
     if (!result.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
 
-    // 2. RECUPERA I DOCUMENTI AGGIORNATI
     const docRes = await pool.query(`SELECT tipo, url, stato FROM documenti_autista WHERE veicolo_id=$1`, [veicoloId]);
     const documenti = {};
     docRes.rows.forEach(d => documenti[d.tipo] = { url: d.url, stato: d.stato });
 
-    // 3. COMBINA I DATI prima di mandarli al frontend
     const veicoloAggiornato = { ...result.rows[0], documenti };
 
-    // 4. Gestione Cache
+    // Sincronizzazione Cache
     await CacheManager.veicolo.delete(veicoloId);
     await CacheManager.veicolo.update(veicoloAggiornato);
+    upsertVeicolo(veicoloAggiornato);
 
     res.json(veicoloAggiornato); 
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -189,7 +170,13 @@ veicoloRouter.delete('/:id', async (req, res) => {
   try {
     const result = await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2 RETURNING *`, [req.params.id, req.user.id]);
     if (!result.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
+    
+    // Sincronizzazione Cache
     await CacheManager.veicolo.delete(Number(req.params.id));
+    removeVeicolo(Number(req.params.id));
+    
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+export default veicoloRouter;

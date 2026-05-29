@@ -4,11 +4,17 @@ import { pool } from '../db/db.js';
 
 const router = express.Router();
 
-// ✅ CORRETTO: già montato su /api/prenotazioni nel server.js
+/**
+ * GET /api/prenotazioni
+ * Recupera le prenotazioni in stato 'pending' per il cliente autenticato,
+ * escludendo automaticamente quelle scadute.
+ */
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const clienteId = req.user.id;
 
+    // Utilizziamo un filtro temporale (expires_at > NOW()) per garantire
+    // che l'utente non veda richieste che non sono più processabili.
     const result = await pool.query(
       `
       SELECT 
@@ -28,18 +34,28 @@ router.get('/', authMiddleware, async (req, res) => {
         expires_at,
         created_at
       FROM pending
-      WHERE cliente_id = $1
+      WHERE cliente_id = $1 
+        AND stato = 'pending'
+        AND expires_at > NOW()
       ORDER BY start_datetime DESC
       `,
       [clienteId]
     );
 
     res.json(result.rows);
-
   } catch (err) {
     console.error('❌ Errore GET prenotazioni:', err);
     res.status(500).json({ error: 'Errore nel recupero prenotazioni' });
   }
 });
+
+/**
+ * Nota architetturale: 
+ * Ti consiglio vivamente di implementare una pulizia automatica 
+ * delle righe scadute nel database tramite un task pianificato.
+ * * Esempio di query di pulizia (da eseguire via cron):
+ * DELETE FROM pending 
+ * WHERE stato = 'pending' AND expires_at < NOW();
+ */
 
 export default router;

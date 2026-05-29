@@ -1,6 +1,8 @@
 import { pool } from '../../db/db.js';
 import Stripe from 'stripe';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
+import { CacheManager } from '../../utils/cacheManager.js';
+import { upsertCorsa, removeCorsa } from '../search/search.cache.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -24,14 +26,18 @@ export async function getCorseByAutista(driver_id, status = '') {
   const client = await pool.connect();
   try {
     await client.query('SET search_path TO public');
-    // Utilizziamo la subquery per i posti reali e il JOIN per i dati del veicolo
+    
     let query = `
       SELECT c.*, v.driver_id, v.modello AS veicolo,
              ST_Y(c.origine::geometry) AS origine_lat, ST_X(c.origine::geometry) AS origine_lon,
              ST_Y(c.destinazione::geometry) AS destinazione_lat, ST_X(c.destinazione::geometry) AS destinazione_lon,
-             (SELECT COALESCE(SUM(p.posti_richiesti), 0) 
-              FROM public.prenotazioni p 
-              WHERE p.corsa_id = c.id) AS posti_prenotati_reali
+             (SELECT COALESCE(MAX(occupazione), 0) 
+              FROM (
+                SELECT SUM(posti_richiesti) as occupazione 
+                FROM public.prenotazioni 
+                WHERE corsa_id = c.id 
+                GROUP BY start_index_polyline 
+              ) AS sub) AS posti_prenotati_reali
       FROM public.corse c
       JOIN public.veicolo v ON c.veicolo_id = v.id
       WHERE v.driver_id = $1`;
@@ -60,6 +66,13 @@ export async function accettaCorsa(corsa_id) {
     await client.query('SET search_path TO public');
     const res = await client.query(`UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, [corsa_id]);
     const c = res.rows[0];
+    
+    if (c) {
+      // Sincronizzazione Cache
+      upsertCorsa(c);
+      CacheManager.corsa.update(c);
+    }
+    
     return c ? { ...c, durataMinuti: parseDurataMinuti(c.durata) } : null;
   } finally { client.release(); }
 }
@@ -81,15 +94,18 @@ export async function toggleCorsa(corsa_id, action) {
     if (!corsaRes.rows.length) throw new Error('Corsa non trovata');
     const corsa = corsaRes.rows[0];
 
+    // Aggiornamento Cache Stato
+    CacheManager.corsa.update(corsa);
+
     if (action === 'end') {
-      // Calcolo dinamico: ottieni il totale posti occupati REALI
+      // Rimuoviamo la corsa dalla cache di ricerca perché non più disponibile
+      removeCorsa(corsa_id);
+
       const postiOccupatiRes = await client.query(
-        `SELECT COALESCE(SUM(posti_richiesti), 0) as totale FROM public.prenotazioni WHERE corsa_id = $1`,
+        `SELECT COALESCE(MAX(occ), 0) as totale FROM (SELECT SUM(posti_richiesti) as occ FROM public.prenotazioni WHERE corsa_id = $1 GROUP BY start_index_polyline) as sub`,
         [corsa_id]
       );
       const totalePostiOccupati = Number(postiOccupatiRes.rows[0].totale);
-
-      // Arricchisci per il pricing
       const corsaPerPricing = { ...corsa, posti_prenotati: totalePostiOccupati };
 
       const prenRes = await client.query(
@@ -125,6 +141,9 @@ export async function toggleCorsa(corsa_id, action) {
           await client.query(`UPDATE public.pagamenti SET stato = 'fallito' WHERE id = $1`, [pren.pagamento_id]);
         }
       }
+    } else {
+      // Se è in_corso, la aggiorniamo nella cache di ricerca
+      upsertCorsa(corsa);
     }
 
     await client.query('COMMIT');

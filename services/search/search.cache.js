@@ -10,6 +10,7 @@ export const CacheStore = {
   pendingCache: new Map()
 };
 
+// --- INDICE SPAZIALE ---
 export const GeoIndex = new Map(); 
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
@@ -18,6 +19,17 @@ const GEOHASH_PRECISION = 4;
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
+export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioniCache);
+
+// --- GESTIONE PENDING (Richiesta da booking.routes.js) ---
+export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
+export const removePending = (id) => CacheStore.pendingCache.delete(id);
+
+// --- GESTIONE RECENSIONI ---
+export const updateRecensioneCache = (conducenteId, media, totale) => {
+  CacheStore.recensioniCache.set(conducenteId, { media: Number(media), totale: Number(totale) });
+};
 
 // --- GESTIONE CORSE AGGIORNATA ---
 export const upsertCorsa = (c) => {
@@ -29,7 +41,6 @@ export const upsertCorsa = (c) => {
   }
   const cleanHashes = Array.isArray(geohashes) ? geohashes : (geohashes || []);
 
-  // Pre-decodifica e calcolo Bounding Box
   let decodedCoords = oldData.decodedCoords;
   let bbox = oldData.bbox;
   
@@ -45,11 +56,9 @@ export const upsertCorsa = (c) => {
     } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
   }
 
-  // 4. AGGIORNAMENTO CACHE CON CAMPI PRICING
   const newCorsa = {
     ...oldData,
     ...c,
-    // Assicuriamo i campi necessari per il pricing
     distanza: Number(c.distanza || oldData.distanza || 0),
     tipo_corsa: c.tipo_corsa || oldData.tipo_corsa || 'standard',
     veicolo_id: Number(c.veicolo_id || oldData.veicolo_id),
@@ -69,6 +78,17 @@ export const upsertCorsa = (c) => {
   });
 };
 
+export const removeCorsa = (corsaId) => {
+  const corsa = CacheStore.corseCache.get(corsaId);
+  if (corsa?.path_geohashes) {
+    corsa.path_geohashes.forEach(h => GeoIndex.get(h.substring(0, GEOHASH_PRECISION))?.delete(corsaId));
+  }
+  CacheStore.corseCache.delete(corsaId);
+};
+
+// --- GESTIONE VEICOLI ---
+export const upsertVeicolo = (v) => CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...v });
+
 // --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0) return;
@@ -77,7 +97,6 @@ export async function loadCachesUltra(force = false) {
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
     
-    // Includiamo esplicitamente 'distanza' e 'tipo_corsa' nella query
     const cRes = await client.query(`
       SELECT c.*, 
              (SELECT COALESCE(MAX(occ), 0) 
@@ -88,7 +107,8 @@ export async function loadCachesUltra(force = false) {
     
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // ... (restante logica di caricamento invariata)
+    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo FROM veicolo`);
+    vRes.rows.forEach(v => upsertVeicolo(v));
     
     console.log(`📦 [CACHE] Caricate ${CacheStore.corseCache.size} corse.`);
   } finally {

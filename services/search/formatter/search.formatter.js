@@ -98,13 +98,14 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         localitaOrigine: await getLocalitaSafe(richiesta.coord),
         localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-        percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
+        // CORRETTO: Passiamo l'intero item, non solo decodedCoords
+        percorsoVisualizzato: isCorsa ? getSottoPercorso(item, richiesta.coord, richiesta.coordDest)?.coords : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,
         prezzo: Number(prezzo?.toFixed(2)) || 0,
         stato: item.stato,
-        // Utilizzo del valore calcolato dinamicamente nel motore di ricerca
+        // Valore calcolato dal motore di ricerca
         postiDisponibili: Number(item.postiDisponibili ?? 0),
         rating: { media: Number((r.media ?? 0).toFixed(1)), totale: r.totale ?? 0 }
       };

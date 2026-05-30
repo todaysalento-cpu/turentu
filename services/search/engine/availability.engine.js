@@ -36,7 +36,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const defaultTol = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  // --- NORMALIZZAZIONE INPUT (Previeni TypeError) ---
+  // --- NORMALIZZAZIONE INPUT ---
   const vMap = veicoliCache instanceof Map 
       ? veicoliCache 
       : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
@@ -99,9 +99,13 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const giornoCorrente = now.getDay();
 
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
-    const v = vMap.get(s.veicolo_id); // Usa la Map normalizzata vMap
-    if (!v) return false;
+    const v = vMap.get(s.veicolo_id);
+    
+    // --- PROTEZIONE GEOMETRICA ---
+    // Verifica che il veicolo esista e abbia coordinate numeriche valide
+    if (!v || typeof v.lon !== 'number' || typeof v.lat !== 'number') return false;
 
+    // Distanza massima per uno slot (es. 15km)
     const dist = turf.distance(
         turf.point([richiesta.coord.lon, richiesta.coord.lat]),
         turf.point([v.lon, v.lat]), 
@@ -109,6 +113,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     );
     if (dist > 15.0) return false;
 
+    // Validazione oraria e giorni
     const startMinutes = new Date(s.start).getHours() * 60 + new Date(s.start).getMinutes();
     const endMinutes = new Date(s.fine).getHours() * 60 + new Date(s.fine).getMinutes();
     const isOrarioValido = currentMinutes >= startMinutes && currentMinutes <= endMinutes;

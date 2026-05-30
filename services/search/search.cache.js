@@ -14,7 +14,7 @@ export const GeoIndex = new Map();
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
-// --- GETTER (Esportazioni complete) ---
+// --- GETTER ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
 export const getCorseMap = () => CacheStore.corseCache;
@@ -88,17 +88,25 @@ export const removeCorsa = (corsaId) => {
 
 // --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
-  if (!force && CacheStore.corseCache.size > 0) return;
+  if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
+
   const client = await pool.connect();
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
+    
+    // 1. Corse
     const cRes = await client.query(`SELECT c.*, (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione FROM corse c WHERE c.stato IN ('prenotabile', 'in_corso')`);
     cRes.rows.forEach(c => upsertCorsa(c));
     
-    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo FROM veicolo`);
+    // 2. Veicoli (con coordinate per il calcolo distanza nel motore)
+    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
     
-    console.log(`📦 [CACHE] Sincronizzazione completata: ${CacheStore.corseCache.size} corse.`);
+    // 3. Disponibilità (Mancante in precedenza - Ora aggiunto!)
+    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
+    dRes.rows.forEach(d => upsertDisponibilita(d));
+    
+    console.log(`📦 [CACHE] Sincronizzazione completata: ${CacheStore.corseCache.size} corse, ${CacheStore.disponibilitaCache.size} slot.`);
   } finally {
     client.release();
   }

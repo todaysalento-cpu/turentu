@@ -86,6 +86,20 @@ export const upsertDisponibilita = (d) => {
   }
 };
 
+export const removeDisponibilita = (id) => {
+    if (CacheStore.disponibilitaCache.has(id)) {
+        const d = CacheStore.disponibilitaCache.get(id);
+        CacheStore.disponibilitaCache.delete(id);
+        const v = CacheStore.veicoliCache.get(d.veicolo_id);
+        if (v && v.lat && v.lon) {
+            const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
+            if (SlotIndex.has(hash)) {
+                SlotIndex.get(hash).delete(id);
+            }
+        }
+    }
+};
+
 export const upsertVeicolo = (v) => {
   const normalized = { ...v, lat: Number(v.lat), lon: Number(v.lon) };
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });

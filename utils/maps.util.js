@@ -13,8 +13,8 @@ const REVERSE_CACHE_TTL = 24 * 60 * 60 * 1000;
 function normalizeCoord(c) {
   if (!c) return null;
   return {
-    lat: c.lat,
-    lon: c.lon ?? c.lng,
+    lat: typeof c.lat === 'number' ? c.lat : parseFloat(c.lat),
+    lon: typeof (c.lon ?? c.lng) === 'number' ? (c.lon ?? c.lng) : parseFloat(c.lon ?? c.lng),
   };
 }
 
@@ -36,7 +36,6 @@ export async function getRouteGeometry(origine, destinazione) {
   const d = normalizeCoord(destinazione);
 
   try {
-    // Aggiunto &overview=full per ottenere la polilinea dettagliata
     const url = `https://maps.googleapis.com/maps/api/directions/json` +
       `?origin=${o.lat},${o.lon}` +
       `&destination=${d.lat},${d.lon}` +
@@ -103,7 +102,7 @@ export async function getDurataDistanza(origine, destinazione) {
 }
 
 // =========================
-// REVERSE GEOCODING
+// REVERSE GEOCODING (AGGIORNATO)
 // =========================
 export async function getLocalitaSafe(coord) {
   const c = normalizeCoord(coord);
@@ -114,20 +113,34 @@ export async function getLocalitaSafe(coord) {
   if (cached && Date.now() - cached.timestamp < REVERSE_CACHE_TTL) return cached.value;
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json` +
-      `?latlng=${c.lat},${c.lon}` +
-      `&key=${GOOGLE_MAPS_API_KEY}`;
-
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${c.lat},${c.lon}&key=${GOOGLE_MAPS_API_KEY}`;
     const res = await fetch(url);
     const data = await res.json();
 
-    if (data.status !== "OK" || !data.results?.length) return "Località sconosciuta";
+    if (data.status !== "OK" || !data.results?.length) {
+      console.warn(`Geocoding fallito per ${key}:`, data.status);
+      return "Località sconosciuta";
+    }
 
     const result = data.results[0];
     const components = result.address_components || [];
-    const get = (type) => components.find((c) => c.types.includes(type))?.long_name;
 
-    const localita = get("locality") || get("administrative_area_level_3") || get("administrative_area_level_2") || result.formatted_address || "Località sconosciuta";
+    // Funzione di ricerca robusta: cerca il componente per tipo
+    const get = (type) => {
+      const found = components.find((comp) => comp.types.includes(type));
+      return found ? found.long_name : null;
+    };
+
+    // Ordine di ricerca per massimizzare la precisione (dal centro città alla zona amministrativa)
+    const localita = 
+      get("locality") || 
+      get("administrative_area_level_3") || 
+      get("administrative_area_level_2") || 
+      get("administrative_area_level_1") ||
+      result.formatted_address || 
+      "Località sconosciuta";
+
+    // Pulizia stringa
     const value = localita.replace(", Italy", "").replace(", Italia", "").trim();
 
     reverseCache.set(key, { value, timestamp: Date.now() });

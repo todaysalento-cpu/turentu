@@ -1,45 +1,75 @@
-import { filterDisponibilita } from './services/search/engine/availability.engine.js'; 
+import 'dotenv/config'; 
+import { filterDisponibilita } from './services/search/engine/availability.engine.js';
+import { CacheStore, loadCachesUltra } from './services/search/search.cache.js';
 
-// Mock della Richiesta
-const mockRichiesta = {
-    posti_richiesti: 1,
-    coord: { lat: 43.1, lon: 13.8 }, // Punto intermedio sul percorso
-    coordDest: { lat: 43.5, lon: 13.5 } // Punto più avanti
-};
-
-// Mock di una Corsa valida
-const mockCorse = [{
-    id: "test_corsa_001",
-    decodedCoords: [
-        [42.4, 14.1], // Inizio
-        [43.1, 13.8], // Salita richiesta
-        [43.5, 13.5], // Discesa richiesta
-        [44.0, 12.5]  // Fine
-    ],
-    posti_totali: 4,
-    picco_occupazione: 0,
-    numero_prenotazioni_attive: 0,
-    fermate_pianificate: []
-}];
-
-function runTest() {
-    console.log("--- ESECUZIONE TEST DI FILTRAGGIO ---");
+// Funzione helper robusta che accetta sia oggetti che array [lat, lon]
+function getDist(p1, p2) {
+    const [lat1, lon1] = Array.isArray(p1) ? p1 : [p1.lat || p1.latitude, p1.lon || p1.lng || p1.longitude];
+    const [lat2, lon2] = Array.isArray(p2) ? p2 : [p2.lat || p2.latitude, p2.lon || p2.lng || p2.longitude];
     
-    const result = filterDisponibilita(
-        mockRichiesta, 
-        [], // veicoliCache
-        [], // disponibilitaCache
-        mockCorse, 
-        []  // puntiRaccolta
-    );
+    const R = 6371; // Raggio terra in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-    console.log(`Risultato: Trovate ${result.corse.length} corse.`);
-    
-    if (result.corse.length > 0) {
-        console.log("✅ Test superato: Corsa rilevata correttamente.");
-        console.log("Dettaglio:", JSON.stringify(result.corse[0].percorsoVisualizzato, null, 2));
-    } else {
-        console.error("❌ Test fallito: La corsa è stata scartata (controlla i [DEBUG] log nel terminale).");
+function calcolaDistanzaPercorso(punti) {
+    if (!punti || punti.length < 2) return 0;
+    let distanza = 0;
+    for (let i = 0; i < punti.length - 1; i++) {
+        distanza += getDist(punti[i], punti[i + 1]);
+    }
+    return distanza;
+}
+
+async function runTest() {
+    try {
+        console.log("🔄 Avvio sincronizzazione cache dal database...");
+        await loadCachesUltra(true); 
+
+        const corseArray = Array.from(CacheStore.corseCache.values());
+        console.log(`📦 Totale corse nel sistema: ${corseArray.length}`);
+
+        // Esempio di richiesta di test
+        const richiesta = {
+            coord: { lat: 41.48, lon: 15.58 }, // Foggia
+            coordDest: { lat: 42.46, lon: 14.21 }, // Pescara
+            posti_richiesti: 1
+        };
+
+        const { corse: corseCompatibili } = filterDisponibilita(richiesta, [], [], corseArray);
+        const idCompatibili = new Set(corseCompatibili.map(c => c.id));
+
+        console.log(`\n📊 REPORT DETTAGLIATO CORSE:`);
+        
+        corseArray.forEach((c) => {
+            const isCompatibile = idCompatibili.has(c.id);
+            const stato = isCompatibile ? "✅ COMPATIBILE" : "❌ SCARTATA";
+            
+            console.log(`-----------------------------------------------`);
+            console.log(`${stato} | ID: ${c.id} | ${c.localitaOrigine || 'N/D'} -> ${c.localitaDestinazione || 'N/D'}`);
+            
+            if (isCompatibile) {
+                // Recupera il percorso segmentato (formato [lat, lon])
+                const punti = c.percorsoVisualizzato || [];
+                const distKm = calcolaDistanzaPercorso(punti);
+                
+                console.log(`    💰 Prezzo Totale Corsa: €${Number(c.prezzo || 0).toFixed(2)}`);
+                console.log(`    📏 Distanza segmento calcolato: ${distKm.toFixed(2)} km`);
+                console.log(`    👥 Occupazione: ${c.picco_occupazione}/${c.posti_totali} posti`);
+            } else {
+                const postiSufficienti = (c.posti_totali - c.picco_occupazione) >= richiesta.posti_richiesti;
+                console.log(`    ⚠️ Motivo: ${postiSufficienti ? "Geometria/Percorso non compatibile" : "Posti esauriti"}`);
+            }
+        });
+
+        console.log(`\n🏁 Fine report: ${corseCompatibili.length} compatibili, ${corseArray.length - corseCompatibili.length} scartate.`);
+
+    } catch (error) {
+        console.error("❌ Errore critico durante il test:", error);
     }
 }
 

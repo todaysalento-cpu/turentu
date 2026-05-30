@@ -1,0 +1,18 @@
+import { filterDisponibilita } from './services/search/engine/availability.engine.js';
+
+const mockRichiesta = {
+  coord: { lat: 41.9028, lon: 12.4964 }, // Roma
+  coordDest: { lat: 45.4642, lon: 9.1900 }, // Milano
+  posti_richiesti: 1
+};
+
+// Corsa che va da Roma a Milano (linea retta)
+const mockCorse = [{
+  id: 999,
+  decodedCoords: [[41.9028, 12.4964], [45.4642, 9.1900]],
+  posti_totali: 4,
+  picco_occupazione: 0
+}];
+
+const result = filterDisponibilita(mockRichiesta, [], [], mockCorse);
+console.log("Corsa trovata:", result.corse.length > 0);

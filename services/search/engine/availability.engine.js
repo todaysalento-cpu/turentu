@@ -13,21 +13,18 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
     if (!Array.isArray(decodedCoords) || decodedCoords.length < 2) return null;
 
-    // 1. Rimuovi duplicati adiacenti (causa comune di errori di slice)
-    const puliti = decodedCoords.filter((c, i) => 
-      i === 0 || (c[0] !== decodedCoords[i-1][0] || c[1] !== decodedCoords[i-1][1])
-    );
-
-    const line = turf.lineString(puliti.map(c => [c[1], c[0]]));
+    const line = turf.lineString(decodedCoords.map(c => [c[1], c[0]]));
     
-    // 2. Snap sui punti più vicini
+    // Snap sui punti più vicini con indice di posizione
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
 
-    // 3. Taglio della linea
+    // Logica direzionale pura: il punto di salita deve apparire PRIMA di quello di discesa
+    if (snapSalita.properties.index >= snapDiscesa.properties.index) return null;
+
+    // Taglio della linea
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
     
-    // 4. Verifica validità risultato
     if (!slice.geometry.coordinates || slice.geometry.coordinates.length < 2) return null;
 
     return slice.geometry.coordinates.map(c => [c[1], c[0]]);
@@ -49,28 +46,22 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       ? corseCache 
       : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  const hashOrigine = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  const hashDestinazione = ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION);
+  // 1. Espansione Geohash (punto centrale + 8 vicini) per non perdere corse "al bordo"
+  const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  const candidateIds = new Set();
+  [hash, ...ngeohash.neighbors(hash)].forEach(h => {
+      const set = GeoIndex.get(h);
+      if (set) set.forEach(id => candidateIds.add(id));
+  });
 
-  const setOrigine = GeoIndex.get(hashOrigine) || new Set();
-  const setDestinazione = GeoIndex.get(hashDestinazione) || new Set();
-
-  let candidateIds = new Set([...setOrigine].filter(id => setDestinazione.has(id)));
-  if (candidateIds.size === 0) candidateIds = setOrigine;
-
-  const slots = disponibilitaCache
-    .filter(dv => {
-      const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
-      if (!v || Number(v.posti_totali) < postiRichiesti) return false;
-      const distanzaKm = richiesta.coord ? haversineDistance({ lat: v.lat, lon: v.lon }, richiesta.coord) : 0;
-      return distanzaKm <= tolKm;
-    })
-    .sort((a, b) => a._distanzaKm - b._distanzaKm);
+  // Se non troviamo nulla nei vicini, estendiamo a tutto il set (opzionale, per robustezza)
+  if (candidateIds.size === 0) {
+      corseMap.forEach((_, id) => candidateIds.add(id));
+  }
 
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      // Validazione base
       if (!c || !Array.isArray(c.decodedCoords) || c.decodedCoords.length < 2) return false;
       
       const postiOccupati = Number(c.picco_occupazione || 0);
@@ -81,26 +72,21 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
         const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
         
-        // 1. Controllo Distanza Perpendicolare
-        const distSalita = turf.pointToLineDistance(salita, line);
-        const distDiscesa = turf.pointToLineDistance(discesa, line);
+        // Controllo Prossimità al percorso (Buffer di tolleranza)
+        const distSalita = turf.pointToLineDistance(salita, line, { units: 'kilometers' });
+        const distDiscesa = turf.pointToLineDistance(discesa, line, { units: 'kilometers' });
+        
         if (distSalita > tolKm || distDiscesa > tolKm) return false;
 
-        // 2. Controllo Direzione
-        const snapSalita = turf.nearestPointOnLine(line, salita);
-        const snapDiscesa = turf.nearestPointOnLine(line, discesa);
-        const distInizioToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
-        const distInizioToDiscesa = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapDiscesa, line), { units: 'kilometers' });
-        
-        if (distInizioToSalita >= distInizioToDiscesa) return false;
-
-        // 3. Arricchimento (Solo se il taglio è valido)
+        // Arricchimento (esegue anche il check direzionale tramite indice)
         const sottoPercorso = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
         if (!sottoPercorso) return false;
         
         c.percorsoVisualizzato = sottoPercorso;
+        
+        // Punti di raccolta (ottimizzati)
         c.puntiRaccoltaDisponibili = puntiRaccoltaCache
-            .filter(p => turf.distance(snapSalita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
+            .filter(p => turf.distance(salita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
             .sort((a, b) => a.dist - b.dist)
             .slice(0, 3);
 
@@ -108,23 +94,22 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         return false;
       }
 
-      // 4. Controllo Fermate
+      // Controllo Fermate
       const nuoveFermate = calcolaNuoveFermate(c, richiesta);
       if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) return false;
 
       return true;
     });
 
-  return { slots, corse };
+  return { slots: [], corse };
 }
 
+// Funzioni accessorie invariate
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };
     const rB = recensioniCache[b.conducente_id] || { media: 3.0, totale: 0 };
-    const bonusA = rA.totale > 20 ? 0.2 : 0;
-    const bonusB = rB.totale > 20 ? 0.2 : 0;
-    return (rB.media + bonusB) - (rA.media + bonusA);
+    return (rB.media + (rB.totale > 20 ? 0.2 : 0)) - (rA.media + (rA.totale > 20 ? 0.2 : 0));
   });
 }
 

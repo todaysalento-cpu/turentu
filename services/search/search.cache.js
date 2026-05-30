@@ -50,6 +50,8 @@ export function calcolaStatoDisponibilita(d) {
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
 export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+// AGGIUNTO: Risolve l'errore di import in disponibilita.service.js
+export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
 export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
 
@@ -105,7 +107,6 @@ export const upsertVeicolo = (v) => {
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
 };
 
-// --- AGGIUNTA MANCANTE ---
 export const removeVeicolo = (id) => {
     return CacheStore.veicoliCache.delete(id);
 };

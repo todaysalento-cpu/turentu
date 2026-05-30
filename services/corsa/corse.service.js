@@ -1,6 +1,6 @@
 import { pool } from '../../db/db.js';
 import Stripe from 'stripe';
-import { getTariffe, calcolaQuotaEqua } from '../../utils/pricing.util.js';
+import { getTariffe, calcolaPrezzo } from '../../utils/pricing.util.js';
 import { CacheManager } from '../../utils/cacheManager.js';
 import { upsertCorsa, removeCorsa } from '../search/search.cache.js';
 
@@ -15,10 +15,6 @@ export function parseDurataMinuti(durata) {
     return (parts[0] || 0) * 60 + (parts[1] || 0);
   }
   return 0;
-}
-
-export function formatDurata(minuti) {
-  return `${Math.floor(minuti / 60)}h ${minuti % 60}m`;
 }
 
 /* ===================== 1️⃣ CORSE PER AUTISTA ===================== */
@@ -67,35 +63,32 @@ export async function toggleCorsa(corsa_id, action) {
     if (action === 'end') {
       removeCorsa(corsa_id);
 
-      const postiOccupatiRes = await client.query(
-        `SELECT COALESCE(MAX(occ), 0) as totale FROM (SELECT SUM(posti_richiesti) as occ FROM public.prenotazioni WHERE corsa_id = $1 GROUP BY start_index_polyline) as sub`,
-        [corsa_id]
-      );
-      const totalePostiOccupati = Math.max(1, Number(postiOccupatiRes.rows[0].totale)); // Minimo 1 per evitare divisione per zero
-      
-      const tariffe = await getTariffe(corsa.veicolo_id, 'standard');
-      const costoTotaleCorsa = Number(corsa.distanza) * tariffe.prezzoKm;
-
+      // Recupero info per finalizzazione pagamenti
       const prenRes = await client.query(
-        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, p.importo
-         FROM public.pagamenti p WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
+        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, 
+                pr.posti_richiesti
+         FROM public.pagamenti p 
+         JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
+         WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
         [corsa_id]
       );
 
       for (const pren of prenRes.rows) {
         if (!pren.stripe_payment_intent) continue;
 
-        const postiRes = await client.query('SELECT posti_richiesti FROM public.prenotazioni WHERE id = $1', [pren.prenotazione_id]);
-        const postiRichiesti = postiRes.rows[0]?.posti_richiesti || 1;
-
-        const importoCalcolato = corsa.tipo_corsa === 'privata' 
-          ? Number(pren.importo) 
-          : calcolaQuotaEqua(costoTotaleCorsa, postiRichiesti, totalePostiOccupati);
+        // Calcolo importo finale tramite la funzione unificata di pricing
+        // Passiamo lo stato 'prenotabile' per riutilizzare la logica di calcolo equo esistente nel pricing.util
+        let importoFinale = 0;
+        if (corsa.tipo_corsa === 'privata') {
+            importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, 'pubblicato');
+        } else {
+            importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, 'prenotabile');
+        }
         
         try {
           const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
           if (pi.status === 'requires_capture') {
-            const amountToCapture = Math.min(Math.round(importoCalcolato * 100), pi.amount);
+            const amountToCapture = Math.min(Math.round(importoFinale * 100), pi.amount);
             await stripe.paymentIntents.capture(pren.stripe_payment_intent, { amount_to_capture: amountToCapture });
             await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, [amountToCapture / 100, pren.pagamento_id]);
           }

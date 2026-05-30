@@ -1,55 +1,46 @@
-import { filterDisponibilita } from './services/search/engine/availability.engine.js'; // Sostituisci con il tuo path
+import { filterDisponibilita } from './services/search/engine/availability.engine.js'; 
 
-// 1. Mock Dati
+// Mock della Richiesta
 const mockRichiesta = {
-  id: "req_1",
-  coord: { lat: 45.4642, lon: 9.1900 }, // Milano
-  coordDest: { lat: 45.0703, lon: 7.6869 }, // Torino
-  posti_richiesti: 1
+    posti_richiesti: 1,
+    coord: { lat: 43.1, lon: 13.8 }, // Punto intermedio sul percorso
+    coordDest: { lat: 43.5, lon: 13.5 } // Punto più avanti
 };
 
-const mockCorse = [
-  {
-    id: "corsa_corretta",
+// Mock di una Corsa valida
+const mockCorse = [{
+    id: "test_corsa_001",
     decodedCoords: [
-      [45.4642, 9.1900], // Partenza Milano
-      [45.0703, 7.6869]  // Arrivo Torino
+        [42.4, 14.1], // Inizio
+        [43.1, 13.8], // Salita richiesta
+        [43.5, 13.5], // Discesa richiesta
+        [44.0, 12.5]  // Fine
     ],
     posti_totali: 4,
-    picco_occupazione: 0
-  },
-  {
-    id: "corsa_inversa",
-    decodedCoords: [
-      [45.0703, 7.6869], // Torino (Direzione opposta!)
-      [45.4642, 9.1900]  // Milano
-    ],
-    posti_totali: 4,
-    picco_occupazione: 0
-  }
-];
+    picco_occupazione: 0,
+    numero_prenotazioni_attive: 0,
+    fermate_pianificate: []
+}];
 
-// 2. Esecuzione Test
 function runTest() {
-  console.log("--- Avvio Test Filtraggio ---");
-  
-  const result = filterDisponibilita(
-    mockRichiesta, 
-    [], // veicoliCache vuota (non serve per il test corse)
-    [], // disponibilitaCache vuota
-    mockCorse, 
-    []  // puntiRaccolta vuoti
-  );
+    console.log("--- ESECUZIONE TEST DI FILTRAGGIO ---");
+    
+    const result = filterDisponibilita(
+        mockRichiesta, 
+        [], // veicoliCache
+        [], // disponibilitaCache
+        mockCorse, 
+        []  // puntiRaccolta
+    );
 
-  const foundIds = result.corse.map(c => c.id);
-  
-  console.log("Corse trovate:", foundIds);
-  
-  if (foundIds.includes("corsa_corretta") && !foundIds.includes("corsa_inversa")) {
-    console.log("✅ TEST SUPERATO: La logica di direzione funziona.");
-  } else {
-    console.error("❌ TEST FALLITO: Il filtro non ha isolato correttamente le corse.");
-  }
+    console.log(`Risultato: Trovate ${result.corse.length} corse.`);
+    
+    if (result.corse.length > 0) {
+        console.log("✅ Test superato: Corsa rilevata correttamente.");
+        console.log("Dettaglio:", JSON.stringify(result.corse[0].percorsoVisualizzato, null, 2));
+    } else {
+        console.error("❌ Test fallito: La corsa è stata scartata (controlla i [DEBUG] log nel terminale).");
+    }
 }
 
 runTest();

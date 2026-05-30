@@ -12,6 +12,7 @@
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --verbose"
   },
   "dependencies": {
+    "@googlemaps/polyline-codec": "^1.0.28",
     "@turf/turf": "^7.3.5",
     "axios": "^1.13.5",
     "bcrypt": "^6.0.0",

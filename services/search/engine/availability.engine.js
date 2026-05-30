@@ -6,16 +6,34 @@ import { GeoIndex } from '../search.cache.js';
 
 const GEOHASH_PRECISION = 4;
 
+/**
+ * Taglio sicuro del percorso con pulizia dei dati
+ */
 export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
-    const line = turf.lineString(decodedCoords.map(c => [c[1], c[0]]));
+    if (!Array.isArray(decodedCoords) || decodedCoords.length < 2) return null;
+
+    // 1. Rimuovi duplicati adiacenti (causa comune di errori di slice)
+    const puliti = decodedCoords.filter((c, i) => 
+      i === 0 || (c[0] !== decodedCoords[i-1][0] || c[1] !== decodedCoords[i-1][1])
+    );
+
+    const line = turf.lineString(puliti.map(c => [c[1], c[0]]));
+    
+    // 2. Snap sui punti più vicini
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
+
+    // 3. Taglio della linea
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
+    
+    // 4. Verifica validità risultato
+    if (!slice.geometry.coordinates || slice.geometry.coordinates.length < 2) return null;
+
     return slice.geometry.coordinates.map(c => [c[1], c[0]]);
   } catch (e) {
     console.error("Errore nel taglio della polilinea:", e);
-    return [];
+    return null;
   }
 }
 
@@ -52,17 +70,11 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      if (!c) return false;
-      if (!c.decodedCoords || c.decodedCoords.length < 2) {
-        console.log(`[DEBUG] Corsa ${c.id} scartata: decodedCoords mancanti`);
-        return false;
-      }
+      // Validazione base
+      if (!c || !Array.isArray(c.decodedCoords) || c.decodedCoords.length < 2) return false;
       
       const postiOccupati = Number(c.picco_occupazione || 0);
-      if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) {
-        console.log(`[DEBUG] Corsa ${c.id} scartata: Posti insufficienti`);
-        return false;
-      }
+      if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
       try {
         const line = turf.lineString(c.decodedCoords.map(coord => [coord[1], coord[0]]));
@@ -72,10 +84,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         // 1. Controllo Distanza Perpendicolare
         const distSalita = turf.pointToLineDistance(salita, line);
         const distDiscesa = turf.pointToLineDistance(discesa, line);
-        if (distSalita > tolKm || distDiscesa > tolKm) {
-          console.log(`[DEBUG] Corsa ${c.id} scartata: Fuori tolleranza (Salita: ${distSalita.toFixed(2)}km, Discesa: ${distDiscesa.toFixed(2)}km)`);
-          return false;
-        }
+        if (distSalita > tolKm || distDiscesa > tolKm) return false;
 
         // 2. Controllo Direzione
         const snapSalita = turf.nearestPointOnLine(line, salita);
@@ -83,28 +92,25 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         const distInizioToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
         const distInizioToDiscesa = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapDiscesa, line), { units: 'kilometers' });
         
-        if (distInizioToSalita >= distInizioToDiscesa) {
-          console.log(`[DEBUG] Corsa ${c.id} scartata: Direzione errata (Salita a ${distInizioToSalita.toFixed(2)}km, Discesa a ${distInizioToDiscesa.toFixed(2)}km)`);
-          return false;
-        }
+        if (distInizioToSalita >= distInizioToDiscesa) return false;
 
-        // 3. Arricchimento
-        c.percorsoVisualizzato = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
+        // 3. Arricchimento (Solo se il taglio è valido)
+        const sottoPercorso = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
+        if (!sottoPercorso) return false;
+        
+        c.percorsoVisualizzato = sottoPercorso;
         c.puntiRaccoltaDisponibili = puntiRaccoltaCache
             .filter(p => turf.distance(snapSalita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
             .sort((a, b) => a.dist - b.dist)
             .slice(0, 3);
 
       } catch (err) {
-        console.log(`[DEBUG] Corsa ${c.id} scartata: Errore geometrico`, err);
         return false;
       }
 
+      // 4. Controllo Fermate
       const nuoveFermate = calcolaNuoveFermate(c, richiesta);
-      if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) {
-        console.log(`[DEBUG] Corsa ${c.id} scartata: Troppe fermate (Tot: ${(c.numero_prenotazioni_attive || 0) + nuoveFermate})`);
-        return false;
-      }
+      if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) return false;
 
       return true;
     });
@@ -126,6 +132,6 @@ function calcolaNuoveFermate(corsa, richiesta) {
   let extra = 0;
   const fermateEsistenti = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
   if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coord.lon, richiesta.coord.lat])) < 0.5)) extra++;
-  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), hitched = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
+  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
   return extra;
 }

@@ -14,7 +14,7 @@ export const GeoIndex = new Map();
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
-// --- GETTER ---
+// --- GETTER (Invariati) ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
 export const getCorseMap = () => CacheStore.corseCache;
@@ -35,7 +35,7 @@ export const updateRecensioneCache = (conducenteId, media, totale) => {
   CacheStore.recensioniCache.set(conducenteId, { media: Number(media), totale: Number(totale) });
 };
 
-// --- GESTIONE CORSE (Aggiornata con Inversione Coords) ---
+// --- GESTIONE CORSE (Aggiornata con Mappatura) ---
 export const upsertCorsa = (c) => {
   const oldData = CacheStore.corseCache.get(c.id) || {};
   let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
@@ -45,28 +45,24 @@ export const upsertCorsa = (c) => {
   
   if (c.percorso_polyline && c.percorso_polyline !== oldData.percorso_polyline) {
     try {
-      const rawCoords = polyline.decode(c.percorso_polyline);
-      // INVERSIONE: da [lat, lon] a [lon, lat] per compatibilità Turf/GeoJSON
-      decodedCoords = rawCoords.map(p => [p[1], p[0]]); 
-      
-      const lons = decodedCoords.map(p => p[0]);
-      const lats = decodedCoords.map(p => p[1]);
-      bbox = { 
-        minLat: Math.min(...lats), maxLat: Math.max(...lats), 
-        minLon: Math.min(...lons), maxLon: Math.max(...lons) 
-      };
+      decodedCoords = polyline.decode(c.percorso_polyline);
+      const lats = decodedCoords.map(p => p[0]);
+      const lons = decodedCoords.map(p => p[1]);
+      bbox = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
     } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
   }
 
   const newCorsa = {
     ...oldData,
     ...c,
+    // --- MAPPATURA ESPLICITA PER EVITARE N/D ---
     id: c.id,
-    localitaOrigine: c.origine_address,
-    localitaDestinazione: c.destinazione_address,
+    localitaOrigine: c.origine_address,         // Mappa da origine_address
+    localitaDestinazione: c.destinazione_address, // Mappa da destinazione_address
     prezzo: Number(c.prezzo_fisso ?? oldData.prezzo ?? 0),
-    oraPartenza: c.start_datetime,
-    oraArrivo: c.arrivo_datetime,
+    oraPartenza: c.start_datetime,              // Mappa da start_datetime
+    oraArrivo: c.arrivo_datetime,               // Mappa da arrivo_datetime
+    // --- Campi tecnici ---
     distanza: Number(c.distanza || oldData.distanza || 0),
     tipo_corsa: c.tipo_corsa || oldData.tipo_corsa || 'standard',
     veicolo_id: Number(c.veicolo_id || oldData.veicolo_id),
@@ -93,7 +89,7 @@ export const removeCorsa = (corsaId) => {
   CacheStore.corseCache.delete(corsaId);
 };
 
-// --- CARICAMENTO ---
+// --- CARICAMENTO (Query aggiornata) ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
 
@@ -101,6 +97,7 @@ export async function loadCachesUltra(force = false) {
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
     
+    // Assicurati che la query recuperi esplicitamente le colonne mappate
     const cRes = await client.query(`
         SELECT c.*, 
         (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione 

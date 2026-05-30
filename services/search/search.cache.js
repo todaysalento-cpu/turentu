@@ -2,7 +2,7 @@ import { pool } from '../../db/db.js';
 import polyline from 'polyline';
 import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
-import { redisClient } from '../../../redis.js'; 
+import { redisClient } from '../../redis.js'; 
 
 // --- OGGETTO CONTENITORE SINGOLO (Singleton) ---
 export const CacheStore = {

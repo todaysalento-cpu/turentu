@@ -1,6 +1,5 @@
 import { pool } from '../../db/db.js';
 import polyline from 'polyline';
-import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
 
 // --- OGGETTO CONTENITORE SINGOLO (Singleton) ---
@@ -13,7 +12,7 @@ export const CacheStore = {
 };
 
 export const GeoIndex = new Map(); 
-export const SlotIndex = new Map(); // Indice spaziale per Slot
+export const SlotIndex = new Map(); // Aggiunto indice per Slot
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
@@ -44,50 +43,38 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
-// --- GETTER ---
-export const getVeicoliMap = () => CacheStore.veicoliCache;
-export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
-export const getCorseMap = () => CacheStore.corseCache;
-export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
-export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
-export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
-export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
-export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioniCache);
-
 // --- GESTIONE DATI ---
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
 
 export const upsertDisponibilita = (d) => {
-  const v = CacheStore.veicoliCache.get(d.veicolo_id);
-  
-  // Arricchimento: calcolo stato e pre-calcolo orari numerici per il motore
+  // Pulizia indice precedente
+  const oldD = CacheStore.disponibilitaCache.get(d.id);
+  if (oldD) {
+      const oldHash = ngeohash.encode(oldD.lat || 0, oldD.lon || 0, GEOHASH_PRECISION);
+      SlotIndex.get(oldHash)?.delete(d.id);
+  }
+
   d.disponibile = calcolaStatoDisponibilita(d);
   
-  const sStart = new Date(d.start);
-  const sEnd = new Date(d.fine);
-  d.startMin = sStart.getHours() * 60 + sStart.getMinutes();
-  d.endMin = sEnd.getHours() * 60 + sEnd.getMinutes();
+  // Recupero coordinate dal veicolo associato
+  const veicolo = CacheStore.veicoliCache.get(d.veicolo_id);
+  if (veicolo) {
+      d.lat = veicolo.lat;
+      d.lon = veicolo.lon;
+      const hash = ngeohash.encode(veicolo.lat, veicolo.lon, GEOHASH_PRECISION);
+      if (!SlotIndex.has(hash)) SlotIndex.set(hash, new Set());
+      SlotIndex.get(hash).add(d.id);
+  }
 
   CacheStore.disponibilitaCache.set(d.id, d);
-
-  // Indicizzazione spaziale per Slot
-  if (v && v.lat && v.lon) {
-    const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
-    if (!SlotIndex.has(hash)) SlotIndex.set(hash, new Set());
-    SlotIndex.get(hash).add(d.id);
-  }
 };
 
 export const removeDisponibilita = (id) => {
-  // Pulizia indice
   const d = CacheStore.disponibilitaCache.get(id);
   if (d) {
-    const v = CacheStore.veicoliCache.get(d.veicolo_id);
-    if (v) {
-        const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
-        SlotIndex.get(hash)?.delete(id);
-    }
+      const hash = ngeohash.encode(d.lat || 0, d.lon || 0, GEOHASH_PRECISION);
+      SlotIndex.get(hash)?.delete(id);
   }
   CacheStore.disponibilitaCache.delete(id);
 };
@@ -98,9 +85,6 @@ export const upsertVeicolo = (v) => {
 };
 
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
-export const updateRecensioneCache = (conducenteId, media, totale) => {
-  CacheStore.recensioniCache.set(conducenteId, { media: Number(media), totale: Number(totale) });
-};
 
 // --- GESTIONE CORSE ---
 export const upsertCorsa = (c) => {
@@ -116,28 +100,39 @@ export const upsertCorsa = (c) => {
   let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
   let decodedCoords = oldData?.decodedCoords;
   let bbox = oldData?.bbox;
-  let turfLine = oldData?.turfLine;
   
   if (c.percorso_polyline && c.percorso_polyline !== oldData?.percorso_polyline) {
     try {
       const raw = polyline.decode(c.percorso_polyline);
       decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
-      turfLine = turf.lineString(decodedCoords);
       const lats = raw.map(p => p[0]);
       const lons = raw.map(p => p[1]);
-      bbox = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
+      bbox = { 
+        minLat: Math.min(...lats), maxLat: Math.max(...lats), 
+        minLon: Math.min(...lons), maxLon: Math.max(...lons) 
+      };
     } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
   }
 
   const newCorsa = {
-    ...(oldData || {}), ...c, id: c.id, localitaOrigine: c.origine_address, localitaDestinazione: c.destinazione_address,
-    prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0), oraPartenza: c.start_datetime, oraArrivo: c.arrivo_datetime,
-    distanza: Number(c.distanza || oldData?.distanza || 0), tipo_corsa: c.tipo_corsa || oldData?.tipo_corsa || 'standard',
-    veicolo_id: Number(c.veicolo_id || oldData?.veicolo_id), decodedCoords, bbox, turfLine, path_geohashes: geohashes,
-    picco_occupazione: Number(c.picco_occupazione ?? oldData?.picco_occupazione ?? 0), posti_totali: c.posti_totali
+    ...(oldData || {}),
+    ...c,
+    id: c.id,
+    localitaOrigine: c.origine_address,
+    localitaDestinazione: c.destinazione_address,
+    prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0),
+    oraPartenza: c.start_datetime,
+    oraArrivo: c.arrivo_datetime,
+    distanza: Number(c.distanza || oldData?.distanza || 0),
+    decodedCoords,
+    bbox,
+    path_geohashes: geohashes,
+    picco_occupazione: Number(c.picco_occupazione ?? oldData?.picco_occupazione ?? 0),
+    posti_totali: c.posti_totali
   };
   
   CacheStore.corseCache.set(c.id, newCorsa);
+  
   geohashes.forEach(h => {
     const prefix = h.substring(0, GEOHASH_PRECISION);
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
@@ -145,25 +140,25 @@ export const upsertCorsa = (c) => {
   });
 };
 
-export const removeCorsa = (corsaId) => {
-  const corsa = CacheStore.corseCache.get(corsaId);
-  if (corsa?.path_geohashes) {
-    corsa.path_geohashes.forEach(h => GeoIndex.get(h.substring(0, GEOHASH_PRECISION))?.delete(corsaId));
-  }
-  CacheStore.corseCache.delete(corsaId);
-};
-
+// --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
+
   const client = await pool.connect();
   try {
-    console.log("🔄 Sincronizzazione cache...");
-    const cRes = await client.query(`SELECT c.*, (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione FROM corse c WHERE c.stato IN ('prenotabile', 'in_corso')`);
+    console.log("🔄 Sincronizzazione cache in corso...");
+    
+    const cRes = await client.query(`SELECT c.* FROM corse c WHERE c.stato IN ('prenotabile', 'in_corso')`);
     cRes.rows.forEach(c => upsertCorsa(c));
-    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
+    
+    const vRes = await client.query(`SELECT id, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
+    
     const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
-    console.log(`📦 [CACHE] Pronta.`);
-  } finally { client.release(); }
+    
+    console.log(`📦 [CACHE] Sincronizzazione completata: ${CacheStore.corseCache.size} corse, ${CacheStore.disponibilitaCache.size} slot.`);
+  } finally {
+    client.release();
+  }
 }

@@ -3,7 +3,8 @@ import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
 import { GeoIndex, SlotIndex } from '../search.cache.js';
 
-const GEOHASH_PRECISION = 4;
+// Aumentato a 5 per restringere l'area di ricerca e ridurre il carico su Turf
+const GEOHASH_PRECISION = 5; 
 
 export function getSottoPercorso(corsa, salita, discesa) {
   try {
@@ -19,14 +20,13 @@ export function getSottoPercorso(corsa, salita, discesa) {
 }
 
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
-  // 1. Normalizzazione (non loggata perché istantanea)
   const vMap = veicoliCache instanceof Map ? veicoliCache : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
   const dCache = disponibilitaCache instanceof Map ? disponibilitaCache : new Map(Array.isArray(disponibilitaCache) ? disponibilitaCache.map(d => [d.id, d]) : []);
 
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   
-  // --- LOG VELOCITÀ ---
+  // 1. RICERCA CORSE
   console.time('Ricerca_Corse');
   const candidateIds = new Set();
   [hash, ...ngeohash.neighbors(hash)].forEach(h => {
@@ -41,12 +41,22 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const discesaPoint = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
   const distRichiesta = turf.distance(salitaPoint, discesaPoint, { units: 'kilometers' });
   const tol = distRichiesta < 10 ? 3.0 : Number(params?.tolleranzaKm ?? 10);
+  
+  // Buffer di tolleranza per BBox (espresso in gradi: 0.1 deg ~= 11km)
+  const bboxBuffer = tol / 110; 
 
   console.time('Filtro_Geometria');
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
       if (!c || (Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
+      
+      // --- OTTIMIZZAZIONE: Pre-filtro Bounding Box (estremamente veloce) ---
+      if (c.bbox) {
+        if (richiesta.coord.lat < c.bbox.minLat - bboxBuffer || richiesta.coord.lat > c.bbox.maxLat + bboxBuffer ||
+            richiesta.coord.lon < c.bbox.minLon - bboxBuffer || richiesta.coord.lon > c.bbox.maxLon + bboxBuffer) return false;
+      }
+
       try {
         const line = c.turfLine || turf.lineString(c.decodedCoords);
         if (turf.pointToLineDistance(salitaPoint, line) > tol || turf.pointToLineDistance(discesaPoint, line) > tol) return false;

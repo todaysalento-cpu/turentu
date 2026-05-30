@@ -37,7 +37,11 @@ export async function accettaCorsa(corsa_id) {
   try {
     const res = await client.query(`UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, [corsa_id]);
     const c = res.rows[0];
-    if (c) { upsertCorsa(c); CacheManager.corsa.update(c); }
+    if (c) { 
+        // Quando la corsa viene accettata, non deve più apparire nei risultati di ricerca
+        removeCorsa(corsa_id); 
+        CacheManager.corsa.update(c); 
+    }
     return c ? c : null;
   } finally { client.release(); }
 }
@@ -60,9 +64,13 @@ export async function toggleCorsa(corsa_id, action) {
     const corsa = corsaRes.rows[0];
     CacheManager.corsa.update(corsa);
 
-    if (action === 'end') {
+    // Gestione Indice Spaziale:
+    // Una volta iniziata o completata, la corsa deve essere rimossa dall'indice GeoIndex
+    if (action === 'start' || action === 'end') {
       removeCorsa(corsa_id);
+    }
 
+    if (action === 'end') {
       // Recupero info per finalizzazione pagamenti
       const prenRes = await client.query(
         `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, 
@@ -76,8 +84,6 @@ export async function toggleCorsa(corsa_id, action) {
       for (const pren of prenRes.rows) {
         if (!pren.stripe_payment_intent) continue;
 
-        // Calcolo importo finale tramite la funzione unificata di pricing
-        // Passiamo lo stato 'prenotabile' per riutilizzare la logica di calcolo equo esistente nel pricing.util
         let importoFinale = 0;
         if (corsa.tipo_corsa === 'privata') {
             importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, 'pubblicato');
@@ -97,8 +103,9 @@ export async function toggleCorsa(corsa_id, action) {
           await client.query(`UPDATE public.pagamenti SET stato = 'fallito' WHERE id = $1`, [pren.pagamento_id]);
         }
       }
-    } else {
-      upsertCorsa(corsa);
+    } else if (action === 'start') {
+        // Se necessario, aggiorniamo la cache (se la corsa fosse ancora in stato 'accettata')
+        upsertCorsa(corsa);
     }
 
     await client.query('COMMIT');

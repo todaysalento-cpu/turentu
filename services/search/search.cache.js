@@ -50,7 +50,6 @@ export function calcolaStatoDisponibilita(d) {
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
 export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
-// AGGIUNTO: Risolve l'errore di import in disponibilita.service.js
 export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
 export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
@@ -103,7 +102,7 @@ export const removeDisponibilita = (id) => {
 };
 
 export const upsertVeicolo = (v) => {
-  const normalized = { ...v, lat: Number(v.lat), lon: Number(v.lon) };
+  const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
 };
 
@@ -189,15 +188,17 @@ export async function loadCachesUltra(force = false) {
     console.log("🔄 Sincronizzazione cache e Redis...");
     if (redisClient) await redisClient.del('corse_geo_index');
 
-    const cRes = await client.query(`SELECT *, ST_Y(coord_partenza::geometry) AS lat, ST_X(coord_partenza::geometry) AS lon FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
-    for (const c of cRes.rows) await upsertCorsa(c);
+    // Query corretta per il tuo schema DB attuale
+    const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
+    for (const c of cRes.rows) await upsertCorsa({ ...c, lat: 0, lon: 0 });
 
     const pRes = await client.query(`SELECT corsa_id, id, posti_richiesti, start_index_polyline, end_index_polyline FROM prenotazioni`);
     CacheStore.prenotazioniCache.clear();
     for (const p of pRes.rows) await upsertPrenotazione(p);
 
-    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
-    vRes.rows.forEach(v => upsertVeicolo(v));
+    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo FROM veicolo`);
+    vRes.rows.forEach(v => upsertVeicolo({ ...v, lat: 0, lon: 0 }));
+    
     const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
     

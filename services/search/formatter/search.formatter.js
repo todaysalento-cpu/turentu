@@ -10,7 +10,7 @@ const safeParseJSON = (str) => {
 };
 
 /**
- * Formatta i risultati con protezione robusta per le date e ripartizione bilanciata
+ * Formatta i risultati garantendo che ogni oggetto contenga i dati necessari al pricing
  */
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
@@ -26,35 +26,15 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     }
   }
 
-  // --- LOGICA DI RIPARTIZIONE BILANCIATA (5 corse + 5 slot) ---
-  const corseNormalizzate = (corseFiltrate || []).map(c => ({ 
-    ...c, 
-    stato: c.stato === 'libero' ? 'libero' : 'prenotabile' 
-  }));
-
-  const slotsNormalizzati = (slotsFiltrati || []).map(s => ({ 
-    ...s, 
-    stato: 'libero' 
-  }));
+  const corseNormalizzate = (corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }));
+  const slotsNormalizzati = (slotsFiltrati || []).map(s => ({ ...s, stato: 'libero' }));
 
   let corseScelte = corseNormalizzate.slice(0, 5);
-  let slotScelti = slotsNormalizzati.slice(0, 5);
-
-  if (corseScelte.length < 5) {
-    slotScelti = slotsNormalizzati.slice(0, 10 - corseScelte.length);
-  } else if (slotScelti.length < 5) {
-    corseScelte = corseNormalizzate.slice(0, 10 - slotScelti.length);
-  }
+  let slotScelti = slotsNormalizzati.slice(0, 10 - corseScelte.length);
 
   const allItems = [...corseScelte, ...slotScelti].slice(0, CacheModule.TOP_RESULTS || 10);
-
   const veicoliMap = injectedVeicoliMap || (typeof CacheModule.getVeicoliMap === 'function' ? CacheModule.getVeicoliMap() : CacheModule.veicoliCache);
   const recensioniCache = typeof CacheModule.getRecensioniCache === 'function' ? CacheModule.getRecensioniCache() : {};
-
-  if (!veicoliMap || typeof veicoliMap.get !== 'function') {
-      console.error(`❌ [FORMATTER] Cache non valida!`);
-      return [];
-  }
 
   return await Promise.all(
     allItems.map(async (item) => {
@@ -63,38 +43,31 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       const isCorsa = item.origine_lat !== undefined;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
-      // --- CALCOLO DATE SICURO ---
-      let oraPartenza = isCorsa 
-        ? new Date(item.start_datetime) 
-        : new Date(richiesta.start_datetime || Date.now());
-
-      if (isNaN(oraPartenza.getTime())) oraPartenza = new Date();
-
-      let durataMs = isCorsa 
-        ? (typeof item.durata === 'string' 
-            ? item.durata.split(':').reduce((acc, time) => (60 * acc) + +time, 0) * 1000 
-            : (Number(item.durata) || 0) * 1000)
-        : durataRichiesta;
-
+      // Calcolo Date
+      let oraPartenza = isCorsa ? new Date(item.start_datetime) : new Date(richiesta.start_datetime || Date.now());
+      let durataMs = isCorsa ? (Number(item.durata) || 0) * 1000 : durataRichiesta;
       let oraArrivo = new Date(oraPartenza.getTime() + Number(durataMs));
-      if (isNaN(oraArrivo.getTime())) oraArrivo = new Date(oraPartenza.getTime() + 3600000); // +1 ora fallback
 
-      // --- CALCOLO DATI ---
-      const percorsoVisualizzato = isCorsa && item.percorso_polyline 
-        ? getSottoPercorso(item.percorso_polyline, richiesta.coord, richiesta.coordDest)
-        : null;
-
-      const localitaOrigine = await getLocalitaSafe(richiesta.coord);
-      const localitaDestinazione = await getLocalitaSafe(richiesta.coordDest);
+      // Dati di contesto
       const distanzaKm = isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta;
       const postiOccupatiReali = Number(item.picco_occupazione ?? 0);
       const postiTotali = Number(v?.posti_totali ?? 0);
 
-      const prezzo = await calcolaPrezzo(
-        { km: distanzaKm, tipo_corsa: item.tipo_corsa, posti_occupati: postiOccupatiReali, posti_totali: postiTotali, veicolo_id: veicoloId },
-        richiesta.posti_richiesti,
-        item.stato
-      );
+      // --- CALCOLO PREZZO CORRETTO ---
+      // Passiamo l'item completo per permettere a pricing.util.js di usare l'ID o i dati di backup
+      let prezzo = 0;
+      try {
+        prezzo = await calcolaPrezzo(
+          item, // Contiene ID, veicolo_id, distanza, tipo_corsa
+          richiesta.posti_richiesti,
+          item.stato,
+          distanzaKm,
+          Number(item.distanza ?? distanzaKm)
+        );
+      } catch (err) {
+        console.error("Errore pricing nel formatter:", err);
+        prezzo = 0;
+      }
 
       return {
         id: item.id || uuidv4(),
@@ -103,16 +76,16 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         tipoVeicolo: v?.tipo ?? 'citycar',
         servizi: Array.isArray(v?.servizi) ? v.servizi : safeParseJSON(v?.servizi),
-        localitaOrigine,
-        localitaDestinazione,
-        percorsoVisualizzato, 
+        localitaOrigine: await getLocalitaSafe(richiesta.coord),
+        localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
+        percorsoVisualizzato: isCorsa && item.percorso_polyline ? getSottoPercorso(item.percorso_polyline, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm,
         postiTotali,
         postiOccupati: postiOccupatiReali,
         postiDisponibili: Math.max(0, postiTotali - postiOccupatiReali),
-        prezzo: prezzo ?? 0,
+        prezzo: Number(prezzo?.toFixed(2)) || 0,
         stato: item.stato,
         rating: { media: Number((r.media ?? 0).toFixed(1)), totale: r.totale ?? 0 }
       };

@@ -7,13 +7,12 @@ const GEOHASH_PRECISION = 4;
 
 /**
  * Taglio sicuro del percorso. 
- * decodedCoords è ora in formato [lon, lat] nativo.
+ * decodedCoords è in formato [lon, lat] nativo.
  */
 export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
     if (!Array.isArray(decodedCoords) || decodedCoords.length < 2) return null;
 
-    // RIMOZIONE INVERSIONE: usiamo decodedCoords così com'è
     const line = turf.lineString(decodedCoords);
     
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
@@ -25,7 +24,6 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
     
     if (!slice.geometry.coordinates || slice.geometry.coordinates.length < 2) return null;
 
-    // RIMOZIONE INVERSIONE: restituiamo [lon, lat] nativo
     return slice.geometry.coordinates;
   } catch (e) {
     console.error("Errore nel taglio della polilinea:", e);
@@ -40,6 +38,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
 
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
+  // 1. Ricerca Corse tramite Geohash
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const candidateIds = new Set();
   [hash, ...ngeohash.neighbors(hash)].forEach(h => {
@@ -58,12 +57,10 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
       try {
-        // RIMOZIONE INVERSIONE: line usa decodedCoords direttamente
         const line = turf.lineString(c.decodedCoords);
         const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
         const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
         
-        // Tolleranza Dinamica: più precisa per le tratte brevi
         const distRichiesta = turf.distance(salita, discesa, { units: 'kilometers' });
         const tolDinamica = distRichiesta < 10 ? 3.0 : defaultTol;
 
@@ -77,10 +74,52 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         
         c.percorsoVisualizzato = sottoPercorso;
         
-        // ... (resto delle logiche di puntiRaccolta e calcolaNuoveFermate invariate)
+        // Punti di raccolta
+        c.puntiRaccoltaDisponibili = puntiRaccoltaCache
+            .filter(p => turf.distance(salita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 3);
+
+        const nuoveFermate = calcolaNuoveFermate(c, richiesta);
+        if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) return false;
+
         return true;
       } catch (err) { return false; }
     });
 
-  return { slots: [], corse };
+  // 2. Calcolo Dinamico Slots (Disponibilità Aperte)
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const giornoCorrente = now.getDay();
+
+  const slots = Array.from(disponibilitaCache.values()).filter(s => {
+    const v = veicoliCache.get(s.veicolo_id);
+    if (!v) return false;
+
+    // Distanza massima per uno slot (es. 15km)
+    const dist = turf.distance(
+        turf.point([richiesta.coord.lon, richiesta.coord.lat]),
+        turf.point([v.lon, v.lat]), 
+        { units: 'kilometers' }
+    );
+    if (dist > 15.0) return false;
+
+    // Validazione oraria e giorni
+    const startMinutes = new Date(s.start).getHours() * 60 + new Date(s.start).getMinutes();
+    const endMinutes = new Date(s.fine).getHours() * 60 + new Date(s.fine).getMinutes();
+    const isOrarioValido = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    const isGiornoValido = Array.isArray(s.giorni_esclusi) ? !s.giorni_esclusi.includes(giornoCorrente) : true;
+
+    return isOrarioValido && isGiornoValido && s.disponibile === true;
+  });
+
+  return { slots, corse };
+}
+
+function calcolaNuoveFermate(corsa, richiesta) {
+  let extra = 0;
+  const fermateEsistenti = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
+  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coord.lon, richiesta.coord.lat])) < 0.5)) extra++;
+  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
+  return extra;
 }

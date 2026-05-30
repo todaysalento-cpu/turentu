@@ -1,3 +1,17 @@
+// --- DEBUG FATALE: Intercetta crash all'avvio su Render ---
+process.on('uncaughtException', (err) => {
+  console.error('--- CRASH FATALE (uncaughtException) ---');
+  console.error(err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('--- REJECTION NON GESTITA (unhandledRejection) ---');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+  process.exit(1);
+});
+
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';

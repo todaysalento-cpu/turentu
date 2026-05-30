@@ -1,6 +1,6 @@
 import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
-import { redisClient } from '../redis.js'; 
+import { redisClient } from '../../../redis.js'; 
 import { getPrenotazioniByCorsa } from '../search.cache.js';
 
 // Funzione di utilità per calcolare il carico di una tratta specifica

@@ -10,6 +10,26 @@ const safeParseJSON = (str) => {
   catch { return []; }
 };
 
+/**
+ * Helper per convertire l'interval Postgres in millisecondi
+ */
+function parseIntervalToMs(durata) {
+  if (typeof durata === 'number') return durata * 1000;
+  if (typeof durata === 'object' && durata !== null) {
+    // Gestione caso in cui l'intervallo sia un oggetto (es. {hours: 1, minutes: 30})
+    const h = durata.hours || 0;
+    const m = durata.minutes || 0;
+    const s = durata.seconds || 0;
+    return (h * 3600 + m * 60 + s) * 1000;
+  }
+  if (typeof durata === 'string') {
+    // Gestione stringa "HH:mm:ss"
+    const parts = durata.split(':').map(Number);
+    if (parts.length === 3) return ((parts[0] * 3600) + (parts[1] * 60) + parts[2]) * 1000;
+  }
+  return 0;
+}
+
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   let durataRichiesta = 0;
   let distanzaRichiesta = 0;
@@ -33,12 +53,13 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     allItems.map(async (item) => {
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
-      
-      // FIX: Utilizziamo start_datetime per identificare una corsa valida
-      const isCorsa = !!item.start_datetime; 
+      const isCorsa = !!item.start_datetime;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
-      // --- CALCOLO ORARIO PARTENZA DINAMICO ---
+      // Normalizzazione Durata
+      const durataTotaleMs = isCorsa ? parseIntervalToMs(item.durata) : durataRichiesta;
+
+      // --- CALCOLO ORARIO PARTENZA/ARRIVO ---
       let oraPartenza;
       if (isCorsa && item.decodedCoords?.length > 1) {
         try {
@@ -48,20 +69,17 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
           
           const distOrigineToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
           const distTotale = Number(item.distanza || 1);
-          const durataTotaleMs = (Number(item.durata) || 0) * 1000;
           
           const offsetMs = (distOrigineToSalita / distTotale) * durataTotaleMs;
           oraPartenza = new Date(new Date(item.start_datetime).getTime() + offsetMs);
         } catch (e) {
-          console.error("Errore calcolo orario dinamico:", e);
           oraPartenza = new Date(item.start_datetime);
         }
       } else {
         oraPartenza = new Date(richiesta.start_datetime || Date.now());
       }
 
-      const durataMs = isCorsa ? (Number(item.durata) || 0) * 1000 : durataRichiesta;
-      const oraArrivo = new Date(oraPartenza.getTime() + Number(durataMs));
+      const oraArrivo = new Date(oraPartenza.getTime() + durataTotaleMs);
 
       // --- CALCOLO PREZZO ---
       let prezzo = 0;
@@ -74,15 +92,12 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         veicolo_id: veicoloId,
         marca: v?.marca ?? null,
         modello: v?.modello ?? null,
-        localitaOrigine: await getLocalitaSafe(richiesta.coord),
-        localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-        percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,
-        postiDisponibili: Math.max(0, Number(v?.posti_totali ?? 0) - Number(item.picco_occupazione ?? 0)),
         prezzo: Number(prezzo?.toFixed(2)) || 0,
         stato: item.stato,
+        postiDisponibili: Math.max(0, Number(v?.posti_totali ?? 0) - Number(item.picco_occupazione ?? 0)),
         rating: { media: Number((r.media ?? 0).toFixed(1)), totale: r.totale ?? 0 }
       };
     })

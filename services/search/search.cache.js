@@ -105,6 +105,11 @@ export const upsertVeicolo = (v) => {
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
 };
 
+// --- AGGIUNTA MANCANTE ---
+export const removeVeicolo = (id) => {
+    return CacheStore.veicoliCache.delete(id);
+};
+
 // --- GESTIONE CORSE ---
 export const upsertCorsa = async (c) => {
   const oldData = CacheStore.corseCache.get(c.id);

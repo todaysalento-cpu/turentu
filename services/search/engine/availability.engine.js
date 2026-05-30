@@ -1,16 +1,15 @@
-import ngeohash from 'ngeohash';
 import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
-import { GeoIndex, SlotIndex, getPrenotazioniByCorsa } from '../search.cache.js';
-
-const GEOHASH_PRECISION = 5; 
+import { redisClient } from '../redis.js'; 
+import { getPrenotazioniByCorsa } from '../search.cache.js';
 
 // Funzione di utilità per calcolare il carico di una tratta specifica
 function calcolaOccupazioneMassima(richiestaStart, richiestaEnd, prenotazioni) {
-    // Si sovrappongono se: (StartA < EndB) E (EndA > StartB)
     return prenotazioni.reduce((maxOccupazione, p) => {
-        const sovrappone = (richiestaStart < p.end_index_polyline) && (richiestaEnd > p.start_index_polyline);
-        return sovrappone ? maxOccupazione + p.posti_richiesti : maxOccupazione;
+        // Parsing necessario se le prenotazioni provengono da Redis (JSON)
+        const item = typeof p === 'string' ? JSON.parse(p) : p;
+        const sovrappone = (richiestaStart < item.end_index_polyline) && (richiestaEnd > item.start_index_polyline);
+        return sovrappone ? maxOccupazione + Number(item.posti_richiesti) : maxOccupazione;
     }, 0);
 }
 
@@ -31,66 +30,55 @@ export function getSottoPercorso(corsa, salita, discesa) {
   } catch (e) { return null; }
 }
 
-export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
+/**
+ * Filtro Disponibilità aggiornato con Redis GeoSearch
+ */
+export async function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
   console.log(`🔍 [SEARCH] Inizio ricerca per: ${richiesta.coord.lat}, ${richiesta.coord.lon}`);
   const startTime = Date.now();
 
   const vMap = veicoliCache instanceof Map ? veicoliCache : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
-  const dCache = disponibilitaCache instanceof Map ? disponibilitaCache : new Map(Array.isArray(disponibilitaCache) ? disponibilitaCache.map(d => [d.id, d]) : []);
-
-  // 1. RICERCA CORSE
-  let candidateIds = new Set();
-  const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  [hash, ...ngeohash.neighbors(hash)].forEach(h => {
-      const set = GeoIndex.get(h);
-      if (set) set.forEach(id => candidateIds.add(id));
-  });
-
-  if (candidateIds.size === 0) {
-      const coarseHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, 4);
-      [coarseHash, ...ngeohash.neighbors(coarseHash)].forEach(h => {
-          const set = GeoIndex.get(h);
-          if (set) set.forEach(id => candidateIds.add(id));
-      });
+  
+  // 1. RICERCA CORSE (Ottimizzata con Redis GeoSearch)
+  let candidateIds = [];
+  if (redisClient) {
+      // Cerca nel raggio di 50km dal punto di origine
+      candidateIds = await redisClient.geoSearch(
+          'corse_geo_index',
+          { longitude: richiesta.coord.lon, latitude: richiesta.coord.lat },
+          { radius: 50, unit: 'km' }
+      );
   }
 
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
-  const tol = Number(params?.tolleranzaKm ?? 10);
 
-  const corse = Array.from(candidateIds)
-    .map(id => corseMap.get(id))
-    .filter(c => {
-      if (!c) return false;
+  // 2. FILTRAGGIO E CALCOLO TRATTA
+  // Nota: ora la funzione deve essere async per gestire la lettura da Redis
+  const corse = [];
+  for (const id of candidateIds) {
+      const c = corseMap.get(Number(id));
+      if (!c) continue;
       
       try {
         const sottoPercorso = getSottoPercorso(c, richiesta.coord, richiesta.coordDest);
-        if (!sottoPercorso) return false;
+        if (!sottoPercorso) continue;
 
-        // --- LOGICA DISPONIBILITÀ DINAMICA ---
-        const prenotazioniCorsa = getPrenotazioniByCorsa(c.id);
-        const occupazioneSegmento = calcolaOccupazioneMassima(sottoPercorso.startIdx, sottoPercorso.endIdx, prenotazioniCorsa);
+        // Recupero prenotazioni da Redis
+        const prenotazioniRaw = redisClient ? await redisClient.hVals(`corsa:prenotazioni:${c.id}`) : [];
+        const occupazioneSegmento = calcolaOccupazioneMassima(sottoPercorso.startIdx, sottoPercorso.endIdx, prenotazioniRaw);
         const postiLiberi = Number(c.posti_totali) - occupazioneSegmento;
 
-        // DEBUG: Log per identificare perché la corsa viene scartata o ha posti a 0
-        console.log(`[DEBUG SEARCH] Corsa ${c.id}: Totali=${c.posti_totali} | Occ.Segmento=${occupazioneSegmento} | PostiLiberi=${postiLiberi}`);
-
-        if (postiLiberi < postiRichiesti) return false;
+        if (postiLiberi < postiRichiesti) continue;
         
         c.postiDisponibili = postiLiberi - postiRichiesti;
         c.percorsoVisualizzato = sottoPercorso.coords;
-        return true;
+        corse.push(c);
       } catch (err) { 
         console.error(`[ERROR SEARCH] Errore analisi corsa ${c.id}:`, err);
-        return false; 
       }
-    });
-
-  // 2. RICERCA SLOT (Invariata)
-  const slots = Array.from(SlotIndex.values()).flat()
-    .map(id => dCache.get(id))
-    .filter(s => s?.disponibile && vMap.has(s.veicolo_id));
+  }
 
   console.log(`✅ [SEARCH] Completata in ${Date.now() - startTime}ms | Risultati: ${corse.length} corse.`);
-  return { slots, corse };
+  return { slots: [], corse }; 
 }

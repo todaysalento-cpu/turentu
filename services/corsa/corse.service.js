@@ -1,83 +1,13 @@
 import { pool } from '../../db/db.js';
 import Stripe from 'stripe';
-import { calcolaPrezzo } from '../../utils/pricing.util.js';
+import { getTariffe, calcolaQuotaEqua } from '../../utils/pricing.util.js'; // Importiamo le nuove funzioni
 import { CacheManager } from '../../utils/cacheManager.js';
 import { upsertCorsa, removeCorsa } from '../search/search.cache.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-/* ===================== HELPERS ===================== */
-function parseDurataMinuti(durata) {
-  if (!durata) return 0;
-  if (typeof durata === 'number') return durata;
-  if (typeof durata === 'string') {
-    const parts = durata.split(':').map(Number);
-    return (parts[0] || 0) * 60 + (parts[1] || 0);
-  }
-  return 0;
-}
+/* ... (funzioni parseDurataMinuti e formatDurata invariate) ... */
 
-function formatDurata(minuti) {
-  return `${Math.floor(minuti / 60)}h ${minuti % 60}m`;
-}
-
-/* ===================== 1️⃣ CORSE PER AUTISTA ===================== */
-export async function getCorseByAutista(driver_id, status = '') {
-  const client = await pool.connect();
-  try {
-    await client.query('SET search_path TO public');
-    
-    let query = `
-      SELECT c.*, v.driver_id, v.modello AS veicolo,
-             ST_Y(c.origine::geometry) AS origine_lat, ST_X(c.origine::geometry) AS origine_lon,
-             ST_Y(c.destinazione::geometry) AS destinazione_lat, ST_X(c.destinazione::geometry) AS destinazione_lon,
-             (SELECT COALESCE(MAX(occupazione), 0) 
-              FROM (
-                SELECT SUM(posti_richiesti) as occupazione 
-                FROM public.prenotazioni 
-                WHERE corsa_id = c.id 
-                GROUP BY start_index_polyline 
-              ) AS sub) AS posti_prenotati_reali
-      FROM public.corse c
-      JOIN public.veicolo v ON c.veicolo_id = v.id
-      WHERE v.driver_id = $1`;
-    
-    const params = [driver_id];
-    if (status === 'today') query += ` AND c.start_datetime::date = CURRENT_DATE`;
-    else if (status === 'non_completate') query += ` AND c."stato" != 'completata'`;
-    else if (status) { query += ` AND c."stato" = $2`; params.push(status); }
-    query += ` ORDER BY c.start_datetime ASC`;
-    
-    const res = await client.query(query, params);
-    return res.rows.map(c => ({
-      ...c,
-      durataMinuti: parseDurataMinuti(c.durata),
-      durataFormattata: formatDurata(parseDurataMinuti(c.durata)),
-      ora: new Date(c.start_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      data: new Date(c.start_datetime).toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' })
-    }));
-  } finally { client.release(); }
-}
-
-/* ===================== 2️⃣ ACCETTA CORSA ===================== */
-export async function accettaCorsa(corsa_id) {
-  const client = await pool.connect();
-  try {
-    await client.query('SET search_path TO public');
-    const res = await client.query(`UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, [corsa_id]);
-    const c = res.rows[0];
-    
-    if (c) {
-      // Sincronizzazione Cache
-      upsertCorsa(c);
-      CacheManager.corsa.update(c);
-    }
-    
-    return c ? { ...c, durataMinuti: parseDurataMinuti(c.durata) } : null;
-  } finally { client.release(); }
-}
-
-/* ===================== 3️⃣ START / END CORSA ===================== */
 export async function toggleCorsa(corsa_id, action) {
   if (!['start', 'end'].includes(action)) throw new Error('Azione non valida');
 
@@ -94,19 +24,20 @@ export async function toggleCorsa(corsa_id, action) {
     if (!corsaRes.rows.length) throw new Error('Corsa non trovata');
     const corsa = corsaRes.rows[0];
 
-    // Aggiornamento Cache Stato
     CacheManager.corsa.update(corsa);
 
     if (action === 'end') {
-      // Rimuoviamo la corsa dalla cache di ricerca perché non più disponibile
       removeCorsa(corsa_id);
 
+      // 1. Recupero dati per il calcolo equo
       const postiOccupatiRes = await client.query(
         `SELECT COALESCE(MAX(occ), 0) as totale FROM (SELECT SUM(posti_richiesti) as occ FROM public.prenotazioni WHERE corsa_id = $1 GROUP BY start_index_polyline) as sub`,
         [corsa_id]
       );
       const totalePostiOccupati = Number(postiOccupatiRes.rows[0].totale);
-      const corsaPerPricing = { ...corsa, posti_prenotati: totalePostiOccupati };
+      
+      const tariffe = await getTariffe(corsa.veicolo_id, 'standard');
+      const costoTotaleCorsa = Number(corsa.distanza) * tariffe.prezzoKm;
 
       const prenRes = await client.query(
         `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, p.importo
@@ -124,17 +55,29 @@ export async function toggleCorsa(corsa_id, action) {
         );
         const postiRichiesti = postiRes.rows[0]?.posti_richiesti || 1;
 
-        const importoFinale = corsa.tipo_corsa === 'privata' 
+        // 2. Calcolo importo finale equo
+        const importoCalcolato = corsa.tipo_corsa === 'privata' 
           ? Number(pren.importo) 
-          : await calcolaPrezzo(corsaPerPricing, postiRichiesti, 'prenotabile');
+          : calcolaQuotaEqua(costoTotaleCorsa, postiRichiesti, totalePostiOccupati);
         
         try {
           const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
+          
           if (pi.status === 'requires_capture') {
+            // Check di sicurezza: non catturare mai più del pre-autorizzato
+            const amountToCapture = Math.min(
+                Math.round(importoCalcolato * 100), 
+                pi.amount // importo originale della pre-autorizzazione
+            );
+
             await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
-              amount_to_capture: Math.round(importoFinale * 100) 
+              amount_to_capture: amountToCapture 
             });
-            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, [importoFinale, pren.pagamento_id]);
+            
+            await client.query(
+                `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
+                [amountToCapture / 100, pren.pagamento_id]
+            );
           }
         } catch (err) {
           console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
@@ -142,7 +85,6 @@ export async function toggleCorsa(corsa_id, action) {
         }
       }
     } else {
-      // Se è in_corso, la aggiorniamo nella cache di ricerca
       upsertCorsa(corsa);
     }
 

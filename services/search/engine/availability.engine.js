@@ -6,10 +6,6 @@ import { GeoIndex } from '../search.cache.js';
 
 const GEOHASH_PRECISION = 4;
 
-/**
- * Taglia la polilinea usando le coordinate già decodificate dalla cache.
- * Elimina la necessità di chiamare polyline.decode() durante la ricerca.
- */
 export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
     const line = turf.lineString(decodedCoords.map(c => [c[1], c[0]]));
@@ -24,10 +20,10 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
 }
 
 /**
- * Motore di ricerca Disponibilità e Ridesharing super-ottimizzato.
- * Utilizza l'intersezione dei Set nel GeoIndex per identificare corse che coprono la tratta.
+ * Motore di ricerca aggiornato con supporto ai Turentu Points
+ * @param {Array} puntiRaccoltaCache - Array in memoria dei punti convenzionati
  */
-export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
+export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache, puntiRaccoltaCache = []) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const tolKm = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
@@ -36,21 +32,15 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       ? corseCache 
       : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  // 1. LOGICA INTERSEZIONE: Cerchiamo corse che coprono origine E destinazione
   const hashOrigine = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const hashDestinazione = ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION);
 
-  // Otteniamo i set di corse che passano nelle zone richieste
   const setOrigine = GeoIndex.get(hashOrigine) || new Set();
   const setDestinazione = GeoIndex.get(hashDestinazione) || new Set();
 
-  // Intersezione: ID che compaiono in entrambi i set (corse che percorrono l'intera tratta)
   let candidateIds = new Set([...setOrigine].filter(id => setDestinazione.has(id)));
-  
-  // Fallback: se nessuna corsa copre esattamente entrambi gli estremi, usiamo quelle che coprono almeno l'origine
   if (candidateIds.size === 0) candidateIds = setOrigine;
 
-  // 2. FILTRO SLOT (Logica di vicinanza veicoli)
   const slots = disponibilitaCache
     .filter(dv => {
       const v = veicoliCache.find(veicolo => veicolo.id === dv.veicolo_id);
@@ -60,7 +50,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     })
     .sort((a, b) => a._distanzaKm - b._distanzaKm);
 
-  // 3. FILTRO CORSE (Usa candidati pre-filtrati e BBox per velocità massima)
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
@@ -69,7 +58,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       const postiOccupati = Number(c.picco_occupazione || 0);
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
-      // FILTRO BBOX: Esclusione matematica immediata prima di caricare Turf.js
       if (c.bbox && (
           richiesta.coord.lat < c.bbox.minLat - 0.1 || richiesta.coord.lat > c.bbox.maxLat + 0.1 ||
           richiesta.coord.lon < c.bbox.minLon - 0.1 || richiesta.coord.lon > c.bbox.maxLon + 0.1
@@ -86,7 +74,16 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
         if (!isTest && (distSalita > tolKm || distDiscesa > tolKm)) return false;
 
+        // Arricchimento dati corsa
         c.percorsoVisualizzato = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
+        
+        // TROVA TURNTU POINTS VICINI al punto di salita sulla linea
+        const snapSalita = turf.nearestPointOnLine(line, salita);
+        c.puntiRaccoltaDisponibili = puntiRaccoltaCache
+            .filter(p => turf.distance(snapSalita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 3);
+
       } catch (err) {
         return false;
       }

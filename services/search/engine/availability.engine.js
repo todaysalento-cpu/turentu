@@ -93,19 +93,18 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       } catch (err) { return false; }
     });
 
-  // 2. Calcolo Dinamico Slots (Disponibilità Aperte)
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const giornoCorrente = now.getDay();
+  // 2. Calcolo Dinamico Slots (Adattivo alla data della richiesta)
+  const targetDate = new Date(richiesta.start_datetime);
+  const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
+  const targetDay = targetDate.getDay();
 
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
     const v = vMap.get(s.veicolo_id);
     
-    // --- PROTEZIONE GEOMETRICA ---
-    // Verifica che il veicolo esista e abbia coordinate numeriche valide
+    // Protezione geometrica
     if (!v || typeof v.lon !== 'number' || typeof v.lat !== 'number') return false;
 
-    // Distanza massima per uno slot (es. 15km)
+    // Distanza geografica
     const dist = turf.distance(
         turf.point([richiesta.coord.lon, richiesta.coord.lat]),
         turf.point([v.lon, v.lat]), 
@@ -113,13 +112,21 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     );
     if (dist > 15.0) return false;
 
-    // Validazione oraria e giorni
-    const startMinutes = new Date(s.start).getHours() * 60 + new Date(s.start).getMinutes();
-    const endMinutes = new Date(s.fine).getHours() * 60 + new Date(s.fine).getMinutes();
-    const isOrarioValido = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-    const isGiornoValido = Array.isArray(s.giorni_esclusi) ? !s.giorni_esclusi.includes(giornoCorrente) : true;
+    // Validazione oraria basata sulla data richiesta
+    const sStart = new Date(s.start);
+    const sEnd = new Date(s.fine);
+    const startMinutes = sStart.getHours() * 60 + sStart.getMinutes();
+    const endMinutes = sEnd.getHours() * 60 + sEnd.getMinutes();
+    
+    const isOrarioValido = targetMinutes >= startMinutes && targetMinutes <= endMinutes;
+    const isGiornoValido = Array.isArray(s.giorni_esclusi) ? !s.giorni_esclusi.includes(targetDay) : true;
+    
+    // Controllo inattività
+    const isInattivo = Array.isArray(s.inattivita) && s.inattivita.some(i => 
+        targetDate >= new Date(i.start) && targetDate <= new Date(i.fine)
+    );
 
-    return isOrarioValido && isGiornoValido && s.disponibile === true;
+    return isOrarioValido && isGiornoValido && !isInattivo && s.disponibile === true;
   });
 
   return { slots, corse };

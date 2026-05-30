@@ -29,26 +29,43 @@ export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
 export const upsertDisponibilita = (d) => CacheStore.disponibilitaCache.set(d.id, d);
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
-export const upsertVeicolo = (v) => CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...v });
+
+export const upsertVeicolo = (v) => {
+  // Normalizzazione forzata: Turf.js richiede Number per le coordinate
+  const normalized = {
+    ...v,
+    lat: Number(v.lat),
+    lon: Number(v.lon)
+  };
+  CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
+};
+
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
 export const updateRecensioneCache = (conducenteId, media, totale) => {
   CacheStore.recensioniCache.set(conducenteId, { media: Number(media), totale: Number(totale) });
 };
 
-// --- GESTIONE CORSE (Normalizzazione Coordinate [lon, lat]) ---
+// --- GESTIONE CORSE ---
 export const upsertCorsa = (c) => {
-  const oldData = CacheStore.corseCache.get(c.id) || {};
+  const oldData = CacheStore.corseCache.get(c.id);
+
+  // 1. PULIZIA INDICE (Fondamentale se il percorso cambia)
+  if (oldData?.path_geohashes) {
+    oldData.path_geohashes.forEach(h => {
+        const prefix = h.substring(0, GEOHASH_PRECISION);
+        GeoIndex.get(prefix)?.delete(c.id);
+    });
+  }
+  
   let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
+  let decodedCoords = oldData?.decodedCoords;
+  let bbox = oldData?.bbox;
   
-  let decodedCoords = oldData.decodedCoords;
-  let bbox = oldData.bbox;
-  
-  if (c.percorso_polyline && c.percorso_polyline !== oldData.percorso_polyline) {
+  if (c.percorso_polyline && c.percorso_polyline !== oldData?.percorso_polyline) {
     try {
-      // Decodifica restituisce [lat, lon]
       const raw = polyline.decode(c.percorso_polyline);
-      // NORMALIZZAZIONE: Convertiamo in [lon, lat] per Turf.js
-      decodedCoords = raw.map(p => [p[1], p[0]]); 
+      // NORMALIZZAZIONE: Convertiamo [lat, lon] -> [lon, lat] per Turf.js
+      decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
       
       const lats = raw.map(p => p[0]);
       const lons = raw.map(p => p[1]);
@@ -60,25 +77,27 @@ export const upsertCorsa = (c) => {
   }
 
   const newCorsa = {
-    ...oldData,
+    ...(oldData || {}),
     ...c,
     id: c.id,
     localitaOrigine: c.origine_address,
     localitaDestinazione: c.destinazione_address,
-    prezzo: Number(c.prezzo_fisso ?? oldData.prezzo ?? 0),
+    prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0),
     oraPartenza: c.start_datetime,
     oraArrivo: c.arrivo_datetime,
-    distanza: Number(c.distanza || oldData.distanza || 0),
-    tipo_corsa: c.tipo_corsa || oldData.tipo_corsa || 'standard',
-    veicolo_id: Number(c.veicolo_id || oldData.veicolo_id),
-    decodedCoords, // Ora in formato [lon, lat]
+    distanza: Number(c.distanza || oldData?.distanza || 0),
+    tipo_corsa: c.tipo_corsa || oldData?.tipo_corsa || 'standard',
+    veicolo_id: Number(c.veicolo_id || oldData?.veicolo_id),
+    decodedCoords,
     bbox,
     path_geohashes: geohashes,
-    picco_occupazione: Number(c.picco_occupazione ?? oldData.picco_occupazione ?? 0),
+    picco_occupazione: Number(c.picco_occupazione ?? oldData?.picco_occupazione ?? 0),
     posti_totali: c.posti_totali
   };
   
   CacheStore.corseCache.set(c.id, newCorsa);
+  
+  // 2. AGGIORNAMENTO INDICE
   geohashes.forEach(h => {
     const prefix = h.substring(0, GEOHASH_PRECISION);
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
@@ -102,6 +121,7 @@ export async function loadCachesUltra(force = false) {
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
     
+    // Caricamento Corse
     const cRes = await client.query(`
         SELECT c.*, 
         (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione 
@@ -110,9 +130,11 @@ export async function loadCachesUltra(force = false) {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
     
+    // Caricamento Veicoli
     const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
     
+    // Caricamento Disponibilità
     const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
     

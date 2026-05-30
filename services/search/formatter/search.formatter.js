@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import * as turf from '@turf/turf'; // Importiamo turf per i calcoli geometrici
+import * as turf from '@turf/turf';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
@@ -33,7 +33,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
     allItems.map(async (item) => {
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
-      const isCorsa = item.origine_lat !== undefined;
+      
+      // FIX: Utilizziamo start_datetime per identificare una corsa valida
+      const isCorsa = !!item.start_datetime; 
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
       // --- CALCOLO ORARIO PARTENZA DINAMICO ---
@@ -44,15 +46,14 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
           const puntoSalita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
           const snapSalita = turf.nearestPointOnLine(line, puntoSalita);
           
-          // Calcolo distanza percorsa dal capolinea alla fermata intermedia
           const distOrigineToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
           const distTotale = Number(item.distanza || 1);
           const durataTotaleMs = (Number(item.durata) || 0) * 1000;
           
-          // Proporzione tempo: (distanzaPercorsa / distanzaTotale) * durataTotale
           const offsetMs = (distOrigineToSalita / distTotale) * durataTotaleMs;
           oraPartenza = new Date(new Date(item.start_datetime).getTime() + offsetMs);
         } catch (e) {
+          console.error("Errore calcolo orario dinamico:", e);
           oraPartenza = new Date(item.start_datetime);
         }
       } else {
@@ -75,7 +76,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         localitaOrigine: await getLocalitaSafe(richiesta.coord),
         localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-        percorsoVisualizzato: isCorsa && item.percorso_polyline ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
+        percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,

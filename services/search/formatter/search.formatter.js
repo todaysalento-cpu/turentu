@@ -54,30 +54,38 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
       const isCorsa = !!item.start_datetime;
       const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
 
-      // Normalizzazione Durata
+      // Normalizzazione Durata Totale
       const durataTotaleMs = isCorsa ? parseIntervalToMs(item.durata) : durataRichiesta;
+      const velMediaMsPerKm = isCorsa ? (durataTotaleMs / Number(item.distanza || 1)) : 0;
 
-      // --- CALCOLO ORARIO PARTENZA/ARRIVO ---
-      let oraPartenza;
+      // --- CALCOLO ORARIO PARTENZA/ARRIVO DINAMICO ---
+      let oraPartenza = new Date(item.start_datetime || Date.now());
+      let durataSegmentoMs = durataTotaleMs;
+
       if (isCorsa && item.decodedCoords?.length > 1) {
         try {
           const line = turf.lineString(item.decodedCoords.map(c => [c[1], c[0]]));
           const puntoSalita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
+          const puntoDiscesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+          
           const snapSalita = turf.nearestPointOnLine(line, puntoSalita);
+          const snapDiscesa = turf.nearestPointOnLine(line, puntoDiscesa);
           
+          // Offset partenza dal capolinea
           const distOrigineToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
-          const distTotale = Number(item.distanza || 1);
+          oraPartenza = new Date(new Date(item.start_datetime).getTime() + (distOrigineToSalita * velMediaMsPerKm));
           
-          const offsetMs = (distOrigineToSalita / distTotale) * durataTotaleMs;
-          oraPartenza = new Date(new Date(item.start_datetime).getTime() + offsetMs);
+          // Durata specifica per il segmento richiesto
+          const distSegmento = turf.length(turf.lineSlice(snapSalita, snapDiscesa, line), { units: 'kilometers' });
+          durataSegmentoMs = distSegmento * velMediaMsPerKm;
         } catch (e) {
-          oraPartenza = new Date(item.start_datetime);
+          console.error("Errore calcolo dinamico:", e);
         }
       } else {
         oraPartenza = new Date(richiesta.start_datetime || Date.now());
       }
 
-      const oraArrivo = new Date(oraPartenza.getTime() + durataTotaleMs);
+      const oraArrivo = new Date(oraPartenza.getTime() + durataSegmentoMs);
 
       // --- CALCOLO PREZZO ---
       let prezzo = 0;
@@ -90,8 +98,8 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         veicolo_id: veicoloId,
         marca: v?.marca ?? null,
         modello: v?.modello ?? null,
-        localitaOrigine: isCorsa ? (item.origine_address || await getLocalitaSafe(richiesta.coord)) : await getLocalitaSafe(richiesta.coord),
-        localitaDestinazione: isCorsa ? (item.destinazione_address || await getLocalitaSafe(richiesta.coordDest)) : await getLocalitaSafe(richiesta.coordDest),
+        localitaOrigine: await getLocalitaSafe(richiesta.coord),
+        localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
         percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),

@@ -149,10 +149,13 @@ export const upsertCorsa = async (c) => {
   
   CacheStore.corseCache.set(c.id, newCorsa);
 
-  if (redisClient && newCorsa.lat && newCorsa.lon) {
+  // Forza l'inserimento in Redis anche se le coordinate sono 0,0
+  if (redisClient) {
+    const lat = newCorsa.lat || 0;
+    const lon = newCorsa.lon || 0;
     await redisClient.geoAdd('corse_geo_index', {
-        longitude: newCorsa.lon,
-        latitude: newCorsa.lat,
+        longitude: lon,
+        latitude: lat,
         member: c.id.toString()
     });
   }

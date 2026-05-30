@@ -53,7 +53,7 @@ export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCa
 export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
 
-// --- GESTIONE DATI (Aggiunte funzioni mancanti) ---
+// --- GESTIONE DATI ---
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
 
@@ -142,6 +142,24 @@ export const upsertCorsa = async (c) => {
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
     GeoIndex.get(prefix).add(c.id);
   });
+};
+
+export const removeCorsa = async (corsaId) => {
+    const corsa = CacheStore.corseCache.get(corsaId);
+    if (corsa) {
+        CacheStore.corseCache.delete(corsaId);
+        CacheStore.prenotazioniCache.delete(corsaId);
+        if (redisClient) {
+            await redisClient.zRem('corse_geo_index', corsaId.toString());
+            await redisClient.del(`corsa:prenotazioni:${corsaId}`);
+        }
+        if (corsa.path_geohashes) {
+            corsa.path_geohashes.forEach(h => {
+                const prefix = h.substring(0, GEOHASH_PRECISION);
+                GeoIndex.get(prefix)?.delete(corsaId);
+            });
+        }
+    }
 };
 
 export async function loadCachesUltra(force = false) {

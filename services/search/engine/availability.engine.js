@@ -1,7 +1,7 @@
 import ngeohash from 'ngeohash';
 import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
-import { GeoIndex } from '../search.cache.js'; 
+import { GeoIndex } from '../search.cache.js';
 
 const GEOHASH_PRECISION = 4;
 
@@ -13,12 +13,8 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
     if (snapSalita.properties.index >= snapDiscesa.properties.index) return null;
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
-    if (!slice.geometry.coordinates || slice.geometry.coordinates.length < 2) return null;
-    return slice.geometry.coordinates;
-  } catch (e) {
-    console.error("Errore nel taglio della polilinea:", e);
-    return null;
-  }
+    return slice.geometry.coordinates?.length >= 2 ? slice.geometry.coordinates : null;
+  } catch (e) { return null; }
 }
 
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache, puntiRaccoltaCache = []) {
@@ -41,66 +37,55 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      if (!c || !Array.isArray(c.decodedCoords) || c.decodedCoords.length < 2) return false;
-      const postiOccupati = Number(c.picco_occupazione || 0);
-      if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
+      if (!c || !Array.isArray(c.decodedCoords)) return false;
+      if ((Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
       try {
         const line = turf.lineString(c.decodedCoords);
         const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
         const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
         const distRichiesta = turf.distance(salita, discesa, { units: 'kilometers' });
-        const tolDinamica = distRichiesta < 10 ? 3.0 : defaultTol;
-        const distSalita = turf.pointToLineDistance(salita, line, { units: 'kilometers' });
-        const distDiscesa = turf.pointToLineDistance(discesa, line, { units: 'kilometers' });
-        if (distSalita > tolDinamica || distDiscesa > tolDinamica) return false;
+        const tol = distRichiesta < 10 ? 3.0 : defaultTol;
+        
+        if (turf.pointToLineDistance(salita, line) > tol || turf.pointToLineDistance(discesa, line) > tol) return false;
+        
         const sottoPercorso = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
         if (!sottoPercorso) return false;
+        
         c.percorsoVisualizzato = sottoPercorso;
-        const nuoveFermate = calcolaNuoveFermate(c, richiesta);
-        if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) return false;
-        return true;
+        return ((c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta)) <= maxStops;
       } catch (err) { return false; }
     });
 
-  // 2. Calcolo Dinamico Slots con LOG di Debug
+  // 2. Calcolo Dinamico Slots
   const targetDate = new Date(richiesta.start_datetime);
-  const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
+  const targetMin = targetDate.getHours() * 60 + targetDate.getMinutes();
   const targetDay = targetDate.getDay();
 
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
     const v = vMap.get(s.veicolo_id);
     
-    // Check base
-    if (!v || typeof v.lon !== 'number' || typeof v.lat !== 'number') {
-        console.log(`[DEBUG SLOT] Escluso veicolo ${s.veicolo_id}: coordinate mancanti/non numeriche.`);
-        return false;
-    }
+    // Verifica integrità veicolo (scarta coordinate 0,0)
+    if (!v || typeof v.lon !== 'number' || (v.lat === 0 && v.lon === 0)) return false;
 
-    const dist = turf.distance(
-        turf.point([richiesta.coord.lon, richiesta.coord.lat]),
-        turf.point([v.lon, v.lat]), 
-        { units: 'kilometers' }
-    );
-
+    const dist = turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat]);
     const sStart = new Date(s.start);
     const sEnd = new Date(s.fine);
-    const startMinutes = sStart.getHours() * 60 + sStart.getMinutes();
-    const endMinutes = sEnd.getHours() * 60 + sEnd.getMinutes();
+    const startMin = sStart.getHours() * 60 + sStart.getMinutes();
+    const endMin = sEnd.getHours() * 60 + sEnd.getMinutes();
     
-    const isOrarioValido = targetMinutes >= startMinutes && targetMinutes <= endMinutes;
-    const isGiornoValido = Array.isArray(s.giorni_esclusi) ? !s.giorni_esclusi.includes(targetDay) : true;
-    const isInattivo = Array.isArray(s.inattivita) && s.inattivita.some(i => 
-        targetDate >= new Date(i.start) && targetDate <= new Date(i.fine)
-    );
+    const isValid = dist <= 15.0 && 
+                    targetMin >= startMin && targetMin <= endMin &&
+                    (!Array.isArray(s.giorni_esclusi) || !s.giorni_esclusi.includes(targetDay)) &&
+                    (!Array.isArray(s.inattivita) || !s.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine))) &&
+                    (s.disponibile !== false); // Accetta true o undefined
 
-    // Logging condizionale per aiutarti a capire cosa succede
-    if (dist > 15.0 || !isOrarioValido || !isGiornoValido || isInattivo || s.disponibile !== true) {
-        console.log(`[DEBUG SLOT] Veicolo ${s.veicolo_id} escluso: Dist=${dist.toFixed(1)}km, OrarioValido=${isOrarioValido}, GiornoValido=${isGiornoValido}, Inattivo=${isInattivo}, DispDB=${s.disponibile}`);
+    if (!isValid) {
+        console.log(`[DEBUG SLOT] Escluso V:${s.veicolo_id} | Dist:${dist.toFixed(1)}km | Disp:${s.disponibile}`);
     } else {
-        console.log(`[DEBUG SLOT] ✅ Veicolo ${s.veicolo_id} SELEZIONATO come slot valido.`);
+        console.log(`[DEBUG SLOT] ✅ V:${s.veicolo_id} VALIDO`);
     }
 
-    return dist <= 15.0 && isOrarioValido && isGiornoValido && !isInattivo && s.disponibile === true;
+    return isValid;
   });
 
   return { slots, corse };
@@ -108,8 +93,8 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
 
 function calcolaNuoveFermate(corsa, richiesta) {
   let extra = 0;
-  const fermateEsistenti = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
-  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coord.lon, richiesta.coord.lat])) < 0.5)) extra++;
-  if (!fermateEsistenti.some(f => turf.distance(turf.point([f.lon, f.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat])) < 0.5)) extra++;
+  const fermate = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];  
+  if (!fermate.some(f => turf.distance([f.lon, f.lat], [richiesta.coord.lon, richiesta.coord.lat]) < 0.5)) extra++;
+  if (!fermate.some(f => turf.distance([f.lon, f.lat], [richiesta.coordDest.lon, richiesta.coordDest.lat]) < 0.5)) extra++;
   return extra;
 }

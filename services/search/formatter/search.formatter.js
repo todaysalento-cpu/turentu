@@ -64,7 +64,8 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
 
       if (isCorsa && item.decodedCoords?.length > 1) {
         try {
-          const line = turf.lineString(item.decodedCoords.map(c => [c[1], c[0]]));
+          // CORRETTO: Nessuna inversione, usiamo item.decodedCoords ([lon, lat]) nativo
+          const line = turf.lineString(item.decodedCoords);
           const puntoSalita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
           const puntoDiscesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
           
@@ -100,6 +101,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         localitaOrigine: await getLocalitaSafe(richiesta.coord),
         localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
+        // Il percorsoVisualizzato è già [lon, lat] dal motore, perfetto per Turf/Frontend
         percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),

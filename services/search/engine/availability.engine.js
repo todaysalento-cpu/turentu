@@ -3,7 +3,6 @@ import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
 import { GeoIndex, SlotIndex } from '../search.cache.js';
 
-// Precisione base, ma ora gestiamo il fallback
 const GEOHASH_PRECISION = 5; 
 
 export function getSottoPercorso(corsa, salita, discesa) {
@@ -27,20 +26,20 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
   const dCache = disponibilitaCache instanceof Map ? disponibilitaCache : new Map(Array.isArray(disponibilitaCache) ? disponibilitaCache.map(d => [d.id, d]) : []);
 
-  // --- LOGICA FALLBACK GEOHASH ---
-  let hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  let searchHashes = [hash, ...ngeohash.neighbors(hash)];
+  console.log(`📊 [DEBUG] Stato Indici: GeoIndex.size=${GeoIndex.size} | SlotIndex.size=${SlotIndex.size}`);
+
+  // 1. RICERCA CORSE (Con logica di fallback)
+  let candidateIds = new Set();
+  const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  const searchHashes = [hash, ...ngeohash.neighbors(hash)];
   
-  // 1. RICERCA CORSE
-  const candidateIds = new Set();
   searchHashes.forEach(h => {
       const set = GeoIndex.get(h);
       if (set) set.forEach(id => candidateIds.add(id));
   });
 
-  // Se a precisione 5 non troviamo nulla, proviamo a precisione 4 (Fallback)
   if (candidateIds.size === 0) {
-      console.log(`⚠️ [SEARCH] Precisione ${GEOHASH_PRECISION} vuota, fallback a precisione 4...`);
+      console.log(`⚠️ [SEARCH] Nessun risultato a precisione 5, provo fallback a precisione 4...`);
       const coarseHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, 4);
       [coarseHash, ...ngeohash.neighbors(coarseHash)].forEach(h => {
           const set = GeoIndex.get(h);
@@ -48,9 +47,14 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       });
   }
 
-  console.log(`ℹ️ [SEARCH] Corse candidate totali identificate: ${candidateIds.size}`);
+  // FALLBACK DI EMERGENZA: Se anche il fallback fallisce, scansioniamo tutto
+  if (candidateIds.size === 0 && corseMap.size > 0) {
+      console.warn(`🚨 [SEARCH] Indici vuoti! Eseguo scansione totale di ${corseMap.size} corse.`);
+      Array.from(corseMap.keys()).forEach(id => candidateIds.add(id));
+  }
 
-  // Setup variabili di filtro
+  console.log(`ℹ️ [SEARCH] Corse candidate identificate: ${candidateIds.size}`);
+
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
   const salitaPoint = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
@@ -66,7 +70,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       if (!c) return false;
       if ((Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
       
-      // BBox check
       if (c.bbox) {
         if (richiesta.coord.lat < c.bbox.minLat - bboxBuffer || richiesta.coord.lat > c.bbox.maxLat + bboxBuffer ||
             richiesta.coord.lon < c.bbox.minLon - bboxBuffer || richiesta.coord.lon > c.bbox.maxLon + bboxBuffer) return false;
@@ -91,6 +94,10 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       const set = SlotIndex.get(h);
       if (set) set.forEach(id => candidatiSlotIds.add(id));
   });
+
+  if (candidatiSlotIds.size === 0 && dCache.size > 0) {
+      Array.from(dCache.keys()).forEach(id => candidatiSlotIds.add(id));
+  }
 
   const slots = Array.from(candidatiSlotIds)
     .map(id => dCache.get(id))

@@ -49,16 +49,20 @@ export function calcolaStatoDisponibilita(d) {
 // --- GETTER ---
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
 
-// --- GESTIONE DATI ---
+// --- GESTIONE DATI (Aggiunte funzioni mancanti) ---
+export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
+export const removePending = (id) => CacheStore.pendingCache.delete(id);
+
 export const upsertPrenotazione = async (p) => {
     if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
         CacheStore.prenotazioniCache.set(p.corsa_id, []);
     }
     CacheStore.prenotazioniCache.get(p.corsa_id).push(p);
 
-    // Sincronizzazione Redis: salviamo le prenotazioni in un Hash
     if (redisClient) {
         await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
     }
@@ -67,7 +71,14 @@ export const upsertPrenotazione = async (p) => {
 export const upsertDisponibilita = (d) => {
   const v = CacheStore.veicoliCache.get(d.veicolo_id);
   d.disponibile = calcolaStatoDisponibilita(d);
+  
+  const sStart = new Date(d.start);
+  const sEnd = new Date(d.fine);
+  d.startMin = sStart.getHours() * 60 + sStart.getMinutes();
+  d.endMin = sEnd.getHours() * 60 + sEnd.getMinutes();
+
   CacheStore.disponibilitaCache.set(d.id, d);
+
   if (v && v.lat && v.lon) {
     const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
     if (!SlotIndex.has(hash)) SlotIndex.set(hash, new Set());
@@ -118,7 +129,6 @@ export const upsertCorsa = async (c) => {
   
   CacheStore.corseCache.set(c.id, newCorsa);
 
-  // Redis Indexing: aggiungiamo la posizione della corsa nell'indice spaziale
   if (redisClient && newCorsa.lat && newCorsa.lon) {
     await redisClient.geoAdd('corse_geo_index', {
         longitude: newCorsa.lon,
@@ -139,8 +149,6 @@ export async function loadCachesUltra(force = false) {
   const client = await pool.connect();
   try {
     console.log("🔄 Sincronizzazione cache e Redis...");
-    
-    // Reset indice Redis
     if (redisClient) await redisClient.del('corse_geo_index');
 
     const cRes = await client.query(`SELECT *, ST_Y(coord_partenza::geometry) AS lat, ST_X(coord_partenza::geometry) AS lon FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);

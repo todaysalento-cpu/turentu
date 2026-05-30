@@ -16,14 +16,12 @@ const safeParseJSON = (str) => {
 function parseIntervalToMs(durata) {
   if (typeof durata === 'number') return durata * 1000;
   if (typeof durata === 'object' && durata !== null) {
-    // Gestione caso in cui l'intervallo sia un oggetto (es. {hours: 1, minutes: 30})
     const h = durata.hours || 0;
     const m = durata.minutes || 0;
     const s = durata.seconds || 0;
     return (h * 3600 + m * 60 + s) * 1000;
   }
   if (typeof durata === 'string') {
-    // Gestione stringa "HH:mm:ss"
     const parts = durata.split(':').map(Number);
     if (parts.length === 3) return ((parts[0] * 3600) + (parts[1] * 60) + parts[2]) * 1000;
   }
@@ -92,6 +90,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         veicolo_id: veicoloId,
         marca: v?.marca ?? null,
         modello: v?.modello ?? null,
+        localitaOrigine: isCorsa ? (item.origine_address || await getLocalitaSafe(richiesta.coord)) : await getLocalitaSafe(richiesta.coord),
+        localitaDestinazione: isCorsa ? (item.destinazione_address || await getLocalitaSafe(richiesta.coordDest)) : await getLocalitaSafe(richiesta.coordDest),
+        percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,

@@ -14,6 +14,36 @@ export const GeoIndex = new Map();
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
+// --- LOGICA CALCOLO STATO (Arricchimento Dati) ---
+export function calcolaStatoDisponibilita(d) {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // 1. Controllo Giorni Esclusi
+    const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
+    if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) return false;
+
+    // 2. Controllo Inattività (JSONB)
+    if (Array.isArray(d.inattivita)) {
+        for (const i of d.inattivita) {
+            const start = new Date(i.start);
+            const end = new Date(i.fine);
+            if (now >= start && now <= end) return false;
+        }
+    }
+
+    // 3. Controllo Orario
+    const startDate = new Date(d.start);
+    const endDate = new Date(d.fine);
+    const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
+    const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+
+    if (currentMinutes < startMinutes || currentMinutes > endMinutes) return false;
+
+    return true;
+}
+
 // --- GETTER ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
@@ -27,11 +57,16 @@ export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioni
 // --- GESTIONE DATI ---
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
-export const upsertDisponibilita = (d) => CacheStore.disponibilitaCache.set(d.id, d);
+
+export const upsertDisponibilita = (d) => {
+  // Arricchimento: calcoliamo lo stato booleano reale prima di salvare in memoria
+  d.disponibile = calcolaStatoDisponibilita(d);
+  CacheStore.disponibilitaCache.set(d.id, d);
+};
+
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
 
 export const upsertVeicolo = (v) => {
-  // Normalizzazione forzata: Turf.js richiede Number per le coordinate
   const normalized = {
     ...v,
     lat: Number(v.lat),
@@ -49,7 +84,6 @@ export const updateRecensioneCache = (conducenteId, media, totale) => {
 export const upsertCorsa = (c) => {
   const oldData = CacheStore.corseCache.get(c.id);
 
-  // 1. PULIZIA INDICE (Fondamentale se il percorso cambia)
   if (oldData?.path_geohashes) {
     oldData.path_geohashes.forEach(h => {
         const prefix = h.substring(0, GEOHASH_PRECISION);
@@ -64,9 +98,7 @@ export const upsertCorsa = (c) => {
   if (c.percorso_polyline && c.percorso_polyline !== oldData?.percorso_polyline) {
     try {
       const raw = polyline.decode(c.percorso_polyline);
-      // NORMALIZZAZIONE: Convertiamo [lat, lon] -> [lon, lat] per Turf.js
       decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
-      
       const lats = raw.map(p => p[0]);
       const lons = raw.map(p => p[1]);
       bbox = { 
@@ -97,7 +129,6 @@ export const upsertCorsa = (c) => {
   
   CacheStore.corseCache.set(c.id, newCorsa);
   
-  // 2. AGGIORNAMENTO INDICE
   geohashes.forEach(h => {
     const prefix = h.substring(0, GEOHASH_PRECISION);
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
@@ -121,7 +152,6 @@ export async function loadCachesUltra(force = false) {
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
     
-    // Caricamento Corse
     const cRes = await client.query(`
         SELECT c.*, 
         (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione 
@@ -130,11 +160,9 @@ export async function loadCachesUltra(force = false) {
     `);
     cRes.rows.forEach(c => upsertCorsa(c));
     
-    // Caricamento Veicoli
     const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
     
-    // Caricamento Disponibilità
     const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
     

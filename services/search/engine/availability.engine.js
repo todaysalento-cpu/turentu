@@ -25,7 +25,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const vMap = veicoliCache instanceof Map ? veicoliCache : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  // 1. Ricerca Corse
+  // 1. Ricerca Corse (Geospaziale con GeoIndex)
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const candidateIds = new Set();
   [hash, ...ngeohash.neighbors(hash)].forEach(h => {
@@ -56,7 +56,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       } catch (err) { return false; }
     });
 
-  // 2. Calcolo Dinamico Slots
+  // 2. Calcolo Dinamico Slots (Basato su cache arricchita)
   const targetDate = new Date(richiesta.start_datetime);
   const targetMin = targetDate.getHours() * 60 + targetDate.getMinutes();
   const targetDay = targetDate.getDay();
@@ -64,20 +64,21 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
     const v = vMap.get(s.veicolo_id);
     
-    // Verifica integrità veicolo (scarta coordinate 0,0)
+    // Verifica integrità veicolo
     if (!v || typeof v.lon !== 'number' || (v.lat === 0 && v.lon === 0)) return false;
 
-    const dist = turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat]);
+    const dist = turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat], { units: 'kilometers' });
     const sStart = new Date(s.start);
     const sEnd = new Date(s.fine);
     const startMin = sStart.getHours() * 60 + sStart.getMinutes();
     const endMin = sEnd.getHours() * 60 + sEnd.getMinutes();
     
+    // Filtro Disponibilità (ora il flag s.disponibile è sempre definito e affidabile)
     const isValid = dist <= 15.0 && 
                     targetMin >= startMin && targetMin <= endMin &&
                     (!Array.isArray(s.giorni_esclusi) || !s.giorni_esclusi.includes(targetDay)) &&
                     (!Array.isArray(s.inattivita) || !s.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine))) &&
-                    (s.disponibile !== false); // Accetta true o undefined
+                    (s.disponibile === true);
 
     if (!isValid) {
         console.log(`[DEBUG SLOT] Escluso V:${s.veicolo_id} | Dist:${dist.toFixed(1)}km | Disp:${s.disponibile}`);

@@ -49,9 +49,13 @@ export function calcolaStatoDisponibilita(d) {
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
 export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
 
 // --- GESTIONE DATI ---
+export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
+export const removePending = (id) => CacheStore.pendingCache.delete(id);
+
 export const upsertPrenotazione = (p) => {
     if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
         CacheStore.prenotazioniCache.set(p.corsa_id, []);
@@ -131,21 +135,18 @@ export async function loadCachesUltra(force = false) {
   try {
     console.log("🔄 Sincronizzazione cache...");
     
-    // 1. Carica Corse
     const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
     cRes.rows.forEach(c => upsertCorsa(c));
 
-    // 2. Carica Prenotazioni (Essenziale per disponibilità dinamica)
     const pRes = await client.query(`SELECT corsa_id, posti_richiesti, start_index_polyline, end_index_polyline FROM prenotazioni`);
     CacheStore.prenotazioniCache.clear();
     pRes.rows.forEach(p => upsertPrenotazione(p));
 
-    // 3. Carica Veicoli e Disponibilità
     const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo, ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
     const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
     dRes.rows.forEach(d => upsertDisponibilita(d));
     
-    console.log(`📦 [CACHE] Pronta. Prenotazioni indicizzate: ${CacheStore.prenotazioniCache.size} corse con occupazione.`);
+    console.log(`📦 [CACHE] Pronta. Prenotazioni indicizzate: ${CacheStore.prenotazioniCache.size} corse.`);
   } finally { client.release(); }
 }

@@ -1,6 +1,5 @@
 import ngeohash from 'ngeohash';
 import * as turf from '@turf/turf';
-import { haversineDistance } from '../../../utils/geo.util.js';
 import params from '../../../config/params.js';
 import { GeoIndex } from '../search.cache.js'; 
 
@@ -8,26 +7,26 @@ const GEOHASH_PRECISION = 4;
 
 /**
  * Taglio sicuro del percorso con pulizia dei dati
+ * Nota: decodedCoords è ora già in formato [lon, lat]
  */
 export function getSottoPercorso(decodedCoords, salita, discesa) {
   try {
     if (!Array.isArray(decodedCoords) || decodedCoords.length < 2) return null;
 
-    const line = turf.lineString(decodedCoords.map(c => [c[1], c[0]]));
+    const line = turf.lineString(decodedCoords);
     
-    // Snap sui punti più vicini con indice di posizione
+    // Snap sui punti più vicini (formato GeoJSON: [lon, lat])
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
 
-    // Logica direzionale pura: il punto di salita deve apparire PRIMA di quello di discesa
-    if (snapSalita.properties.index >= snapDiscesa.properties.index) return null;
+    // Logica direzionale
+    if (snapSalita.properties.index > snapDiscesa.properties.index) return null;
 
-    // Taglio della linea
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
     
     if (!slice.geometry.coordinates || slice.geometry.coordinates.length < 2) return null;
 
-    return slice.geometry.coordinates.map(c => [c[1], c[0]]);
+    return slice.geometry.coordinates; // Restituisce [lon, lat]
   } catch (e) {
     console.error("Errore nel taglio della polilinea:", e);
     return null;
@@ -35,18 +34,16 @@ export function getSottoPercorso(decodedCoords, salita, discesa) {
 }
 
 /**
- * Motore di ricerca con filtraggio geografico, direzionale e di capienza
+ * Motore di ricerca ottimizzato
  */
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache, puntiRaccoltaCache = []) {
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
-  const tolKm = Number(params?.tolleranzaKm ?? 10);
+  const defaultTol = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  const corseMap = corseCache instanceof Map 
-      ? corseCache 
-      : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
+  const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  // 1. Espansione Geohash (punto centrale + 8 vicini) per non perdere corse "al bordo"
+  // 1. Espansione Geohash
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const candidateIds = new Set();
   [hash, ...ngeohash.neighbors(hash)].forEach(h => {
@@ -54,39 +51,42 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       if (set) set.forEach(id => candidateIds.add(id));
   });
 
-  // Se non troviamo nulla nei vicini, estendiamo a tutto il set (opzionale, per robustezza)
-  if (candidateIds.size === 0) {
-      corseMap.forEach((_, id) => candidateIds.add(id));
-  }
+  if (candidateIds.size === 0) corseMap.forEach((_, id) => candidateIds.add(id));
 
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
+      // Validazione base
       if (!c || !Array.isArray(c.decodedCoords) || c.decodedCoords.length < 2) return false;
       
       const postiOccupati = Number(c.picco_occupazione || 0);
       if ((postiOccupati + postiRichiesti) > Number(c.posti_totali)) return false;
 
       try {
-        const line = turf.lineString(c.decodedCoords.map(coord => [coord[1], coord[0]]));
+        // Linea già in formato [lon, lat] grazie al nuovo CacheStore
+        const line = turf.lineString(c.decodedCoords);
         const salita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
         const discesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
         
-        // Controllo Prossimità al percorso (Buffer di tolleranza)
+        // 2. Tolleranza Adattiva
+        const distRichiesta = turf.distance(salita, discesa, { units: 'kilometers' });
+        const tolDinamica = distRichiesta < 5 ? 2.5 : defaultTol; 
+
         const distSalita = turf.pointToLineDistance(salita, line, { units: 'kilometers' });
         const distDiscesa = turf.pointToLineDistance(discesa, line, { units: 'kilometers' });
         
-        if (distSalita > tolKm || distDiscesa > tolKm) return false;
+        if (distSalita > tolDinamica || distDiscesa > tolDinamica) return false;
 
-        // Arricchimento (esegue anche il check direzionale tramite indice)
+        // 3. Arricchimento
         const sottoPercorso = getSottoPercorso(c.decodedCoords, richiesta.coord, richiesta.coordDest);
         if (!sottoPercorso) return false;
         
         c.percorsoVisualizzato = sottoPercorso;
         
-        // Punti di raccolta (ottimizzati)
+        // 4. Punti di raccolta
+        const tolPunti = distRichiesta < 5 ? 1.0 : 1.5;
         c.puntiRaccoltaDisponibili = puntiRaccoltaCache
-            .filter(p => turf.distance(salita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
+            .filter(p => turf.distance(salita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < tolPunti)
             .sort((a, b) => a.dist - b.dist)
             .slice(0, 3);
 
@@ -94,9 +94,8 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         return false;
       }
 
-      // Controllo Fermate
-      const nuoveFermate = calcolaNuoveFermate(c, richiesta);
-      if ((c.numero_prenotazioni_attive || 0) + nuoveFermate > maxStops) return false;
+      // 5. Controllo Fermate
+      if ((c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta) > maxStops) return false;
 
       return true;
     });
@@ -104,7 +103,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   return { slots: [], corse };
 }
 
-// Funzioni accessorie invariate
 export function rankResults(corse, recensioniCache) {
   return corse.sort((a, b) => {
     const rA = recensioniCache[a.conducente_id] || { media: 3.0, totale: 0 };

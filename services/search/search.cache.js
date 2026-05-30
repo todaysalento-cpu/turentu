@@ -10,7 +10,6 @@ export const CacheStore = {
   pendingCache: new Map()
 };
 
-// --- INDICE SPAZIALE ---
 export const GeoIndex = new Map(); 
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
@@ -19,28 +18,32 @@ const GEOHASH_PRECISION = 4;
 export const getVeicoliMap = () => CacheStore.veicoliCache;
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
 export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
 export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioniCache);
 
-// --- GESTIONE PENDING (Richiesta da booking.routes.js) ---
+// --- GESTIONE PENDING ---
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
+
+// --- GESTIONE DISPONIBILITÀ (Esportate per risolvere il SyntaxError) ---
+export const upsertDisponibilita = (d) => CacheStore.disponibilitaCache.set(d.id, d);
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
+
+// --- GESTIONE VEICOLI ---
+export const upsertVeicolo = (v) => CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...v });
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
 
 // --- GESTIONE RECENSIONI ---
 export const updateRecensioneCache = (conducenteId, media, totale) => {
   CacheStore.recensioniCache.set(conducenteId, { media: Number(media), totale: Number(totale) });
 };
 
-// --- GESTIONE CORSE AGGIORNATA ---
+// --- GESTIONE CORSE ---
 export const upsertCorsa = (c) => {
   const oldData = CacheStore.corseCache.get(c.id) || {};
+  let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
   
-  let geohashes = c.path_geohashes;
-  if (typeof geohashes === 'string') {
-      try { geohashes = JSON.parse(geohashes); } catch (e) { geohashes = []; }
-  }
-  const cleanHashes = Array.isArray(geohashes) ? geohashes : (geohashes || []);
-
   let decodedCoords = oldData.decodedCoords;
   let bbox = oldData.bbox;
   
@@ -49,10 +52,7 @@ export const upsertCorsa = (c) => {
       decodedCoords = polyline.decode(c.percorso_polyline);
       const lats = decodedCoords.map(p => p[0]);
       const lons = decodedCoords.map(p => p[1]);
-      bbox = {
-        minLat: Math.min(...lats), maxLat: Math.max(...lats),
-        minLon: Math.min(...lons), maxLon: Math.max(...lons)
-      };
+      bbox = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
     } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
   }
 
@@ -62,16 +62,14 @@ export const upsertCorsa = (c) => {
     distanza: Number(c.distanza || oldData.distanza || 0),
     tipo_corsa: c.tipo_corsa || oldData.tipo_corsa || 'standard',
     veicolo_id: Number(c.veicolo_id || oldData.veicolo_id),
-    percorso_polyline: c.percorso_polyline || oldData.percorso_polyline,
     decodedCoords,
     bbox,
-    path_geohashes: cleanHashes,
+    path_geohashes: geohashes,
     picco_occupazione: Number(c.picco_occupazione ?? oldData.picco_occupazione ?? 0)
   };
   
   CacheStore.corseCache.set(c.id, newCorsa);
-
-  cleanHashes.forEach(h => {
+  geohashes.forEach(h => {
     const prefix = h.substring(0, GEOHASH_PRECISION);
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
     GeoIndex.get(prefix).add(c.id);
@@ -86,31 +84,19 @@ export const removeCorsa = (corsaId) => {
   CacheStore.corseCache.delete(corsaId);
 };
 
-// --- GESTIONE VEICOLI ---
-export const upsertVeicolo = (v) => CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...v });
-
 // --- CARICAMENTO ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0) return;
-
   const client = await pool.connect();
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
-    
-    const cRes = await client.query(`
-      SELECT c.*, 
-             (SELECT COALESCE(MAX(occ), 0) 
-              FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub
-             ) as picco_occupazione
-      FROM corse c WHERE c.stato IN ('prenotabile', 'in_corso')
-    `);
-    
+    const cRes = await client.query(`SELECT c.*, (SELECT COALESCE(MAX(occ), 0) FROM (SELECT SUM(posti_richiesti) as occ FROM prenotazioni WHERE corsa_id = c.id GROUP BY start_index_polyline) as sub) as picco_occupazione FROM corse c WHERE c.stato IN ('prenotabile', 'in_corso')`);
     cRes.rows.forEach(c => upsertCorsa(c));
-
+    
     const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo FROM veicolo`);
     vRes.rows.forEach(v => upsertVeicolo(v));
     
-    console.log(`📦 [CACHE] Caricate ${CacheStore.corseCache.size} corse.`);
+    console.log(`📦 [CACHE] Sincronizzazione completata: ${CacheStore.corseCache.size} corse.`);
   } finally {
     client.release();
   }

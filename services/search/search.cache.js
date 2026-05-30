@@ -104,7 +104,7 @@ export const removeDisponibilita = (id) => {
 export const upsertVeicolo = (v) => {
   const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
-  console.log(`[CACHE] Veicolo ${v.id} aggiornato | Coord: ${normalized.lat}, ${normalized.lon}`);
+  console.log(`[CACHE] Veicolo ${v.id} aggiornato`);
 };
 
 export const removeVeicolo = (id) => {
@@ -121,3 +121,88 @@ export const upsertCorsa = async (c) => {
         GeoIndex.get(prefix)?.delete(c.id);
     });
   }
+  
+  let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
+  let decodedCoords = oldData?.decodedCoords;
+  let bbox = oldData?.bbox;
+  let turfLine = oldData?.turfLine;
+  
+  if (c.percorso_polyline && c.percorso_polyline !== oldData?.percorso_polyline) {
+    try {
+      const raw = polyline.decode(c.percorso_polyline);
+      decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
+      turfLine = turf.lineString(decodedCoords);
+      const lats = raw.map(p => p[0]);
+      const lons = raw.map(p => p[1]);
+      bbox = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
+    } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
+  }
+
+  const newCorsa = {
+    ...(oldData || {}), ...c, id: c.id, localitaOrigine: c.origine_address, localitaDestinazione: c.destinazione_address,
+    prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0), oraPartenza: c.start_datetime, oraArrivo: c.arrivo_datetime,
+    distanza: Number(c.distanza || oldData?.distanza || 0), tipo_corsa: c.tipo_corsa || oldData?.tipo_corsa || 'standard',
+    veicolo_id: Number(c.veicolo_id || oldData?.veicolo_id), decodedCoords, bbox, turfLine, path_geohashes: geohashes,
+    posti_totali: c.posti_totali, posti_prenotati: c.posti_prenotati,
+    lat: Number(c.lat || oldData?.lat || 0), lon: Number(c.lon || oldData?.lon || 0)
+  };
+  
+  CacheStore.corseCache.set(c.id, newCorsa);
+
+  if (redisClient && newCorsa.lat && newCorsa.lon) {
+    await redisClient.geoAdd('corse_geo_index', {
+        longitude: newCorsa.lon,
+        latitude: newCorsa.lat,
+        member: c.id.toString()
+    });
+  }
+  
+  geohashes.forEach(h => {
+    const prefix = h.substring(0, GEOHASH_PRECISION);
+    if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
+    GeoIndex.get(prefix).add(c.id);
+  });
+};
+
+export const removeCorsa = async (corsaId) => {
+    const corsa = CacheStore.corseCache.get(corsaId);
+    if (corsa) {
+        CacheStore.corseCache.delete(corsaId);
+        CacheStore.prenotazioniCache.delete(corsaId);
+        if (redisClient) {
+            await redisClient.zRem('corse_geo_index', corsaId.toString());
+            await redisClient.del(`corsa:prenotazioni:${corsaId}`);
+        }
+        if (corsa.path_geohashes) {
+            corsa.path_geohashes.forEach(h => {
+                const prefix = h.substring(0, GEOHASH_PRECISION);
+                GeoIndex.get(prefix)?.delete(corsaId);
+            });
+        }
+    }
+};
+
+export async function loadCachesUltra(force = false) {
+  if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
+  const client = await pool.connect();
+  try {
+    console.log("🔄 Sincronizzazione cache e Redis...");
+    if (redisClient) await redisClient.del('corse_geo_index');
+
+    const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
+    console.log(`[LOAD] Lette ${cRes.rows.length} corse`);
+    for (const c of cRes.rows) await upsertCorsa({ ...c, lat: 0, lon: 0 });
+
+    const pRes = await client.query(`SELECT corsa_id, id, posti_richiesti, start_index_polyline, end_index_polyline FROM prenotazioni`);
+    CacheStore.prenotazioniCache.clear();
+    for (const p of pRes.rows) await upsertPrenotazione(p);
+
+    const vRes = await client.query(`SELECT id, driver_id, marca, modello, posti_totali, tipo FROM veicolo`);
+    vRes.rows.forEach(v => upsertVeicolo({ ...v, lat: 0, lon: 0 }));
+    
+    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
+    dRes.rows.forEach(d => upsertDisponibilita(d));
+    
+    console.log(`📦 [CACHE] Pronta. Veicoli: ${CacheStore.veicoliCache.size} | Corse: ${CacheStore.corseCache.size}`);
+  } finally { client.release(); }
+}

@@ -64,7 +64,6 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
 
       if (isCorsa && item.decodedCoords?.length > 1) {
         try {
-          // CORRETTO: Nessuna inversione, usiamo item.decodedCoords ([lon, lat]) nativo
           const line = turf.lineString(item.decodedCoords);
           const puntoSalita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
           const puntoDiscesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
@@ -72,11 +71,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
           const snapSalita = turf.nearestPointOnLine(line, puntoSalita);
           const snapDiscesa = turf.nearestPointOnLine(line, puntoDiscesa);
           
-          // Offset partenza dal capolinea
           const distOrigineToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
           oraPartenza = new Date(new Date(item.start_datetime).getTime() + (distOrigineToSalita * velMediaMsPerKm));
           
-          // Durata specifica per il segmento richiesto
           const distSegmento = turf.length(turf.lineSlice(snapSalita, snapDiscesa, line), { units: 'kilometers' });
           durataSegmentoMs = distSegmento * velMediaMsPerKm;
         } catch (e) {
@@ -101,14 +98,14 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         localitaOrigine: await getLocalitaSafe(richiesta.coord),
         localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-        // Il percorsoVisualizzato è già [lon, lat] dal motore, perfetto per Turf/Frontend
         percorsoVisualizzato: isCorsa && item.decodedCoords ? getSottoPercorso(item.decodedCoords, richiesta.coord, richiesta.coordDest) : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
         distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,
         prezzo: Number(prezzo?.toFixed(2)) || 0,
         stato: item.stato,
-        postiDisponibili: Math.max(0, Number(v?.posti_totali ?? 0) - Number(item.picco_occupazione ?? 0)),
+        // Utilizzo del valore calcolato dinamicamente nel motore di ricerca
+        postiDisponibili: Number(item.postiDisponibili ?? 0),
         rating: { media: Number((r.media ?? 0).toFixed(1)), totale: r.totale ?? 0 }
       };
     })

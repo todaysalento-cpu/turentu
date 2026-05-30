@@ -14,8 +14,10 @@ export const GeoIndex = new Map();
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
-// --- GETTER ---
+// --- GETTER (Esportazioni complete) ---
 export const getVeicoliMap = () => CacheStore.veicoliCache;
+export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
+export const getCorseMap = () => CacheStore.corseCache;
 export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
 export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
 export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
@@ -26,7 +28,7 @@ export const getRecensioniCache = () => Object.fromEntries(CacheStore.recensioni
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
 
-// --- GESTIONE DISPONIBILITÀ (Esportate per risolvere il SyntaxError) ---
+// --- GESTIONE DISPONIBILITÀ ---
 export const upsertDisponibilita = (d) => CacheStore.disponibilitaCache.set(d.id, d);
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
 

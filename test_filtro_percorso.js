@@ -5,6 +5,7 @@ import { CacheStore, loadCachesUltra } from './services/search/search.cache.js';
 async function runTest() {
     try {
         console.log("🔄 Avvio sincronizzazione cache...");
+        // Forza il caricamento per assicurarsi che i dati siano aggiornati
         await loadCachesUltra(true); 
         
         // Verifica integrità cache
@@ -20,7 +21,7 @@ async function runTest() {
         const now = new Date();
         const nowIso = now.toISOString();
 
-        // Casi di test
+        // Casi di test configurati
         const testCases = [
             {
                 label: "TRATTA LUNGA (Foggia -> Pescara)",
@@ -32,11 +33,19 @@ async function runTest() {
                 }
             },
             {
-                label: "TRATTA LOCALE (Vicino ID:162 - Area Matera/Bari)",
+                label: "TRATTA LOCALE (Area Matera/Bari)",
                 richiesta: { 
-                    // Coordinate coerenti con ID 162 trovato nel tuo DB (40.66, 16.60)
                     coord: { lat: 40.66, lon: 16.60 }, 
                     coordDest: { lat: 40.67, lon: 16.61 }, 
+                    posti_richiesti: 1,
+                    start_datetime: nowIso 
+                }
+            },
+            {
+                label: "TRATTA LOCALE (Salento: Tricase -> Corsano)",
+                richiesta: { 
+                    coord: { lat: 39.9317, lon: 18.3582 }, 
+                    coordDest: { lat: 39.9547, lon: 18.3753 }, 
                     posti_richiesti: 1,
                     start_datetime: nowIso 
                 }
@@ -63,6 +72,12 @@ async function runTest() {
                 });
             } else {
                 console.log(`ℹ️ Nessuna corsa trovata per questa posizione.`);
+            }
+
+            if (slots.length > 0) {
+                slots.forEach(s => {
+                    console.log(`🚗 Slot Valido: V:${s.veicolo_id} (Disponibile: ${s.disponibile})`);
+                });
             }
         }
 

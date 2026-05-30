@@ -36,7 +36,14 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const defaultTol = Number(params?.tolleranzaKm ?? 10);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
 
-  const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
+  // --- NORMALIZZAZIONE INPUT (Previeni TypeError) ---
+  const vMap = veicoliCache instanceof Map 
+      ? veicoliCache 
+      : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
+      
+  const corseMap = corseCache instanceof Map 
+      ? corseCache 
+      : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
   // 1. Ricerca Corse tramite Geohash
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
@@ -74,7 +81,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         
         c.percorsoVisualizzato = sottoPercorso;
         
-        // Punti di raccolta
         c.puntiRaccoltaDisponibili = puntiRaccoltaCache
             .filter(p => turf.distance(salita, turf.point([p.lon, p.lat]), { units: 'kilometers' }) < 1.5)
             .sort((a, b) => a.dist - b.dist)
@@ -93,10 +99,9 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const giornoCorrente = now.getDay();
 
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
-    const v = veicoliCache.get(s.veicolo_id);
+    const v = vMap.get(s.veicolo_id); // Usa la Map normalizzata vMap
     if (!v) return false;
 
-    // Distanza massima per uno slot (es. 15km)
     const dist = turf.distance(
         turf.point([richiesta.coord.lon, richiesta.coord.lat]),
         turf.point([v.lon, v.lat]), 
@@ -104,7 +109,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     );
     if (dist > 15.0) return false;
 
-    // Validazione oraria e giorni
     const startMinutes = new Date(s.start).getHours() * 60 + new Date(s.start).getMinutes();
     const endMinutes = new Date(s.fine).getHours() * 60 + new Date(s.fine).getMinutes();
     const isOrarioValido = currentMinutes >= startMinutes && currentMinutes <= endMinutes;

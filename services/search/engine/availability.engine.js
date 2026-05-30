@@ -3,6 +3,7 @@ import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
 import { GeoIndex, SlotIndex } from '../search.cache.js';
 
+// Precisione base, ma ora gestiamo il fallback
 const GEOHASH_PRECISION = 5; 
 
 export function getSottoPercorso(corsa, salita, discesa) {
@@ -26,18 +27,28 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
   const dCache = disponibilitaCache instanceof Map ? disponibilitaCache : new Map(Array.isArray(disponibilitaCache) ? disponibilitaCache.map(d => [d.id, d]) : []);
 
-  const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
-  const searchHashes = [hash, ...ngeohash.neighbors(hash)];
+  // --- LOGICA FALLBACK GEOHASH ---
+  let hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  let searchHashes = [hash, ...ngeohash.neighbors(hash)];
   
   // 1. RICERCA CORSE
-  console.time('⏳ [TIMER] Ricerca_Corse');
   const candidateIds = new Set();
   searchHashes.forEach(h => {
       const set = GeoIndex.get(h);
       if (set) set.forEach(id => candidateIds.add(id));
   });
-  console.timeEnd('⏳ [TIMER] Ricerca_Corse');
-  console.log(`ℹ️ [SEARCH] Corse candidate trovate via Geohash: ${candidateIds.size}`);
+
+  // Se a precisione 5 non troviamo nulla, proviamo a precisione 4 (Fallback)
+  if (candidateIds.size === 0) {
+      console.log(`⚠️ [SEARCH] Precisione ${GEOHASH_PRECISION} vuota, fallback a precisione 4...`);
+      const coarseHash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, 4);
+      [coarseHash, ...ngeohash.neighbors(coarseHash)].forEach(h => {
+          const set = GeoIndex.get(h);
+          if (set) set.forEach(id => candidateIds.add(id));
+      });
+  }
+
+  console.log(`ℹ️ [SEARCH] Corse candidate totali identificate: ${candidateIds.size}`);
 
   // Setup variabili di filtro
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
@@ -75,7 +86,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   console.timeEnd('⏳ [TIMER] Filtro_Geometria');
 
   // 2. RICERCA SLOT
-  console.time('⏳ [TIMER] Ricerca_Slot');
   const candidatiSlotIds = new Set();
   searchHashes.forEach(h => {
       const set = SlotIndex.get(h);
@@ -86,15 +96,10 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     .map(id => dCache.get(id))
     .filter(s => {
       if (!s || s.disponibile !== true) return false;
-      // Nota: Assicurati che nel tuo oggetto slot (d) esistano startMin/endMin calcolati
-      if (richiesta.targetMin < s.startMin || richiesta.targetMin > s.endMin) return false;
-      
       const v = vMap.get(s.veicolo_id);
       if (!v) return false;
-
       return turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat], { units: 'kilometers' }) <= 15.0;
     });
-  console.timeEnd('⏳ [TIMER] Ricerca_Slot');
 
   console.log(`✅ [SEARCH] Completata in ${Date.now() - startTime}ms | Risultati: ${corse.length} corse, ${slots.length} slot.`);
   return { slots, corse };

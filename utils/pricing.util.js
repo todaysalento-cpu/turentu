@@ -14,7 +14,8 @@ export async function getTariffe(veicolo_id, tipo) {
 }
 
 /**
- * 1. CALCOLO STIMA PRENOTAZIONE (Per la Pre-autorizzazione)
+ * 1. CALCOLO STIMA PRENOTAZIONE
+ * Gestisce sia corse salvate (con ID) che slot di ricerca (senza ID)
  */
 export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotati = 0, kmTotaliCorsa = 0) {
   const richiesti = Number(postiRichiesti) || 1;
@@ -33,20 +34,26 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
 
   const kmTotali = kmTotaliCorsa > 0 ? kmTotaliCorsa : Number(corsa.distanza ?? 0);
   const kmUtente = kmPrenotati > 0 ? kmPrenotati : kmTotali;
+  const prezzoBaseCorsa = kmTotali * prezzoKm;
+
+  // --- LOGICA IBRIDA ---
+  // Se la corsa ha un ID, interroghiamo il database. Se è uno slot, usiamo i dati in memoria.
+  let passPrecedenti = 0;
+  
+  if (corsa.id) {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(SUM(posti_richiesti), 0) as tot_pass_precedenti
+       FROM prenotazioni WHERE corsa_id = $1`,
+      [corsa.id]
+    );
+    passPrecedenti = Number(rows[0].tot_pass_precedenti);
+  } else {
+    passPrecedenti = Number(corsa.posti_occupati || 0);
+  }
 
   switch (statoSlot) {
     case 'prenotabile': {
-      const { rows } = await pool.query(
-        `SELECT COUNT(*) as num_prenotazioni, COALESCE(SUM(posti_richiesti), 0) as tot_pass_precedenti
-         FROM prenotazioni WHERE corsa_id = $1`,
-        [corsa.id]
-      );
-      
-      const numPrenotazioni = Number(rows[0].num_prenotazioni);
-      const passPrecedenti = Number(rows[0].tot_pass_precedenti);
-      const prezzoBaseCorsa = kmTotali * prezzoKm;
-
-      if (numPrenotazioni === 0) {
+      if (passPrecedenti === 0) {
         return Math.max(0.10, prezzoBaseCorsa);
       } else {
         const totPasseggeri = passPrecedenti + richiesti;
@@ -54,7 +61,6 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
         const coefficienteTratta = kmUtente / kmTotali;
         const prezzoFinale = (quotaCondivisa / totPasseggeri) * coefficienteTratta;
         
-        console.log(`💰 [PRICING STIMA] CorsaID=${corsa.id} | Finale=${prezzoFinale.toFixed(2)}`);
         return Math.max(0.10, prezzoFinale);
       }
     }
@@ -66,18 +72,13 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
 }
 
 /**
- * 2. CALCOLO QUOTA EQUA (Per il Conguaglio a fine corsa)
- * @param {number} costoTotaleCorsa - Distanza totale * tariffa Km
- * @param {number} postiRichiesti - Posti prenotati da questo specifico utente
- * @param {number} totalePasseggeri - Numero totale di passeggeri che hanno viaggiato
+ * 2. CALCOLO QUOTA EQUA (Conguaglio a fine corsa)
  */
 export function calcolaQuotaEqua(costoTotaleCorsa, postiRichiesti, totalePasseggeri) {
   if (totalePasseggeri <= 0) return costoTotaleCorsa;
   
-  // La quota è ripartita equamente per posto occupato
   const quotaPerPosto = costoTotaleCorsa / totalePasseggeri;
   const prezzoFinale = quotaPerPosto * postiRichiesti;
   
-  console.log(`⚖️ [PRICING CONGUAGLIO] TotaleCorsa=${costoTotaleCorsa} | TotalePass=${totalePasseggeri} | QuotaFinale=${prezzoFinale.toFixed(2)}`);
   return Math.max(0.10, prezzoFinale);
 }

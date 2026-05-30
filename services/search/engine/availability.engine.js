@@ -72,12 +72,18 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         const occupazioneSegmento = calcolaOccupazioneMassima(sottoPercorso.startIdx, sottoPercorso.endIdx, prenotazioniCorsa);
         const postiLiberi = Number(c.posti_totali) - occupazioneSegmento;
 
+        // DEBUG: Log per identificare perché la corsa viene scartata o ha posti a 0
+        console.log(`[DEBUG SEARCH] Corsa ${c.id}: Totali=${c.posti_totali} | Occ.Segmento=${occupazioneSegmento} | PostiLiberi=${postiLiberi}`);
+
         if (postiLiberi < postiRichiesti) return false;
         
         c.postiDisponibili = postiLiberi - postiRichiesti;
         c.percorsoVisualizzato = sottoPercorso.coords;
         return true;
-      } catch (err) { return false; }
+      } catch (err) { 
+        console.error(`[ERROR SEARCH] Errore analisi corsa ${c.id}:`, err);
+        return false; 
+      }
     });
 
   // 2. RICERCA SLOT (Invariata)

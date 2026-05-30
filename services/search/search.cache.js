@@ -12,11 +12,11 @@ export const CacheStore = {
 };
 
 export const GeoIndex = new Map(); 
-export const SlotIndex = new Map(); // Aggiunto indice per Slot
+export const SlotIndex = new Map();
 export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION = 4;
 
-// --- LOGICA CALCOLO STATO (Arricchimento Dati) ---
+// --- LOGICA CALCOLO STATO ---
 export function calcolaStatoDisponibilita(d) {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -48,7 +48,6 @@ export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
 
 export const upsertDisponibilita = (d) => {
-  // Pulizia indice precedente
   const oldD = CacheStore.disponibilitaCache.get(d.id);
   if (oldD) {
       const oldHash = ngeohash.encode(oldD.lat || 0, oldD.lon || 0, GEOHASH_PRECISION);
@@ -57,7 +56,6 @@ export const upsertDisponibilita = (d) => {
 
   d.disponibile = calcolaStatoDisponibilita(d);
   
-  // Recupero coordinate dal veicolo associato
   const veicolo = CacheStore.veicoliCache.get(d.veicolo_id);
   if (veicolo) {
       d.lat = veicolo.lat;
@@ -138,6 +136,15 @@ export const upsertCorsa = (c) => {
     if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
     GeoIndex.get(prefix).add(c.id);
   });
+};
+
+// AGGIUNTO EXPORT QUI SOTTO
+export const removeCorsa = (corsaId) => {
+  const corsa = CacheStore.corseCache.get(corsaId);
+  if (corsa?.path_geohashes) {
+    corsa.path_geohashes.forEach(h => GeoIndex.get(h.substring(0, GEOHASH_PRECISION))?.delete(corsaId));
+  }
+  CacheStore.corseCache.delete(corsaId);
 };
 
 // --- CARICAMENTO ---

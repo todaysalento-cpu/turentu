@@ -3,21 +3,15 @@ import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
 import { GeoIndex } from '../search.cache.js';
 
-// Aumentata a 5 per ridurre i candidati inviati al filtro
-const GEOHASH_PRECISION = 5; 
+const GEOHASH_PRECISION = 4; 
 const BBOX_PADDING = 0.2;
 
-/**
- * Assumiamo che corsa.turfLine sia già pre-calcolato nella cache come turf.lineString
- */
 export function getSottoPercorso(corsa, salita, discesa) {
   try {
     const line = corsa.turfLine;
     const snapSalita = turf.nearestPointOnLine(line, turf.point([salita.lon, salita.lat]));
     const snapDiscesa = turf.nearestPointOnLine(line, turf.point([discesa.lon, discesa.lat]));
-    
     if (snapSalita.properties.index >= snapDiscesa.properties.index) return null;
-    
     const slice = turf.lineSlice(snapSalita, snapDiscesa, line);
     return slice.geometry.coordinates?.length >= 2 ? slice.geometry.coordinates : null;
   } catch (e) { return null; }
@@ -31,7 +25,6 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const vMap = veicoliCache instanceof Map ? veicoliCache : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
 
-  // 1. Ricerca Corse con GeoIndex (Precisione 5)
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
   const candidateIds = new Set();
   [hash, ...ngeohash.neighbors(hash)].forEach(h => {
@@ -42,22 +35,28 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      // Filtro rapido: Integrità, capacità e BBOX pre-calcolata
       if (!c?.turfLine) return false;
+      
+      // Filtro Capacità
       if ((Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
       
+      // Filtro BBOX con Log
       if (c.bbox && (
           richiesta.coord.lat < (c.bbox.minLat - BBOX_PADDING) || richiesta.coord.lat > (c.bbox.maxLat + BBOX_PADDING) ||
           richiesta.coord.lon < (c.bbox.minLon - BBOX_PADDING) || richiesta.coord.lon > (c.bbox.maxLon + BBOX_PADDING))) {
+        // console.log(`[DEBUG] Corsa ${c.id} scartata da BBOX`);
         return false;
       }
 
-      // Distanza (Usa turfLine già in memoria)
       const salitaPoint = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
       const distRichiesta = turf.distance(salitaPoint, turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), { units: 'kilometers' });
       const tol = distRichiesta < 10 ? 3.0 : defaultTol;
       
-      if (turf.pointToLineDistance(salitaPoint, c.turfLine) > tol) return false;
+      // Filtro Distanza con Log
+      if (turf.pointToLineDistance(salitaPoint, c.turfLine) > tol) {
+        // console.log(`[DEBUG] Corsa ${c.id} scartata da Distanza: ${turf.pointToLineDistance(salitaPoint, c.turfLine).toFixed(2)}km > ${tol}km`);
+        return false;
+      }
       
       const sottoPercorso = getSottoPercorso(c, richiesta.coord, richiesta.coordDest);
       if (!sottoPercorso) return false;
@@ -66,7 +65,7 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
       return ((c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta)) <= maxStops;
     });
 
-  // 2. Slots (Ottimizzato)
+  // 2. Slots
   const targetDate = new Date(richiesta.start_datetime);
   const targetMin = targetDate.getHours() * 60 + targetDate.getMinutes();
   const targetDay = targetDate.getDay();
@@ -74,12 +73,10 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
   const slots = Array.from(disponibilitaCache.values()).filter(s => {
     const v = vMap.get(s.veicolo_id);
     if (!v) return false;
-
-    // Distanza rapida
+    
     const dist = turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat], { units: 'kilometers' });
     if (dist > 15.0) return false;
     
-    // Verifica tempo
     const sStart = new Date(s.start);
     const sEnd = new Date(s.fine);
     const startMin = sStart.getHours() * 60 + sStart.getMinutes();

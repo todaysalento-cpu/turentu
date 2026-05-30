@@ -43,6 +43,14 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
+// --- GETTER (Necessari per le dipendenze esterne) ---
+export const getVeicoliMap = () => CacheStore.veicoliCache;
+export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
+export const getCorseMap = () => CacheStore.corseCache;
+export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
+export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+
 // --- GESTIONE DATI ---
 export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
 export const removePending = (id) => CacheStore.pendingCache.delete(id);
@@ -138,7 +146,6 @@ export const upsertCorsa = (c) => {
   });
 };
 
-// AGGIUNTO EXPORT QUI SOTTO
 export const removeCorsa = (corsaId) => {
   const corsa = CacheStore.corseCache.get(corsaId);
   if (corsa?.path_geohashes) {

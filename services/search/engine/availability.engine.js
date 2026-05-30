@@ -3,7 +3,6 @@ import * as turf from '@turf/turf';
 import params from '../../../config/params.js';
 import { GeoIndex, SlotIndex } from '../search.cache.js';
 
-// Aumentato a 5 per restringere l'area di ricerca e ridurre il carico su Turf
 const GEOHASH_PRECISION = 5; 
 
 export function getSottoPercorso(corsa, salita, discesa) {
@@ -20,38 +19,43 @@ export function getSottoPercorso(corsa, salita, discesa) {
 }
 
 export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
+  console.log(`🔍 [SEARCH] Inizio ricerca per: ${richiesta.coord.lat}, ${richiesta.coord.lon}`);
+  const startTime = Date.now();
+
   const vMap = veicoliCache instanceof Map ? veicoliCache : new Map(Array.isArray(veicoliCache) ? veicoliCache.map(v => [v.id, v]) : []);
   const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [c.id, c]) : []);
   const dCache = disponibilitaCache instanceof Map ? disponibilitaCache : new Map(Array.isArray(disponibilitaCache) ? disponibilitaCache.map(d => [d.id, d]) : []);
 
   const hash = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
+  const searchHashes = [hash, ...ngeohash.neighbors(hash)];
   
   // 1. RICERCA CORSE
-  console.time('Ricerca_Corse');
+  console.time('⏳ [TIMER] Ricerca_Corse');
   const candidateIds = new Set();
-  [hash, ...ngeohash.neighbors(hash)].forEach(h => {
+  searchHashes.forEach(h => {
       const set = GeoIndex.get(h);
       if (set) set.forEach(id => candidateIds.add(id));
   });
-  console.timeEnd('Ricerca_Corse');
+  console.timeEnd('⏳ [TIMER] Ricerca_Corse');
+  console.log(`ℹ️ [SEARCH] Corse candidate trovate via Geohash: ${candidateIds.size}`);
 
+  // Setup variabili di filtro
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
   const maxStops = Number(params?.MAX_STOP_PER_CORSA ?? 5);
   const salitaPoint = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
   const discesaPoint = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
   const distRichiesta = turf.distance(salitaPoint, discesaPoint, { units: 'kilometers' });
   const tol = distRichiesta < 10 ? 3.0 : Number(params?.tolleranzaKm ?? 10);
-  
-  // Buffer di tolleranza per BBox (espresso in gradi: 0.1 deg ~= 11km)
   const bboxBuffer = tol / 110; 
 
-  console.time('Filtro_Geometria');
+  console.time('⏳ [TIMER] Filtro_Geometria');
   const corse = Array.from(candidateIds)
     .map(id => corseMap.get(id))
     .filter(c => {
-      if (!c || (Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
+      if (!c) return false;
+      if ((Number(c.picco_occupazione || 0) + postiRichiesti) > Number(c.posti_totali)) return false;
       
-      // --- OTTIMIZZAZIONE: Pre-filtro Bounding Box (estremamente veloce) ---
+      // BBox check
       if (c.bbox) {
         if (richiesta.coord.lat < c.bbox.minLat - bboxBuffer || richiesta.coord.lat > c.bbox.maxLat + bboxBuffer ||
             richiesta.coord.lon < c.bbox.minLon - bboxBuffer || richiesta.coord.lon > c.bbox.maxLon + bboxBuffer) return false;
@@ -68,15 +72,12 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
         return ((c.numero_prenotazioni_attive || 0) + calcolaNuoveFermate(c, richiesta)) <= maxStops;
       } catch (err) { return false; }
     });
-  console.timeEnd('Filtro_Geometria');
+  console.timeEnd('⏳ [TIMER] Filtro_Geometria');
 
-  console.time('Ricerca_Slot');
-  const targetDate = new Date(richiesta.start_datetime);
-  const targetMin = targetDate.getHours() * 60 + targetDate.getMinutes();
-  const targetDay = targetDate.getDay();
-
+  // 2. RICERCA SLOT
+  console.time('⏳ [TIMER] Ricerca_Slot');
   const candidatiSlotIds = new Set();
-  [hash, ...ngeohash.neighbors(hash)].forEach(h => {
+  searchHashes.forEach(h => {
       const set = SlotIndex.get(h);
       if (set) set.forEach(id => candidatiSlotIds.add(id));
   });
@@ -85,17 +86,17 @@ export function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache,
     .map(id => dCache.get(id))
     .filter(s => {
       if (!s || s.disponibile !== true) return false;
-      if (targetMin < s.startMin || targetMin > s.endMin) return false;
+      // Nota: Assicurati che nel tuo oggetto slot (d) esistano startMin/endMin calcolati
+      if (richiesta.targetMin < s.startMin || richiesta.targetMin > s.endMin) return false;
       
       const v = vMap.get(s.veicolo_id);
       if (!v) return false;
 
-      return turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat], { units: 'kilometers' }) <= 15.0 &&
-             (!Array.isArray(s.giorni_esclusi) || !s.giorni_esclusi.includes(targetDay)) &&
-             (!Array.isArray(s.inattivita) || !s.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine)));
+      return turf.distance([richiesta.coord.lon, richiesta.coord.lat], [v.lon, v.lat], { units: 'kilometers' }) <= 15.0;
     });
-  console.timeEnd('Ricerca_Slot');
+  console.timeEnd('⏳ [TIMER] Ricerca_Slot');
 
+  console.log(`✅ [SEARCH] Completata in ${Date.now() - startTime}ms | Risultati: ${corse.length} corse, ${slots.length} slot.`);
   return { slots, corse };
 }
 

@@ -93,32 +93,35 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
     const corsaId = Number(c.id);
-    console.log(`[DEBUG] Elaborazione corsa ID: ${corsaId}`);
     
-    const oldData = CacheStore.corseCache.get(corsaId);
-    let decodedCoords = oldData?.decodedCoords || [];
-    
+    // 1. Decodifica Polyline
+    let decodedCoords = [];
     if (c.percorso_polyline) {
         try {
             const raw = polyline.decode(c.percorso_polyline);
-            decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
-            console.log(`[DEBUG] Corsa ${corsaId}: Polyline decodificata (${decodedCoords.length} punti)`);
-        } catch (e) { 
-            console.error(`[ERROR] Decodifica polyline fallita per corsa ${c.id}:`, e); 
-        }
+            decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]);
+        } catch (e) { console.error(`[ERROR] Decodifica fallita ${corsaId}:`, e); }
     }
 
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
-    CacheStore.corseCache.set(corsaId, { ...oldData, ...c, lat, lon, decodedCoords });
-    console.log(`[DEBUG] CacheStore.corseCache size ora: ${CacheStore.corseCache.size}`);
-
+    // 2. AGGIORNAMENTO MEMORIA (Senza cancellare nulla)
+    CacheStore.corseCache.set(corsaId, { ...c, lat, lon, decodedCoords });
+    
+    // 3. Sincronizzazione Redis (Pulizia e reinserimento)
     if (redisClient) {
         try {
-            await removeCorsa(corsaId, true);
+            // Rimuoviamo solo i dati vecchi da Redis, NON dalla memoria
+            const hashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
             const pipeline = redisClient.multi();
             
+            pipeline.zRem('corse_geo_index', corsaId.toString());
+            pipeline.del(`corsa:prenotazioni:${corsaId}`);
+            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
+            pipeline.del(`corsa:hashes:${corsaId}`);
+            
+            // Inserimento nuovi dati in Redis
             if (lat !== 0 && lon !== 0) {
                 pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
             }
@@ -133,14 +136,13 @@ export const upsertCorsa = async (c) => {
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
             
             await pipeline.exec();
-            console.log(`[DEBUG] Corsa ${corsaId} salvata in Redis.`);
         } catch (redisErr) {
-            console.error(`[ERROR] Fallimento scrittura Redis per corsa ${corsaId}:`, redisErr);
+            console.error(`[ERROR] Redis fallito per corsa ${corsaId}:`, redisErr);
         }
     }
 };
 
-export const removeCorsa = async (corsaId, internal = false) => {
+export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
     CacheStore.prenotazioniCache.delete(id);
@@ -149,12 +151,10 @@ export const removeCorsa = async (corsaId, internal = false) => {
         try {
             const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
             const pipeline = redisClient.multi();
-            
             pipeline.zRem('corse_geo_index', id.toString());
             pipeline.del(`corsa:prenotazioni:${id}`);
             hashes.forEach(h => pipeline.sRem(`corsa_in_area:${h}`, id.toString()));
             pipeline.del(`corsa:hashes:${id}`);
-
             await pipeline.exec();
         } catch (e) { console.error("Errore pulizia Redis:", e); }
     }
@@ -166,12 +166,8 @@ export async function loadCachesUltra(force = false) {
     
     const client = await pool.connect();
     try {
-        console.log("🔄 [SYNC] Inizio sincronizzazione cache...");
-        
+        console.log("🔄 [SYNC] Inizio sincronizzazione...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
-        console.log(`[SYNC] Trovate ${cRes.rowCount} corse attive nel database.`);
-        
-        if (force) await redisClient.flushdb(); 
         
         for (const c of cRes.rows) {
             await upsertCorsa(c);
@@ -179,7 +175,7 @@ export async function loadCachesUltra(force = false) {
         
         console.log(`📦 [SYNC] Completata. Corse in memoria: ${CacheStore.corseCache.size}`);
     } catch (err) {
-        console.error("❌ [SYNC] Errore critico:", err);
+        console.error("❌ [SYNC] Errore:", err);
     } finally { 
         client.release(); 
     }

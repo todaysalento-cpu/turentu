@@ -1,6 +1,7 @@
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../../redis.js';
 
+// Precisione 5 (~4.9km) per una ricerca geografica tollerante
 const GEOHASH_PRECISION = 5;
 
 export async function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
@@ -28,9 +29,8 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
 
     const rawResults = await pipeline.exec();
     
-    // Sicurezza: se rawResults è null o non è un array, usciamo per evitare il crash
     if (!rawResults || !Array.isArray(rawResults)) {
-        console.error("[SEARCH ENGINE] Errore critico esecuzione pipeline Redis");
+        console.error("[SEARCH ENGINE] Errore critico: Pipeline Redis non valida");
         return { slots: [], corse: [] };
     }
     
@@ -42,27 +42,40 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         const c = corseMap.get(Number(id));
         if (!c) continue;
 
-        // ACCESSO SICURO: Verifica che ogni step della pipeline sia un array [err, val]
         const opStart = rawResults[i * 3];
         const opEnd = rawResults[i * 3 + 1];
         const opPrenotazioni = rawResults[i * 3 + 2];
 
-        // Se un'operazione è nulla o ha un errore (op[0]), saltiamo questa corsa
+        // Controllo robusto: op[0] è l'errore, op[1] è il risultato
         if (!opStart || !opEnd || !opPrenotazioni || opStart[0] || opEnd[0]) {
             continue;
         }
 
         const idxStart = opStart[1];
         const idxEnd = opEnd[1];
-        const prenotazioniRaw = opPrenotazioni[1] || [];
+        
+        // --- SANITIZZAZIONE RIGIDA ---
+        // hVals ritorna un array di valori (le prenotazioni in formato JSON string)
+        // Se non ci sono prenotazioni, ritorna []
+        const prenotazioniData = opPrenotazioni[1];
+        const prenotazioniArray = Array.isArray(prenotazioniData) ? prenotazioniData : [];
 
         if (idxStart === null || idxEnd === null || Number(idxStart) >= Number(idxEnd)) continue;
 
-        const occupazioneSegmento = prenotazioniRaw.reduce((max, p) => {
-            const item = typeof p === 'string' ? JSON.parse(p) : p;
-            const sovrappone = (Number(idxStart) < Number(item.end_index_polyline)) && 
-                               (Number(idxEnd) > Number(item.start_index_polyline));
-            return sovrappone ? max + Number(item.posti_richiesti || 0) : max;
+        const occupazioneSegmento = prenotazioniArray.reduce((max, p) => {
+            try {
+                const item = typeof p === 'string' ? JSON.parse(p) : p;
+                
+                // Controllo validità dell'oggetto prenotazione
+                if (!item || typeof item !== 'object') return max;
+
+                const sovrappone = (Number(idxStart) < Number(item.end_index_polyline)) && 
+                                   (Number(idxEnd) > Number(item.start_index_polyline));
+                
+                return sovrappone ? max + Number(item.posti_richiesti || 0) : max;
+            } catch (e) {
+                return max; // Salta elementi JSON corrotti
+            }
         }, 0);
 
         const postiLiberi = Number(c.posti_totali || 0) - occupazioneSegmento;

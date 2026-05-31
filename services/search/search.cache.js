@@ -52,12 +52,17 @@ export const upsertVeicolo = (v) => {
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
 export const upsertDisponibilita = async (d) => {
-    CacheStore.disponibilitaCache.set(Number(d.id), {
+    // Normalizzazione per garantire compatibilità con il servizio di disponibilità
+    const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
-        is_slot: true 
-    });
-    console.log(`✅ [CACHE] Disponibilità ${d.id} normalizzata.`);
+        is_slot: true,
+        // Parsing di inattivita per evitare errori di tipo nel filtro
+        inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
+    };
+    
+    CacheStore.disponibilitaCache.set(Number(d.id), normalized);
+    console.log(`✅ [CACHE] Disponibilità ${d.id} normalizzata e caricata.`);
 };
 
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));

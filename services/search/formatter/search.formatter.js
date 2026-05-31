@@ -8,91 +8,88 @@ import ngeohash from 'ngeohash';
 const MATCHING_PRECISION = 5;
 
 /**
- * Calcola l'orario e la distanza usando gli indici ZSET di Redis
+ * Logica pura di interpolazione basata su ZSET
  */
-async function getDettagliTrattaRedis(corsaId, startCoord, endCoord) {
-    const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, MATCHING_PRECISION);
-    const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, MATCHING_PRECISION);
+function calcolaDettagliTratta(item, idxStart, idxEnd) {
+    if (idxStart === null || idxEnd === null || idxEnd <= idxStart) return null;
+
+    const totalPoints = item.decodedCoords.length;
+    const ratioPartenza = idxStart / totalPoints;
+    const ratioSegmento = (idxEnd - idxStart) / totalPoints;
+    const durataTotaleMs = Number(item.durata_ms || 0);
     
-    const idxStart = await redisClient.zScore(`corsa:percorso_hash:${corsaId}`, hStart);
-    const idxEnd = await redisClient.zScore(`corsa:percorso_hash:${corsaId}`, hEnd);
-    
-    return { 
-        idxStart: idxStart !== null ? Number(idxStart) : null, 
-        idxEnd: idxEnd !== null ? Number(idxEnd) : null 
-    };
+    const oraPartenza = new Date(new Date(item.start_datetime).getTime() + (durataTotaleMs * ratioPartenza));
+    const oraArrivo = new Date(oraPartenza.getTime() + (durataTotaleMs * ratioSegmento));
+    const distanzaSegmentoKm = Number(item.distanza || 0) * ratioSegmento;
+
+    return { oraPartenza, oraArrivo, distanzaSegmentoKm };
 }
 
-/**
- * Formatta i risultati e calcola dinamicamente le tratte basandosi su Redis
- */
+async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
+    const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, MATCHING_PRECISION);
+    const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, MATCHING_PRECISION);
+    const pipeline = redisClient.multi();
+    corsaIds.forEach(id => {
+        pipeline.zScore(`corsa:percorso_hash:${id}`, hStart);
+        pipeline.zScore(`corsa:percorso_hash:${id}`, hEnd);
+    });
+    return await pipeline.exec();
+}
+
+const localitaCache = new Map();
+async function getLocalitaSafeCached(coord) {
+    const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
+    if (localitaCache.has(key)) return localitaCache.get(key);
+    const loc = await getLocalitaSafe(coord);
+    localitaCache.set(key, loc);
+    return loc;
+}
+
 export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
-  const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
-  const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
-  
-  console.log(`🔍 [FORMATTER] Inizio formattazione di ${allItems.length} elementi.`);
-  
-  const results = await Promise.all(
-    allItems.map(async (item) => {
-      try {
-        const isCorsa = !!item.start_datetime;
-        const veicoloId = Number(item.veicolo_id);
-        const v = veicoliMap.get(veicoloId);
-        
-        let oraPartenza = new Date(item.start_datetime || Date.now());
-        let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
-        let distanzaSegmentoKm = Number(item.distanza || 0);
+    const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
+    const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
+    
+    const corsaItems = allItems.filter(item => !!item.start_datetime && item.decodedCoords?.length > 0);
+    const zsetResults = corsaItems.length > 0 
+        ? await getDettagliTrattaRedis(corsaItems.map(c => c.id), richiesta.coord, richiesta.coordDest) 
+        : [];
 
-        // --- LOGICA DINAMICA BASATA SU ZSET ---
-        if (isCorsa && item.decodedCoords?.length > 0) {
-          const { idxStart, idxEnd } = await getDettagliTrattaRedis(item.id, richiesta.coord, richiesta.coordDest);
-          
-          if (idxStart !== null && idxEnd !== null && idxEnd > idxStart) {
-            const totalPoints = item.decodedCoords.length;
-            const ratioPartenza = idxStart / totalPoints;
-            const ratioSegmento = (idxEnd - idxStart) / totalPoints;
-            const durataTotaleMs = Number(item.durata_ms || 0);
-            
-            oraPartenza = new Date(new Date(item.start_datetime).getTime() + (durataTotaleMs * ratioPartenza));
-            oraArrivo = new Date(oraPartenza.getTime() + (durataTotaleMs * ratioSegmento));
-            distanzaSegmentoKm = Number(item.distanza || 0) * ratioSegmento;
-            console.log(`✅ [FORMATTER] Corsa ${item.id}: Orari ricalcolati via Redis.`);
-          } else {
-            console.log(`ℹ️ [FORMATTER] Corsa ${item.id}: Nessun match ZSET, uso default.`);
-          }
-        }
-
-        // --- CALCOLO PREZZO ---
-        let prezzo = 0;
+    return (await Promise.all(allItems.map(async (item) => {
         try {
-          prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaSegmentoKm, Number(item.distanza || 0));
-        } catch (err) { 
-          console.error(`❌ [FORMATTER] Errore calcolo prezzo corsa ${item.id}:`, err); 
+            let oraPartenza = new Date(item.start_datetime || Date.now());
+            let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
+            let distanza = Number(item.distanza || 0);
+
+            // Applicazione interpolazione se presente
+            if (item.start_datetime && item.decodedCoords?.length > 0) {
+                const zIndex = corsaItems.findIndex(c => c.id === item.id);
+                if (zIndex !== -1) {
+                    const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
+                    if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
+                }
+            }
+
+            const v = veicoliMap.get(Number(item.veicolo_id));
+            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
+
+            return {
+                id: item.id || uuidv4(),
+                veicolo_id: Number(item.veicolo_id),
+                marca: v?.marca ?? null,
+                modello: v?.modello ?? null,
+                localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
+                localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
+                oraPartenza: oraPartenza.toISOString(),
+                oraArrivo: oraArrivo.toISOString(),
+                distanzaKm: Number(distanza.toFixed(2)),
+                prezzo: Number(prezzo?.toFixed(2)) || 0,
+                stato: item.stato,
+                postiDisponibili: Number(item.postiDisponibili ?? 0),
+                percorsoVisualizzato: item.decodedCoords || null
+            };
+        } catch (err) {
+            console.error(`💥 Errore formattazione ${item?.id}:`, err);
+            return null;
         }
-
-        return {
-          id: item.id || uuidv4(),
-          veicolo_id: veicoloId,
-          marca: v?.marca ?? null,
-          modello: v?.modello ?? null,
-          localitaOrigine: await getLocalitaSafe(richiesta.coord),
-          localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-          oraPartenza: oraPartenza.toISOString(),
-          oraArrivo: oraArrivo.toISOString(),
-          distanzaKm: Number(distanzaSegmentoKm.toFixed(2)),
-          prezzo: Number(prezzo?.toFixed(2)) || 0,
-          stato: item.stato,
-          postiDisponibili: Number(item.postiDisponibili ?? 0),
-          percorsoVisualizzato: isCorsa ? item.decodedCoords : null 
-        };
-      } catch (err) {
-        console.error(`💥 [FORMATTER] Errore critico elaborazione item ${item?.id}:`, err);
-        return null;
-      }
-    })
-  );
-
-  const filteredResults = results.filter(r => r !== null);
-  console.log(`🏁 [FORMATTER] Risultati finali pronti: ${filteredResults.length}`);
-  return filteredResults;
+    }))).filter(r => r !== null);
 }

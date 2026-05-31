@@ -1,7 +1,7 @@
 import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { redisClient } from '../../redis.js'; // Assicurati che l'import sia corretto
+import { redisClient } from '../../redis.js';
 import ngeohash from 'ngeohash';
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -14,54 +14,43 @@ export async function cercaSlotUltra(richiesta) {
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
 
-  // --- LOGICA DI RICERCA VELOCE O(1) ---
-  // 1. Calcola il geohash del punto di richiesta
+  // 1. Recupero candidati (incluso vicini)
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
+  const hashes = [hash, ...ngeohash.neighbors(hash)];
   
-  // 2. Recupera solo gli ID delle corse che passano in quest'area (incluso vicini)
-  // Grazie all'indice inverso creato in upsertCorsa
-  const candidateIds = await redisClient.sMembers(`corsa_in_area:${hash}`);
+  const candidateIds = [...new Set(
+    (await Promise.all(hashes.map(h => redisClient.sMembers(`corsa_in_area:${h}`)))).flat()
+  )];
   
-  // 3. Filtra le corse dalla cache basandosi solo sui candidati trovati
   const corseCandidate = candidateIds
     .map(id => CacheStore.corseCache.get(Number(id)))
     .filter(Boolean);
 
-  console.log(`DEBUG: Corse candidate trovate via indice Redis: ${corseCandidate.length}`);
+  if (corseCandidate.length === 0) return [];
 
-  if (corseCandidate.length === 0) {
-    console.log("⚠️ [SERVICE] Nessuna corsa transita in quest'area");
-    return [];
-  }
-
-  const veicoli = Array.from(CacheStore.veicoliCache.values());
-  const disponibilita = Array.from(CacheStore.disponibilitaCache.values());
+  // 2. Recupero massivo prenotazioni in pipeline (Ottimizzazione Critica)
+  const pipeline = redisClient.multi();
+  corseCandidate.forEach(c => pipeline.hVals(`corsa:prenotazioni:${c.id}`));
+  const prenotazioniBatch = await pipeline.exec();
 
   const richiestaNormalizzata = {
     ...richiesta,
     posti_richiesti: Number(richiesta.posti_richiesti),
+    coord: { lat, lon },
     lat,
     lon
   };
 
-  // --- FILTRO AVANZATO ---
-  // Passiamo solo le corse candidate al motore di disponibilità
-  const risultatoFiltro = await filterDisponibilita(
+  // 3. Filtro avanzato (passiamo i dati già pronti al motore)
+  const { slots, corse: corseCompatibili } = await filterDisponibilita(
     richiestaNormalizzata,
-    veicoli,
-    disponibilita,
-    corseCandidate // <- Solo le corse che passano di qui
+    corseCandidate,
+    prenotazioniBatch // Passiamo le prenotazioni caricate in pipeline
   );
 
-  const { slots, corse: corseCompatibili } = risultatoFiltro;
+  if (!slots?.length) return [];
 
-  console.log(`📊 [SERVICE] Filtro completato | Slots: ${slots?.length || 0} | Corse: ${corseCompatibili?.length || 0}`);
-  
-  if (!slots || slots.length === 0) {
-    console.log("⚠️ [SERVICE] Nessun risultato compatibile trovato");
-    return [];
-  }
-
+  // 4. Formattazione finale
   try {
     const risultati = await formatResults(
       richiestaNormalizzata, 
@@ -70,12 +59,9 @@ export async function cercaSlotUltra(richiesta) {
       CacheStore.veicoliCache 
     );
     
-    const risultatiFinali = Array.isArray(risultati) ? risultati : [];
-    console.log(`✅ [SERVICE] Risultati finali pronti: ${risultatiFinali.length}`);
-    return risultatiFinali;
-    
+    return Array.isArray(risultati) ? risultati : [];
   } catch (err) {
-    console.error("💥 [SERVICE] Errore critico durante la formattazione:", err);
+    console.error("💥 [SERVICE] Errore critico:", err);
     return []; 
   }
 }

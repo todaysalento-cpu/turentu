@@ -17,15 +17,13 @@ export async function getDisponibilita(driver_id) {
 
   return turniDriver.map(d => {
     let disponibile = true;
-    
-    // 1. Verifica giorni esclusi
     const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
+
     if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
       disponibile = false;
     }
 
-    // 2. Verifica periodi di inattività
-    if (disponibile && Array.isArray(d.inattivita)) {
+    if (Array.isArray(d.inattivita)) {
       for (const i of d.inattivita) {
         const start = new Date(i.start);
         const end = new Date(i.fine);
@@ -36,23 +34,13 @@ export async function getDisponibilita(driver_id) {
       }
     }
 
-    // 3. Verifica orario turno (con supporto per turni notturni che superano la mezzanotte)
     const startDate = new Date(d.start);
     const endDate = new Date(d.fine);
     const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
     const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
     
-    // Se start > end, il turno scavalca la mezzanotte (es. 22:00 - 06:00)
-    const isOvernight = startMinutes > endMinutes;
-    
-    if (isOvernight) {
-      if (!(currentMinutes >= startMinutes || currentMinutes <= endMinutes)) {
-        disponibile = false;
-      }
-    } else {
-      if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-        disponibile = false;
-      }
+    if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+      disponibile = false;
     }
 
     return { ...d, disponibile };
@@ -92,7 +80,14 @@ export async function createDisponibilita(turno) {
 
   console.log("[BACKEND] createDisponibilita - ID creato/aggiornato:", nuovoTurno.id, "per driver:", nuovoTurno.driver_id);
   
-  await CacheManager.disponibilita.update(nuovoTurno);
+  // AGGIORNAMENTO CACHE CON METADATI DI DISTINZIONE
+  CacheManager.disponibilita.update({
+    ...nuovoTurno,
+    veicolo_id: Number(nuovoTurno.veicolo_id),
+    is_slot: true,
+    tipo: 'disponibilita'
+  });
+  
   return nuovoTurno;
 }
 
@@ -126,14 +121,21 @@ export async function updateDisponibilita(id, update) {
   const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [turnoAggiornato.veicolo_id]);
   turnoAggiornato.driver_id = vRes.rows[0]?.driver_id;
 
-  await CacheManager.disponibilita.update(turnoAggiornato);
+  // AGGIORNAMENTO CACHE CON METADATI DI DISTINZIONE
+  CacheManager.disponibilita.update({
+    ...turnoAggiornato,
+    veicolo_id: Number(turnoAggiornato.veicolo_id),
+    is_slot: true,
+    tipo: 'disponibilita'
+  });
+  
   return turnoAggiornato;
 }
 
 export async function deleteDisponibilita(id) {
   console.log(`[BACKEND] deleteDisponibilita - ID: ${id}`);
   await pool.query('DELETE FROM disponibilita_veicolo WHERE id=$1', [id]);
-  await CacheManager.disponibilita.delete(id);
+  CacheManager.disponibilita.delete(id);
 }
 
 function parseTimeString(timeStr) {

@@ -1,7 +1,7 @@
 import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { redisClient } from '../redis.js'; // Assicurati che l'import sia corretto
+import { redisClient } from '../../redis.js'; // Assicurati che l'import sia corretto
 import ngeohash from 'ngeohash';
 
 const GEOHASH_PRECISION_TRATTA = 5;

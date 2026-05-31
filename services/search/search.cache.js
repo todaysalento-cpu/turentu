@@ -13,12 +13,14 @@ export const CacheStore = {
   prenotazioniCache: new Map() 
 };
 
-export const GeoIndex = new Map(); 
+// SlotIndex rimane solo se strettamente necessario per la logica di business,
+// altrimenti consiglio di spostare anche questo in Redis.
 export const SlotIndex = new Map(); 
-export const TOP_RESULTS = 10;
-const GEOHASH_PRECISION = 4;
+
+const GEOHASH_PRECISION_TRATTA = 7;
 
 // --- LOGICA CALCOLO STATO ---
+// (Mantenuta invariata per compatibilità)
 export function calcolaStatoDisponibilita(d) {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -45,71 +47,10 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
-// --- GETTER ---
-export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
-export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
-export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
-export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
-export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
-export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
-
 // --- GESTIONE DATI ---
-export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
-export const removePending = (id) => CacheStore.pendingCache.delete(id);
-
-export const upsertPrenotazione = async (p) => {
-    if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
-        CacheStore.prenotazioniCache.set(p.corsa_id, []);
-    }
-    CacheStore.prenotazioniCache.get(p.corsa_id).push(p);
-
-    if (redisClient) {
-        await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
-    }
-};
-
-export const upsertVeicolo = (v) => {
-  const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
-  CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
-};
-
-export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
-
-export const upsertDisponibilita = (d) => {
-  const v = CacheStore.veicoliCache.get(d.veicolo_id);
-  d.disponibile = calcolaStatoDisponibilita(d);
-  CacheStore.disponibilitaCache.set(d.id, d);
-
-  if (v && v.lat && v.lon) {
-    const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
-    if (!SlotIndex.has(hash)) SlotIndex.set(hash, new Set());
-    SlotIndex.get(hash).add(d.id);
-  }
-};
-
-export const removeDisponibilita = (id) => {
-    if (CacheStore.disponibilitaCache.has(id)) {
-        const d = CacheStore.disponibilitaCache.get(id);
-        CacheStore.disponibilitaCache.delete(id);
-        const v = CacheStore.veicoliCache.get(d.veicolo_id);
-        if (v && v.lat && v.lon) {
-            const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
-            SlotIndex.get(hash)?.delete(id);
-        }
-    }
-};
-
 export const upsertCorsa = async (c) => {
   const oldData = CacheStore.corseCache.get(c.id);
-
-  if (oldData?.path_geohashes) {
-    oldData.path_geohashes.forEach(h => {
-        const prefix = h.substring(0, GEOHASH_PRECISION);
-        GeoIndex.get(prefix)?.delete(c.id);
-    });
-  }
   
-  let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
   let decodedCoords = oldData?.decodedCoords || [];
   let turfLine = oldData?.turfLine;
   
@@ -118,7 +59,7 @@ export const upsertCorsa = async (c) => {
       const raw = polyline.decode(c.percorso_polyline);
       decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
       turfLine = turf.lineString(decodedCoords);
-    } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
+    } catch (e) { console.error(`Errore decodifica polyline ${c.id}:`, e); }
   }
 
   const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
@@ -126,63 +67,67 @@ export const upsertCorsa = async (c) => {
 
   const newCorsa = {
     ...(oldData || {}), ...c, id: c.id, 
-    localitaOrigine: c.origine_address, localitaDestinazione: c.destinazione_address,
+    localitaOrigine: c.origine_address, 
+    localitaDestinazione: c.destinazione_address,
     prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0), 
-    oraPartenza: c.start_datetime, oraArrivo: c.arrivo_datetime,
-    lat, lon, decodedCoords, turfLine, path_geohashes: geohashes
+    oraPartenza: c.start_datetime, 
+    oraArrivo: c.arrivo_datetime,
+    lat, lon, decodedCoords, turfLine
   };
   
   CacheStore.corseCache.set(c.id, newCorsa);
 
-  if (redisClient && lat !== 0 && lon !== 0) {
-    await redisClient.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
+  if (redisClient) {
+    // Pipeline per atomicità delle scritture Redis
+    const pipeline = redisClient.multi();
+    
+    // 1. Aggiorna indice geospaziale (prossimità)
+    if (lat !== 0 && lon !== 0) {
+        pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
+    }
+    
+    // 2. Aggiorna ZSET (tratta)
+    const zKey = `corsa:percorso_hash:${c.id}`;
+    pipeline.del(zKey);
+    decodedCoords.forEach((coord, idx) => {
+        const hash = ngeohash.encode(coord[1], coord[0], GEOHASH_PRECISION_TRATTA);
+        pipeline.zAdd(zKey, { score: idx, value: hash });
+    });
+    
+    await pipeline.exec();
   }
-  
-  geohashes.forEach(h => {
-    const prefix = h.substring(0, GEOHASH_PRECISION);
-    if (!GeoIndex.has(prefix)) GeoIndex.set(prefix, new Set());
-    GeoIndex.get(prefix).add(c.id);
-  });
 };
 
 export const removeCorsa = async (corsaId) => {
-    const corsa = CacheStore.corseCache.get(corsaId);
-    if (corsa) {
-        CacheStore.corseCache.delete(corsaId);
-        CacheStore.prenotazioniCache.delete(corsaId);
-        if (redisClient) {
-            await redisClient.zRem('corse_geo_index', corsaId.toString());
-            await redisClient.del(`corsa:prenotazioni:${corsaId}`);
-        }
-        if (corsa.path_geohashes) {
-            corsa.path_geohashes.forEach(h => {
-                const prefix = h.substring(0, GEOHASH_PRECISION);
-                GeoIndex.get(prefix)?.delete(corsaId);
-            });
-        }
+    CacheStore.corseCache.delete(corsaId);
+    CacheStore.prenotazioniCache.delete(corsaId);
+    if (redisClient) {
+        // Pulizia totale da Redis
+        await redisClient.zRem('corse_geo_index', corsaId.toString());
+        await redisClient.del(`corsa:prenotazioni:${corsaId}`);
+        await redisClient.del(`corsa:percorso_hash:${corsaId}`);
     }
 };
 
 export async function loadCachesUltra(force = false) {
-  if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
+  if (!force && CacheStore.corseCache.size > 0) return;
   const client = await pool.connect();
   try {
-    console.log("🔄 Sincronizzazione cache...");
-    if (redisClient) await redisClient.del('corse_geo_index');
+    console.log("🔄 Sincronizzazione cache in corso...");
+    
+    // Pulizia totale Redis per evitare residui tra riavvii
+    if (redisClient) {
+        await redisClient.del('corse_geo_index');
+        // Nota: Qui potresti voler pulire anche i ZSET esistenti se sono persistenti
+    }
 
     const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
     for (const c of cRes.rows) await upsertCorsa(c);
-
-    const pRes = await client.query(`SELECT * FROM prenotazioni`);
-    CacheStore.prenotazioniCache.clear();
-    for (const p of pRes.rows) await upsertPrenotazione(p);
-
-    const vRes = await client.query(`SELECT * FROM veicolo`);
-    vRes.rows.forEach(v => upsertVeicolo(v));
     
-    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
-    dRes.rows.forEach(d => upsertDisponibilita(d));
-    
-    console.log(`📦 [CACHE] Pronta. Corse: ${CacheStore.corseCache.size}`);
-  } finally { client.release(); }
+    console.log(`📦 [CACHE] Pronta. Corse caricate: ${CacheStore.corseCache.size}`);
+  } catch (err) {
+    console.error("❌ Errore durante il caricamento cache:", err);
+  } finally { 
+    client.release(); 
+  }
 }

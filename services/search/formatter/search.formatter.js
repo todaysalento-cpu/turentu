@@ -1,94 +1,63 @@
 import { v4 as uuidv4 } from 'uuid';
-import * as turf from '@turf/turf';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getDurataDistanza, getLocalitaSafe } from '../../../utils/maps.util.js';
+import { getLocalitaSafe } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
-import { getSottoPercorso } from '../engine/availability.engine.js'; 
-
-const safeParseJSON = (str) => {
-  try { return typeof str === 'string' ? JSON.parse(str) : (str || []); } 
-  catch { return []; }
-};
+import { redisClient } from '../../../redis.js';
+import ngeohash from 'ngeohash';
 
 /**
- * Helper per convertire l'interval Postgres in millisecondi
+ * Calcola l'orario e la distanza usando gli indici ZSET di Redis
  */
-function parseIntervalToMs(durata) {
-  if (typeof durata === 'number') return durata * 1000;
-  if (typeof durata === 'object' && durata !== null) {
-    const h = durata.hours || 0;
-    const m = durata.minutes || 0;
-    const s = durata.seconds || 0;
-    return (h * 3600 + m * 60 + s) * 1000;
-  }
-  if (typeof durata === 'string') {
-    const parts = durata.split(':').map(Number);
-    if (parts.length === 3) return ((parts[0] * 3600) + (parts[1] * 60) + parts[2]) * 1000;
-  }
-  return 0;
+async function getDettagliTrattaRedis(corsaId, startCoord, endCoord) {
+    const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, 7);
+    const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, 7);
+    
+    // Recupera indici dal ZSET (O(1))
+    const idxStart = await redisClient.zScore(`corsa:percorso_hash:${corsaId}`, hStart);
+    const idxEnd = await redisClient.zScore(`corsa:percorso_hash:${corsaId}`, hEnd);
+    
+    return { idxStart, idxEnd };
 }
 
 async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
-  let durataRichiesta = 0;
-  let distanzaRichiesta = 0;
-
-  if (richiesta.coord && richiesta.coordDest) {
-    try {
-      const result = await getDurataDistanza(richiesta.coord, richiesta.coordDest);
-      durataRichiesta = Number(result.durataMs ?? 0);
-      distanzaRichiesta = Number(result.distanzaKm ?? 0);
-    } catch (err) { console.warn('Errore calcolo durata/distanza:', err); }
-  }
-
-  const corseNormalizzate = (corseFiltrate || []).map(c => ({ ...c, stato: c.stato === 'libero' ? 'libero' : 'prenotabile' }));
-  const slotsNormalizzati = (slotsFiltrati || []).map(s => ({ ...s, stato: 'libero' }));
-
-  const allItems = [...corseNormalizzate.slice(0, 5), ...slotsNormalizzati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
-  const veicoliMap = injectedVeicoliMap || (typeof CacheModule.getVeicoliMap === 'function' ? CacheModule.getVeicoliMap() : CacheModule.veicoliCache);
-  const recensioniCache = typeof CacheModule.getRecensioniCache === 'function' ? CacheModule.getRecensioniCache() : {};
-
+  const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
+  const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
+  
   return await Promise.all(
     allItems.map(async (item) => {
+      const isCorsa = !!item.start_datetime;
       const veicoloId = Number(item.veicolo_id);
       const v = veicoliMap.get(veicoloId);
-      const isCorsa = !!item.start_datetime;
-      const r = recensioniCache[v?.driver_id] || { media: 0, totale: 0 };
-
-      // Normalizzazione Durata Totale
-      const durataTotaleMs = isCorsa ? parseIntervalToMs(item.durata) : durataRichiesta;
-      const velMediaMsPerKm = isCorsa ? (durataTotaleMs / Number(item.distanza || 1)) : 0;
-
-      // --- CALCOLO ORARIO PARTENZA/ARRIVO DINAMICO ---
+      
       let oraPartenza = new Date(item.start_datetime || Date.now());
-      let durataSegmentoMs = durataTotaleMs;
+      let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
+      let distanzaSegmentoKm = Number(item.distanza || 0);
 
-      if (isCorsa && item.decodedCoords?.length > 1) {
+      // --- LOGICA DINAMICA BASATA SU ZSET ---
+      if (isCorsa && item.decodedCoords?.length > 0) {
         try {
-          const line = turf.lineString(item.decodedCoords);
-          const puntoSalita = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
-          const puntoDiscesa = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+          const { idxStart, idxEnd } = await getDettagliTrattaRedis(item.id, richiesta.coord, richiesta.coordDest);
           
-          const snapSalita = turf.nearestPointOnLine(line, puntoSalita);
-          const snapDiscesa = turf.nearestPointOnLine(line, puntoDiscesa);
-          
-          const distOrigineToSalita = turf.length(turf.lineSlice(turf.point(line.geometry.coordinates[0]), snapSalita, line), { units: 'kilometers' });
-          oraPartenza = new Date(new Date(item.start_datetime).getTime() + (distOrigineToSalita * velMediaMsPerKm));
-          
-          const distSegmento = turf.length(turf.lineSlice(snapSalita, snapDiscesa, line), { units: 'kilometers' });
-          durataSegmentoMs = distSegmento * velMediaMsPerKm;
+          if (idxStart !== null && idxEnd !== null) {
+            const totalPoints = item.decodedCoords.length;
+            const ratioPartenza = idxStart / totalPoints;
+            const ratioSegmento = (idxEnd - idxStart) / totalPoints;
+            
+            const durataTotaleMs = item.durata_ms || 0; // Assicurati di aver normalizzato questo campo
+            
+            oraPartenza = new Date(new Date(item.start_datetime).getTime() + (durataTotaleMs * ratioPartenza));
+            oraArrivo = new Date(oraPartenza.getTime() + (durataTotaleMs * ratioSegmento));
+            distanzaSegmentoKm = Number(item.distanza) * ratioSegmento;
+          }
         } catch (e) {
-          console.error("Errore calcolo dinamico:", e);
+          console.error(`[FORMAT ERROR] Errore calcolo ZSET per corsa ${item.id}:`, e);
         }
-      } else {
-        oraPartenza = new Date(richiesta.start_datetime || Date.now());
       }
-
-      const oraArrivo = new Date(oraPartenza.getTime() + durataSegmentoMs);
 
       // --- CALCOLO PREZZO ---
       let prezzo = 0;
       try {
-        prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaRichiesta, Number(item.distanza));
+        prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaSegmentoKm, Number(item.distanza));
       } catch (err) { prezzo = 0; }
 
       return {
@@ -98,16 +67,14 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         modello: v?.modello ?? null,
         localitaOrigine: await getLocalitaSafe(richiesta.coord),
         localitaDestinazione: await getLocalitaSafe(richiesta.coordDest),
-        // CORRETTO: Passiamo l'intero item, non solo decodedCoords
-        percorsoVisualizzato: isCorsa ? getSottoPercorso(item, richiesta.coord, richiesta.coordDest)?.coords : null,
         oraPartenza: oraPartenza.toISOString(),
         oraArrivo: oraArrivo.toISOString(),
-        distanzaKm: isCorsa ? Number(item.distanza ?? 0) : distanzaRichiesta,
+        distanzaKm: Number(distanzaSegmentoKm.toFixed(2)),
         prezzo: Number(prezzo?.toFixed(2)) || 0,
         stato: item.stato,
-        // Valore calcolato dal motore di ricerca
         postiDisponibili: Number(item.postiDisponibili ?? 0),
-        rating: { media: Number((r.media ?? 0).toFixed(1)), totale: r.totale ?? 0 }
+        // percorsoVisualizzato ora può essere recuperato con logica semplificata
+        percorsoVisualizzato: isCorsa ? item.decodedCoords : null 
       };
     })
   );

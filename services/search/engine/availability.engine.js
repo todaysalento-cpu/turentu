@@ -38,15 +38,11 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const startPointOnLine = turf.nearestPointOnLine(route, pStart);
         const endPointOnLine = turf.nearestPointOnLine(route, pEnd);
         
-        // Se l'indice di start è minore di end, la direzione è corretta (Pescara -> Rimini)
-        // Se è maggiore, la polyline è invertita (Rimini -> Pescara), ma è comunque percorribile.
-        // Se gli indici sono uguali, la corsa non copre la tratta.
         if (startPointOnLine.properties.index === endPointOnLine.properties.index) {
             console.log(`[DEBUG FILTRO] Corsa ${c.id} scartata: Punti troppo vicini sulla linea.`);
             continue;
         }
         
-        // Logica accettata: non importa l'ordine, basta che la corsa copra entrambi i punti
         console.log(`[DEBUG FILTRO] Corsa ${c.id} direzione OK (Start index: ${startPointOnLine.properties.index}, End index: ${endPointOnLine.properties.index}).`);
 
         // 3. Calcolo disponibilità
@@ -65,9 +61,12 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     console.log(`✅ [FILTER] Elaborati ${corseCandidate.length} candidati in ${Date.now() - startTime}ms`);
     
     return {
+        // AGGIORNAMENTO: Aggiunti veicolo_id e is_slot per prevenire bug nel pricing
         slots: corseValide.map(c => ({
             id: `slot_${c.id}`,
             corsa_id: c.id,
+            veicolo_id: c.veicolo_id,
+            is_slot: true,
             posti_disponibili: c.postiDisponibili,
             prezzo: c.prezzo_fisso,
             start_datetime: c.start_datetime

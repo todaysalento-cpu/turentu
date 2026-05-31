@@ -86,6 +86,8 @@ export const upsertCorsa = async (c) => {
 
   const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
   const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
+  const endLat = decodedCoords.length > 0 ? decodedCoords[decodedCoords.length - 1][1] : 0;
+  const endLon = decodedCoords.length > 0 ? decodedCoords[decodedCoords.length - 1][0] : 0;
 
   const newCorsa = {
     ...(oldData || {}), ...c, id: c.id, 
@@ -102,10 +104,18 @@ export const upsertCorsa = async (c) => {
   if (redisClient) {
     const pipeline = redisClient.multi();
     
+    // Pulizia indici precedenti
+    pipeline.zRem('corse_geo_index', c.id.toString());
+    
+    // Indicizzazione Geospaziale (Origine e Destinazione per coprire tratte lunghe)
     if (lat !== 0 && lon !== 0) {
         pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
     }
+    if (endLat !== 0 && endLon !== 0) {
+        pipeline.geoAdd('corse_geo_index', { longitude: endLon, latitude: endLat, member: c.id.toString() });
+    }
     
+    // Aggiornamento Hash del percorso
     const zKey = `corsa:percorso_hash:${c.id}`;
     pipeline.del(zKey);
     decodedCoords.forEach((coord, idx) => {

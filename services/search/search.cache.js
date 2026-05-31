@@ -21,7 +21,7 @@ if (!global.__CACHESTORE__) {
 export const CacheStore = global.__CACHESTORE__;
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// --- GESTIONE PRENOTAZIONI (Ripristinata) ---
+// --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
     const corsaId = Number(prenotazione.corsa_id);
     const pId = Number(prenotazione.id);
@@ -103,6 +103,24 @@ export const upsertCorsa = async (c) => {
         } catch (redisErr) {
             console.error(`[ERROR] Redis fallito per corsa ${corsaId}:`, redisErr);
         }
+    }
+};
+
+export const removeCorsa = async (corsaId) => {
+    const id = Number(corsaId);
+    CacheStore.corseCache.delete(id);
+    CacheStore.prenotazioniCache.delete(id);
+    
+    if (redisClient) {
+        try {
+            const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
+            const pipeline = redisClient.multi();
+            pipeline.zRem('corse_geo_index', id.toString());
+            pipeline.del(`corsa:prenotazioni:${id}`);
+            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
+            pipeline.del(`corsa:hashes:${id}`);
+            await pipeline.exec();
+        } catch (e) { console.error("Errore pulizia Redis:", e); }
     }
 };
 

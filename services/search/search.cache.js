@@ -91,6 +91,12 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
 
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
+    // DIAGNOSTICA ID VEICOLO
+    const veicoloId = Number(c.veicolo_id);
+    if (isNaN(veicoloId)) {
+        console.warn(`⚠️ [CACHE] Corsa ${c.id} caricata con veicolo_id non valido/mancante: ${c.veicolo_id}`);
+    }
+
     const corsaId = Number(c.id);
     
     let decodedCoords = [];
@@ -104,7 +110,8 @@ export const upsertCorsa = async (c) => {
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
-    CacheStore.corseCache.set(corsaId, { ...c, lat, lon, decodedCoords });
+    // Inseriamo in cache includendo esplicitamente il veicolo_id normalizzato
+    CacheStore.corseCache.set(corsaId, { ...c, veicolo_id: veicoloId, lat, lon, decodedCoords });
     
     if (redisClient) {
         try {

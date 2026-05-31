@@ -19,7 +19,8 @@ export async function cercaSlotUltra(richiesta) {
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   console.log(`[DEBUG GEOSH] Punto: ${lat},${lon} | Hash ricercato: ${hash} | Area vicini: ${hashes.length}`);
   
-  const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa_in_area:${h}`)));
+  // CORRETTO: Chiave uniformata in 'corsa:in_area:${h}'
+  const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
   const candidateIds = [...new Set(results.flat())];
   console.log(`[DEBUG GEOSH] Candidati trovati in Redis (ID):`, candidateIds);
   

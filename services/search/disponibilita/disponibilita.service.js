@@ -13,18 +13,23 @@ export async function getDisponibilita(driver_id) {
 
   const now = new Date();
   const dayOfWeek = now.getDay();
+  // Calcolo minuti correnti nel giorno
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   return turniDriver.map(d => {
     let disponibile = true;
+    
+    // 1. Verifica giorni esclusi
     const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
-
     if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
       disponibile = false;
     }
 
-    if (Array.isArray(d.inattivita)) {
-      for (const i of d.inattivita) {
+    // 2. Verifica periodi di inattività
+    // Assicurati di gestire il jsonb parsato o stringa
+    const inattivita = typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || []);
+    if (disponibile && Array.isArray(inattivita)) {
+      for (const i of inattivita) {
         const start = new Date(i.start);
         const end = new Date(i.fine);
         if (now >= start && now <= end) {
@@ -34,13 +39,24 @@ export async function getDisponibilita(driver_id) {
       }
     }
 
+    // 3. Verifica orario turno (estrazione HH:mm da timestamp)
     const startDate = new Date(d.start);
     const endDate = new Date(d.fine);
+    
     const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
     const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
     
-    if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-      disponibile = false;
+    // Se start > end, il turno scavalca la mezzanotte
+    const isOvernight = startMinutes > endMinutes;
+    
+    if (isOvernight) {
+      if (!(currentMinutes >= startMinutes || currentMinutes <= endMinutes)) {
+        disponibile = false;
+      }
+    } else {
+      if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
+        disponibile = false;
+      }
     }
 
     return { ...d, disponibile };
@@ -51,11 +67,14 @@ export async function createDisponibilita(turno) {
   console.log("[BACKEND] createDisponibilita - Ricevuto:", turno);
   let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
 
+  // Nota: parseTimeString continua a creare ISO date per mantenere compatibilità col db timestamp
   start = parseTimeString(start);
   fine  = parseTimeString(fine);
 
-  if (!start || !fine || start >= fine) {
-    throw new Error('Orario non valido: start deve essere prima di fine');
+  // NOTA: Se vuoi supportare turni notturni (es 22-06), 
+  // il check del DB "chk_start_end" deve essere rimosso.
+  if (!start || !fine) {
+    throw new Error('Orario non valido');
   }
 
   const res = await pool.query(
@@ -74,25 +93,14 @@ export async function createDisponibilita(turno) {
   );
 
   let nuovoTurno = res.rows[0];
-
   const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [nuovoTurno.veicolo_id]);
   nuovoTurno.driver_id = vRes.rows[0]?.driver_id;
 
-  console.log("[BACKEND] createDisponibilita - ID creato/aggiornato:", nuovoTurno.id, "per driver:", nuovoTurno.driver_id);
-  
-  // AGGIORNAMENTO CACHE CON METADATI DI DISTINZIONE
-  CacheManager.disponibilita.update({
-    ...nuovoTurno,
-    veicolo_id: Number(nuovoTurno.veicolo_id),
-    is_slot: true,
-    tipo: 'disponibilita'
-  });
-  
+  await CacheManager.disponibilita.update(nuovoTurno);
   return nuovoTurno;
 }
 
 export async function updateDisponibilita(id, update) {
-  console.log(`[BACKEND] updateDisponibilita - ID: ${id}`);
   const fields = [];
   const values = [];
   let idx = 1;
@@ -117,25 +125,16 @@ export async function updateDisponibilita(id, update) {
   );
 
   let turnoAggiornato = res.rows[0];
-  
   const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [turnoAggiornato.veicolo_id]);
   turnoAggiornato.driver_id = vRes.rows[0]?.driver_id;
 
-  // AGGIORNAMENTO CACHE CON METADATI DI DISTINZIONE
-  CacheManager.disponibilita.update({
-    ...turnoAggiornato,
-    veicolo_id: Number(turnoAggiornato.veicolo_id),
-    is_slot: true,
-    tipo: 'disponibilita'
-  });
-  
+  await CacheManager.disponibilita.update(turnoAggiornato);
   return turnoAggiornato;
 }
 
 export async function deleteDisponibilita(id) {
-  console.log(`[BACKEND] deleteDisponibilita - ID: ${id}`);
   await pool.query('DELETE FROM disponibilita_veicolo WHERE id=$1', [id]);
-  CacheManager.disponibilita.delete(id);
+  await CacheManager.disponibilita.delete(id);
 }
 
 function parseTimeString(timeStr) {

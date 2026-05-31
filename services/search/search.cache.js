@@ -45,7 +45,18 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
+// --- GETTER ---
+export const getVeicoliCache = () => Array.from(CacheStore.veicoliCache.values());
+export const getCorseCache = () => Array.from(CacheStore.corseCache.values());
+export const getDisponibilitaCache = () => Array.from(CacheStore.disponibilitaCache.values());
+export const getDisponibilitaMap = () => CacheStore.disponibilitaCache;
+export const getPendingCache = () => Array.from(CacheStore.pendingCache.values());
+export const getPrenotazioniByCorsa = (corsaId) => CacheStore.prenotazioniCache.get(corsaId) || [];
+
 // --- GESTIONE DATI ---
+export const upsertPending = (p) => CacheStore.pendingCache.set(p.id, p);
+export const removePending = (id) => CacheStore.pendingCache.delete(id);
+
 export const upsertPrenotazione = async (p) => {
     if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
         CacheStore.prenotazioniCache.set(p.corsa_id, []);
@@ -54,6 +65,37 @@ export const upsertPrenotazione = async (p) => {
 
     if (redisClient) {
         await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
+    }
+};
+
+export const upsertVeicolo = (v) => {
+  const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
+  CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
+};
+
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
+
+export const upsertDisponibilita = (d) => {
+  const v = CacheStore.veicoliCache.get(d.veicolo_id);
+  d.disponibile = calcolaStatoDisponibilita(d);
+  CacheStore.disponibilitaCache.set(d.id, d);
+
+  if (v && v.lat && v.lon) {
+    const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
+    if (!SlotIndex.has(hash)) SlotIndex.set(hash, new Set());
+    SlotIndex.get(hash).add(d.id);
+  }
+};
+
+export const removeDisponibilita = (id) => {
+    if (CacheStore.disponibilitaCache.has(id)) {
+        const d = CacheStore.disponibilitaCache.get(id);
+        CacheStore.disponibilitaCache.delete(id);
+        const v = CacheStore.veicoliCache.get(d.veicolo_id);
+        if (v && v.lat && v.lon) {
+            const hash = ngeohash.encode(v.lat, v.lon, GEOHASH_PRECISION);
+            SlotIndex.get(hash)?.delete(id);
+        }
     }
 };
 
@@ -69,22 +111,16 @@ export const upsertCorsa = async (c) => {
   
   let geohashes = typeof c.path_geohashes === 'string' ? JSON.parse(c.path_geohashes || '[]') : (c.path_geohashes || []);
   let decodedCoords = oldData?.decodedCoords || [];
-  let bbox = oldData?.bbox;
   let turfLine = oldData?.turfLine;
   
-  // Decodifica polilinea ed estrazione coordinate iniziali
   if (c.percorso_polyline) {
     try {
       const raw = polyline.decode(c.percorso_polyline);
       decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]); 
       turfLine = turf.lineString(decodedCoords);
-      const lats = raw.map(p => p[0]);
-      const lons = raw.map(p => p[1]);
-      bbox = { minLat: Math.min(...lats), maxLat: Math.max(...lats), minLon: Math.min(...lons), maxLon: Math.max(...lons) };
     } catch (e) { console.error(`Errore decodifica ${c.id}:`, e); }
   }
 
-  // Estrazione coordinate reali per Redis (primo punto della polilinea)
   const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
   const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
 
@@ -93,23 +129,13 @@ export const upsertCorsa = async (c) => {
     localitaOrigine: c.origine_address, localitaDestinazione: c.destinazione_address,
     prezzo: Number(c.prezzo_fisso ?? oldData?.prezzo ?? 0), 
     oraPartenza: c.start_datetime, oraArrivo: c.arrivo_datetime,
-    distanza: Number(c.distanza || oldData?.distanza || 0), 
-    tipo_corsa: c.tipo_corsa || oldData?.tipo_corsa || 'standard',
-    veicolo_id: Number(c.veicolo_id || oldData?.veicolo_id), 
-    decodedCoords, bbox, turfLine, path_geohashes: geohashes,
-    posti_totali: c.posti_totali, posti_prenotati: c.posti_prenotati,
-    lat, lon
+    lat, lon, decodedCoords, turfLine, path_geohashes: geohashes
   };
   
   CacheStore.corseCache.set(c.id, newCorsa);
 
-  // Inserimento in Redis con coordinate estratte dalla polilinea
   if (redisClient && lat !== 0 && lon !== 0) {
-    await redisClient.geoAdd('corse_geo_index', {
-        longitude: lon,
-        latitude: lat,
-        member: c.id.toString()
-    });
+    await redisClient.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
   }
   
   geohashes.forEach(h => {
@@ -123,18 +149,22 @@ export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
   const client = await pool.connect();
   try {
-    console.log("🔄 Sincronizzazione cache e Redis...");
+    console.log("🔄 Sincronizzazione cache...");
     if (redisClient) await redisClient.del('corse_geo_index');
 
     const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
-    console.log(`[LOAD] Lette ${cRes.rows.length} corse`);
     for (const c of cRes.rows) await upsertCorsa(c);
 
-    const pRes = await client.query(`SELECT corsa_id, id, posti_richiesti, start_index_polyline, end_index_polyline FROM prenotazioni`);
+    const pRes = await client.query(`SELECT * FROM prenotazioni`);
     CacheStore.prenotazioniCache.clear();
     for (const p of pRes.rows) await upsertPrenotazione(p);
+
+    const vRes = await client.query(`SELECT * FROM veicolo`);
+    vRes.rows.forEach(v => upsertVeicolo(v));
     
-    // ... (aggiungi qui le funzioni per veicoli e disponibilita se necessario)
+    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
+    dRes.rows.forEach(d => upsertDisponibilita(d));
+    
     console.log(`📦 [CACHE] Pronta. Corse: ${CacheStore.corseCache.size}`);
   } finally { client.release(); }
 }

@@ -9,11 +9,10 @@ export const CacheStore = {
   disponibilitaCache: new Map(),
   corseCache: new Map(),
   recensioniCache: new Map(),
-  pendingCache: new Map(),
   prenotazioniCache: new Map() 
 };
 
-// Precisione 7 per l'indicizzazione ZSET (tratta)
+// Precisione 7 (~150m) per la validazione della tratta stradale
 const GEOHASH_PRECISION_TRATTA = 7;
 
 // --- LOGICA CALCOLO STATO ---
@@ -103,12 +102,12 @@ export const upsertCorsa = async (c) => {
   if (redisClient) {
     const pipeline = redisClient.multi();
     
-    // 1. Indice Geospaziale
+    // 1. Aggiorna indice geospaziale (prossimità)
     if (lat !== 0 && lon !== 0) {
         pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
     }
     
-    // 2. Popolamento ZSET per validazione tratta
+    // 2. Aggiorna ZSET (percorso sequenziale per validazione tratta)
     const zKey = `corsa:percorso_hash:${c.id}`;
     pipeline.del(zKey);
     decodedCoords.forEach((coord, idx) => {
@@ -152,5 +151,7 @@ export async function loadCachesUltra(force = false) {
     dRes.rows.forEach(d => upsertDisponibilita(d));
     
     console.log(`📦 [CACHE] Pronta. Corse caricate: ${CacheStore.corseCache.size}`);
+  } catch (err) {
+    console.error("❌ Errore durante il caricamento cache:", err);
   } finally { client.release(); }
 }

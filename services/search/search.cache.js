@@ -145,6 +145,24 @@ export const upsertCorsa = async (c) => {
   });
 };
 
+export const removeCorsa = async (corsaId) => {
+    const corsa = CacheStore.corseCache.get(corsaId);
+    if (corsa) {
+        CacheStore.corseCache.delete(corsaId);
+        CacheStore.prenotazioniCache.delete(corsaId);
+        if (redisClient) {
+            await redisClient.zRem('corse_geo_index', corsaId.toString());
+            await redisClient.del(`corsa:prenotazioni:${corsaId}`);
+        }
+        if (corsa.path_geohashes) {
+            corsa.path_geohashes.forEach(h => {
+                const prefix = h.substring(0, GEOHASH_PRECISION);
+                GeoIndex.get(prefix)?.delete(corsaId);
+            });
+        }
+    }
+};
+
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0 && CacheStore.disponibilitaCache.size > 0) return;
   const client = await pool.connect();

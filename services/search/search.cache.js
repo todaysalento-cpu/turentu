@@ -23,7 +23,7 @@ export const CacheStore = global.__CACHESTORE__;
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// --- LOGICA CALCOLO STATO ---
+// --- LOGICA CALCOLO STATO (Mantenuta come utility per il service) ---
 export function calcolaStatoDisponibilita(d) {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -55,9 +55,10 @@ export const upsertVeicolo = (v) => {
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
 export const upsertDisponibilita = async (d) => {
-    d.disponibile = calcolaStatoDisponibilita(d);
+    // AGGIORNATO: Non forziamo più d.disponibile qui. 
+    // Il calcolo avverrà dinamicamente nel service al momento della richiesta.
     CacheStore.disponibilitaCache.set(Number(d.id), d);
-    console.log(`✅ [CACHE] Disponibilità ${d.id} aggiornata.`);
+    console.log(`✅ [CACHE] Disponibilità ${d.id} memorizzata (Dati grezzi).`);
 };
 
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
@@ -105,7 +106,6 @@ export const upsertCorsa = async (c) => {
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
-    // Aggiornamento cache in RAM
     CacheStore.corseCache.set(corsaId, { ...c, lat, lon, decodedCoords });
     
     if (redisClient) {
@@ -115,7 +115,6 @@ export const upsertCorsa = async (c) => {
             
             pipeline.zRem('corse_geo_index', corsaId.toString());
             pipeline.del(`corsa:prenotazioni:${corsaId}`);
-            // Pulizia usando la chiave corretta
             hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.del(`corsa:hashes:${corsaId}`);
             
@@ -129,7 +128,6 @@ export const upsertCorsa = async (c) => {
                 [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
             });
 
-            // Scrittura usando la chiave corretta
             hashSet.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
             
@@ -151,7 +149,6 @@ export const removeCorsa = async (corsaId) => {
             const pipeline = redisClient.multi();
             pipeline.zRem('corse_geo_index', id.toString());
             pipeline.del(`corsa:prenotazioni:${id}`);
-            // Pulizia coerente con la chiave di salvataggio
             hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
             pipeline.del(`corsa:hashes:${id}`);
             await pipeline.exec();

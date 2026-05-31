@@ -4,13 +4,22 @@ import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js'; 
 
-export const CacheStore = {
-    veicoliCache: new Map(),
-    disponibilitaCache: new Map(),
-    corseCache: new Map(),
-    recensioniCache: new Map(),
-    prenotazioniCache: new Map() 
-};
+/**
+ * Singleton Pattern: Garantisce che CacheStore sia lo stesso oggetto 
+ * in tutta l'applicazione Node.js, evitando duplicazioni di memoria.
+ */
+if (!global.__CACHESTORE__) {
+    global.__CACHESTORE__ = {
+        veicoliCache: new Map(),
+        disponibilitaCache: new Map(),
+        corseCache: new Map(),
+        recensioniCache: new Map(),
+        prenotazioniCache: new Map() 
+    };
+    console.log("🚀 [CACHE] Inizializzata istanza globale di CacheStore");
+}
+
+export const CacheStore = global.__CACHESTORE__;
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
@@ -45,9 +54,10 @@ export const upsertVeicolo = (v) => {
 
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
-export const upsertDisponibilita = (d) => {
+export const upsertDisponibilita = async (d) => {
     d.disponibile = calcolaStatoDisponibilita(d);
     CacheStore.disponibilitaCache.set(Number(d.id), d);
+    console.log(`✅ [CACHE] Disponibilità ${d.id} aggiornata.`);
 };
 
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
@@ -96,14 +106,13 @@ export const upsertCorsa = async (c) => {
         } catch (e) { 
             console.error(`[ERROR] Decodifica polyline fallita per corsa ${c.id}:`, e); 
         }
-    } else {
-        console.warn(`[WARN] Corsa ${corsaId} senza percorso_polyline`);
     }
 
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
     CacheStore.corseCache.set(corsaId, { ...oldData, ...c, lat, lon, decodedCoords });
+    console.log(`[DEBUG] CacheStore.corseCache size ora: ${CacheStore.corseCache.size}`);
 
     if (redisClient) {
         try {
@@ -124,7 +133,7 @@ export const upsertCorsa = async (c) => {
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
             
             await pipeline.exec();
-            console.log(`[DEBUG] Corsa ${corsaId} salvata in Redis con ${hashSet.size} hashes.`);
+            console.log(`[DEBUG] Corsa ${corsaId} salvata in Redis.`);
         } catch (redisErr) {
             console.error(`[ERROR] Fallimento scrittura Redis per corsa ${corsaId}:`, redisErr);
         }
@@ -137,15 +146,17 @@ export const removeCorsa = async (corsaId, internal = false) => {
     CacheStore.prenotazioniCache.delete(id);
     
     if (redisClient) {
-        const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
-        const pipeline = redisClient.multi();
-        
-        pipeline.zRem('corse_geo_index', id.toString());
-        pipeline.del(`corsa:prenotazioni:${id}`);
-        hashes.forEach(h => pipeline.sRem(`corsa_in_area:${h}`, id.toString()));
-        pipeline.del(`corsa:hashes:${id}`);
+        try {
+            const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
+            const pipeline = redisClient.multi();
+            
+            pipeline.zRem('corse_geo_index', id.toString());
+            pipeline.del(`corsa:prenotazioni:${id}`);
+            hashes.forEach(h => pipeline.sRem(`corsa_in_area:${h}`, id.toString()));
+            pipeline.del(`corsa:hashes:${id}`);
 
-        await pipeline.exec();
+            await pipeline.exec();
+        } catch (e) { console.error("Errore pulizia Redis:", e); }
     }
 };
 
@@ -157,7 +168,6 @@ export async function loadCachesUltra(force = false) {
     try {
         console.log("🔄 [SYNC] Inizio sincronizzazione cache...");
         
-        // Filtriamo per corse future o in corso per essere precisi
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
         console.log(`[SYNC] Trovate ${cRes.rowCount} corse attive nel database.`);
         
@@ -172,6 +182,5 @@ export async function loadCachesUltra(force = false) {
         console.error("❌ [SYNC] Errore critico:", err);
     } finally { 
         client.release(); 
-        console.log("[SYNC] Connessione DB rilasciata.");
     }
 }

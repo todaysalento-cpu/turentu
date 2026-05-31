@@ -49,6 +49,8 @@ export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
 
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
+
 export const upsertDisponibilita = async (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), {
         ...d,
@@ -57,6 +59,8 @@ export const upsertDisponibilita = async (d) => {
     });
     console.log(`✅ [CACHE] Disponibilità ${d.id} normalizzata.`);
 };
+
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
 
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {

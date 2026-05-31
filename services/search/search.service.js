@@ -1,5 +1,4 @@
-// ======================= services/search/search.service.js =======================
-import { loadCachesUltra, getVeicoliCache, getDisponibilitaCache, getCorseCache, CacheStore } from './search.cache.js';
+import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 
@@ -12,10 +11,10 @@ export async function cercaSlotUltra(richiesta) {
   // 1. Assicura che la cache sia caricata
   await loadCachesUltra();
 
-  // 2. Lettura sincrona dalla memoria
-  const veicoli = getVeicoliCache();
-  const disponibilita = getDisponibilitaCache();
-  const corse = getCorseCache();
+  // 2. Lettura sincrona dalla memoria tramite CacheStore
+  const veicoli = Array.from(CacheStore.veicoliCache.values());
+  const disponibilita = Array.from(CacheStore.disponibilitaCache.values());
+  const corse = Array.from(CacheStore.corseCache.values());
 
   if (!veicoli || !disponibilita || !corse) {
     console.error("❌ [SERVICE] Errore: Cache non caricata correttamente");
@@ -48,7 +47,6 @@ export async function cercaSlotUltra(richiesta) {
 
   // 6. Formattazione risultati
   try {
-    // FIX: Passiamo la Map (CacheStore.veicoliCache) invece dell'array
     const risultati = await formatResults(
       richiestaNormalizzata, 
       slots, 
@@ -75,7 +73,7 @@ export async function cercaSlotPerCliente(clienteId, richiesta) {
 
 export async function cercaSlotPerAutista(veicoloId) {
   await loadCachesUltra();
-  const corse = getCorseCache();
+  const corse = Array.from(CacheStore.corseCache.values());
   if (!corse) return [];
   return corse.filter(c => c.veicolo_id == veicoloId);
 }

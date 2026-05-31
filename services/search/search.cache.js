@@ -12,8 +12,8 @@ export const CacheStore = {
   prenotazioniCache: new Map() 
 };
 
-// Precisione 7 (~150m) per la validazione della tratta stradale
-const GEOHASH_PRECISION_TRATTA = 7;
+// Precisione 5 (~4.9km) per una ricerca geografica iniziale tollerante
+const GEOHASH_PRECISION_TRATTA = 5;
 
 // --- LOGICA CALCOLO STATO ---
 export function calcolaStatoDisponibilita(d) {
@@ -65,7 +65,6 @@ export const upsertPrenotazione = async (p) => {
     CacheStore.prenotazioniCache.get(p.corsa_id).push(p);
 
     if (redisClient) {
-        // Memorizziamo la prenotazione in un Hash Redis per accesso rapido durante il filtering
         await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
     }
 };
@@ -103,12 +102,10 @@ export const upsertCorsa = async (c) => {
   if (redisClient) {
     const pipeline = redisClient.multi();
     
-    // 1. Indice Geospaziale per ricerca rapida
     if (lat !== 0 && lon !== 0) {
         pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
     }
     
-    // 2. Popolamento ZSET per validazione tratta (percorso sequenziale)
     const zKey = `corsa:percorso_hash:${c.id}`;
     pipeline.del(zKey);
     decodedCoords.forEach((coord, idx) => {
@@ -136,7 +133,6 @@ export async function loadCachesUltra(force = false) {
   const client = await pool.connect();
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
-    if (redisClient) await redisClient.del('corse_geo_index');
 
     const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
     for (const c of cRes.rows) await upsertCorsa(c);

@@ -1,7 +1,7 @@
 import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { getDisponibilita } from './disponibilita/disponibilita.service.js'; // Import per calcolo dinamico
+import { getDisponibilita } from './disponibilita/disponibilita.service.js';
 import { redisClient } from '../../redis.js';
 import ngeohash from 'ngeohash';
 
@@ -10,6 +10,7 @@ const GEOHASH_PRECISION_TRATTA = 5;
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
   
+  // Assicurati che i dati siano in memoria
   await loadCachesUltra();
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
@@ -45,6 +46,7 @@ export async function cercaSlotUltra(richiesta) {
   // 3. ESECUZIONE FILTRI
   
   // A. Filtro Corse (Geometrico)
+  // Nota: Assicurati che filterDisponibilita usi la logica getPostiReali descritta prima
   const { slots: slotsCorse, corse: corseCompatibili } = await filterDisponibilita(
     richiestaNormalizzata,
     corseCandidate,
@@ -55,10 +57,15 @@ export async function cercaSlotUltra(richiesta) {
   const allSlots = await Promise.all(
     Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
       const stati = await getDisponibilita(s.driver_id, targetDate);
+      
+      // ARRICCHIMENTO: Recupero posti certi dalla fonte ufficiale (veicoliCache)
+      const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+      const postiReali = veicolo ? Number(veicolo.posti_totali || 0) : 0;
+      
       return {
         ...s,
         disponibile: stati.some(st => st.disponibile),
-        posti_totali: Number(s.posti_totali || 0)
+        posti_totali: postiReali // Dato ora garantito corretto
       };
     })
   );
@@ -67,6 +74,7 @@ export async function cercaSlotUltra(richiesta) {
 
   // 4. FUSIONE DEI RISULTATI
   const mapRisultati = new Map();
+  // Gli slot di corsa hanno priorità o sovrascrivono i generici
   slotsLiberi.forEach(s => mapRisultati.set(s.veicolo_id, s));
   slotsCorse.forEach(s => mapRisultati.set(s.veicolo_id, s));
 

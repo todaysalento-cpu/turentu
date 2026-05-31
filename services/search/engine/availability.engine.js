@@ -11,21 +11,21 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
 
-    // Statistiche per monitoraggio leggero
-    let stats = { totali: corseCandidate.length, scartateDist: 0, scartateDir: 0, scartatePosti: 0 };
+    let stats = { totali: corseCandidate.length, d: 0, dir: 0, p: 0 };
 
     for (let i = 0; i < corseCandidate.length; i++) {
         const c = corseCandidate[i];
-        if (!c?.decodedCoords) continue;
+        if (!c?.decodedCoords || c.decodedCoords.length < 2) continue;
 
         const route = turf.lineString(c.decodedCoords);
         
-        // 1. Verifica geometrica
-        const distStart = turf.pointToLineDistance(pStart, route);
-        const distEnd = turf.pointToLineDistance(pEnd, route);
+        // 1. Verifica geometrica (Distanza in KM)
+        // Se la tratta è molto lunga, 50km è ok, ma verifica se il percorso ha abbastanza punti
+        const distStart = turf.pointToLineDistance(pStart, route, { units: 'kilometers' });
+        const distEnd = turf.pointToLineDistance(pEnd, route, { units: 'kilometers' });
         
         if (distStart > 50 || distEnd > 50) {
-            stats.scartateDist++;
+            stats.d++;
             continue;
         }
 
@@ -34,13 +34,18 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const endPointOnLine = turf.nearestPointOnLine(route, pEnd);
         
         if (startPointOnLine.properties.index >= endPointOnLine.properties.index) {
-            stats.scartateDir++;
+            stats.dir++;
             continue;
         }
 
         // 3. Calcolo disponibilità
-        const occupazione = (prenotazioniData[i] || []).reduce((acc, p) => {
-            try { return acc + (JSON.parse(p)?.posti_richiesti || 0); } catch { return acc; }
+        // Assicuriamo che prenotazioniData[i] sia un array pulito
+        const prenotazioni = Array.isArray(prenotazioniData[i]) ? prenotazioniData[i] : [];
+        const occupazione = prenotazioni.reduce((acc, p) => {
+            try {
+                const data = typeof p === 'string' ? JSON.parse(p) : p;
+                return acc + (Number(data?.posti_richiesti) || 0);
+            } catch { return acc; }
         }, 0);
         
         const postiLiberi = Number(c.posti_totali || 0) - occupazione;
@@ -49,11 +54,11 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             c.postiDisponibili = postiLiberi;
             corseValide.push(c);
         } else {
-            stats.scartatePosti++;
+            stats.p++;
         }
     }
 
-    console.log(`[FILTER] Elaborati ${stats.totali} candidati in ${Date.now() - startTime}ms. Accettate: ${corseValide.length}, Scarti(D: ${stats.scartateDist}, Dir: ${stats.scartateDir}, Posti: ${stats.scartatePosti})`);
+    console.log(`[FILTER] Elaborati ${stats.totali} in ${Date.now() - startTime}ms | Esito: ${corseValide.length} ok | Scarti (D:${stats.d} Dir:${stats.dir} P:${stats.p})`);
     
     return {
         slots: corseValide.map(c => ({

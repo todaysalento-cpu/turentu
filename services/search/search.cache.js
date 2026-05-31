@@ -23,80 +23,25 @@ export const CacheStore = global.__CACHESTORE__;
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// --- LOGICA CALCOLO STATO (Utility) ---
-export function calcolaStatoDisponibilita(d) {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
-    if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) return false;
-
-    if (Array.isArray(d.inattivita)) {
-        for (const i of d.inattivita) {
-            if (now >= new Date(i.start) && now <= new Date(i.fine)) return false;
-        }
-    }
-
-    const startMinutes = new Date(d.start).getHours() * 60 + new Date(d.start).getMinutes();
-    const endMinutes = new Date(d.fine).getHours() * 60 + new Date(d.fine).getMinutes();
-
-    return (startMinutes > endMinutes) 
-        ? (currentMinutes >= startMinutes || currentMinutes <= endMinutes)
-        : (currentMinutes >= startMinutes && currentMinutes <= endMinutes);
-}
-
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
     const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
 
-export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
-
 export const upsertDisponibilita = async (d) => {
-    CacheStore.disponibilitaCache.set(Number(d.id), d);
-    console.log(`✅ [CACHE] Disponibilità ${d.id} memorizzata (Dati grezzi).`);
-};
-
-export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
-
-// --- GESTIONE PRENOTAZIONI ---
-export const upsertPrenotazione = async (prenotazione) => {
-    const corsaId = Number(prenotazione.corsa_id);
-    const pId = Number(prenotazione.id);
-    
-    if (!CacheStore.prenotazioniCache.has(corsaId)) {
-        CacheStore.prenotazioniCache.set(corsaId, new Map());
-    }
-    CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
-
-    if (redisClient) {
-        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
-    }
-};
-
-export const removePrenotazione = async (corsaId, prenotazioneId) => {
-    const cId = Number(corsaId);
-    const pId = Number(prenotazioneId);
-    
-    if (CacheStore.prenotazioniCache.has(cId)) {
-        CacheStore.prenotazioniCache.get(cId).delete(pId);
-    }
-    
-    if (redisClient) {
-        await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
-    }
+    // Normalizziamo subito per prevenire NaN nel pricing
+    CacheStore.disponibilitaCache.set(Number(d.id), {
+        ...d,
+        veicolo_id: Number(d.veicolo_id),
+        is_slot: true 
+    });
+    console.log(`✅ [CACHE] Disponibilità ${d.id} normalizzata.`);
 };
 
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
-    // DIAGNOSTICA ID VEICOLO
     const veicoloId = Number(c.veicolo_id);
-    if (isNaN(veicoloId)) {
-        console.warn(`⚠️ [CACHE] Corsa ${c.id} caricata con veicolo_id non valido/mancante: ${c.veicolo_id}`);
-    }
-
     const corsaId = Number(c.id);
     
     let decodedCoords = [];
@@ -110,7 +55,6 @@ export const upsertCorsa = async (c) => {
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
-    // Inseriamo in cache includendo esplicitamente il veicolo_id normalizzato
     CacheStore.corseCache.set(corsaId, { ...c, veicolo_id: veicoloId, lat, lon, decodedCoords });
     
     if (redisClient) {
@@ -143,58 +87,38 @@ export const upsertCorsa = async (c) => {
     }
 };
 
-export const removeCorsa = async (corsaId) => {
-    const id = Number(corsaId);
-    CacheStore.corseCache.delete(id);
-    CacheStore.prenotazioniCache.delete(id);
-    
-    if (redisClient) {
-        try {
-            const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
-            const pipeline = redisClient.multi();
-            pipeline.zRem('corse_geo_index', id.toString());
-            pipeline.del(`corsa:prenotazioni:${id}`);
-            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
-            pipeline.del(`corsa:hashes:${id}`);
-            await pipeline.exec();
-        } catch (e) { console.error("Errore pulizia Redis:", e); }
-    }
-};
-
 // --- SYNC ENGINE ---
 export async function loadVeicoliCache() {
     const client = await pool.connect();
     try {
-        console.log("🚗 [SYNC] Inizio sincronizzazione veicoli...");
         const vRes = await client.query("SELECT * FROM veicolo");
-        for (const v of vRes.rows) {
-            upsertVeicolo(v);
-        }
-        console.log(`✅ [SYNC] Veicoli in memoria: ${CacheStore.veicoliCache.size}`);
-    } catch (err) {
-        console.error("❌ [SYNC VEICOLI] Errore:", err);
-    } finally {
-        client.release();
-    }
+        for (const v of vRes.rows) upsertVeicolo(v);
+        console.log(`✅ [SYNC] Veicoli caricati: ${CacheStore.veicoliCache.size}`);
+    } finally { client.release(); }
+}
+
+export async function loadDisponibilitaCache() {
+    const client = await pool.connect();
+    try {
+        const res = await client.query("SELECT * FROM disponibilita_veicolo");
+        for (const d of res.rows) await upsertDisponibilita(d);
+        console.log(`✅ [SYNC] Slot disponibilità caricati: ${CacheStore.disponibilitaCache.size}`);
+    } finally { client.release(); }
 }
 
 export async function loadCachesUltra(force = false) {
     if (!force && CacheStore.corseCache.size > 0 && CacheStore.veicoliCache.size > 0) return;
     
-    // 1. Carica prima i veicoli (essenziali per il lookup)
+    // Caricamento sequenziale per integrità dei dati
     await loadVeicoliCache();
+    await loadDisponibilitaCache();
     
-    // 2. Carica poi le corse
     const client = await pool.connect();
     try {
-        console.log("🔄 [SYNC] Inizio sincronizzazione corse...");
+        console.log("🔄 [SYNC] Sincronizzazione corse...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
-        
-        for (const c of cRes.rows) {
-            await upsertCorsa(c);
-        }
-        
-        console.log(`📦 [SYNC] Completata. Corse in memoria: ${CacheStore.corseCache.size}`);
+        for (const c of cRes.rows) await upsertCorsa(c);
+        console.log(`📦 [SYNC] Completata. Corse totali: ${CacheStore.corseCache.size}`);
     } catch (err) {
         console.error("❌ [SYNC] Errore:", err);
     } finally { 

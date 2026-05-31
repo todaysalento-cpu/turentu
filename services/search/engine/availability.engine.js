@@ -1,77 +1,67 @@
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../../redis.js';
 
-// Precisione 5 (~4.9km)
 const GEOHASH_PRECISION = 5;
+const BATCH_SIZE = 10; // Processiamo a blocchi per evitare timeout e sovraccarico
 
 export async function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
     const startTime = Date.now();
     const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [Number(c.id), c]) : []);
     
-    // Hash di ricerca
     const hStart = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
     const hEnd = ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION);
 
-    let candidateIds = [];
-    if (redisClient) {
-        candidateIds = await redisClient.geoSearch('corse_geo_index', { 
-            longitude: richiesta.coord.lon, latitude: richiesta.coord.lat 
-        }, { radius: 100, unit: 'km' });
-    }
+    let candidateIds = await redisClient.geoSearch('corse_geo_index', { 
+        longitude: richiesta.coord.lon, latitude: richiesta.coord.lat 
+    }, { radius: 100, unit: 'km' });
 
-    if (candidateIds.length === 0) {
-        console.log("ℹ️ [SEARCH ENGINE] Nessun candidato trovato nel raggio di 100km.");
-        return { slots: [], corse: [] };
-    }
+    if (candidateIds.length === 0) return { slots: [], corse: [] };
 
     const corse = [];
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-    console.log(`🔍 [SEARCH ENGINE] Processo ${candidateIds.length} candidati via query atomica...`);
+    // Processamento a blocchi (Batching) per massimizzare la velocità
+    for (let i = 0; i < candidateIds.length; i += BATCH_SIZE) {
+        const batchIds = candidateIds.slice(i, i + BATCH_SIZE);
+        const pipeline = redisClient.multi();
 
-    // Utilizziamo un ciclo asincrono per evitare fallimenti di pipeline bloccanti
-    for (const id of candidateIds) {
-        try {
+        batchIds.forEach(id => {
+            pipeline.zRangeByLex(`corsa:percorso_hash:${id}`, `[${hStart}`, `[${hStart}\xff`, 'LIMIT', 0, 1);
+            pipeline.zRangeByLex(`corsa:percorso_hash:${id}`, `[${hEnd}`, `[${hEnd}\xff`, 'LIMIT', 0, 1);
+            pipeline.hVals(`corsa:prenotazioni:${id}`);
+        });
+
+        const results = await pipeline.exec();
+        
+        for (let j = 0; j < batchIds.length; j++) {
+            const id = batchIds[j];
             const c = corseMap.get(Number(id));
             if (!c) continue;
 
-            // 1. Cerchiamo l'hash più vicino nella ZSET del percorso
-            const startMatches = await redisClient.zRangeByLex(`corsa:percorso_hash:${id}`, `[${hStart}`, `[${hStart}\xff`, 'LIMIT', 0, 1);
-            const endMatches = await redisClient.zRangeByLex(`corsa:percorso_hash:${id}`, `[${hEnd}`, `[${hEnd}\xff`, 'LIMIT', 0, 1);
+            // Estrarre risultati dalla pipeline (i risultati sono a gruppi di 3 per ogni ID del batch)
+            const resStart = results[j * 3][1];
+            const resEnd = results[j * 3 + 1][1];
+            const prenotazioniData = results[j * 3 + 2][1];
 
-            if (!startMatches?.length || !endMatches?.length) continue;
+            if (!resStart?.length || !resEnd?.length) continue;
 
-            // 2. Recuperiamo gli indici (score) basandoci sull'hash trovato
-            const idxStart = await redisClient.zScore(`corsa:percorso_hash:${id}`, startMatches[0]);
-            const idxEnd = await redisClient.zScore(`corsa:percorso_hash:${id}`, endMatches[0]);
+            // Recuperiamo gli score (usiamo await singolo qui perché è molto veloce)
+            const idxStart = await redisClient.zScore(`corsa:percorso_hash:${id}`, resStart[0]);
+            const idxEnd = await redisClient.zScore(`corsa:percorso_hash:${id}`, resEnd[0]);
 
             if (idxStart === null || idxEnd === null || Number(idxStart) >= Number(idxEnd)) continue;
 
-            // 3. Recuperiamo le prenotazioni per questo specifico ID
-            const prenotazioniData = await redisClient.hVals(`corsa:prenotazioni:${id}`);
-            const prenotazioniArray = Array.isArray(prenotazioniData) ? prenotazioniData : [];
-
-            // 4. Calcolo occupazione segmentata
-            const occupazioneSegmento = prenotazioniArray.reduce((max, p) => {
-                try {
-                    const item = typeof p === 'string' ? JSON.parse(p) : p;
-                    if (!item || typeof item !== 'object') return max;
-
-                    const sovrappone = (Number(idxStart) < Number(item.end_index_polyline)) && 
-                                       (Number(idxEnd) > Number(item.start_index_polyline));
-                    
-                    return sovrappone ? max + Number(item.posti_richiesti || 0) : max;
-                } catch (e) { return max; }
+            // Calcolo occupazione
+            const occupazione = (prenotazioniData || []).reduce((max, p) => {
+                const item = JSON.parse(p);
+                return (Number(idxStart) < Number(item.end_index_polyline) && Number(idxEnd) > Number(item.start_index_polyline)) 
+                    ? max + Number(item.posti_richiesti || 0) : max;
             }, 0);
 
-            const postiLiberi = Number(c.posti_totali || 0) - occupazioneSegmento;
-
-            if (postiLiberi >= postiRichiesti) {
-                c.postiDisponibili = postiLiberi;
+            if ((Number(c.posti_totali || 0) - occupazione) >= postiRichiesti) {
+                c.postiDisponibili = Number(c.posti_totali) - occupazione;
                 corse.push(c);
             }
-        } catch (err) {
-            console.error(`⚠️ [SEARCH ENGINE] Errore processando corsa ${id}:`, err);
         }
     }
 

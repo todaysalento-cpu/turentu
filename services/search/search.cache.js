@@ -13,14 +13,10 @@ export const CacheStore = {
   prenotazioniCache: new Map() 
 };
 
-// SlotIndex rimane solo se strettamente necessario per la logica di business,
-// altrimenti consiglio di spostare anche questo in Redis.
-export const SlotIndex = new Map(); 
-
+// Precisione 7 per l'indicizzazione ZSET (tratta)
 const GEOHASH_PRECISION_TRATTA = 7;
 
 // --- LOGICA CALCOLO STATO ---
-// (Mantenuta invariata per compatibilità)
 export function calcolaStatoDisponibilita(d) {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -47,7 +43,34 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
-// --- GESTIONE DATI ---
+// --- GESTIONE DATI: VEICOLI & DISPONIBILITÀ ---
+export const upsertVeicolo = (v) => {
+  const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
+  CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
+};
+
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
+
+export const upsertDisponibilita = (d) => {
+  d.disponibile = calcolaStatoDisponibilita(d);
+  CacheStore.disponibilitaCache.set(d.id, d);
+};
+
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
+
+// --- GESTIONE DATI: PRENOTAZIONI ---
+export const upsertPrenotazione = async (p) => {
+    if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
+        CacheStore.prenotazioniCache.set(p.corsa_id, []);
+    }
+    CacheStore.prenotazioniCache.get(p.corsa_id).push(p);
+
+    if (redisClient) {
+        await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
+    }
+};
+
+// --- GESTIONE DATI: CORSE (Core Logica ZSET) ---
 export const upsertCorsa = async (c) => {
   const oldData = CacheStore.corseCache.get(c.id);
   
@@ -78,15 +101,14 @@ export const upsertCorsa = async (c) => {
   CacheStore.corseCache.set(c.id, newCorsa);
 
   if (redisClient) {
-    // Pipeline per atomicità delle scritture Redis
     const pipeline = redisClient.multi();
     
-    // 1. Aggiorna indice geospaziale (prossimità)
+    // 1. Indice Geospaziale
     if (lat !== 0 && lon !== 0) {
         pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
     }
     
-    // 2. Aggiorna ZSET (tratta)
+    // 2. Popolamento ZSET per validazione tratta
     const zKey = `corsa:percorso_hash:${c.id}`;
     pipeline.del(zKey);
     decodedCoords.forEach((coord, idx) => {
@@ -102,32 +124,33 @@ export const removeCorsa = async (corsaId) => {
     CacheStore.corseCache.delete(corsaId);
     CacheStore.prenotazioniCache.delete(corsaId);
     if (redisClient) {
-        // Pulizia totale da Redis
         await redisClient.zRem('corse_geo_index', corsaId.toString());
         await redisClient.del(`corsa:prenotazioni:${corsaId}`);
         await redisClient.del(`corsa:percorso_hash:${corsaId}`);
     }
 };
 
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0) return;
   const client = await pool.connect();
   try {
     console.log("🔄 Sincronizzazione cache in corso...");
-    
-    // Pulizia totale Redis per evitare residui tra riavvii
-    if (redisClient) {
-        await redisClient.del('corse_geo_index');
-        // Nota: Qui potresti voler pulire anche i ZSET esistenti se sono persistenti
-    }
+    if (redisClient) await redisClient.del('corse_geo_index');
 
     const cRes = await client.query(`SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')`);
     for (const c of cRes.rows) await upsertCorsa(c);
+
+    const pRes = await client.query(`SELECT * FROM prenotazioni`);
+    CacheStore.prenotazioniCache.clear();
+    for (const p of pRes.rows) await upsertPrenotazione(p);
+
+    const vRes = await client.query(`SELECT * FROM veicolo`);
+    vRes.rows.forEach(v => upsertVeicolo(v));
+    
+    const dRes = await client.query(`SELECT * FROM disponibilita_veicolo`);
+    dRes.rows.forEach(d => upsertDisponibilita(d));
     
     console.log(`📦 [CACHE] Pronta. Corse caricate: ${CacheStore.corseCache.size}`);
-  } catch (err) {
-    console.error("❌ Errore durante il caricamento cache:", err);
-  } finally { 
-    client.release(); 
-  }
+  } finally { client.release(); }
 }

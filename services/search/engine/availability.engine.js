@@ -1,7 +1,8 @@
 import * as turf from '@turf/turf';
 
 /**
- * MOTORE DI FILTRAGGIO OTTIMIZZATO
+ * MOTORE 1: FILTRO CORSE (Geometrico + Posti)
+ * Verifica rotta (Turf) e occupazione veicolo
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniData) {
     const startTime = Date.now();
@@ -20,7 +21,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const route = turf.lineString(c.decodedCoords);
         
         // 1. Verifica geometrica (Distanza in KM)
-        // Se la tratta è molto lunga, 50km è ok, ma verifica se il percorso ha abbastanza punti
         const distStart = turf.pointToLineDistance(pStart, route, { units: 'kilometers' });
         const distEnd = turf.pointToLineDistance(pEnd, route, { units: 'kilometers' });
         
@@ -39,7 +39,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         }
 
         // 3. Calcolo disponibilità
-        // Assicuriamo che prenotazioniData[i] sia un array pulito
         const prenotazioni = Array.isArray(prenotazioniData[i]) ? prenotazioniData[i] : [];
         const occupazione = prenotazioni.reduce((acc, p) => {
             try {
@@ -58,7 +57,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         }
     }
 
-    console.log(`[FILTER] Elaborati ${stats.totali} in ${Date.now() - startTime}ms | Esito: ${corseValide.length} ok | Scarti (D:${stats.d} Dir:${stats.dir} P:${stats.p})`);
+    console.log(`[FILTER-CORSE] Elaborati ${stats.totali} in ${Date.now() - startTime}ms | Accettate: ${corseValide.length} | Scarti (D:${stats.d} Dir:${stats.dir} P:${stats.p})`);
     
     return {
         slots: corseValide.map(c => ({
@@ -72,4 +71,29 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         })),
         corse: corseValide
     };
+}
+
+/**
+ * MOTORE 2: FILTRO SLOT (Solo Disponibilità Oraria)
+ * Ignora la geometria (Turf). Verifica solo se il driver è al lavoro e ha posto.
+ */
+export async function filterSlotOnly(richiesta, allSlots) {
+    const startTime = Date.now();
+    const postiRichiesti = Number(richiesta.posti_richiesti || 1);
+    
+    const slotsValidi = allSlots.filter(s => {
+        // 'disponibile' è il flag booleano calcolato nel servizio di disponibilità
+        return s.disponibile === true && Number(s.posti_totali || 0) >= postiRichiesti;
+    });
+
+    console.log(`[FILTER-SLOT] Elaborati ${allSlots.length} in ${Date.now() - startTime}ms | Accettate: ${slotsValidi.length}`);
+    
+    return slotsValidi.map(s => ({
+        id: `slot_ind_${s.id}`,
+        veicolo_id: s.veicolo_id,
+        is_slot: true,
+        posti_disponibili: s.posti_totali,
+        prezzo: 0, // Prezzo da definire in base alla logica di business
+        start_datetime: s.start
+    }));
 }

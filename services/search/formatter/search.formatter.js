@@ -57,31 +57,34 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
 
     return (await Promise.all(allItems.map(async (item) => {
         try {
-            // --- 1. GESTIONE SLOT (DISPONIBILITÀ) ---
+            const vId = Number(item.veicolo_id);
+            const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
+
+            // --- 1. GESTIONE SLOT (DISPONIBILITÀ ORARIA) ---
             if (item.is_slot) {
                 return {
                     id: item.id || uuidv4(),
-                    veicolo_id: item.veicolo_id,
-                    marca: "Servizio",
-                    modello: "Disponibilità oraria",
+                    veicolo_id: vId,
+                    marca: v?.marca ?? "Servizio",
+                    modello: v?.modello ?? "Disponibilità oraria",
                     localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
-                    oraPartenza: item.start,
-                    oraArrivo: item.fine,
+                    oraPartenza: item.start_datetime || new Date().toISOString(),
+                    oraArrivo: "Da concordare",
                     distanzaKm: 0,
                     prezzo: 0,
                     stato: 'disponibile',
-                    postiDisponibili: 0,
+                    postiDisponibili: Number(item.posti_disponibili ?? 0),
                     percorsoVisualizzato: null
                 };
             }
 
-            // --- 2. GESTIONE CORSE ---
+            // --- 2. GESTIONE CORSE (TRATTE PIANIFICATE) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            // Applicazione interpolazione solo se è una corsa
+            // Applicazione interpolazione ZSET
             if (item.start_datetime && item.decodedCoords?.length > 0) {
                 const zIndex = corsaItems.findIndex(c => c.id === item.id);
                 if (zIndex !== -1) {
@@ -90,12 +93,7 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 }
             }
 
-            const vId = Number(item.veicolo_id);
-            const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
-            
-            if (!v) {
-                console.warn(`⚠️ [PRICING] Veicolo non trovato in cache per ID: ${vId}`);
-            }
+            if (!v) console.warn(`⚠️ [PRICING] Veicolo non trovato per ID: ${vId}`);
 
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
 

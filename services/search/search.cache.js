@@ -94,7 +94,6 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
 export const upsertCorsa = async (c) => {
     const corsaId = Number(c.id);
     
-    // 1. Decodifica Polyline
     let decodedCoords = [];
     if (c.percorso_polyline) {
         try {
@@ -106,22 +105,20 @@ export const upsertCorsa = async (c) => {
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
     
-    // 2. AGGIORNAMENTO MEMORIA (Senza cancellare nulla)
+    // Aggiornamento cache in RAM
     CacheStore.corseCache.set(corsaId, { ...c, lat, lon, decodedCoords });
     
-    // 3. Sincronizzazione Redis (Pulizia e reinserimento)
     if (redisClient) {
         try {
-            // Rimuoviamo solo i dati vecchi da Redis, NON dalla memoria
             const hashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
             const pipeline = redisClient.multi();
             
             pipeline.zRem('corse_geo_index', corsaId.toString());
             pipeline.del(`corsa:prenotazioni:${corsaId}`);
+            // Pulizia usando la chiave corretta
             hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.del(`corsa:hashes:${corsaId}`);
             
-            // Inserimento nuovi dati in Redis
             if (lat !== 0 && lon !== 0) {
                 pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
             }
@@ -132,7 +129,8 @@ export const upsertCorsa = async (c) => {
                 [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
             });
 
-            hashSet.forEach(h => pipeline.sAdd(`corsa_in_area:${h}`, corsaId.toString()));
+            // Scrittura usando la chiave corretta
+            hashSet.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
             
             await pipeline.exec();
@@ -153,7 +151,8 @@ export const removeCorsa = async (corsaId) => {
             const pipeline = redisClient.multi();
             pipeline.zRem('corse_geo_index', id.toString());
             pipeline.del(`corsa:prenotazioni:${id}`);
-            hashes.forEach(h => pipeline.sRem(`corsa_in_area:${h}`, id.toString()));
+            // Pulizia coerente con la chiave di salvataggio
+            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
             pipeline.del(`corsa:hashes:${id}`);
             await pipeline.exec();
         } catch (e) { console.error("Errore pulizia Redis:", e); }

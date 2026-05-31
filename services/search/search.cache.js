@@ -5,8 +5,7 @@ import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js'; 
 
 /**
- * Singleton Pattern: Garantisce che CacheStore sia lo stesso oggetto 
- * in tutta l'applicazione Node.js, evitando duplicazioni di memoria.
+ * Singleton Pattern: Gestione stato globale cache
  */
 if (!global.__CACHESTORE__) {
     global.__CACHESTORE__ = {
@@ -20,8 +19,29 @@ if (!global.__CACHESTORE__) {
 }
 
 export const CacheStore = global.__CACHESTORE__;
-
 const GEOHASH_PRECISION_TRATTA = 5;
+
+// --- GESTIONE PRENOTAZIONI (Ripristinata) ---
+export const upsertPrenotazione = async (prenotazione) => {
+    const corsaId = Number(prenotazione.corsa_id);
+    const pId = Number(prenotazione.id);
+    
+    if (!CacheStore.prenotazioniCache.has(corsaId)) {
+        CacheStore.prenotazioniCache.set(corsaId, new Map());
+    }
+    CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
+
+    if (redisClient) {
+        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
+    }
+};
+
+export const removePrenotazione = async (corsaId, prenotazioneId) => {
+    const cId = Number(corsaId);
+    const pId = Number(prenotazioneId);
+    if (CacheStore.prenotazioniCache.has(cId)) CacheStore.prenotazioniCache.get(cId).delete(pId);
+    if (redisClient) await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
+};
 
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
@@ -30,7 +50,6 @@ export const upsertVeicolo = (v) => {
 };
 
 export const upsertDisponibilita = async (d) => {
-    // Normalizziamo subito per prevenire NaN nel pricing
     CacheStore.disponibilitaCache.set(Number(d.id), {
         ...d,
         veicolo_id: Number(d.veicolo_id),
@@ -109,7 +128,6 @@ export async function loadDisponibilitaCache() {
 export async function loadCachesUltra(force = false) {
     if (!force && CacheStore.corseCache.size > 0 && CacheStore.veicoliCache.size > 0) return;
     
-    // Caricamento sequenziale per integrità dei dati
     await loadVeicoliCache();
     await loadDisponibilitaCache();
     

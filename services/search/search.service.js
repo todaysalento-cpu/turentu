@@ -14,21 +14,27 @@ export async function cercaSlotUltra(richiesta) {
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
 
-  // 1. Recupero candidati (incluso vicini)
+  // 1. Recupero candidati con LOG approfondito
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
+  console.log(`[DEBUG GEOSH] Punto: ${lat},${lon} | Hash ricercato: ${hash} | Area vicini: ${hashes.length}`);
   
-  const candidateIds = [...new Set(
-    (await Promise.all(hashes.map(h => redisClient.sMembers(`corsa_in_area:${h}`)))).flat()
-  )];
+  const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa_in_area:${h}`)));
+  const candidateIds = [...new Set(results.flat())];
+  console.log(`[DEBUG GEOSH] Candidati trovati in Redis (ID):`, candidateIds);
   
   const corseCandidate = candidateIds
     .map(id => CacheStore.corseCache.get(Number(id)))
     .filter(Boolean);
 
-  if (corseCandidate.length === 0) return [];
+  console.log(`[DEBUG SERVICE] Corse estratte dalla Cache: ${corseCandidate.length}`);
 
-  // 2. Recupero massivo prenotazioni in pipeline (Ottimizzazione Critica)
+  if (corseCandidate.length === 0) {
+    console.log(`[DEBUG SERVICE] Nessun candidato trovato per l'area.`);
+    return [];
+  }
+
+  // 2. Recupero massivo prenotazioni
   const pipeline = redisClient.multi();
   corseCandidate.forEach(c => pipeline.hVals(`corsa:prenotazioni:${c.id}`));
   const prenotazioniBatch = await pipeline.exec();
@@ -41,14 +47,20 @@ export async function cercaSlotUltra(richiesta) {
     lon
   };
 
-  // 3. Filtro avanzato (passiamo i dati già pronti al motore)
+  // 3. Filtro avanzato con LOG per scartare i candidati
+  console.log(`[DEBUG SERVICE] Avvio filtro disponibilità per ${corseCandidate.length} candidati.`);
   const { slots, corse: corseCompatibili } = await filterDisponibilita(
     richiestaNormalizzata,
     corseCandidate,
-    prenotazioniBatch // Passiamo le prenotazioni caricate in pipeline
+    prenotazioniBatch
   );
 
-  if (!slots?.length) return [];
+  if (!slots?.length) {
+    console.log(`[DEBUG SERVICE] Filtro completato: 0 slot compatibili trovati.`);
+    return [];
+  }
+
+  console.log(`[DEBUG SERVICE] Filtro completato: ${slots.length} slot trovati.`);
 
   // 4. Formattazione finale
   try {
@@ -59,9 +71,10 @@ export async function cercaSlotUltra(richiesta) {
       CacheStore.veicoliCache 
     );
     
+    console.log(`[DEBUG SERVICE] Risultati finali formattati: ${risultati?.length || 0}`);
     return Array.isArray(risultati) ? risultati : [];
   } catch (err) {
-    console.error("💥 [SERVICE] Errore critico:", err);
+    console.error("💥 [SERVICE] Errore critico in formatResults:", err);
     return []; 
   }
 }

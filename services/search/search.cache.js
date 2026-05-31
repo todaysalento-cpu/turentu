@@ -40,17 +40,22 @@ export function calcolaStatoDisponibilita(d) {
     return true;
 }
 
-// --- GESTIONE DATI ---
+// --- GESTIONE DATI: VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
   const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
   CacheStore.veicoliCache.set(v.id, { ...(CacheStore.veicoliCache.get(v.id) || {}), ...normalized });
 };
+
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(id);
 
 export const upsertDisponibilita = (d) => {
   d.disponibile = calcolaStatoDisponibilita(d);
   CacheStore.disponibilitaCache.set(d.id, d);
 };
 
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(id);
+
+// --- GESTIONE DATI: PRENOTAZIONI ---
 export const upsertPrenotazione = async (p) => {
     if (!CacheStore.prenotazioniCache.has(p.corsa_id)) {
         CacheStore.prenotazioniCache.set(p.corsa_id, []);
@@ -99,7 +104,6 @@ export const upsertCorsa = async (c) => {
   }
 };
 
-// --- FUNZIONE ESPORTATA PER RISOLVERE L'ERRORE ---
 export const removeCorsa = async (corsaId) => {
     CacheStore.corseCache.delete(corsaId);
     CacheStore.prenotazioniCache.delete(corsaId);
@@ -110,7 +114,7 @@ export const removeCorsa = async (corsaId) => {
     }
 };
 
-// --- SYNC ENGINE COMPLETATO ---
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
   if (!force && CacheStore.corseCache.size > 0) return;
   const client = await pool.connect();

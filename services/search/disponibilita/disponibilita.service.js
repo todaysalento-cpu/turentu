@@ -2,60 +2,64 @@ import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
 import { CacheStore } from '../search.cache.js';
 
-export async function getDisponibilita(driver_id) {
+/**
+ * @param {number} driver_id 
+ * @param {Date} [targetDate] - Data specifica richiesta per la ricerca
+ */
+export async function getDisponibilita(driver_id, targetDate = new Date()) {
   const cacheMap = CacheStore.disponibilitaCache;
   const tuttiITurni = Array.from(cacheMap.values());
   
-  console.log(`[BACKEND] getDisponibilita - Cache size: ${cacheMap.size}, Filtro driver_id: ${driver_id}`);
+  console.log(`[BACKEND] getDisponibilita - Cache size: ${cacheMap.size}, Filtro driver_id: ${driver_id}, Data target: ${targetDate.toISOString()}`);
   
   const turniDriver = tuttiITurni.filter(d => d.driver_id === driver_id);
-  console.log(`[BACKEND] getDisponibilita - Trovati ${turniDriver.length} turni per driver ${driver_id}`);
 
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  // Calcolo minuti correnti nel giorno
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Parametri basati sulla data target (es. data della prenotazione futura)
+  const dayOfWeek = targetDate.getDay();
+  const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
 
   return turniDriver.map(d => {
     let disponibile = true;
     
-    // 1. Verifica giorni esclusi
+    // 1. Verifica giorni esclusi (Logica basata sulla data target)
     const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
     if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
       disponibile = false;
     }
 
-    // 2. Verifica periodi di inattività
-    // Assicurati di gestire il jsonb parsato o stringa
+    // 2. Verifica periodi di inattività (Confronto diretto con targetDate)
     const inattivita = typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || []);
     if (disponibile && Array.isArray(inattivita)) {
       for (const i of inattivita) {
         const start = new Date(i.start);
         const end = new Date(i.fine);
-        if (now >= start && now <= end) {
+        if (targetDate >= start && targetDate <= end) {
           disponibile = false;
           break;
         }
       }
     }
 
-    // 3. Verifica orario turno (estrazione HH:mm da timestamp)
+    // 3. Verifica orario turno (Data-agnostic: confronto basato solo su HH:mm)
     const startDate = new Date(d.start);
     const endDate = new Date(d.fine);
     
     const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
     const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
     
-    // Se start > end, il turno scavalca la mezzanotte
     const isOvernight = startMinutes > endMinutes;
     
-    if (isOvernight) {
-      if (!(currentMinutes >= startMinutes || currentMinutes <= endMinutes)) {
-        disponibile = false;
-      }
-    } else {
-      if (currentMinutes < startMinutes || currentMinutes > endMinutes) {
-        disponibile = false;
+    if (disponibile) {
+      if (isOvernight) {
+        // Turno notturno: valido se dopo start OR prima di end
+        if (!(targetMinutes >= startMinutes || targetMinutes <= endMinutes)) {
+          disponibile = false;
+        }
+      } else {
+        // Turno normale: valido se tra start e end
+        if (!(targetMinutes >= startMinutes && targetMinutes <= endMinutes)) {
+          disponibile = false;
+        }
       }
     }
 
@@ -64,18 +68,12 @@ export async function getDisponibilita(driver_id) {
 }
 
 export async function createDisponibilita(turno) {
-  console.log("[BACKEND] createDisponibilita - Ricevuto:", turno);
   let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
 
-  // Nota: parseTimeString continua a creare ISO date per mantenere compatibilità col db timestamp
   start = parseTimeString(start);
   fine  = parseTimeString(fine);
 
-  // NOTA: Se vuoi supportare turni notturni (es 22-06), 
-  // il check del DB "chk_start_end" deve essere rimosso.
-  if (!start || !fine) {
-    throw new Error('Orario non valido');
-  }
+  if (!start || !fine) throw new Error('Orario non valido');
 
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo

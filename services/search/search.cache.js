@@ -23,7 +23,7 @@ export const CacheStore = global.__CACHESTORE__;
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// --- LOGICA CALCOLO STATO (Mantenuta come utility per il service) ---
+// --- LOGICA CALCOLO STATO (Utility) ---
 export function calcolaStatoDisponibilita(d) {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -55,8 +55,6 @@ export const upsertVeicolo = (v) => {
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
 export const upsertDisponibilita = async (d) => {
-    // AGGIORNATO: Non forziamo più d.disponibile qui. 
-    // Il calcolo avverrà dinamicamente nel service al momento della richiesta.
     CacheStore.disponibilitaCache.set(Number(d.id), d);
     console.log(`✅ [CACHE] Disponibilità ${d.id} memorizzata (Dati grezzi).`);
 };
@@ -157,12 +155,32 @@ export const removeCorsa = async (corsaId) => {
 };
 
 // --- SYNC ENGINE ---
-export async function loadCachesUltra(force = false) {
-    if (!force && CacheStore.corseCache.size > 0) return;
-    
+export async function loadVeicoliCache() {
     const client = await pool.connect();
     try {
-        console.log("🔄 [SYNC] Inizio sincronizzazione...");
+        console.log("🚗 [SYNC] Inizio sincronizzazione veicoli...");
+        const vRes = await client.query("SELECT * FROM veicolo");
+        for (const v of vRes.rows) {
+            upsertVeicolo(v);
+        }
+        console.log(`✅ [SYNC] Veicoli in memoria: ${CacheStore.veicoliCache.size}`);
+    } catch (err) {
+        console.error("❌ [SYNC VEICOLI] Errore:", err);
+    } finally {
+        client.release();
+    }
+}
+
+export async function loadCachesUltra(force = false) {
+    if (!force && CacheStore.corseCache.size > 0 && CacheStore.veicoliCache.size > 0) return;
+    
+    // 1. Carica prima i veicoli (essenziali per il lookup)
+    await loadVeicoliCache();
+    
+    // 2. Carica poi le corse
+    const client = await pool.connect();
+    try {
+        console.log("🔄 [SYNC] Inizio sincronizzazione corse...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
         
         for (const c of cRes.rows) {

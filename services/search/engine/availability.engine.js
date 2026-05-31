@@ -40,17 +40,22 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
     const corse = [];
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
+    console.log(`🔍 [SEARCH ENGINE] Processo ${candidateIds.length} candidati geografici...`);
+
     for (let i = 0; i < candidateIds.length; i++) {
         const id = candidateIds[i];
         const c = corseMap.get(Number(id));
-        if (!c) continue;
+        if (!c) {
+            console.log(`⚠️ [DEBUG] Corsa ${id}: Non trovata nella corseMap.`);
+            continue;
+        }
 
         const opStart = rawResults[i * 3];
         const opEnd = rawResults[i * 3 + 1];
         const opPrenotazioni = rawResults[i * 3 + 2];
 
-        // Controllo robusto pipeline
         if (!opStart || !opEnd || !opPrenotazioni || opStart[0] || opEnd[0]) {
+            console.log(`❌ [DEBUG] Corsa ${id}: Errore pipeline Redis.`);
             continue;
         }
 
@@ -59,12 +64,12 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         
         // --- DIAGNOSTICA GEOSPAZIALE ---
         if (idxStart === null || idxEnd === null) {
-            // console.log(`🔍 [DEBUG] Corsa ${id}: Geohash non matchato correttamente.`);
+            console.log(`🔍 [DEBUG] Corsa ${id}: Geohash NON matchato | hStart: ${hStart}, hEnd: ${hEnd}`);
             continue;
         }
 
         if (Number(idxStart) >= Number(idxEnd)) {
-            // console.log(`🔍 [DEBUG] Corsa ${id}: Direzione non coerente (start >= end).`);
+            console.log(`🔍 [DEBUG] Corsa ${id}: Direzione errata | Start: ${idxStart}, End: ${idxEnd}`);
             continue;
         }
 
@@ -91,8 +96,9 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         if (postiLiberi >= postiRichiesti) {
             c.postiDisponibili = postiLiberi;
             corse.push(c);
+            console.log(`✅ [DEBUG] Corsa ${id}: Valida! Posti liberi: ${postiLiberi}`);
         } else {
-            // console.log(`🔍 [DEBUG] Corsa ${id}: Posti insufficienti (Richiesti: ${postiRichiesti}, Liberi: ${postiLiberi})`);
+            console.log(`🔍 [DEBUG] Corsa ${id}: Posti insufficienti (Richiesti: ${postiRichiesti}, Liberi: ${postiLiberi})`);
         }
     }
 

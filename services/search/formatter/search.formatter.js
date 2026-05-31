@@ -69,21 +69,29 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 }
             }
 
-            const v = veicoliMap.get(Number(item.veicolo_id));
+            // --- PROTEZIONE DATI VEICOLO ---
+            const vId = Number(item.veicolo_id);
+            const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
+            
+            if (!v) {
+                console.warn(`⚠️ [PRICING] Veicolo non trovato in cache per ID: ${vId}`);
+            }
+
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
 
             return {
                 id: item.id || uuidv4(),
-                veicolo_id: Number(item.veicolo_id),
-                marca: v?.marca ?? null,
-                modello: v?.modello ?? null,
+                veicolo_id: vId,
+                // Fallback sicuri per il frontend
+                marca: v?.marca ?? "N/A", 
+                modello: v?.modello ?? "Veicolo",
                 localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                 localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                 oraPartenza: oraPartenza.toISOString(),
                 oraArrivo: oraArrivo.toISOString(),
                 distanzaKm: Number(distanza.toFixed(2)),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
-                stato: item.stato,
+                stato: item.stato || 'prenotabile',
                 postiDisponibili: Number(item.postiDisponibili ?? 0),
                 percorsoVisualizzato: item.decodedCoords || null
             };

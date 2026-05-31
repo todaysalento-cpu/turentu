@@ -9,7 +9,7 @@ export const CacheStore = {
     disponibilitaCache: new Map(),
     corseCache: new Map(),
     recensioniCache: new Map(),
-    prenotazioniCache: new Map() 
+    prenotazioniCache: new Map() // Mappa di Mappe: corsaId -> Map<prenotazioneId, dati>
 };
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -50,7 +50,35 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), d);
 };
 
-// --- CORE: CORSE (Ottimizzato e Safe) ---
+// --- GESTIONE PRENOTAZIONI (Aggiunte per risolvere l'errore) ---
+export const upsertPrenotazione = async (prenotazione) => {
+    const corsaId = Number(prenotazione.corsa_id);
+    const pId = Number(prenotazione.id);
+    
+    if (!CacheStore.prenotazioniCache.has(corsaId)) {
+        CacheStore.prenotazioniCache.set(corsaId, new Map());
+    }
+    CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
+
+    if (redisClient) {
+        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
+    }
+};
+
+export const removePrenotazione = async (corsaId, prenotazioneId) => {
+    const cId = Number(corsaId);
+    const pId = Number(prenotazioneId);
+    
+    if (CacheStore.prenotazioniCache.has(cId)) {
+        CacheStore.prenotazioniCache.get(cId).delete(pId);
+    }
+    
+    if (redisClient) {
+        await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
+    }
+};
+
+// --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
     const corsaId = Number(c.id);
     const oldData = CacheStore.corseCache.get(corsaId);
@@ -69,17 +97,13 @@ export const upsertCorsa = async (c) => {
     CacheStore.corseCache.set(corsaId, { ...oldData, ...c, lat, lon, decodedCoords });
 
     if (redisClient) {
-        // Pulizia atomica prima dell'inserimento
         await removeCorsa(corsaId, true);
-
         const pipeline = redisClient.multi();
         
-        // 1. Indice GEO nativo Redis
         if (lat !== 0 && lon !== 0) {
             pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
         }
         
-        // 2. Indice inverso (Geohash neighbors)
         const hashSet = new Set();
         decodedCoords.forEach((coord) => {
             const hash = ngeohash.encode(coord[1], coord[0], GEOHASH_PRECISION_TRATTA);
@@ -120,7 +144,6 @@ export async function loadCachesUltra(force = false) {
         console.log("🔄 Sincronizzazione cache in corso...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso')");
         
-        // Pulizia totale indici Redis se necessario (opzionale: solo se force è true)
         if (force) await redisClient.flushdb(); 
         
         await Promise.all(cRes.rows.map(c => upsertCorsa(c)));

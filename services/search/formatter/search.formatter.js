@@ -49,18 +49,39 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
     const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
     
-    const corsaItems = allItems.filter(item => !!item.start_datetime && item.decodedCoords?.length > 0);
+    // Filtriamo solo le corse reali per la logica di interpolazione ZSET
+    const corsaItems = allItems.filter(item => !item.is_slot && !!item.start_datetime && item.decodedCoords?.length > 0);
     const zsetResults = corsaItems.length > 0 
         ? await getDettagliTrattaRedis(corsaItems.map(c => c.id), richiesta.coord, richiesta.coordDest) 
         : [];
 
     return (await Promise.all(allItems.map(async (item) => {
         try {
+            // --- 1. GESTIONE SLOT (DISPONIBILITÀ) ---
+            if (item.is_slot) {
+                return {
+                    id: item.id || uuidv4(),
+                    veicolo_id: item.veicolo_id,
+                    marca: "Servizio",
+                    modello: "Disponibilità oraria",
+                    localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
+                    localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
+                    oraPartenza: item.start,
+                    oraArrivo: item.fine,
+                    distanzaKm: 0,
+                    prezzo: 0,
+                    stato: 'disponibile',
+                    postiDisponibili: 0,
+                    percorsoVisualizzato: null
+                };
+            }
+
+            // --- 2. GESTIONE CORSE ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            // Applicazione interpolazione se presente
+            // Applicazione interpolazione solo se è una corsa
             if (item.start_datetime && item.decodedCoords?.length > 0) {
                 const zIndex = corsaItems.findIndex(c => c.id === item.id);
                 if (zIndex !== -1) {
@@ -69,7 +90,6 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 }
             }
 
-            // --- PROTEZIONE DATI VEICOLO ---
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
             
@@ -82,7 +102,6 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             return {
                 id: item.id || uuidv4(),
                 veicolo_id: vId,
-                // Fallback sicuri per il frontend
                 marca: v?.marca ?? "N/A", 
                 modello: v?.modello ?? "Veicolo",
                 localitaOrigine: await getLocalitaSafeCached(richiesta.coord),

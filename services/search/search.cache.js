@@ -65,6 +65,7 @@ export const upsertPrenotazione = async (p) => {
     CacheStore.prenotazioniCache.get(p.corsa_id).push(p);
 
     if (redisClient) {
+        // Memorizziamo la prenotazione in un Hash Redis per accesso rapido durante il filtering
         await redisClient.hSet(`corsa:prenotazioni:${p.corsa_id}`, p.id || Math.random().toString(), JSON.stringify(p));
     }
 };
@@ -102,12 +103,12 @@ export const upsertCorsa = async (c) => {
   if (redisClient) {
     const pipeline = redisClient.multi();
     
-    // 1. Aggiorna indice geospaziale (prossimità)
+    // 1. Indice Geospaziale per ricerca rapida
     if (lat !== 0 && lon !== 0) {
         pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: c.id.toString() });
     }
     
-    // 2. Aggiorna ZSET (percorso sequenziale per validazione tratta)
+    // 2. Popolamento ZSET per validazione tratta (percorso sequenziale)
     const zKey = `corsa:percorso_hash:${c.id}`;
     pipeline.del(zKey);
     decodedCoords.forEach((coord, idx) => {

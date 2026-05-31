@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { sendNotification } from '../socket.js';
 import { sendPush } from '../services/notifications/push.service.js';
 import { getDurataDistanza } from '../utils/maps.util.js';
-// 🔥 Import per sincronizzazione cache ricerca
-import { upsertPending } from '../services/search/search.cache.js';
+// 🔥 Import aggiornato: sincronizzazione tramite la nuova logica Redis
+import { upsertPrenotazione } from '../services/search/search.cache.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
@@ -82,8 +82,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const pItem = result.rows[0];
       pendingRows.push(pItem);
 
-      // 🔥 Sincronizzazione Cache Ricerca
-      upsertPending(pItem);
+      // 🔥 Sincronizzazione Cache Redis (logica ZSET/Hash integrata)
+      await upsertPrenotazione(pItem);
 
       const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [veicolo_id]);
       const driverId = driverRes.rows[0]?.driver_id;
@@ -93,7 +93,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           `INSERT INTO notifications(user_id, type, message, seen, created_at) VALUES ($1, 'pending', $2, false, NOW()) RETURNING *`, 
           [driverId, generatePendingMessage({ role: 'autista', startAddress: localitaOrigine, endAddress: localitaDestinazione, startDatetime: start_datetime })]
         );
-        // Accodiamo le notifiche da inviare post-commit
         notificheDaInviare.push({ userId: driverId, notification: notif.rows[0] });
       }
     }

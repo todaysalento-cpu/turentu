@@ -1,9 +1,10 @@
 import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
-import { getDisponibilitaMap } from '../search.cache.js';
+import { CacheStore } from '../search.cache.js'; // Importazione corretta del CacheStore
 
 export async function getDisponibilita(driver_id) {
-  const cacheMap = getDisponibilitaMap();
+  // Accesso diretto alla mappa tramite CacheStore
+  const cacheMap = CacheStore.disponibilitaCache;
   const tuttiITurni = Array.from(cacheMap.values());
   
   console.log(`[BACKEND] getDisponibilita - Cache size: ${cacheMap.size}, Filtro driver_id: ${driver_id}`);
@@ -58,7 +59,6 @@ export async function createDisponibilita(turno) {
     throw new Error('Orario non valido: start deve essere prima di fine');
   }
 
-  // Esegui inserimento
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo
       (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
@@ -76,7 +76,6 @@ export async function createDisponibilita(turno) {
 
   let nuovoTurno = res.rows[0];
 
-  // Recupera il driver_id per mantenere la cache coerente per il filtraggio futuro
   const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [nuovoTurno.veicolo_id]);
   nuovoTurno.driver_id = vRes.rows[0]?.driver_id;
 
@@ -113,7 +112,6 @@ export async function updateDisponibilita(id, update) {
 
   let turnoAggiornato = res.rows[0];
   
-  // Re-integra il driver_id
   const vRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [turnoAggiornato.veicolo_id]);
   turnoAggiornato.driver_id = vRes.rows[0]?.driver_id;
 

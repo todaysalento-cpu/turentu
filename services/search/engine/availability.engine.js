@@ -18,7 +18,10 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         }, { radius: 100, unit: 'km' });
     }
 
-    if (candidateIds.length === 0) return { slots: [], corse: [] };
+    if (candidateIds.length === 0) {
+        console.log("ℹ️ [SEARCH ENGINE] Nessun candidato trovato nel raggio di 100km.");
+        return { slots: [], corse: [] };
+    }
 
     const pipeline = redisClient.multi();
     candidateIds.forEach(id => {
@@ -46,7 +49,7 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         const opEnd = rawResults[i * 3 + 1];
         const opPrenotazioni = rawResults[i * 3 + 2];
 
-        // Controllo robusto: op[0] è l'errore, op[1] è il risultato
+        // Controllo robusto pipeline
         if (!opStart || !opEnd || !opPrenotazioni || opStart[0] || opEnd[0]) {
             continue;
         }
@@ -54,19 +57,23 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         const idxStart = opStart[1];
         const idxEnd = opEnd[1];
         
-        // --- SANITIZZAZIONE RIGIDA ---
-        // hVals ritorna un array di valori (le prenotazioni in formato JSON string)
-        // Se non ci sono prenotazioni, ritorna []
+        // --- DIAGNOSTICA GEOSPAZIALE ---
+        if (idxStart === null || idxEnd === null) {
+            // console.log(`🔍 [DEBUG] Corsa ${id}: Geohash non matchato correttamente.`);
+            continue;
+        }
+
+        if (Number(idxStart) >= Number(idxEnd)) {
+            // console.log(`🔍 [DEBUG] Corsa ${id}: Direzione non coerente (start >= end).`);
+            continue;
+        }
+
         const prenotazioniData = opPrenotazioni[1];
         const prenotazioniArray = Array.isArray(prenotazioniData) ? prenotazioniData : [];
-
-        if (idxStart === null || idxEnd === null || Number(idxStart) >= Number(idxEnd)) continue;
 
         const occupazioneSegmento = prenotazioniArray.reduce((max, p) => {
             try {
                 const item = typeof p === 'string' ? JSON.parse(p) : p;
-                
-                // Controllo validità dell'oggetto prenotazione
                 if (!item || typeof item !== 'object') return max;
 
                 const sovrappone = (Number(idxStart) < Number(item.end_index_polyline)) && 
@@ -74,15 +81,18 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
                 
                 return sovrappone ? max + Number(item.posti_richiesti || 0) : max;
             } catch (e) {
-                return max; // Salta elementi JSON corrotti
+                return max;
             }
         }, 0);
 
         const postiLiberi = Number(c.posti_totali || 0) - occupazioneSegmento;
 
+        // --- DIAGNOSTICA DISPONIBILITÀ ---
         if (postiLiberi >= postiRichiesti) {
             c.postiDisponibili = postiLiberi;
             corse.push(c);
+        } else {
+            // console.log(`🔍 [DEBUG] Corsa ${id}: Posti insufficienti (Richiesti: ${postiRichiesti}, Liberi: ${postiLiberi})`);
         }
     }
 

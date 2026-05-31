@@ -9,7 +9,7 @@ export const CacheStore = {
     disponibilitaCache: new Map(),
     corseCache: new Map(),
     recensioniCache: new Map(),
-    prenotazioniCache: new Map() // Mappa di Mappe: corsaId -> Map<prenotazioneId, dati>
+    prenotazioniCache: new Map() 
 };
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -50,7 +50,11 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), d);
 };
 
-// --- GESTIONE PRENOTAZIONI (Aggiunte per risolvere l'errore) ---
+export const removeDisponibilita = (id) => {
+    CacheStore.disponibilitaCache.delete(Number(id));
+};
+
+// --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
     const corsaId = Number(prenotazione.corsa_id);
     const pId = Number(prenotazione.id);

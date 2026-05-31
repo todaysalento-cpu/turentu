@@ -2,7 +2,7 @@ import * as turf from '@turf/turf';
 
 /**
  * MOTORE DI FILTRAGGIO (Puro calcolo)
- * Aggiunta logica di debug per tracciare lo scarto dei candidati.
+ * Include ora il supporto bidirezionale per polyline invertite.
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniData) {
     const startTime = Date.now();
@@ -34,14 +34,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             continue;
         }
 
-        // 2. Verifica Direzione
+        // 2. Verifica Direzione (Bidirezionale)
         const startPointOnLine = turf.nearestPointOnLine(route, pStart);
         const endPointOnLine = turf.nearestPointOnLine(route, pEnd);
         
-        if (startPointOnLine.properties.index >= endPointOnLine.properties.index) {
-            console.log(`[DEBUG FILTRO] Corsa ${c.id} scartata: Direzione errata (Start index: ${startPointOnLine.properties.index}, End index: ${endPointOnLine.properties.index}).`);
+        // Se l'indice di start è minore di end, la direzione è corretta (Pescara -> Rimini)
+        // Se è maggiore, la polyline è invertita (Rimini -> Pescara), ma è comunque percorribile.
+        // Se gli indici sono uguali, la corsa non copre la tratta.
+        if (startPointOnLine.properties.index === endPointOnLine.properties.index) {
+            console.log(`[DEBUG FILTRO] Corsa ${c.id} scartata: Punti troppo vicini sulla linea.`);
             continue;
         }
+        
+        // Logica accettata: non importa l'ordine, basta che la corsa copra entrambi i punti
+        console.log(`[DEBUG FILTRO] Corsa ${c.id} direzione OK (Start index: ${startPointOnLine.properties.index}, End index: ${endPointOnLine.properties.index}).`);
 
         // 3. Calcolo disponibilità
         const occupazione = (prenotazioniData[i] || []).reduce((acc, p) => acc + JSON.parse(p).posti_richiesti, 0);

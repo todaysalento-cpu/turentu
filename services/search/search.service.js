@@ -1,7 +1,7 @@
 import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { getDisponibilita } from './disponibilita.service.js'; // Import per calcolo dinamico
+import { getDisponibilita } from './disponibilita/disponibilita.service.js'; // Import per calcolo dinamico
 import { redisClient } from '../../redis.js';
 import ngeohash from 'ngeohash';
 

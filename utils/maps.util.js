@@ -27,36 +27,50 @@ function makeCacheKey(o, d) {
 }
 
 // =========================
-// DIRECTIONS API (PER GEOMETRIA)
+// DIRECTIONS API (ROBUSTA)
 // =========================
 export async function getRouteGeometry(origine, destinazione) {
-  if (!GOOGLE_MAPS_API_KEY) throw new Error("GOOGLE_MAPS_API_KEY mancante");
+  if (!GOOGLE_MAPS_API_KEY) throw new Error("API Key mancante");
 
   const o = normalizeCoord(origine);
   const d = normalizeCoord(destinazione);
 
-  try {
-    const url = `https://maps.googleapis.com/maps/api/directions/json` +
-      `?origin=${o.lat},${o.lon}` +
-      `&destination=${d.lat},${d.lon}` +
-      `&overview=full` + 
-      `&key=${GOOGLE_MAPS_API_KEY}`;
+  if (!o || !d) throw new Error("Coordinate non valide");
 
+  const url = `https://maps.googleapis.com/maps/api/directions/json` +
+    `?origin=${o.lat},${o.lon}` +
+    `&destination=${d.lat},${d.lon}` +
+    `&overview=full` + 
+    `&key=${GOOGLE_MAPS_API_KEY}`;
+
+  try {
     const res = await fetch(url);
     const data = await res.json();
 
-    if (data.status !== "OK" || !data.routes?.length) {
-      throw new Error("Percorso non trovato");
+    // Gestione rigorosa: status != OK indica un problema (es: ZERO_RESULTS, REQUEST_DENIED, OVER_QUERY_LIMIT)
+    if (data.status !== "OK") {
+      throw new Error(`Google API Status: ${data.status} - ${data.error_message || "Nessun dettaglio"}`);
+    }
+
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error("Nessuna rotta trovata nei risultati");
+    }
+
+    const route = data.routes[0];
+    
+    // Validazione finale della polyline
+    if (!route.overview_polyline?.points) {
+      throw new Error("Polyline assente nella risposta");
     }
 
     return {
-      polyline: data.routes[0].overview_polyline.points,
-      distanza: data.routes[0].legs[0].distance.value,
-      durata: data.routes[0].legs[0].duration.value
+      polyline: route.overview_polyline.points,
+      distanza: route.legs[0].distance.value,
+      durata: route.legs[0].duration.value
     };
   } catch (e) {
-    console.error("getRouteGeometry ERROR:", e);
-    throw e;
+    console.error("💥 Errore critico getRouteGeometry:", e.message);
+    throw e; // Rilancia l'errore per fermare lo script di migrazione
   }
 }
 
@@ -64,11 +78,10 @@ export async function getRouteGeometry(origine, destinazione) {
 // DISTANZA + DURATA
 // =========================
 export async function getDurataDistanza(origine, destinazione) {
-  if (!GOOGLE_MAPS_API_KEY) throw new Error("GOOGLE_MAPS_API_KEY mancante");
+  if (!GOOGLE_MAPS_API_KEY) return { durataMs: 0, distanzaKm: 0 };
 
   const o = normalizeCoord(origine);
   const d = normalizeCoord(destinazione);
-
   if (!o || !d) return { durataMs: 0, distanzaKm: 0 };
 
   const key = makeCacheKey(o, d);
@@ -76,11 +89,7 @@ export async function getDurataDistanza(origine, destinazione) {
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached;
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json` +
-      `?units=metric&origins=${o.lat},${o.lon}` +
-      `&destinations=${d.lat},${d.lon}` +
-      `&key=${GOOGLE_MAPS_API_KEY}`;
-
+    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?units=metric&origins=${o.lat},${o.lon}&destinations=${d.lat},${d.lon}&key=${GOOGLE_MAPS_API_KEY}`;
     const res = await fetch(url);
     const data = await res.json();
     const element = data.rows?.[0]?.elements?.[0];
@@ -96,13 +105,13 @@ export async function getDurataDistanza(origine, destinazione) {
     mapsCache.set(key, result);
     return result;
   } catch (e) {
-    console.error("getDurataDistanza ERROR:", e);
+    console.error("Errore getDurataDistanza:", e.message);
     return { durataMs: 0, distanzaKm: 0 };
   }
 }
 
 // =========================
-// REVERSE GEOCODING (AGGIORNATO)
+// REVERSE GEOCODING
 // =========================
 export async function getLocalitaSafe(coord) {
   const c = normalizeCoord(coord);
@@ -117,36 +126,17 @@ export async function getLocalitaSafe(coord) {
     const res = await fetch(url);
     const data = await res.json();
 
-    if (data.status !== "OK" || !data.results?.length) {
-      console.warn(`Geocoding fallito per ${key}:`, data.status);
-      return "Località sconosciuta";
-    }
+    if (data.status !== "OK" || !data.results?.length) return "Località sconosciuta";
 
-    const result = data.results[0];
-    const components = result.address_components || [];
+    const components = data.results[0].address_components || [];
+    const get = (type) => components.find(comp => comp.types.includes(type))?.long_name;
 
-    // Funzione di ricerca robusta: cerca il componente per tipo
-    const get = (type) => {
-      const found = components.find((comp) => comp.types.includes(type));
-      return found ? found.long_name : null;
-    };
-
-    // Ordine di ricerca per massimizzare la precisione (dal centro città alla zona amministrativa)
-    const localita = 
-      get("locality") || 
-      get("administrative_area_level_3") || 
-      get("administrative_area_level_2") || 
-      get("administrative_area_level_1") ||
-      result.formatted_address || 
-      "Località sconosciuta";
-
-    // Pulizia stringa
+    const localita = get("locality") || get("administrative_area_level_3") || get("administrative_area_level_2") || data.results[0].formatted_address;
     const value = localita.replace(", Italy", "").replace(", Italia", "").trim();
 
     reverseCache.set(key, { value, timestamp: Date.now() });
     return value;
   } catch (err) {
-    console.error("getLocalitaSafe ERROR:", err);
     return "Località sconosciuta";
   }
 }

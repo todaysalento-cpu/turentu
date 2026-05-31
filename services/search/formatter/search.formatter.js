@@ -7,6 +7,9 @@ import ngeohash from 'ngeohash';
 
 const MATCHING_PRECISION = 5;
 
+/**
+ * Calcola l'orario e la distanza usando gli indici ZSET di Redis
+ */
 async function getDettagliTrattaRedis(corsaId, startCoord, endCoord) {
     const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, MATCHING_PRECISION);
     const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, MATCHING_PRECISION);
@@ -20,7 +23,10 @@ async function getDettagliTrattaRedis(corsaId, startCoord, endCoord) {
     };
 }
 
-async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
+/**
+ * Formatta i risultati e calcola dinamicamente le tratte basandosi su Redis
+ */
+export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
   const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
   const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
   
@@ -37,6 +43,7 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
         let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
         let distanzaSegmentoKm = Number(item.distanza || 0);
 
+        // --- LOGICA DINAMICA BASATA SU ZSET ---
         if (isCorsa && item.decodedCoords?.length > 0) {
           const { idxStart, idxEnd } = await getDettagliTrattaRedis(item.id, richiesta.coord, richiesta.coordDest);
           
@@ -55,12 +62,15 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
           }
         }
 
+        // --- CALCOLO PREZZO ---
         let prezzo = 0;
         try {
           prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaSegmentoKm, Number(item.distanza || 0));
-        } catch (err) { console.error(`❌ [FORMATTER] Errore calcolo prezzo corsa ${item.id}:`, err); }
+        } catch (err) { 
+          console.error(`❌ [FORMATTER] Errore calcolo prezzo corsa ${item.id}:`, err); 
+        }
 
-        const result = {
+        return {
           id: item.id || uuidv4(),
           veicolo_id: veicoloId,
           marca: v?.marca ?? null,
@@ -75,11 +85,9 @@ async function formatResultsAsSlots(richiesta, slotsFiltrati, corseFiltrate, inj
           postiDisponibili: Number(item.postiDisponibili ?? 0),
           percorsoVisualizzato: isCorsa ? item.decodedCoords : null 
         };
-
-        return result;
       } catch (err) {
-        console.error(`💥 [FORMATTER] Errore critico elaborazione item:`, err);
-        return null; // Ritorna null per filtrarlo poi
+        console.error(`💥 [FORMATTER] Errore critico elaborazione item ${item?.id}:`, err);
+        return null;
       }
     })
   );

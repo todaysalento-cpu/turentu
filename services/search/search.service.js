@@ -1,6 +1,7 @@
 import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
+import { getDisponibilita } from './disponibilita.service.js'; // Import per calcolo dinamico
 import { redisClient } from '../../redis.js';
 import ngeohash from 'ngeohash';
 
@@ -13,6 +14,7 @@ export async function cercaSlotUltra(richiesta) {
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
+  const targetDate = new Date(richiesta.start_datetime || Date.now());
 
   // 1. Recupero candidati (Corse)
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
@@ -24,7 +26,7 @@ export async function cercaSlotUltra(richiesta) {
     .map(id => CacheStore.corseCache.get(Number(id)))
     .filter(Boolean);
 
-  // 2. Recupero massivo prenotazioni per le corse trovate
+  // 2. Recupero massivo prenotazioni
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -40,25 +42,32 @@ export async function cercaSlotUltra(richiesta) {
     lon
   };
 
-  // 3. ESECUZIONE FILTRI (Duale: Corse + Slot Generici)
+  // 3. ESECUZIONE FILTRI
   
-  // A. Filtro Corse (Geometrico/Turf)
+  // A. Filtro Corse (Geometrico)
   const { slots: slotsCorse, corse: corseCompatibili } = await filterDisponibilita(
     richiestaNormalizzata,
     corseCandidate,
     prenotazioniBatch
   );
 
-  // B. Filtro Slot Generici (Disponibilità pura, senza vincoli di rotta)
-  const allSlots = Array.from(CacheStore.disponibilitaCache.values());
+  // B. Filtro Slot Generici (Arricchimento dinamico con targetDate)
+  const allSlots = await Promise.all(
+    Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
+      const stati = await getDisponibilita(s.driver_id, targetDate);
+      return {
+        ...s,
+        disponibile: stati.some(st => st.disponibile),
+        posti_totali: Number(s.posti_totali || 0)
+      };
+    })
+  );
+  
   const slotsLiberi = await filterSlotOnly(richiestaNormalizzata, allSlots);
 
-  // 4. FUSIONE DEI RISULTATI (Deduplicazione su veicolo_id)
+  // 4. FUSIONE DEI RISULTATI
   const mapRisultati = new Map();
-  
-  // Aggiungiamo prima gli slot liberi
   slotsLiberi.forEach(s => mapRisultati.set(s.veicolo_id, s));
-  // Sovrascriviamo con le corse specifiche (priorità alla rotta definita)
   slotsCorse.forEach(s => mapRisultati.set(s.veicolo_id, s));
 
   const risultatiFinali = Array.from(mapRisultati.values());
@@ -69,14 +78,12 @@ export async function cercaSlotUltra(richiesta) {
 
   // 5. Formattazione finale
   try {
-    const risultati = await formatResults(
+    return await formatResults(
       richiestaNormalizzata, 
       risultatiFinali, 
       corseCompatibili, 
       CacheStore.veicoliCache 
     );
-    
-    return Array.isArray(risultati) ? risultati : [];
   } catch (err) {
     console.error("💥 [SERVICE] Errore critico in formatResults:", err);
     return []; 

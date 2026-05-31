@@ -1,20 +1,17 @@
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../../redis.js';
 
-// Precisione 5 (~4.9km) per essere tolleranti sul matching iniziale dei punti
 const GEOHASH_PRECISION = 5;
 
 export async function filterDisponibilita(richiesta, veicoliCache, disponibilitaCache, corseCache) {
     const startTime = Date.now();
     const corseMap = corseCache instanceof Map ? corseCache : new Map(Array.isArray(corseCache) ? corseCache.map(c => [Number(c.id), c]) : []);
     
-    // Usiamo precisione 5 per il matching dei punti sulla polyline
     const hStart = ngeohash.encode(richiesta.coord.lat, richiesta.coord.lon, GEOHASH_PRECISION);
     const hEnd = ngeohash.encode(richiesta.coordDest.lat, richiesta.coordDest.lon, GEOHASH_PRECISION);
 
     let candidateIds = [];
     if (redisClient) {
-        // Filtro largo geospaziale
         candidateIds = await redisClient.geoSearch('corse_geo_index', { 
             longitude: richiesta.coord.lon, latitude: richiesta.coord.lat 
         }, { radius: 100, unit: 'km' });
@@ -29,8 +26,13 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         pipeline.hVals(`corsa:prenotazioni:${id}`);
     });
 
-    // Esecuzione pipeline: returns [[err, res1], [err, res2], ...]
     const rawResults = await pipeline.exec();
+    
+    // Sicurezza: se rawResults è null o non è un array, usciamo per evitare il crash
+    if (!rawResults || !Array.isArray(rawResults)) {
+        console.error("[SEARCH ENGINE] Errore critico esecuzione pipeline Redis");
+        return { slots: [], corse: [] };
+    }
     
     const corse = [];
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
@@ -40,18 +42,24 @@ export async function filterDisponibilita(richiesta, veicoliCache, disponibilita
         const c = corseMap.get(Number(id));
         if (!c) continue;
 
-        // Estrazione sicura: rawResults[index][1] contiene il valore effettivo
-        const idxStart = rawResults[i * 3][1];
-        const idxEnd = rawResults[i * 3 + 1][1];
-        const prenotazioniRaw = rawResults[i * 3 + 2][1] || [];
+        // ACCESSO SICURO: Verifica che ogni step della pipeline sia un array [err, val]
+        const opStart = rawResults[i * 3];
+        const opEnd = rawResults[i * 3 + 1];
+        const opPrenotazioni = rawResults[i * 3 + 2];
 
-        // Validazione logica
+        // Se un'operazione è nulla o ha un errore (op[0]), saltiamo questa corsa
+        if (!opStart || !opEnd || !opPrenotazioni || opStart[0] || opEnd[0]) {
+            continue;
+        }
+
+        const idxStart = opStart[1];
+        const idxEnd = opEnd[1];
+        const prenotazioniRaw = opPrenotazioni[1] || [];
+
         if (idxStart === null || idxEnd === null || Number(idxStart) >= Number(idxEnd)) continue;
 
-        // Calcolo occupazione
         const occupazioneSegmento = prenotazioniRaw.reduce((max, p) => {
             const item = typeof p === 'string' ? JSON.parse(p) : p;
-            // Verifica sovrapposizione indici
             const sovrappone = (Number(idxStart) < Number(item.end_index_polyline)) && 
                                (Number(idxEnd) > Number(item.start_index_polyline));
             return sovrappone ? max + Number(item.posti_richiesti || 0) : max;

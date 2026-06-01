@@ -10,7 +10,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const corseValide = [];
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     
-    // Turf lavora in [lon, lat] - Richiesta corretta
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     
@@ -19,12 +18,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     for (let i = 0; i < corseCandidate.length; i++) {
         const c = corseCandidate[i];
-        
         if (!c?.decodedCoords || c.decodedCoords.length < 2) continue;
 
-        // DIAGNOSTICA: Stampiamo il primo punto per vedere com'è fatto
-        // Se vedi [18.3, 39.8], è [lon, lat]. Se vedi [39.8, 18.3], è [lat, lon].
-        // Se è già [lon, lat], NON invertire.
         const coords = c.decodedCoords; 
         const route = turf.lineString(coords);
 
@@ -32,7 +27,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const distEnd = turf.pointToLineDistance(pEnd, route, { units: 'kilometers' });
         
         if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) { 
-            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA (Distanza): Start=${distStart.toFixed(1)}km, End=${distEnd.toFixed(1)}km. Dati: ${JSON.stringify(coords[0])}`);
             stats.d++; continue; 
         }
 
@@ -40,11 +34,17 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const endPointOnLine = turf.nearestPointOnLine(route, pEnd);
         const idxDiff = endPointOnLine.properties.index - startPointOnLine.properties.index;
         
-        if (idxDiff < 0.1) { 
+        // LOG DI DEBUG: fondamentale per capire se la polyline è troppo corta o invertita
+        console.log(`[DEBUG-DIR] Corsa ${c.id}: idxDiff=${idxDiff.toFixed(2)} (StartIdx: ${startPointOnLine.properties.index.toFixed(0)}, EndIdx: ${endPointOnLine.properties.index.toFixed(0)})`);
+
+        // Accettiamo sia corse dirette che inverse usando Math.abs
+        if (Math.abs(idxDiff) < 0.1) { 
             stats.dir++; continue; 
         }
 
-        const postiLiberi = Number(c.posti_totali || 0) - (Array.isArray(prenotazioniData[i]) ? prenotazioniData[i].reduce((a, p) => a + Number(p?.posti_richiesti || 0), 0) : 0);
+        const prenotazioni = Array.isArray(prenotazioniData[i]) ? prenotazioniData[i] : [];
+        const occupazione = prenotazioni.reduce((acc, p) => acc + (Number(p?.posti_richiesti) || 0), 0);
+        const postiLiberi = Number(c.posti_totali || 0) - occupazione;
 
         if (postiLiberi >= postiRichiesti) {
             c.postiDisponibili = postiLiberi;
@@ -66,16 +66,18 @@ export async function filterSlotOnly(richiesta, allSlots) {
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     
     const slotsValidi = allSlots.filter(s => {
+        // Controllo disponibilità reale e posti
+        const postiTotali = Number(s.posti_totali || 0);
+        const postiPrenotati = Number(s.posti_prenotati || 0);
+        if (s.disponibile !== true || (postiTotali - postiPrenotati) < postiRichiesti) return false;
+
         const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
         if (!veicolo || !veicolo.lat || !veicolo.lon) return false;
 
-        // Se veicolo.lon/lat sono già corretti, Turf funzionerà
         const vPos = turf.point([veicolo.lon, veicolo.lat]);
-        const distanzaKm = turf.distance(pStart, vPos, { units: 'kilometers' });
-
-        return distanzaKm <= MAX_DIST_KM;
+        return turf.distance(pStart, vPos, { units: 'kilometers' }) <= MAX_DIST_KM;
     });
 
     console.log(`[FILTER-SLOT] ${slotsValidi.length}/${allSlots.length} ok | (${Date.now() - startTime}ms)`);
-    return slotsValidi.map(s => ({ id: `slot_ind_${s.id}`, veicolo_id: s.veicolo_id, posti_disponibili: s.posti_totali, prezzo: 0, start_datetime: s.start_datetime }));
+    return slotsValidi.map(s => ({ id: `slot_ind_${s.id}`, veicolo_id: s.veicolo_id, posti_disponibili: s.posti_totali - (s.posti_prenotati || 0), prezzo: 0, start_datetime: s.start_datetime }));
 }

@@ -4,13 +4,10 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
 import { redisClient } from '../../../redis.js';
 import ngeohash from 'ngeohash';
-import * as turf from '@turf/turf'; // Assicurati di avere turf installato
+import * as turf from '@turf/turf';
 
 const MATCHING_PRECISION = 5;
 
-/**
- * Logica pura di interpolazione basata su ZSET
- */
 function calcolaDettagliTratta(item, idxStart, idxEnd) {
     if (idxStart === null || idxEnd === null || idxEnd <= idxStart) return null;
 
@@ -39,8 +36,10 @@ async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
 
 const localitaCache = new Map();
 async function getLocalitaSafeCached(coord) {
+    if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
     if (localitaCache.has(key)) return localitaCache.get(key);
+    
     const loc = await getLocalitaSafe(coord);
     localitaCache.set(key, loc);
     return loc;
@@ -60,27 +59,22 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (CALCOLO DINAMICO) ---
+            // --- 1. GESTIONE SLOT (DISPONIBILITÀ DINAMICA) ---
             if (item.is_slot) {
-                // Calcolo distanza reale basata su coordinate in cache (v.lat, v.lon)
-                const dist = v ? turf.distance(
-                    turf.point([v.lon, v.lat]), 
-                    turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), 
-                    { units: 'kilometers' }
-                ) : 0;
-
+                const coordVeicolo = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
+                const dist = v ? turf.distance(turf.point([v.lon, v.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), { units: 'kilometers' }) : (item._distanzaKm || 0);
+                
                 const oraPartenza = new Date(item.start_datetime || Date.now());
-                const oreStimate = dist > 0 ? (dist / 60) : 1; 
-                const oraArrivo = new Date(oraPartenza.getTime() + (oreStimate * 3600000));
-
+                const oraArrivo = new Date(oraPartenza.getTime() + ((dist / 60) * 3600000));
                 const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
 
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
-                    modello: v?.modello ?? "Disponibilità",
-                    localitaOrigine: v ? await getLocalitaSafeCached({ lat: v.lat, lon: v.lon }) : "N/D",
+                    modello: v?.modello ?? "Disponibilità oraria",
+                    tipo: item.tipo_corsa || 'disponibile',
+                    localitaOrigine: await getLocalitaSafeCached(coordVeicolo),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                     oraPartenza: oraPartenza.toISOString(),
                     oraArrivo: oraArrivo.toISOString(),
@@ -92,15 +86,17 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 };
             }
 
-            // --- 2. GESTIONE CORSE (ZSET INTERPOLATION) ---
+            // --- 2. GESTIONE CORSE (TRATTE PIANIFICATE) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            const zIndex = corsaItems.findIndex(c => c.id === item.id);
-            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
-                const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
-                if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
+            if (item.start_datetime && item.decodedCoords?.length > 0) {
+                const zIndex = corsaItems.findIndex(c => c.id === item.id);
+                if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
+                    const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
+                    if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
+                }
             }
 
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
@@ -110,6 +106,7 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 veicolo_id: vId,
                 marca: v?.marca ?? "N/A", 
                 modello: v?.modello ?? "Veicolo",
+                tipo: item.tipo_corsa || 'condivisa',
                 localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                 localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                 oraPartenza: oraPartenza.toISOString(),

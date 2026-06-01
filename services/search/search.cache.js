@@ -4,6 +4,9 @@ import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js'; 
 
+/**
+ * Singleton Pattern: Gestione stato globale cache
+ */
 if (!global.__CACHESTORE__) {
     global.__CACHESTORE__ = {
         veicoliCache: new Map(),
@@ -16,17 +19,21 @@ if (!global.__CACHESTORE__) {
 }
 
 export const CacheStore = global.__CACHESTORE__;
-export const TOP_RESULTS = 10;
 const GEOHASH_PRECISION_TRATTA = 5;
-const DISTANZA_CAMPIONAMENTO_KM = 50;
 
 // --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
     const corsaId = Number(prenotazione.corsa_id);
     const pId = Number(prenotazione.id);
-    if (!CacheStore.prenotazioniCache.has(corsaId)) CacheStore.prenotazioniCache.set(corsaId, new Map());
+    
+    if (!CacheStore.prenotazioniCache.has(corsaId)) {
+        CacheStore.prenotazioniCache.set(corsaId, new Map());
+    }
     CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
-    if (redisClient) await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
+
+    if (redisClient) {
+        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
+    }
 };
 
 export const removePrenotazione = async (corsaId, prenotazioneId) => {
@@ -36,104 +43,134 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
     if (redisClient) await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
 };
 
-// --- GESTIONE VEICOLI E DISPONIBILITÀ ---
+// --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
     const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
 
-// ESPORTAZIONE AGGIUNTA PER IL CACHEMANAGER
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
 export const upsertDisponibilita = async (d) => {
-    CacheStore.disponibilitaCache.set(Number(d.id), {
+    const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
         is_slot: true,
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
-    });
+    };
+    
+    CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
 
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
 
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
+    const veicoloId = Number(c.veicolo_id);
     const corsaId = Number(c.id);
+    
+    // FIX: Decodifica isolata e copia profonda per evitare riferimenti condivisi
     let decodedCoords = [];
     if (c.percorso_polyline) {
         try {
             const raw = polyline.decode(c.percorso_polyline);
+            // Mappiamo in modo esplicito creando nuovi array per ogni punto (Deep Copy)
             decodedCoords = raw.map(p => [Number(p[1]), Number(p[0])]);
-        } catch (e) { console.error(`[ERROR] Decodifica fallita ${corsaId}:`, e); }
+        } catch (e) { 
+            console.error(`[ERROR] Decodifica fallita ${corsaId}:`, e); 
+            decodedCoords = []; 
+        }
     }
 
     const lat = decodedCoords.length > 0 ? decodedCoords[0][1] : 0;
     const lon = decodedCoords.length > 0 ? decodedCoords[0][0] : 0;
-    CacheStore.corseCache.set(corsaId, { ...c, veicolo_id: Number(c.veicolo_id), lat, lon, decodedCoords });
+    
+    // Salviamo nella cache clonando esplicitamente l'array dei percorsi
+    CacheStore.corseCache.set(corsaId, { 
+        ...c, 
+        veicolo_id: veicoloId, 
+        lat, 
+        lon, 
+        decodedCoords: decodedCoords.map(p => [...p]) 
+    });
     
     if (redisClient) {
         try {
-            const oldHashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
+            const hashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
             const pipeline = redisClient.multi();
             
-            // Pulizia
             pipeline.zRem('corse_geo_index', corsaId.toString());
             pipeline.del(`corsa:prenotazioni:${corsaId}`);
-            pipeline.del(`corsa:percorso_hash:${corsaId}`);
-            oldHashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
+            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.del(`corsa:hashes:${corsaId}`);
             
-            // Geo Indexing
-            if (lat !== 0 && lon !== 0) pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
-            
-            // Indicizzazione tratta dinamica + ZSET per interpolazione
-            const hashSet = new Set();
-            if (decodedCoords.length >= 2) {
-                const line = turf.lineString(decodedCoords);
-                const lunghezzaTotale = turf.length(line, { units: 'kilometers' });
-                const numeroPunti = Math.max(3, Math.ceil(lunghezzaTotale / DISTANZA_CAMPIONAMENTO_KM));
-                
-                for (let i = 0; i < numeroPunti; i++) {
-                    const frazione = i / (numeroPunti - 1);
-                    const point = turf.along(line, frazione * lunghezzaTotale, { units: 'kilometers' });
-                    const [lonP, latP] = point.geometry.coordinates;
-                    const hash = ngeohash.encode(latP, lonP, GEOHASH_PRECISION_TRATTA);
-                    
-                    // Popolamento ZSET per il calcolo dei segmenti in formatResults
-                    pipeline.zAdd(`corsa:percorso_hash:${corsaId}`, { score: i, value: hash });
-                    
-                    [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
-                }
+            if (lat !== 0 && lon !== 0) {
+                pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
             }
+            
+            const hashSet = new Set();
+            decodedCoords.forEach((coord) => {
+                const hash = ngeohash.encode(coord[1], coord[0], GEOHASH_PRECISION_TRATTA);
+                [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
+            });
 
             hashSet.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
+            
             await pipeline.exec();
-        } catch (e) { console.error(`[ERROR] Redis fallito per corsa ${corsaId}:`, e); }
+        } catch (redisErr) {
+            console.error(`[ERROR] Redis fallito per corsa ${corsaId}:`, redisErr);
+        }
     }
 };
 
 export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
+    CacheStore.prenotazioniCache.delete(id);
+    
     if (redisClient) {
-        const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
-        const pipeline = redisClient.multi();
-        pipeline.zRem('corse_geo_index', id.toString());
-        pipeline.del(`corsa:percorso_hash:${id}`);
-        hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
-        pipeline.del(`corsa:hashes:${id}`);
-        await pipeline.exec();
+        try {
+            const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
+            const pipeline = redisClient.multi();
+            pipeline.zRem('corse_geo_index', id.toString());
+            pipeline.del(`corsa:prenotazioni:${id}`);
+            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
+            pipeline.del(`corsa:hashes:${id}`);
+            await pipeline.exec();
+        } catch (e) { console.error("Errore pulizia Redis:", e); }
     }
 };
 
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
-    if (!force && CacheStore.corseCache.size > 0) return;
+    if (!force && CacheStore.corseCache.size > 0 && CacheStore.veicoliCache.size > 0) return;
+    
+    // Reset se forziamo il reload per evitare inquinamento dati
+    if (force) {
+        CacheStore.corseCache.clear();
+        CacheStore.veicoliCache.clear();
+    }
+    
     const client = await pool.connect();
     try {
+        // Caricamento Veicoli
         const vRes = await client.query("SELECT *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon FROM veicolo");
-        vRes.rows.forEach(upsertVeicolo);
+        for (const v of vRes.rows) upsertVeicolo(v);
+
+        // Caricamento Disponibilità
+        const dRes = await client.query("SELECT * FROM disponibilita_veicolo");
+        for (const d of dRes.rows) await upsertDisponibilita(d);
+
+        // Caricamento Corse
+        console.log("🔄 [SYNC] Sincronizzazione corse...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
         for (const c of cRes.rows) await upsertCorsa(c);
-    } finally { client.release(); }
+        
+        console.log(`📦 [SYNC] Completata. Corse totali: ${CacheStore.corseCache.size}`);
+    } catch (err) {
+        console.error("❌ [SYNC] Errore critico:", err);
+    } finally { 
+        client.release(); 
+    }
 }

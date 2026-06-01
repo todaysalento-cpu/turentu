@@ -54,6 +54,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     distanzaKm: Number(dist.toFixed(2)),
                     prezzo: Number(prezzo?.toFixed(2)) || 0,
                     stato: 'disponibile',
+                    postiTotali: Number(item.posti_totali || 0),
+                    postiPrenotati: 0,
                     postiDisponibili: Number(item.posti_totali || 0),
                     percorsoVisualizzato: null
                 };
@@ -63,12 +65,10 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const decodedCoords = item.decodedCoords || [];
             const totalPoints = decodedCoords.length;
 
-            // Calcolo del rapporto di percorso (Ratio) basato sugli indici del motore
             const startIdx = item.startIdx ?? 0;
             const endIdx = item.endIdx ?? (totalPoints - 1);
             const ratio = (totalPoints > 1) ? (endIdx - startIdx) / (totalPoints - 1) : 1;
 
-            // Ricalcolo dinamico
             const distDinamica = (item.distanzaKm || item.distanza || 0) * ratio;
             
             const startBase = new Date(item.start_datetime || item.oraPartenza).getTime();
@@ -78,13 +78,12 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const oraPartenzaDinamica = new Date(startBase + (durataTotale * (startIdx / (totalPoints - 1 || 1))));
             const oraArrivoDinamico = new Date(startBase + (durataTotale * (endIdx / (totalPoints - 1 || 1))));
 
-            const prezzo = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti, 
-                item.stato, 
-                distDinamica, 
-                distDinamica
-            );
+            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distDinamica, distDinamica);
+
+            // Calcolo posti prenotati totali per questa tratta
+            const postiTotali = Number(item.posti_totali || 0);
+            const postiDisponibili = Number(item.postiDisponibili || 0);
+            const postiPrenotati = Math.max(0, postiTotali - postiDisponibili);
 
             return {
                 id: item.id,
@@ -99,7 +98,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 distanzaKm: Number(distDinamica.toFixed(2)),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
                 stato: item.stato || 'prenotabile',
-                postiDisponibili: Number(item.postiDisponibili),
+                postiTotali: postiTotali,
+                postiPrenotati: postiPrenotati,
+                postiDisponibili: postiDisponibili,
                 percorsoVisualizzato: item.decodedCoords || null
             };
 

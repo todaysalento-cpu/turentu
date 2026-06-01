@@ -1,13 +1,12 @@
 import * as turf from '@turf/turf';
 
 /**
- * Motore di calcolo occupazione: determina i posti liberi su un segmento specifico
+ * Motore di calcolo occupazione: determina i posti liberi e occupati su un segmento specifico
  */
-function calcolaPostiDisponibiliSuTratta(corsa, startIdx, endIdx, prenotazioni) {
+function calcolaOccupazioneSuTratta(corsa, startIdx, endIdx, prenotazioni) {
     const puntiCritici = new Set([startIdx, endIdx]);
     
     prenotazioni.forEach(p => {
-        // Fallback: se gli indici mancano, usiamo valori estremi o ignoriamo
         const sIdx = p.start_index_polyline ?? 0;
         const eIdx = p.end_index_polyline ?? corsa.decodedCoords.length;
         if (sIdx > startIdx && sIdx < endIdx) puntiCritici.add(sIdx);
@@ -27,7 +26,11 @@ function calcolaPostiDisponibiliSuTratta(corsa, startIdx, endIdx, prenotazioni) 
         if (occupazioneAlPunto > maxOccupazione) maxOccupazione = occupazioneAlPunto;
     }
 
-    return Number(corsa.posti_totali || 0) - maxOccupazione;
+    const postiTotali = Number(corsa.posti_totali || 0);
+    return {
+        postiDisponibili: postiTotali - maxOccupazione,
+        postiPrenotati: maxOccupazione
+    };
 }
 
 /**
@@ -38,7 +41,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     
-    // Tolleranza estesa per corse a lunga percorrenza
     const TOLLERANZA_KM = 150; 
 
     for (let i = 0; i < corseCandidate.length; i++) {
@@ -47,29 +49,32 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
         const route = turf.lineString(c.decodedCoords);
         
-        // 1. Filtro Spaziale con Logging
+        // 1. Filtro Spaziale
         const distStart = turf.pointToLineDistance(pStart, route);
         const distEnd = turf.pointToLineDistance(pEnd, route);
         
         if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) {
-            // Log silente: puoi decommentarlo per debug estremo
-            // console.log(`[FILTER] Corsa ${c.id} fuori tolleranza: ${distStart.toFixed(1)}km/${distEnd.toFixed(1)}km`);
             continue;
         }
 
-        // 2. Filtro Direzione migliorato
+        // 2. Filtro Direzione
         const startIdx = turf.nearestPointOnLine(route, pStart).properties.index;
         const endIdx = turf.nearestPointOnLine(route, pEnd).properties.index;
         
-        // Se endIdx <= startIdx, la corsa è in direzione opposta o troppo breve
         if (endIdx <= startIdx) continue; 
 
-        // 3. Calcolo Disponibilità
+        // 3. Calcolo Disponibilità e Occupazione
         const prenotazioni = prenotazioniBatch[i] || [];
-        const postiDisponibili = calcolaPostiDisponibiliSuTratta(c, startIdx, endIdx, prenotazioni);
+        const { postiDisponibili, postiPrenotati } = calcolaOccupazioneSuTratta(c, startIdx, endIdx, prenotazioni);
 
         if (postiDisponibili >= richiesta.posti_richiesti) {
-            corseValide.push({ ...c, postiDisponibili, startIdx, endIdx });
+            corseValide.push({ 
+                ...c, 
+                postiDisponibili, 
+                postiPrenotati, // Passiamo il dato pronto al formatter
+                startIdx, 
+                endIdx 
+            });
         }
     }
     

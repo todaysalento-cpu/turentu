@@ -13,41 +13,42 @@ export async function getDisponibilita(driver_id, targetDate = new Date()) {
   
   const turniDriver = tuttiITurni.filter(d => d.driver_id === driver_id);
   
-  const dayOfWeek = targetDate.getDay();
+  // Parametri di confronto
+  const targetDayOfWeek = targetDate.getDay();
   const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
 
   return turniDriver.map(d => {
     let disponibile = true;
     
-    // 1. Verifica giorni esclusi
+    // 1. Verifica GIORNI ESCLUSI (Data-Specific: controlla il giorno della settimana)
     const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
-    if (giorniEsclusiNum.includes(dayOfWeek) || giorniEsclusiNum.length >= 7) {
+    if (giorniEsclusiNum.includes(targetDayOfWeek)) {
       disponibile = false;
     }
 
-    // 2. Verifica periodi di inattività
+    // 2. Verifica PERIODI DI INATTIVITÀ (Data-Specific: confronto range date reali)
     if (disponibile && Array.isArray(d.inattivita)) {
       for (const i of d.inattivita) {
-        const start = new Date(i.start);
-        const end = new Date(i.fine);
-        if (targetDate >= start && targetDate <= end) {
+        const startInattivita = new Date(i.start);
+        const fineInattivita = new Date(i.fine);
+        if (targetDate >= startInattivita && targetDate <= fineInattivita) {
           disponibile = false;
           break;
         }
       }
     }
 
-    // 3. Verifica orario turno (Data-agnostic: confronto basato solo su HH:mm)
-    const startDate = new Date(d.start);
-    const endDate = new Date(d.fine);
-    
-    const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
-    const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
-    
-    // Supporto per turni che superano la mezzanotte
-    const isOvernight = startMinutes > endMinutes;
-    
+    // 3. Verifica ORARIO TURNO (Data-Agnostic: solo HH:mm)
     if (disponibile) {
+      const startDate = new Date(d.start);
+      const endDate = new Date(d.fine);
+      
+      const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
+      const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+      
+      // Supporto per turni che superano la mezzanotte (Overnight)
+      const isOvernight = startMinutes > endMinutes;
+      
       if (isOvernight) {
         if (!(targetMinutes >= startMinutes || targetMinutes <= endMinutes)) disponibile = false;
       } else {
@@ -141,11 +142,16 @@ export async function deleteDisponibilita(id) {
   CacheManager.disponibilita.delete(id);
 }
 
+/**
+ * Parsa un orario in stringa (HH:mm) convertendolo in una data standard.
+ * Usiamo il 1970-01-01 come data base per rendere i confronti data-agnostic.
+ */
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
-  const today = new Date();
+  
   const [hh, mm] = timeStr.split(':').map(Number);
-  today.setHours(hh, mm, 0, 0);
-  return today.toISOString();
+  // Forza la data al 1° Gennaio 1970 per ignorare la parte calendario
+  const d = new Date(1970, 0, 1, hh, mm, 0, 0);
+  return d.toISOString();
 }

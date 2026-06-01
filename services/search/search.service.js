@@ -1,11 +1,6 @@
-import { loadCachesUltra, CacheStore } from './search.cache.js';
-import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
-import { formatResults } from './formatter/search.formatter.js';
-import { getDisponibilita } from './disponibilita/disponibilita.service.js';
-import { redisClient } from '../../redis.js';
-import ngeohash from 'ngeohash';
+import * as turf from '@turf/turf'; // Importa turf qui
 
-const GEOHASH_PRECISION_TRATTA = 5;
+// ... (tutto il resto dei tuoi import)
 
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
@@ -14,20 +9,18 @@ export async function cercaSlotUltra(richiesta) {
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
+  const pStart = turf.point([lon, lat]); // Punto di riferimento per gli slot
   const targetDate = new Date(richiesta.start_datetime || Date.now());
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-  // 1. Recupero candidati da Redis
+  // 1. Recupero corse candidato (come prima)
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
   const candidateIds = [...new Set(results.flat())];
-  
-  const corseCandidate = candidateIds
-    .map(id => CacheStore.corseCache.get(Number(id)))
-    .filter(Boolean);
+  const corseCandidate = candidateIds.map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
 
-  // 2. Recupero prenotazioni batch
+  // 2. Recupero prenotazioni batch (come prima)
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -35,19 +28,25 @@ export async function cercaSlotUltra(richiesta) {
     prenotazioniBatch = await pipeline.exec();
   }
 
-  // 3. ESECUZIONE FILTRI (UNICA FONTE DI VERITÀ)
-  // Il filtro ora restituisce corse già arricchite con 'postiDisponibili' corretto
+  // 3. ESECUZIONE FILTRI CORSE (Unica fonte di verità per le tratte)
   const { corse: corseValide } = await filterDisponibilita(
     { ...richiesta, posti_richiesti: postiRichiesti, coord: { lat, lon } },
     corseCandidate,
     prenotazioniBatch
   );
 
-  // 4. Gestione Slot Generici
+  // 4. Gestione Slot Generici (FILTRO SPAZIALE: devono essere vicini!)
+  const TOLLERANZA_SLOT_KM = 50; 
   const allSlots = await Promise.all(
     Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
+      const veicolo = CacheStore.veicoloCache.get(Number(s.veicolo_id));
+      if (!veicolo?.lat || !veicolo?.lon) return null;
+
+      // Filtro solo per vicinanza geografica (indipendente dalla tratta)
+      const dist = turf.distance(pStart, turf.point([veicolo.lon, veicolo.lat]), { units: 'kilometers' });
+      if (dist > TOLLERANZA_SLOT_KM) return null;
+
       const stati = await getDisponibilita(s.driver_id, targetDate);
-      const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       return {
         ...s,
         disponibile: stati.some(st => st.disponibile),
@@ -56,27 +55,24 @@ export async function cercaSlotUltra(richiesta) {
     })
   );
   
-  const slotsLiberi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots);
+  const slotsLiberi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots.filter(Boolean));
 
-  // 5. FUSIONE DEI RISULTATI (PULITA)
-  const mapRisultati = new Map();
+  // 5. SEPARAZIONE E FUSIONE PULITA
+  // Aggiungiamo le corse validate dal motore geometrico
+  const risultatiCorse = corseValide.map(c => ({ ...c, is_slot: false }));
+  
+  // Aggiungiamo gli slot, ma solo se quel veicolo non è già impegnato in una delle corse valide
+  const risultatiSlot = slotsLiberi.filter(s => 
+    !risultatiCorse.some(c => c.veicolo_id === s.veicolo_id)
+  ).map(s => ({ ...s, is_slot: true }));
 
-  // Aggiungiamo solo corse che hanno superato il filtro disponibilità
-  corseValide.forEach(c => {
-    mapRisultati.set(`corsa-${c.id}`, { ...c, is_slot: false });
-  });
-
-  // Aggiungiamo slot generici validi
-  slotsLiberi.forEach(s => {
-    mapRisultati.set(`slot-${s.id}`, { ...s, is_slot: true });
-  });
-
-  const risultatiFinali = Array.from(mapRisultati.values());
-  console.log(`[SERVICE] Filtro completato: ${risultatiFinali.length} risultati trovati.`);
+  const risultatiFinali = [...risultatiCorse, ...risultatiSlot];
+  
+  console.log(`[SERVICE] Trovate ${risultatiCorse.length} corse e ${risultatiSlot.length} slot.`);
 
   if (risultatiFinali.length === 0) return [];
 
-  // 6. Formattazione finale (Riceve dati già validati)
+  // 6. Formattazione finale
   try {
     return await formatResults(richiesta, risultatiFinali, corseValide, CacheStore.veicoliCache);
   } catch (err) {

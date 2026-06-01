@@ -5,59 +5,44 @@ router.post("/", async (req, res) => {
   try {
     const form = req.body;
 
-    // =========================
-    // 🔥 LOG REQUEST COMPLETA
-    // =========================
     console.log("==================================");
-    console.log("📩 /api/search REQUEST");
-    console.log("BODY:", JSON.stringify(form, null, 2));
+    console.log("📩 /api/search REQUEST RECEIVED");
+    console.log(`Da: ${form.localitaOrigine} | Per: ${form.localitaDestinazione}`);
+    console.log(`Data: ${form.start_datetime} | Posti: ${form.posti_richiesti}`);
     console.log("==================================");
 
-    // =========================
-    // 🔒 VALIDAZIONE INPUT
-    // =========================
-    if (!form.coord || !form.coordDest) {
-      console.log("❌ REQUEST INVALID: missing coordinates");
-      return res.status(400).json({ error: "coord e coordDest sono obbligatorie" });
+    // 1. VALIDAZIONE
+    if (!form.coord || !form.coordDest || !form.localitaOrigine || !form.localitaDestinazione) {
+      console.log("❌ REQUEST REJECTED: Missing fields");
+      return res.status(400).json({ error: "Dati geografici o posizioni mancanti" });
     }
 
-    if (!form.localitaOrigine || !form.localitaDestinazione) {
-      console.log("❌ REQUEST INVALID: missing locations");
-      return res.status(400).json({ error: "localitaOrigine e localitaDestinazione sono obbligatorie" });
-    }
-
-    if (!form.start_datetime) {
-      return res.status(400).json({ error: "start_datetime mancante" });
-    }
-
-    if (!form.posti_richiesti) {
-      return res.status(400).json({ error: "posti_richiesti mancante" });
-    }
-
-    // =========================
-    // 🚀 BUSINESS LOGIC
-    // =========================
+    // 2. ESECUZIONE (Import dinamico per evitare cicli)
     const { cercaSlotUltra } = await import("../services/search/search.service.js");
 
+    console.time("⏱️ Performance Timer: cercaSlotUltra");
     const risultati = await cercaSlotUltra(form);
+    console.timeEnd("⏱️ Performance Timer: cercaSlotUltra");
 
-    console.log("🔍 Search risultati trovati:", risultati.length);
+    console.log(`🔍 Search elaborata. Risultati trovati: ${risultati ? risultati.length : 0}`);
 
-    // ==================================================
-    // 📡 DEBUG PAYLOAD IN USCITA (La prova del nove)
-    // ==================================================
-    if (risultati.length > 0) {
-      console.log("📡 [DEBUG API] Primo elemento in uscita:", JSON.stringify(risultati[0], null, 2));
+    // 3. DEBUG TRACCIAMENTO USCITA
+    if (risultati && risultati.length > 0) {
+      console.log(`📡 [DEBUG API] Inviando ${risultati.length} elementi.`);
+      console.log(`📡 [DEBUG API] ID elementi inviati: ${risultati.map(r => r.id).join(', ')}`);
     } else {
-      console.log("📡 [DEBUG API] Nessun risultato da inviare.");
+      console.log("📡 [DEBUG API] Payload inviato: [] (Array vuoto)");
     }
 
-    return res.json(risultati);
+    // 4. INVIO RISPOSTA
+    return res.json(risultati || []);
 
   } catch (err) {
-    console.error("❌ Search error:", err);
+    console.error("❌ CRITICAL SEARCH ERROR:");
+    console.error(err);
     return res.status(500).json({
-      error: err.message || "Internal server error",
+      error: "Errore durante la ricerca",
+      details: err.message
     });
   }
 });

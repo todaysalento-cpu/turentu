@@ -51,6 +51,9 @@ export const upsertDisponibilita = async (d) => {
     });
 };
 
+// AGGIUNTA EXPORT MANCANTE CHE CAUSAVA ERRORE
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
+
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c) => {
     const corsaId = Number(c.id);

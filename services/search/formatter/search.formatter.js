@@ -8,6 +8,9 @@ import * as turf from '@turf/turf';
 
 const MATCHING_PRECISION = 5;
 
+/**
+ * Logica pura di interpolazione basata su ZSET
+ */
 function calcolaDettagliTratta(item, idxStart, idxEnd) {
     if (idxStart === null || idxEnd === null || idxEnd <= idxStart) return null;
 
@@ -59,13 +62,18 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (DISPONIBILITÀ DINAMICA) ---
+            // --- 1. GESTIONE SLOT (CALCOLO DINAMICO) ---
             if (item.is_slot) {
-                const coordVeicolo = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
-                const dist = v ? turf.distance(turf.point([v.lon, v.lat]), turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), { units: 'kilometers' }) : (item._distanzaKm || 0);
-                
+                // Calcolo distanza reale per pricing/orario (dal veicolo alla destinazione)
+                const dist = v ? turf.distance(
+                    turf.point([v.lon, v.lat]), 
+                    turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), 
+                    { units: 'kilometers' }
+                ) : 0;
+
                 const oraPartenza = new Date(item.start_datetime || Date.now());
-                const oraArrivo = new Date(oraPartenza.getTime() + ((dist / 60) * 3600000));
+                const oreStimate = dist > 0 ? (dist / 60) : 1; 
+                const oraArrivo = new Date(oraPartenza.getTime() + (oreStimate * 3600000));
                 const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
 
                 return {
@@ -74,7 +82,8 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                     marca: v?.marca ?? "Servizio",
                     modello: v?.modello ?? "Disponibilità oraria",
                     tipo: item.tipo_corsa || 'disponibile',
-                    localitaOrigine: await getLocalitaSafeCached(coordVeicolo),
+                    // Coerenza visuale: usiamo la località richiesta dall'utente
+                    localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                     oraPartenza: oraPartenza.toISOString(),
                     oraArrivo: oraArrivo.toISOString(),
@@ -86,17 +95,15 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 };
             }
 
-            // --- 2. GESTIONE CORSE (TRATTE PIANIFICATE) ---
+            // --- 2. GESTIONE CORSE (ZSET INTERPOLATION) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            if (item.start_datetime && item.decodedCoords?.length > 0) {
-                const zIndex = corsaItems.findIndex(c => c.id === item.id);
-                if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
-                    const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
-                    if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
-                }
+            const zIndex = corsaItems.findIndex(c => c.id === item.id);
+            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
+                const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
+                if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
             }
 
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));

@@ -19,7 +19,11 @@ if (!global.__CACHESTORE__) {
 }
 
 export const CacheStore = global.__CACHESTORE__;
+
+// Precisione 5: ~4.9km x 4.9km (bilanciamento ottimale tra precisione e performance)
 const GEOHASH_PRECISION_TRATTA = 5;
+// Campionamento: un punto ogni 50km garantisce copertura costante per tratte lunghe
+const DISTANZA_CAMPIONAMENTO_KM = 50;
 
 // --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
@@ -45,7 +49,6 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
 
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
-    // v.lat e v.lon arrivano ora dalla query corretta in loadVeicoliCache
     const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
@@ -59,14 +62,12 @@ export const upsertDisponibilita = async (d) => {
         is_slot: true,
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
-    
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
-    console.log(`✅ [CACHE] Disponibilità ${d.id} normalizzata e caricata.`);
 };
 
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
 
-// --- CORE: CORSE ---
+// --- CORE: CORSE OTTIMIZZATO ---
 export const upsertCorsa = async (c) => {
     const veicoloId = Number(c.veicolo_id);
     const corsaId = Number(c.id);
@@ -86,23 +87,37 @@ export const upsertCorsa = async (c) => {
     
     if (redisClient) {
         try {
-            const hashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
+            // 1. Pulizia atomica dei vecchi indici basata sugli hash esistenti
+            const oldHashes = await redisClient.sMembers(`corsa:hashes:${corsaId}`);
             const pipeline = redisClient.multi();
             
             pipeline.zRem('corse_geo_index', corsaId.toString());
             pipeline.del(`corsa:prenotazioni:${corsaId}`);
-            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
+            oldHashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.del(`corsa:hashes:${corsaId}`);
             
+            // 2. Re-indicizzazione mirata (Campionamento Dinamico)
             if (lat !== 0 && lon !== 0) {
                 pipeline.geoAdd('corse_geo_index', { longitude: lon, latitude: lat, member: corsaId.toString() });
             }
             
             const hashSet = new Set();
-            decodedCoords.forEach((coord) => {
-                const hash = ngeohash.encode(coord[1], coord[0], GEOHASH_PRECISION_TRATTA);
-                [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
-            });
+            if (decodedCoords.length >= 2) {
+                const line = turf.lineString(decodedCoords);
+                const lunghezzaTotale = turf.length(line, { units: 'kilometers' });
+                // Calcolo dinamico punti: minimo 3, uno ogni 50km per tratte lunghe
+                const numeroPunti = Math.max(3, Math.ceil(lunghezzaTotale / DISTANZA_CAMPIONAMENTO_KM));
+                
+                for (let i = 0; i < numeroPunti; i++) {
+                    const frazione = i / (numeroPunti - 1);
+                    const point = turf.along(line, frazione * lunghezzaTotale, { units: 'kilometers' });
+                    const [lonP, latP] = point.geometry.coordinates;
+                    
+                    const hash = ngeohash.encode(latP, lonP, GEOHASH_PRECISION_TRATTA);
+                    // Aggiungiamo il Geohash e i suoi 8 vicini per garantire la continuità spaziale
+                    [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));
+                }
+            }
 
             hashSet.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
             pipeline.sAdd(`corsa:hashes:${corsaId}`, Array.from(hashSet));
@@ -118,17 +133,14 @@ export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
     CacheStore.prenotazioniCache.delete(id);
-    
     if (redisClient) {
-        try {
-            const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
-            const pipeline = redisClient.multi();
-            pipeline.zRem('corse_geo_index', id.toString());
-            pipeline.del(`corsa:prenotazioni:${id}`);
-            hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
-            pipeline.del(`corsa:hashes:${id}`);
-            await pipeline.exec();
-        } catch (e) { console.error("Errore pulizia Redis:", e); }
+        const hashes = await redisClient.sMembers(`corsa:hashes:${id}`);
+        const pipeline = redisClient.multi();
+        pipeline.zRem('corse_geo_index', id.toString());
+        pipeline.del(`corsa:prenotazioni:${id}`);
+        hashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
+        pipeline.del(`corsa:hashes:${id}`);
+        await pipeline.exec();
     }
 };
 
@@ -136,15 +148,9 @@ export const removeCorsa = async (corsaId) => {
 export async function loadVeicoliCache() {
     const client = await pool.connect();
     try {
-        // CORREZIONE: Estratto lat/lon dalla colonna 'coord' di tipo geography
-        const query = `
-            SELECT *, 
-                   ST_Y(coord::geometry) as lat, 
-                   ST_X(coord::geometry) as lon 
-            FROM veicolo`;
+        const query = `SELECT *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon FROM veicolo`;
         const vRes = await client.query(query);
         for (const v of vRes.rows) upsertVeicolo(v);
-        console.log(`✅ [SYNC] Veicoli caricati: ${CacheStore.veicoliCache.size}`);
     } finally { client.release(); }
 }
 
@@ -153,25 +159,17 @@ export async function loadDisponibilitaCache() {
     try {
         const res = await client.query("SELECT * FROM disponibilita_veicolo");
         for (const d of res.rows) await upsertDisponibilita(d);
-        console.log(`✅ [SYNC] Slot disponibilità caricati: ${CacheStore.disponibilitaCache.size}`);
     } finally { client.release(); }
 }
 
 export async function loadCachesUltra(force = false) {
     if (!force && CacheStore.corseCache.size > 0 && CacheStore.veicoliCache.size > 0) return;
-    
     await loadVeicoliCache();
     await loadDisponibilitaCache();
-    
     const client = await pool.connect();
     try {
-        console.log("🔄 [SYNC] Sincronizzazione corse...");
         const cRes = await client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso') AND start_datetime > NOW()");
         for (const c of cRes.rows) await upsertCorsa(c);
         console.log(`📦 [SYNC] Completata. Corse totali: ${CacheStore.corseCache.size}`);
-    } catch (err) {
-        console.error("❌ [SYNC] Errore:", err);
-    } finally { 
-        client.release(); 
-    }
+    } catch (err) { console.error("❌ [SYNC] Errore:", err); } finally { client.release(); }
 }

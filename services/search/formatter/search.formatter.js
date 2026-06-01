@@ -8,7 +8,7 @@ import ngeohash from 'ngeohash';
 const MATCHING_PRECISION = 5;
 
 /**
- * Logica pura di interpolazione basata su ZSET
+ * Logica di interpolazione basata su indici di percorso
  */
 function calcolaDettagliTratta(item, idxStart, idxEnd) {
     if (idxStart === null || idxEnd === null || idxEnd <= idxStart) return null;
@@ -16,11 +16,13 @@ function calcolaDettagliTratta(item, idxStart, idxEnd) {
     const totalPoints = item.decodedCoords.length;
     const ratioPartenza = idxStart / totalPoints;
     const ratioSegmento = (idxEnd - idxStart) / totalPoints;
+    
     const durataTotaleMs = Number(item.durata_ms || 0);
+    const distanzaTotaleKm = Number(item.distanza || 0);
     
     const oraPartenza = new Date(new Date(item.start_datetime).getTime() + (durataTotaleMs * ratioPartenza));
     const oraArrivo = new Date(oraPartenza.getTime() + (durataTotaleMs * ratioSegmento));
-    const distanzaSegmentoKm = Number(item.distanza || 0) * ratioSegmento;
+    const distanzaSegmentoKm = distanzaTotaleKm * ratioSegmento;
 
     return { oraPartenza, oraArrivo, distanzaSegmentoKm };
 }
@@ -28,6 +30,7 @@ function calcolaDettagliTratta(item, idxStart, idxEnd) {
 async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
     const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, MATCHING_PRECISION);
     const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, MATCHING_PRECISION);
+    
     const pipeline = redisClient.multi();
     corsaIds.forEach(id => {
         pipeline.zScore(`corsa:percorso_hash:${id}`, hStart);
@@ -61,16 +64,14 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (API MAPS INTEGRATA) ---
+            // --- 1. GESTIONE SLOT ---
             if (item.is_slot) {
                 const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
                 const datiViaggio = await getDurataDistanza(origine, richiesta.coordDest);
                 
                 const dist = datiViaggio.distanzaKm > 0 ? datiViaggio.distanzaKm : 0;
-                const durataMs = datiViaggio.durataMs > 0 ? datiViaggio.durataMs : 3600000;
-                
                 const oraPartenza = new Date(item.start_datetime || Date.now());
-                const oraArrivo = new Date(oraPartenza.getTime() + durataMs);
+                const oraArrivo = new Date(oraPartenza.getTime() + (datiViaggio.durataMs || 3600000));
                 
                 const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
 
@@ -92,14 +93,14 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 };
             }
 
-            // --- 2. GESTIONE CORSE (ZSET INTERPOLATION) ---
+            // --- 2. GESTIONE CORSE (CON INTERPOLAZIONE ZSET) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
-            let distanzaTratta = Number(item.distanza || 0); // Distanza totale corsa
-            const distanzaTotaleCorsa = Number(item.distanza || 0);
+            let distanzaTratta = Number(item.distanza || 0);
 
             const zIndex = corsaItems.findIndex(c => c.id === item.id);
-            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
+            // Verifica che l'indice esista e che Redis abbia restituito valori validi (non null)
+            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null && zsetResults[zIndex * 2 + 1] !== null) {
                 const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
                 if (dettagli) {
                     oraPartenza = dettagli.oraPartenza;
@@ -108,7 +109,7 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 }
             }
 
-            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaTratta, distanzaTotaleCorsa);
+            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaTratta, Number(item.distanza));
 
             return {
                 id: item.id || uuidv4(),

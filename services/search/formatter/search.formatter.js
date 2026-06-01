@@ -1,10 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getLocalitaSafe } from '../../../utils/maps.util.js';
+import { getLocalitaSafe, getDurataDistanza } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
 import { redisClient } from '../../../redis.js';
 import ngeohash from 'ngeohash';
-import * as turf from '@turf/turf';
 
 const MATCHING_PRECISION = 5;
 
@@ -62,18 +61,19 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (CALCOLO DINAMICO) ---
+            // --- 1. GESTIONE SLOT (API MAPS INTEGRATA) ---
             if (item.is_slot) {
-                // Calcolo distanza reale per pricing/orario (dal veicolo alla destinazione)
-                const dist = v ? turf.distance(
-                    turf.point([v.lon, v.lat]), 
-                    turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), 
-                    { units: 'kilometers' }
-                ) : 0;
-
+                const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
+                
+                // Utilizzo dell'API reale invece del calcolo matematico
+                const datiViaggio = await getDurataDistanza(origine, richiesta.coordDest);
+                
+                const dist = datiViaggio.distanzaKm > 0 ? datiViaggio.distanzaKm : 0;
+                const durataMs = datiViaggio.durataMs > 0 ? datiViaggio.durataMs : 3600000; // 1h default fallback
+                
                 const oraPartenza = new Date(item.start_datetime || Date.now());
-                const oreStimate = dist > 0 ? (dist / 60) : 1; 
-                const oraArrivo = new Date(oraPartenza.getTime() + (oreStimate * 3600000));
+                const oraArrivo = new Date(oraPartenza.getTime() + durataMs);
+                
                 const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
 
                 return {
@@ -82,7 +82,6 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                     marca: v?.marca ?? "Servizio",
                     modello: v?.modello ?? "Disponibilità oraria",
                     tipo: item.tipo_corsa || 'disponibile',
-                    // Coerenza visuale: usiamo la località richiesta dall'utente
                     localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                     oraPartenza: oraPartenza.toISOString(),

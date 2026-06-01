@@ -34,36 +34,39 @@ function calcolaOccupazioneSuTratta(corsa, startIdx, endIdx, prenotazioni) {
 }
 
 /**
- * Filtra le corse basandosi sulla disponibilità spaziale e temporale
+ * Filtra le corse basandosi sulla disponibilità spaziale, temporale e di posti
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
     const corseValide = [];
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     
+    // Normalizziamo la data richiesta per confronto giornaliero
+    const reqDate = new Date(richiesta.start_datetime).toDateString();
     const TOLLERANZA_KM = 150; 
 
     for (let i = 0; i < corseCandidate.length; i++) {
         const c = corseCandidate[i];
         if (!c.decodedCoords || c.decodedCoords.length < 2) continue;
 
+        // 1. FILTRO TEMPORALE (Critico: scarta subito date diverse)
+        const corsaDate = new Date(c.start_datetime || c.oraPartenza).toDateString();
+        if (corsaDate !== reqDate) continue;
+
+        // 2. FILTRO SPAZIALE
         const route = turf.lineString(c.decodedCoords);
-        
-        // 1. Filtro Spaziale
         const distStart = turf.pointToLineDistance(pStart, route);
         const distEnd = turf.pointToLineDistance(pEnd, route);
         
-        if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) {
-            continue;
-        }
+        if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) continue;
 
-        // 2. Filtro Direzione
+        // 3. FILTRO DIREZIONE
         const startIdx = turf.nearestPointOnLine(route, pStart).properties.index;
         const endIdx = turf.nearestPointOnLine(route, pEnd).properties.index;
         
         if (endIdx <= startIdx) continue; 
 
-        // 3. Calcolo Disponibilità e Occupazione
+        // 4. CALCOLO DISPONIBILITÀ E OCCUPAZIONE
         const prenotazioni = prenotazioniBatch[i] || [];
         const { postiDisponibili, postiPrenotati } = calcolaOccupazioneSuTratta(c, startIdx, endIdx, prenotazioni);
 
@@ -71,14 +74,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             corseValide.push({ 
                 ...c, 
                 postiDisponibili, 
-                postiPrenotati, // Passiamo il dato pronto al formatter
+                postiPrenotati, 
                 startIdx, 
                 endIdx 
             });
         }
     }
     
-    console.log(`[ENGINE] Ricerca completata: trovate ${corseValide.length} corse valide.`);
+    console.log(`[ENGINE] Ricerca completata per ${reqDate}: trovate ${corseValide.length} corse valide.`);
     return { corse: corseValide };
 }
 

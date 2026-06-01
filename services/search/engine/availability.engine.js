@@ -73,9 +73,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * Filtro placeholder per eventuali slot puri (se richiesto dal tuo search.service.js)
+ * Filtra gli slot generici basandosi sui posti richiesti
  */
-export function filterSlotOnly(data) {
-    // Implementazione placeholder o logica per soli slot veicolo
-    return data;
+export function filterSlotOnly(richiesta, allSlots) {
+    if (!Array.isArray(allSlots)) return [];
+
+    return allSlots.filter(s => {
+        // Logica base: deve essere disponibile e avere abbastanza posti
+        return s.disponibile && (s.posti_totali >= richiesta.posti_richiesti);
+    });
 }

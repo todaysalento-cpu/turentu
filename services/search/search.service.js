@@ -17,7 +17,7 @@ export async function cercaSlotUltra(richiesta) {
   const targetDate = new Date(richiesta.start_datetime || Date.now());
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-  // 2. Recupero candidati (Corse)
+  // 1. Recupero candidati da Redis
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -27,7 +27,7 @@ export async function cercaSlotUltra(richiesta) {
     .map(id => CacheStore.corseCache.get(Number(id)))
     .filter(Boolean);
 
-  // 3. Recupero massivo prenotazioni
+  // 2. Recupero prenotazioni batch
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -35,74 +35,52 @@ export async function cercaSlotUltra(richiesta) {
     prenotazioniBatch = await pipeline.exec();
   }
 
-  const richiestaNormalizzata = {
-    ...richiesta,
-    posti_richiesti: postiRichiesti,
-    coord: { lat, lon },
-    lat,
-    lon
-  };
-
-  // 4. ESECUZIONE FILTRI
-  const { slots: slotsCorse, corse: corseCompatibili } = await filterDisponibilita(
-    richiestaNormalizzata,
+  // 3. ESECUZIONE FILTRI (UNICA FONTE DI VERITÀ)
+  // Il filtro ora restituisce corse già arricchite con 'postiDisponibili' corretto
+  const { corse: corseValide } = await filterDisponibilita(
+    { ...richiesta, posti_richiesti: postiRichiesti, coord: { lat, lon } },
     corseCandidate,
     prenotazioniBatch
   );
 
+  // 4. Gestione Slot Generici
   const allSlots = await Promise.all(
     Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
       const stati = await getDisponibilita(s.driver_id, targetDate);
       const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
-      const postiReali = veicolo ? Number(veicolo.posti_totali || 0) : 0;
-      
       return {
         ...s,
         disponibile: stati.some(st => st.disponibile),
-        posti_totali: postiReali,
-        start_datetime: targetDate.toISOString() 
+        posti_totali: veicolo ? Number(veicolo.posti_totali || 0) : 0
       };
     })
   );
   
-  const slotsLiberi = await filterSlotOnly(richiestaNormalizzata, allSlots);
+  const slotsLiberi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots);
 
-  // 5. FUSIONE E PULIZIA DEI RISULTATI
-  // Usiamo una Map con chiave composta "tipo-ID" per evitare sovrascritture di veicoli
+  // 5. FUSIONE DEI RISULTATI (PULITA)
   const mapRisultati = new Map();
-  
-  const arraySlotsLiberi = Array.isArray(slotsLiberi) ? slotsLiberi : [];
-  const arraySlotsCorse = Array.isArray(slotsCorse) ? slotsCorse : [];
 
-  // Aggiungiamo un flag 'is_slot' per distinguerli chiaramente nel frontend
-  arraySlotsLiberi
-    .filter(s => s.disponibile && s.posti_totali >= postiRichiesti)
-    .forEach(s => {
-      mapRisultati.set(`slot-${s.id}`, { ...s, is_slot: true });
-    });
+  // Aggiungiamo solo corse che hanno superato il filtro disponibilità
+  corseValide.forEach(c => {
+    mapRisultati.set(`corsa-${c.id}`, { ...c, is_slot: false });
+  });
 
-  arraySlotsCorse
-    .filter(c => c.postiDisponibili >= postiRichiesti)
-    .forEach(c => {
-      mapRisultati.set(`corsa-${c.id}`, { ...c, is_slot: false });
-    });
+  // Aggiungiamo slot generici validi
+  slotsLiberi.forEach(s => {
+    mapRisultati.set(`slot-${s.id}`, { ...s, is_slot: true });
+  });
 
   const risultatiFinali = Array.from(mapRisultati.values());
-
-  console.log(`[SERVICE] Filtro completato: ${risultatiFinali.length} slot validi (Corse: ${arraySlotsCorse.length}, Generici: ${arraySlotsLiberi.length})`);
+  console.log(`[SERVICE] Filtro completato: ${risultatiFinali.length} risultati trovati.`);
 
   if (risultatiFinali.length === 0) return [];
 
-  // 6. Formattazione finale
+  // 6. Formattazione finale (Riceve dati già validati)
   try {
-    return await formatResults(
-      richiestaNormalizzata, 
-      risultatiFinali, 
-      corseCompatibili, 
-      CacheStore.veicoliCache 
-    );
+    return await formatResults(richiesta, risultatiFinali, corseValide, CacheStore.veicoliCache);
   } catch (err) {
-    console.error("💥 [SERVICE] Errore critico in formatResults:", err);
+    console.error("💥 [SERVICE] Errore in formatResults:", err);
     return []; 
   }
 }

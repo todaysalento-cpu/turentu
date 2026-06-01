@@ -1,132 +1,73 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getLocalitaSafe, getDurataDistanza } from '../../../utils/maps.util.js';
+import { getLocalitaSafe } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
-import { redisClient } from '../../../redis.js';
-import ngeohash from 'ngeohash';
-
-const MATCHING_PRECISION = 5;
-
-/**
- * Logica di interpolazione basata su indici di percorso
- */
-function calcolaDettagliTratta(item, idxStart, idxEnd) {
-    if (idxStart === null || idxEnd === null || idxEnd <= idxStart) return null;
-
-    const totalPoints = item.decodedCoords.length;
-    const ratioPartenza = idxStart / totalPoints;
-    const ratioSegmento = (idxEnd - idxStart) / totalPoints;
-    
-    const durataTotaleMs = Number(item.durata_ms || 0);
-    const distanzaTotaleKm = Number(item.distanza || 0);
-    
-    const oraPartenza = new Date(new Date(item.start_datetime).getTime() + (durataTotaleMs * ratioPartenza));
-    const oraArrivo = new Date(oraPartenza.getTime() + (durataTotaleMs * ratioSegmento));
-    const distanzaSegmentoKm = distanzaTotaleKm * ratioSegmento;
-
-    return { oraPartenza, oraArrivo, distanzaSegmentoKm };
-}
-
-async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
-    const hStart = ngeohash.encode(startCoord.lat, startCoord.lon, MATCHING_PRECISION);
-    const hEnd = ngeohash.encode(endCoord.lat, endCoord.lon, MATCHING_PRECISION);
-    
-    const pipeline = redisClient.multi();
-    corsaIds.forEach(id => {
-        pipeline.zScore(`corsa:percorso_hash:${id}`, hStart);
-        pipeline.zScore(`corsa:percorso_hash:${id}`, hEnd);
-    });
-    return await pipeline.exec();
-}
 
 const localitaCache = new Map();
 async function getLocalitaSafeCached(coord) {
     if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
     if (localitaCache.has(key)) return localitaCache.get(key);
-    
     const loc = await getLocalitaSafe(coord);
     localitaCache.set(key, loc);
     return loc;
 }
 
-export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, injectedVeicoliMap = null) {
-    const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
+export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
-    
-    const corsaItems = allItems.filter(item => !item.is_slot && !!item.start_datetime && item.decodedCoords?.length > 0);
-    const zsetResults = corsaItems.length > 0 
-        ? await getDettagliTrattaRedis(corsaItems.map(c => c.id), richiesta.coord, richiesta.coordDest) 
-        : [];
 
-    return (await Promise.all(allItems.map(async (item) => {
+    return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT ---
+            // --- 1. GESTIONE SLOT (Generici) ---
             if (item.is_slot) {
-                const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
-                const datiViaggio = await getDurataDistanza(origine, richiesta.coordDest);
-                
-                const dist = datiViaggio.distanzaKm > 0 ? datiViaggio.distanzaKm : 0;
-                const oraPartenza = new Date(item.start_datetime || Date.now());
-                const oraArrivo = new Date(oraPartenza.getTime() + (datiViaggio.durataMs || 3600000));
-                
-                const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
-
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
                     modello: v?.modello ?? "Disponibilità oraria",
-                    tipo: item.tipo_corsa || 'disponibile',
+                    tipo: 'disponibile',
                     localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
-                    oraPartenza: oraPartenza.toISOString(),
-                    oraArrivo: oraArrivo.toISOString(),
-                    distanzaKm: Number(dist.toFixed(2)),
-                    prezzo: Number(prezzo?.toFixed(2)) || 0,
+                    oraPartenza: item.start_datetime,
+                    oraArrivo: item.start_datetime, // Slot basati su disponibilità oraria
+                    distanzaKm: 0,
+                    prezzo: 0, // Calcolato a consuntivo o tramite altro servizio
                     stato: 'disponibile',
-                    postiDisponibili: Number(item.posti_disponibili ?? 0),
+                    postiDisponibili: Number(item.posti_totali || 0),
                     percorsoVisualizzato: null
                 };
             }
 
-            // --- 2. GESTIONE CORSE (CON INTERPOLAZIONE ZSET) ---
-            let oraPartenza = new Date(item.start_datetime || Date.now());
-            let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
-            let distanzaTratta = Number(item.distanza || 0);
-
-            const zIndex = corsaItems.findIndex(c => c.id === item.id);
-            // Verifica che l'indice esista e che Redis abbia restituito valori validi (non null)
-            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null && zsetResults[zIndex * 2 + 1] !== null) {
-                const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
-                if (dettagli) {
-                    oraPartenza = dettagli.oraPartenza;
-                    oraArrivo = dettagli.oraArrivo;
-                    distanzaTratta = dettagli.distanzaSegmentoKm;
-                }
-            }
-
-            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaTratta, Number(item.distanza));
+            // --- 2. GESTIONE CORSE (Già filtrate e calcolate) ---
+            // Niente ricalcoli qui: 'item' contiene già i dati corretti dal filtro
+            const prezzo = await calcolaPrezzo(
+                item, 
+                richiesta.posti_richiesti, 
+                item.stato, 
+                item.distanzaKm || item.distanza, 
+                item.distanza
+            );
 
             return {
-                id: item.id || uuidv4(),
+                id: item.id,
                 veicolo_id: vId,
                 marca: v?.marca ?? "N/A", 
                 modello: v?.modello ?? "Veicolo",
                 tipo: item.tipo_corsa || 'condivisa',
                 localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                 localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
-                oraPartenza: oraPartenza.toISOString(),
-                oraArrivo: oraArrivo.toISOString(),
-                distanzaKm: Number(distanzaTratta.toFixed(2)),
+                oraPartenza: item.oraPartenza || item.start_datetime,
+                oraArrivo: item.oraArrivo || item.start_datetime,
+                distanzaKm: Number(item.distanzaKm || item.distanza || 0),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
                 stato: item.stato || 'prenotabile',
-                postiDisponibili: Number(item.postiDisponibili ?? 0),
+                postiDisponibili: Number(item.postiDisponibili), // VALORE CERTO DAL FILTRO
                 percorsoVisualizzato: item.decodedCoords || null
             };
+
         } catch (err) {
             console.error(`💥 Errore formattazione ${item?.id}:`, err);
             return null;

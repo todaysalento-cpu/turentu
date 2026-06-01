@@ -13,7 +13,7 @@ export async function getDisponibilita(driver_id, targetDate = new Date()) {
   
   const turniDriver = tuttiITurni.filter(d => d.driver_id === driver_id);
   
-  // Parametri di confronto
+  // Parametri di confronto per la richiesta specifica
   const targetDayOfWeek = targetDate.getDay();
   const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
 
@@ -43,11 +43,11 @@ export async function getDisponibilita(driver_id, targetDate = new Date()) {
       const start = new Date(d.start);
       const fine = new Date(d.fine);
       
-      // Usiamo getUTC... perché la data è stata fissata al 1970-01-01 UTC
+      // Utilizzo di UTC per isolare l'orario dalla data (fissata al 1970-01-01)
       const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
       const endMinutes = fine.getUTCHours() * 60 + fine.getUTCMinutes();
       
-      // Supporto per turni che superano la mezzanotte (Overnight)
+      // Gestione turni a cavallo della mezzanotte (Overnight)
       const isOvernight = startMinutes > endMinutes;
       
       if (isOvernight) {
@@ -145,16 +145,13 @@ export async function deleteDisponibilita(id) {
 
 /**
  * Parsa un orario in stringa (HH:mm) convertendolo in una data standard.
- * Usiamo il 1970-01-01 come data base per rendere i confronti data-agnostic.
+ * Forza la data al 1° Gennaio 1970 per rendere i confronti data-agnostic.
  */
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   
   const [hh, mm] = timeStr.split(':').map(Number);
-  // Forza la data al 1° Gennaio 1970 per ignorare la parte calendario
-  // new Date(y, m, d, h, min) crea una data basata sul fuso orario locale.
-  // Poiché la convertiamo in ISO (UTC), è perfetto.
-  const d = new Date(1970, 0, 1, hh, mm, 0, 0);
-  return d.toISOString();
+  // La data 1970-01-01 è usata come riferimento neutro per ogni orario
+  return new Date(1970, 0, 1, hh, mm, 0, 0).toISOString();
 }

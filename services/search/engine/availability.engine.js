@@ -1,7 +1,9 @@
 import * as turf from '@turf/turf';
+import { CacheStore } from '../search.cache.js';
+import params from '../../../config/params.js';
 
 /**
- * MOTORE 1: FILTRO CORSE (Geometrico)
+ * MOTORE 1: FILTRO CORSE (Geometrico - analizza percorsi predefiniti)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniData) {
     const startTime = Date.now();
@@ -58,22 +60,31 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * MOTORE 2: FILTRO SLOT (Disponibilità oraria)
+ * MOTORE 2: FILTRO SLOT (Disponibilità oraria + Prossimità geografica)
  */
 export async function filterSlotOnly(richiesta, allSlots) {
     const startTime = Date.now();
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
-    
-    // Debug rapido per capire perché non accetta nulla
-    const campioni = allSlots.slice(0, 3).map(s => `Disp:${s.disponibile}, Posti:${s.posti_totali}`);
+    const MAX_DIST_KM = params.tolleranzaKm || 100; // Parametro di tolleranza configurabile
+    const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     
     const slotsValidi = allSlots.filter(s => {
-        const disponibile = s.disponibile === true;
-        const postiOk = Number(s.posti_totali || 0) >= postiRichiesti;
-        return disponibile && postiOk;
+        // 1. Verifica disponibilità logica e posti
+        if (s.disponibile !== true || Number(s.posti_totali || 0) < postiRichiesti) {
+            return false;
+        }
+
+        // 2. Verifica Prossimità Geografica (Geofencing)
+        const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+        if (!veicolo || !veicolo.lat || !veicolo.lon) return false;
+
+        const vPos = turf.point([veicolo.lon, veicolo.lat]);
+        const distanzaKm = turf.distance(pStart, vPos, { units: 'kilometers' });
+
+        return distanzaKm <= MAX_DIST_KM;
     });
 
-    console.log(`[FILTER-SLOT] ${slotsValidi.length}/${allSlots.length} ok | Campioni: [${campioni.join(' | ')}] (${Date.now() - startTime}ms)`);
+    console.log(`[FILTER-SLOT] ${slotsValidi.length}/${allSlots.length} ok | (${Date.now() - startTime}ms)`);
     
     return slotsValidi.map(s => ({
         id: `slot_ind_${s.id}`,
@@ -81,6 +92,6 @@ export async function filterSlotOnly(richiesta, allSlots) {
         is_slot: true,
         posti_disponibili: s.posti_totali,
         prezzo: 0,
-        start_datetime: s.start
+        start_datetime: s.start_datetime // Preserva la data iniettata dal servizio
     }));
 }

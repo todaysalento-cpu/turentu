@@ -45,6 +45,7 @@ export const removePrenotazione = async (corsaId, prenotazioneId) => {
 
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
 export const upsertVeicolo = (v) => {
+    // v.lat e v.lon arrivano ora dalla query corretta in loadVeicoliCache
     const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
@@ -52,12 +53,10 @@ export const upsertVeicolo = (v) => {
 export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
 
 export const upsertDisponibilita = async (d) => {
-    // Normalizzazione per garantire compatibilità con il servizio di disponibilità
     const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
         is_slot: true,
-        // Parsing di inattivita per evitare errori di tipo nel filtro
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
@@ -137,7 +136,13 @@ export const removeCorsa = async (corsaId) => {
 export async function loadVeicoliCache() {
     const client = await pool.connect();
     try {
-        const vRes = await client.query("SELECT * FROM veicolo");
+        // CORREZIONE: Estratto lat/lon dalla colonna 'coord' di tipo geography
+        const query = `
+            SELECT *, 
+                   ST_Y(coord::geometry) as lat, 
+                   ST_X(coord::geometry) as lon 
+            FROM veicolo`;
+        const vRes = await client.query(query);
         for (const v of vRes.rows) upsertVeicolo(v);
         console.log(`✅ [SYNC] Veicoli caricati: ${CacheStore.veicoliCache.size}`);
     } finally { client.release(); }

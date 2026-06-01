@@ -5,7 +5,6 @@ import * as CacheModule from '../search.cache.js';
 
 const localitaCache = new Map();
 
-// Helper per validare le date e prevenire RangeError
 const getSafeISO = (dateInput) => {
     const d = new Date(dateInput);
     return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
@@ -23,7 +22,6 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
 
-    // Taglio chirurgico: Max 5 slot e 5 corse
     const slots = risultatiFiltrati.filter(item => item.is_slot).slice(0, 5);
     const corse = risultatiFiltrati.filter(item => !item.is_slot).slice(0, 5);
     const risultatiDaFormattare = [...slots, ...corse];
@@ -61,13 +59,31 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 };
             }
 
-            // --- 2. GESTIONE CORSE ---
+            // --- 2. GESTIONE CORSE (DINAMICA) ---
+            const decodedCoords = item.decodedCoords || [];
+            const totalPoints = decodedCoords.length;
+
+            // Calcolo del rapporto di percorso (Ratio) basato sugli indici del motore
+            const startIdx = item.startIdx ?? 0;
+            const endIdx = item.endIdx ?? (totalPoints - 1);
+            const ratio = (totalPoints > 1) ? (endIdx - startIdx) / (totalPoints - 1) : 1;
+
+            // Ricalcolo dinamico
+            const distDinamica = (item.distanzaKm || item.distanza || 0) * ratio;
+            
+            const startBase = new Date(item.start_datetime || item.oraPartenza).getTime();
+            const endBase = new Date(item.arrivo_datetime || item.oraArrivo).getTime();
+            const durataTotale = endBase - startBase;
+
+            const oraPartenzaDinamica = new Date(startBase + (durataTotale * (startIdx / (totalPoints - 1 || 1))));
+            const oraArrivoDinamico = new Date(startBase + (durataTotale * (endIdx / (totalPoints - 1 || 1))));
+
             const prezzo = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti, 
                 item.stato, 
-                item.distanzaKm || item.distanza, 
-                item.distanza
+                distDinamica, 
+                distDinamica
             );
 
             return {
@@ -78,9 +94,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 tipo: item.tipo_corsa || 'condivisa',
                 localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                 localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
-                oraPartenza: getSafeISO(item.oraPartenza || item.start_datetime),
-                oraArrivo: getSafeISO(item.oraArrivo || item.start_datetime),
-                distanzaKm: Number(item.distanzaKm || item.distanza || 0),
+                oraPartenza: getSafeISO(oraPartenzaDinamica),
+                oraArrivo: getSafeISO(oraArrivoDinamico),
+                distanzaKm: Number(distDinamica.toFixed(2)),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
                 stato: item.stato || 'prenotabile',
                 postiDisponibili: Number(item.postiDisponibili),

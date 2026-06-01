@@ -64,12 +64,10 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             // --- 1. GESTIONE SLOT (API MAPS INTEGRATA) ---
             if (item.is_slot) {
                 const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
-                
-                // Utilizzo dell'API reale invece del calcolo matematico
                 const datiViaggio = await getDurataDistanza(origine, richiesta.coordDest);
                 
                 const dist = datiViaggio.distanzaKm > 0 ? datiViaggio.distanzaKm : 0;
-                const durataMs = datiViaggio.durataMs > 0 ? datiViaggio.durataMs : 3600000; // 1h default fallback
+                const durataMs = datiViaggio.durataMs > 0 ? datiViaggio.durataMs : 3600000;
                 
                 const oraPartenza = new Date(item.start_datetime || Date.now());
                 const oraArrivo = new Date(oraPartenza.getTime() + durataMs);
@@ -97,15 +95,20 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             // --- 2. GESTIONE CORSE (ZSET INTERPOLATION) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
-            let distanza = Number(item.distanza || 0);
+            let distanzaTratta = Number(item.distanza || 0); // Distanza totale corsa
+            const distanzaTotaleCorsa = Number(item.distanza || 0);
 
             const zIndex = corsaItems.findIndex(c => c.id === item.id);
             if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
                 const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
-                if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
+                if (dettagli) {
+                    oraPartenza = dettagli.oraPartenza;
+                    oraArrivo = dettagli.oraArrivo;
+                    distanzaTratta = dettagli.distanzaSegmentoKm;
+                }
             }
 
-            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
+            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanzaTratta, distanzaTotaleCorsa);
 
             return {
                 id: item.id || uuidv4(),
@@ -117,7 +120,7 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                 oraPartenza: oraPartenza.toISOString(),
                 oraArrivo: oraArrivo.toISOString(),
-                distanzaKm: Number(distanza.toFixed(2)),
+                distanzaKm: Number(distanzaTratta.toFixed(2)),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
                 stato: item.stato || 'prenotabile',
                 postiDisponibili: Number(item.postiDisponibili ?? 0),

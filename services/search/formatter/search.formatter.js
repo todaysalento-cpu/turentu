@@ -38,8 +38,10 @@ async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
 
 const localitaCache = new Map();
 async function getLocalitaSafeCached(coord) {
+    if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
     if (localitaCache.has(key)) return localitaCache.get(key);
+    
     const loc = await getLocalitaSafe(coord);
     localitaCache.set(key, loc);
     return loc;
@@ -49,7 +51,6 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
     const allItems = [...corseFiltrate.slice(0, 5), ...slotsFiltrati.slice(0, 5)].slice(0, CacheModule.TOP_RESULTS || 10);
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
     
-    // Filtriamo solo le corse reali per la logica di interpolazione ZSET
     const corsaItems = allItems.filter(item => !item.is_slot && !!item.start_datetime && item.decodedCoords?.length > 0);
     const zsetResults = corsaItems.length > 0 
         ? await getDettagliTrattaRedis(corsaItems.map(c => c.id), richiesta.coord, richiesta.coordDest) 
@@ -60,18 +61,21 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (DISPONIBILITÀ ORARIA) ---
+            // --- 1. GESTIONE SLOT ---
             if (item.is_slot) {
+                // Ora usiamo le coordinate reali del veicolo per la localitaOrigine
+                const coordVeicolo = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
+                
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
                     modello: v?.modello ?? "Disponibilità oraria",
-                    localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
+                    localitaOrigine: await getLocalitaSafeCached(coordVeicolo),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                     oraPartenza: item.start_datetime || new Date().toISOString(),
                     oraArrivo: "Da concordare",
-                    distanzaKm: 0,
+                    distanzaKm: item._distanzaKm ? Number(item._distanzaKm.toFixed(2)) : 0,
                     prezzo: 0,
                     stato: 'disponibile',
                     postiDisponibili: Number(item.posti_disponibili ?? 0),
@@ -79,21 +83,18 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
                 };
             }
 
-            // --- 2. GESTIONE CORSE (TRATTE PIANIFICATE) ---
+            // --- 2. GESTIONE CORSE ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            // Applicazione interpolazione ZSET
             if (item.start_datetime && item.decodedCoords?.length > 0) {
                 const zIndex = corsaItems.findIndex(c => c.id === item.id);
-                if (zIndex !== -1) {
+                if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
                     const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
                     if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
                 }
             }
-
-            if (!v) console.warn(`⚠️ [PRICING] Veicolo non trovato per ID: ${vId}`);
 
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));
 

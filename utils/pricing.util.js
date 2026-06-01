@@ -14,13 +14,13 @@ export async function getTariffe(veicolo_id, tipo) {
 }
 
 /**
- * Calcolo Prezzo Dinamico (Aggiornato)
+ * Calcolo Prezzo Dinamico
+ * @param {Object} overrideOccupazione - { num: number, totPass: number } per testare senza DB
  */
-export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotati = 0, kmTotaliCorsa = 0) {
+export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotati = 0, kmTotaliCorsa = 0, overrideOccupazione = null) {
   const richiesti = Number(postiRichiesti) || 1;
   const tipoTariffa = 'standard';
 
-  // Valori di default di sicurezza
   let prezzoKm = 0.50;
   let prezzoPasseggero = 2.00;
 
@@ -37,33 +37,33 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
 
   switch (statoSlot) {
     case 'prenotabile': {
-      const { rows } = await pool.query(
-        `SELECT COUNT(*) as num_prenotazioni, COALESCE(SUM(posti_richiesti), 0) as tot_pass_precedenti
-         FROM prenotazioni WHERE corsa_id = $1`,
-        [corsa.id]
-      );
-      
-      const numPrenotazioni = Number(rows[0].num_prenotazioni);
-      const passPrecedenti = Number(rows[0].tot_pass_precedenti);
-      const prezzoBaseCorsa = kmTotali * prezzoKm;
+      let numPrenotazioni, passPrecedenti;
 
-      if (numPrenotazioni === 0) {
-        // PRIMA PRENOTAZIONE: Nessun sovrapprezzo per passeggero
-        return Math.max(0.50, prezzoBaseCorsa);
+      if (overrideOccupazione) {
+        numPrenotazioni = overrideOccupazione.num;
+        passPrecedenti = overrideOccupazione.totPass;
       } else {
-        // PRENOTAZIONI SUCCESSIVE:
-        // Applico il prezzoPasseggero moltiplicato per i passeggeri aggiuntivi (richiesti)
-        const totPasseggeri = passPrecedenti + richiesti;
-        const quotaAggiuntiva = prezzoPasseggero * richiesti;
-
-        const quotaCondivisa = prezzoBaseCorsa + quotaAggiuntiva;
-        const coefficienteTratta = kmTotali > 0 ? (kmUtente / kmTotali) : 0;
-        
-        // Divisione equa distribuita su tutti i passeggeri (precedenti + nuovi)
-        const prezzoFinale = (quotaCondivisa / totPasseggeri) * coefficienteTratta;
-        
-        return Math.max(0.50, prezzoFinale);
+        const { rows } = await pool.query(
+          `SELECT COUNT(*) as num, COALESCE(SUM(posti_richiesti), 0) as tot 
+           FROM prenotazioni WHERE corsa_id = $1`, [corsa.id]
+        );
+        numPrenotazioni = Number(rows[0].num);
+        passPrecedenti = Number(rows[0].tot);
       }
+      
+      const totPasseggeri = passPrecedenti + richiesti;
+      const prezzoBaseCorsa = kmTotali * prezzoKm;
+      
+      // LOGICA AGGIORNATA: La quota variabile scatta solo se c'è condivisione (tot > 1)
+      const quotaVariabile = totPasseggeri > 1 ? (prezzoPasseggero * richiesti) : 0;
+      
+      const quotaCondivisa = prezzoBaseCorsa + quotaVariabile;
+      const coefficienteTratta = kmTotali > 0 ? (kmUtente / kmTotali) : 0;
+      
+      // Calcolo finale distribuito sui passeggeri totali
+      const prezzoFinale = (quotaCondivisa / totPasseggeri) * coefficienteTratta;
+        
+      return Math.max(0.50, prezzoFinale);
     }
 
     case 'pubblicato': {
@@ -71,8 +71,7 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
     }
 
     case 'libero': {
-      const prezzoBase = (prezzoKm * kmUtente) + (prezzoPasseggero * richiesti);
-      return Math.max(0.50, prezzoBase);
+      return Math.max(0.50, (prezzoKm * kmUtente) + (prezzoPasseggero * richiesti));
     }
 
     default: {

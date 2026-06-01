@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@googlemaps/polyline-codec": "^1.0.28",
+    "@mapbox/polyline": "^1.2.1",
     "@turf/turf": "^7.3.5",
     "axios": "^1.13.5",
     "bcrypt": "^6.0.0",

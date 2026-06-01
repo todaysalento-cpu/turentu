@@ -1,37 +1,44 @@
-// Simulazione dati che causano il fallimento
-const mockCorsa = {
-    id: 101,
-    veicolo_id: 1,
-    posti_totali: 0, // <--- QUI È IL PROBLEMA CHE RILEVI
-    decodedCoords: [[17.9, 40.6], [14.2, 42.4]]
-};
+import { fetchCorse } from './db/db.js';
+import { filterDisponibilita } from './services/search/engine/availability.engine.js';
 
-const mockSlot = {
-    id: 999,
-    veicolo_id: 1,
-    posti_totali: 0, // <--- SIMULAZIONE DATO MANCANTE
-    disponibile: true
-};
+async function runDetailedTest() {
+  // Struttura dati richiesta (Chiavi attese dal Motore: coord e coordDest)
+  const richiesta = {
+    coord: { lat: 41.8967, lon: 12.4822 },      // Origine (Roma)
+    coordDest: { lat: 45.4642, lon: 9.1900 },   // Destinazione (Milano)
+    posti_richiesti: 1
+  };
 
-const mockRichiesta = {
-    posti_richiesti: 1,
-    coord: { lat: 40.6, lon: 17.9 },
-    coordDest: { lat: 42.4, lon: 14.2 }
-};
+  // Nomi leggibili per il log
+  const nomi = {
+    origine: "Roma",
+    destinazione: "Milano"
+  };
 
-// --- LOGICA DI TEST ---
-function testFiltroSlot() {
-    console.log("--- TEST FILTRO SLOT ---");
-    const allSlots = [mockSlot];
-    const postiRichiesti = 1;
+  console.log(`🔍 [TEST] Ricerca da ${nomi.origine} (${richiesta.coord.lat}, ${richiesta.coord.lon})`);
+  console.log(`   Verso ${nomi.destinazione} (${richiesta.coordDest.lat}, ${richiesta.coordDest.lon})`);
+  
+  const corse = await fetchCorse();
+  
+  // Esecuzione del filtro
+  const result = await filterDisponibilita(richiesta, corse, corse.map(() => []));
 
-    const slotsValidi = allSlots.filter(s => {
-        const postiOk = Number(s.posti_totali || 0) >= postiRichiesti;
-        console.log(`DEBUG: SlotID ${s.id} | Posti: ${s.posti_totali} | Richiesti: ${postiRichiesti} | Esito: ${postiOk}`);
-        return postiOk;
-    });
+  console.log("\n--- RISULTATI CON DETTAGLIO RICHIESTA ---");
+  
+  if (result.corse && result.corse.length > 0) {
+    console.table(result.corse.map(c => ({
+      Corsa_ID: c.id,
+      Tratta_DB: `${c.origine_address} -> ${c.destinazione_address}`,
+      Prezzo: `€${c.prezzo_fisso}`,
+      Posti_Disp: c.posti_disponibili,
+      Origine_Richiesta: nomi.origine,
+      Dest_Richiesta: nomi.destinazione
+    })));
+  } else {
+    console.log("⚠️ Nessuna corsa trovata per questa tratta.");
+  }
 
-    console.log(`Risultato: ${slotsValidi.length} validi.`);
+  console.log(`✅ Corse compatibili trovate: ${result.corse ? result.corse.length : 0}`);
 }
 
-testFiltroSlot();
+runDetailedTest().catch(console.error);

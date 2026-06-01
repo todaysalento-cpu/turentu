@@ -68,20 +68,24 @@ export async function cercaSlotUltra(richiesta) {
   const slotsLiberi = await filterSlotOnly(richiestaNormalizzata, allSlots);
 
   // 5. FUSIONE E PULIZIA DEI RISULTATI
+  // Usiamo una Map con chiave composta "tipo-ID" per evitare sovrascritture di veicoli
   const mapRisultati = new Map();
   
-  // Garantiamo array validi
   const arraySlotsLiberi = Array.isArray(slotsLiberi) ? slotsLiberi : [];
   const arraySlotsCorse = Array.isArray(slotsCorse) ? slotsCorse : [];
 
-  // Filtriamo subito per posti disponibili prima di inserire in Map
+  // Aggiungiamo un flag 'is_slot' per distinguerli chiaramente nel frontend
   arraySlotsLiberi
     .filter(s => s.disponibile && s.posti_totali >= postiRichiesti)
-    .forEach(s => mapRisultati.set(s.veicolo_id, s));
+    .forEach(s => {
+      mapRisultati.set(`slot-${s.id}`, { ...s, is_slot: true });
+    });
 
   arraySlotsCorse
     .filter(c => c.postiDisponibili >= postiRichiesti)
-    .forEach(c => mapRisultati.set(c.veicolo_id, c));
+    .forEach(c => {
+      mapRisultati.set(`corsa-${c.id}`, { ...c, is_slot: false });
+    });
 
   const risultatiFinali = Array.from(mapRisultati.values());
 

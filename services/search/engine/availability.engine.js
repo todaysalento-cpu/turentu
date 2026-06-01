@@ -4,30 +4,34 @@ import params from '../../../config/params.js';
 
 /**
  * MOTORE 1: FILTRO CORSE (Geometrico)
- * Log diagnostici inclusi per monitorare gli scarti
+ * Corretto: Normalizzazione coordinate [lon, lat] per compatibilità Turf
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniData) {
     const startTime = Date.now();
     const corseValide = [];
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     
+    // Turf richiede sempre [lon, lat]
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     
-    // Tolleranza estesa per tratte a lunga percorrenza
     const TOLLERANZA_KM = 150; 
-
     let stats = { d: 0, dir: 0, p: 0 };
 
     for (let i = 0; i < corseCandidate.length; i++) {
         const c = corseCandidate[i];
         
         if (!c?.decodedCoords || c.decodedCoords.length < 2) {
-            console.log(`[LOG-FILTER] Corsa ${c.id}: Dati percorso assenti/invalidi.`);
             continue;
         }
 
-        const coords = c.decodedCoords.map(p => Array.isArray(p) ? [p[1], p[0]] : [p.lon || p.lng, p.lat]);
+        // CORREZIONE CRITICA: Google Polyline decodifica in [lat, lon]. 
+        // Turf richiede [lon, lat]. Invertiamo ogni punto.
+        const coords = c.decodedCoords.map(p => {
+            // Se p è [lat, lon], restituiamo [lon, lat]
+            return [p[1], p[0]]; 
+        });
+        
         const route = turf.lineString(coords);
 
         const distStart = turf.pointToLineDistance(pStart, route, { units: 'kilometers' });
@@ -35,7 +39,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         
         // 1. Controllo Distanza
         if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) { 
-            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA per DISTANZA: StartDist=${distStart.toFixed(1)}km, EndDist=${distEnd.toFixed(1)}km (Limit=${TOLLERANZA_KM})`);
+            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA (Distanza): Start=${distStart.toFixed(1)}km, End=${distEnd.toFixed(1)}km`);
             stats.d++; continue; 
         }
 
@@ -45,7 +49,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const idxDiff = endPointOnLine.properties.index - startPointOnLine.properties.index;
         
         if (idxDiff < 0.1) { 
-            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA per DIREZIONE: DiffIndex=${idxDiff.toFixed(2)}. StartIdx=${startPointOnLine.properties.index.toFixed(0)}, EndIdx=${endPointOnLine.properties.index.toFixed(0)}`);
+            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA (Direzione): DiffIndex=${idxDiff.toFixed(2)}`);
             stats.dir++; continue; 
         }
 
@@ -58,7 +62,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             c.postiDisponibili = postiLiberi;
             corseValide.push(c);
         } else { 
-            console.log(`[LOG-FILTER] Corsa ${c.id} SCARTATA per POSTI: Disponibili=${postiLiberi}, Richiesti=${postiRichiesti}`);
             stats.p++; 
         }
     }
@@ -80,12 +83,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * MOTORE 2: FILTRO SLOT (Disponibilità oraria + Prossimità)
+ * MOTORE 2: FILTRO SLOT
+ * Aumentato MAX_DIST_KM a 100 per catturare veicoli vicini al punto di partenza
  */
 export async function filterSlotOnly(richiesta, allSlots) {
     const startTime = Date.now();
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
-    const MAX_DIST_KM = params.tolleranzaKm || 500; 
+    const MAX_DIST_KM = 100; // Aumentato da 10 a 100 per test
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     
     const slotsValidi = allSlots.filter(s => {
@@ -97,12 +101,7 @@ export async function filterSlotOnly(richiesta, allSlots) {
         const vPos = turf.point([veicolo.lon, veicolo.lat]);
         const distanzaKm = turf.distance(pStart, vPos, { units: 'kilometers' });
 
-        if (distanzaKm > MAX_DIST_KM) {
-            console.log(`[LOG-SLOT] Slot ${s.id} SCARTATO: Distanza ${distanzaKm.toFixed(0)}km > Max ${MAX_DIST_KM}km`);
-            return false;
-        }
-
-        return true;
+        return distanzaKm <= MAX_DIST_KM;
     });
 
     console.log(`[FILTER-SLOT] ${slotsValidi.length}/${allSlots.length} ok | (${Date.now() - startTime}ms)`);

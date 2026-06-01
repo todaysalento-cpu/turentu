@@ -1,7 +1,6 @@
 import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js';
-// Assicurati che il percorso di import sia corretto
 import { loadCachesUltra, CacheStore } from './search.cache.js'; 
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
@@ -12,7 +11,6 @@ const GEOHASH_PRECISION_TRATTA = 5;
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
   
-  // 0. Caricamento cache (assicurati che sia esportata in search.cache.js)
   await loadCachesUltra();
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
@@ -26,6 +24,8 @@ export async function cercaSlotUltra(richiesta) {
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
   const candidateIds = [...new Set(results.flat())];
+  console.log(`[DEBUG 1] Candidati trovati da Redis: ${candidateIds.length}`);
+  
   const corseCandidate = candidateIds.map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
 
   // 2. Recupero prenotazioni batch
@@ -42,8 +42,10 @@ export async function cercaSlotUltra(richiesta) {
     corseCandidate,
     prenotazioniBatch
   );
+  
+  console.log(`[DEBUG 2] Corse valide dopo filtro engine: ${corseValide.length}`);
 
-  // 4. Gestione Slot Generici (CORRETTO IL NOME CacheStore.veicoliCache)
+  // 4. Gestione Slot Generici
   const TOLLERANZA_SLOT_KM = 50; 
   const allSlots = await Promise.all(
     Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
@@ -66,13 +68,21 @@ export async function cercaSlotUltra(richiesta) {
 
   // 5. SEPARAZIONE E FUSIONE
   const risultatiCorse = corseValide.map(c => ({ ...c, is_slot: false }));
+  
+  // Filtriamo gli slot che sono già coperti da corse attive (stesso veicolo)
   const risultatiSlot = slotsLiberi.filter(s => 
     !risultatiCorse.some(c => c.veicolo_id === s.veicolo_id)
   ).map(s => ({ ...s, is_slot: true }));
 
   const risultatiFinali = [...risultatiCorse, ...risultatiSlot];
   
-  if (risultatiFinali.length === 0) return [];
+  console.log(`[DEBUG 3] Risultati finali: ${risultatiFinali.length} (Corse: ${risultatiCorse.length}, Slot: ${risultatiSlot.length})`);
+  console.log(`[DEBUG 3] IDs inviati:`, risultatiFinali.map(r => r.id));
+
+  if (risultatiFinali.length === 0) {
+    console.log("📡 [DEBUG API] Nessun risultato da inviare.");
+    return [];
+  }
 
   // 6. Formattazione finale
   try {

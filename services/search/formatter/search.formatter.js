@@ -4,6 +4,7 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
 import { redisClient } from '../../../redis.js';
 import ngeohash from 'ngeohash';
+import * as turf from '@turf/turf'; // Assicurati di avere turf installato
 
 const MATCHING_PRECISION = 5;
 
@@ -38,10 +39,8 @@ async function getDettagliTrattaRedis(corsaIds, startCoord, endCoord) {
 
 const localitaCache = new Map();
 async function getLocalitaSafeCached(coord) {
-    if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
     if (localitaCache.has(key)) return localitaCache.get(key);
-    
     const loc = await getLocalitaSafe(coord);
     localitaCache.set(key, loc);
     return loc;
@@ -61,39 +60,47 @@ export async function formatResults(richiesta, slotsFiltrati, corseFiltrate, inj
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT ---
+            // --- 1. GESTIONE SLOT (CALCOLO DINAMICO) ---
             if (item.is_slot) {
-                // Ora usiamo le coordinate reali del veicolo per la localitaOrigine
-                const coordVeicolo = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
-                
+                // Calcolo distanza reale basata su coordinate in cache (v.lat, v.lon)
+                const dist = v ? turf.distance(
+                    turf.point([v.lon, v.lat]), 
+                    turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]), 
+                    { units: 'kilometers' }
+                ) : 0;
+
+                const oraPartenza = new Date(item.start_datetime || Date.now());
+                const oreStimate = dist > 0 ? (dist / 60) : 1; 
+                const oraArrivo = new Date(oraPartenza.getTime() + (oreStimate * 3600000));
+
+                const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
+
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
-                    modello: v?.modello ?? "Disponibilità oraria",
-                    localitaOrigine: await getLocalitaSafeCached(coordVeicolo),
+                    modello: v?.modello ?? "Disponibilità",
+                    localitaOrigine: v ? await getLocalitaSafeCached({ lat: v.lat, lon: v.lon }) : "N/D",
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
-                    oraPartenza: item.start_datetime || new Date().toISOString(),
-                    oraArrivo: "Da concordare",
-                    distanzaKm: item._distanzaKm ? Number(item._distanzaKm.toFixed(2)) : 0,
-                    prezzo: 0,
+                    oraPartenza: oraPartenza.toISOString(),
+                    oraArrivo: oraArrivo.toISOString(),
+                    distanzaKm: Number(dist.toFixed(2)),
+                    prezzo: Number(prezzo?.toFixed(2)) || 0,
                     stato: 'disponibile',
                     postiDisponibili: Number(item.posti_disponibili ?? 0),
                     percorsoVisualizzato: null
                 };
             }
 
-            // --- 2. GESTIONE CORSE ---
+            // --- 2. GESTIONE CORSE (ZSET INTERPOLATION) ---
             let oraPartenza = new Date(item.start_datetime || Date.now());
             let oraArrivo = new Date(oraPartenza.getTime() + (item.durata_ms || 0));
             let distanza = Number(item.distanza || 0);
 
-            if (item.start_datetime && item.decodedCoords?.length > 0) {
-                const zIndex = corsaItems.findIndex(c => c.id === item.id);
-                if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
-                    const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
-                    if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
-                }
+            const zIndex = corsaItems.findIndex(c => c.id === item.id);
+            if (zIndex !== -1 && zsetResults[zIndex * 2] !== null) {
+                const dettagli = calcolaDettagliTratta(item, Number(zsetResults[zIndex * 2]), Number(zsetResults[zIndex * 2 + 1]));
+                if (dettagli) ({ oraPartenza, oraArrivo, distanzaSegmentoKm: distanza } = dettagli);
             }
 
             const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distanza, Number(item.distanza || 0));

@@ -1,6 +1,9 @@
 import * as turf from '@turf/turf';
 import { CacheStore } from '../search.cache.js';
 
+/**
+ * Filtra le corse esistenti in base alla disponibilità spaziale e temporale
+ */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniData) {
     const startTime = Date.now();
     const corseValide = [];
@@ -27,7 +30,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const startPointOnLine = turf.nearestPointOnLine(route, pStart);
         const endPointOnLine = turf.nearestPointOnLine(route, pEnd);
         
-        // Indici per calcolare la sovrapposizione dei segmenti
         const startIdx = startPointOnLine.properties.index;
         const endIdx = endPointOnLine.properties.index;
         const idxDiff = endIdx - startIdx;
@@ -36,15 +38,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             stats.dir++; continue; 
         }
 
-        // --- NUOVA LOGICA: Calcolo Picco di Occupazione ---
         const prenotazioni = Array.isArray(prenotazioniData[i]) ? prenotazioniData[i] : [];
-        
-        // Funzione per calcolare il numero massimo di posti occupati contemporaneamente
-        // nel segmento [startIdx, endIdx]
         let maxOccupazioneSulSegmento = 0;
         
-        // Verifichiamo il carico in ogni punto del segmento richiesto
-        // (Per efficienza, controlliamo solo i punti di inizio/fine delle prenotazioni esistenti)
         const puntiCritici = new Set([startIdx, endIdx]);
         prenotazioni.forEach(p => {
             if (p.start_index_polyline > startIdx && p.start_index_polyline < endIdx) puntiCritici.add(p.start_index_polyline);
@@ -53,7 +49,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
         for (let punto of puntiCritici) {
             let occupazioneAlPunto = prenotazioni.reduce((acc, p) => {
-                // Se la prenotazione esistente copre questo punto, aggiungila al carico
                 if (punto >= p.start_index_polyline && punto < p.end_index_polyline) {
                     return acc + (Number(p?.posti_richiesti) || 0);
                 }
@@ -74,5 +69,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     console.log(`[FILTER-CORSE] ${corseValide.length} ok | Scarti: D=${stats.d} Dir=${stats.dir} P=${stats.p} (${Date.now() - startTime}ms)`);
     
-    return { slots: corseValide.map(c => ({ /* ... */ })), corse: corseValide };
+    return { slots: corseValide.map(c => ({ ...c })), corse: corseValide };
+}
+
+/**
+ * Filtro placeholder per eventuali slot puri (se richiesto dal tuo search.service.js)
+ */
+export function filterSlotOnly(data) {
+    // Implementazione placeholder o logica per soli slot veicolo
+    return data;
 }

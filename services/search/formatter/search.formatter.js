@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getLocalitaSafe } from '../../../utils/maps.util.js';
+import { getLocalitaSafe, getDurataDistanza } from '../../../utils/maps.util.js';
 import * as CacheModule from '../search.cache.js';
 
 const localitaCache = new Map();
@@ -16,13 +16,23 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
 
-    return (await Promise.all(risultatiFiltrati.map(async (item) => {
+    // 1. Taglio chirurgico: Max 5 slot e 5 corse
+    const slots = risultatiFiltrati.filter(item => item.is_slot).slice(0, 5);
+    const corse = risultatiFiltrati.filter(item => !item.is_slot).slice(0, 5);
+    const risultatiDaFormattare = [...slots, ...corse];
+
+    return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
             const vId = Number(item.veicolo_id);
             const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
 
-            // --- 1. GESTIONE SLOT (Generici) ---
+            // --- 1. GESTIONE SLOT ---
             if (item.is_slot) {
+                const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
+                const viaggio = await getDurataDistanza(origine, richiesta.coordDest);
+                const dist = viaggio.distanzaKm || 0;
+                const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
+
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
@@ -32,17 +42,16 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     localitaOrigine: await getLocalitaSafeCached(richiesta.coord),
                     localitaDestinazione: await getLocalitaSafeCached(richiesta.coordDest),
                     oraPartenza: item.start_datetime,
-                    oraArrivo: item.start_datetime, // Slot basati su disponibilità oraria
-                    distanzaKm: 0,
-                    prezzo: 0, // Calcolato a consuntivo o tramite altro servizio
+                    oraArrivo: new Date(new Date(item.start_datetime).getTime() + (viaggio.durataMs || 3600000)).toISOString(),
+                    distanzaKm: Number(dist.toFixed(2)),
+                    prezzo: Number(prezzo?.toFixed(2)) || 0,
                     stato: 'disponibile',
                     postiDisponibili: Number(item.posti_totali || 0),
                     percorsoVisualizzato: null
                 };
             }
 
-            // --- 2. GESTIONE CORSE (Già filtrate e calcolate) ---
-            // Niente ricalcoli qui: 'item' contiene già i dati corretti dal filtro
+            // --- 2. GESTIONE CORSE ---
             const prezzo = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti, 
@@ -64,7 +73,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 distanzaKm: Number(item.distanzaKm || item.distanza || 0),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
                 stato: item.stato || 'prenotabile',
-                postiDisponibili: Number(item.postiDisponibili), // VALORE CERTO DAL FILTRO
+                postiDisponibili: Number(item.postiDisponibili),
                 percorsoVisualizzato: item.decodedCoords || null
             };
 

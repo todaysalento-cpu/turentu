@@ -42,6 +42,9 @@ export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
 
+// ESPORTAZIONE AGGIUNTA PER IL CACHEMANAGER
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
+
 export const upsertDisponibilita = async (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), {
         ...d,
@@ -51,7 +54,6 @@ export const upsertDisponibilita = async (d) => {
     });
 };
 
-// AGGIUNTA EXPORT MANCANTE CHE CAUSAVA ERRORE
 export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
 
 // --- CORE: CORSE ---
@@ -97,7 +99,7 @@ export const upsertCorsa = async (c) => {
                     const [lonP, latP] = point.geometry.coordinates;
                     const hash = ngeohash.encode(latP, lonP, GEOHASH_PRECISION_TRATTA);
                     
-                    // Popolamento ZSET per formatResults
+                    // Popolamento ZSET per il calcolo dei segmenti in formatResults
                     pipeline.zAdd(`corsa:percorso_hash:${corsaId}`, { score: i, value: hash });
                     
                     [hash, ...ngeohash.neighbors(hash)].forEach(h => hashSet.add(h));

@@ -10,14 +10,14 @@ const GEOHASH_PRECISION_TRATTA = 5;
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
   
-  // Assicurati che i dati siano in memoria
+  // 1. Assicurati che i dati siano in memoria
   await loadCachesUltra();
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
   const targetDate = new Date(richiesta.start_datetime || Date.now());
 
-  // 1. Recupero candidati (Corse)
+  // 2. Recupero candidati (Corse)
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -27,7 +27,7 @@ export async function cercaSlotUltra(richiesta) {
     .map(id => CacheStore.corseCache.get(Number(id)))
     .filter(Boolean);
 
-  // 2. Recupero massivo prenotazioni
+  // 3. Recupero massivo prenotazioni
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -43,10 +43,9 @@ export async function cercaSlotUltra(richiesta) {
     lon
   };
 
-  // 3. ESECUZIONE FILTRI
+  // 4. ESECUZIONE FILTRI
   
   // A. Filtro Corse (Geometrico)
-  // Nota: Assicurati che filterDisponibilita usi la logica getPostiReali descritta prima
   const { slots: slotsCorse, corse: corseCompatibili } = await filterDisponibilita(
     richiestaNormalizzata,
     corseCandidate,
@@ -58,21 +57,22 @@ export async function cercaSlotUltra(richiesta) {
     Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
       const stati = await getDisponibilita(s.driver_id, targetDate);
       
-      // ARRICCHIMENTO: Recupero posti certi dalla fonte ufficiale (veicoliCache)
       const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       const postiReali = veicolo ? Number(veicolo.posti_totali || 0) : 0;
       
       return {
         ...s,
         disponibile: stati.some(st => st.disponibile),
-        posti_totali: postiReali // Dato ora garantito corretto
+        posti_totali: postiReali,
+        // CORREZIONE CRITICA: iniettiamo la data di ricerca per sovrascrivere residui DB
+        start_datetime: targetDate.toISOString() 
       };
     })
   );
   
   const slotsLiberi = await filterSlotOnly(richiestaNormalizzata, allSlots);
 
-  // 4. FUSIONE DEI RISULTATI
+  // 5. FUSIONE DEI RISULTATI
   const mapRisultati = new Map();
   // Gli slot di corsa hanno priorità o sovrascrivono i generici
   slotsLiberi.forEach(s => mapRisultati.set(s.veicolo_id, s));
@@ -84,7 +84,7 @@ export async function cercaSlotUltra(richiesta) {
 
   if (risultatiFinali.length === 0) return [];
 
-  // 5. Formattazione finale
+  // 6. Formattazione finale
   try {
     return await formatResults(
       richiestaNormalizzata, 

@@ -40,11 +40,12 @@ export async function getDisponibilita(driver_id, targetDate = new Date()) {
 
     // 3. Verifica ORARIO TURNO (Data-Agnostic: solo HH:mm)
     if (disponibile) {
-      const startDate = new Date(d.start);
-      const endDate = new Date(d.fine);
+      const start = new Date(d.start);
+      const fine = new Date(d.fine);
       
-      const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
-      const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+      // Usiamo getUTC... perché la data è stata fissata al 1970-01-01 UTC
+      const startMinutes = start.getUTCHours() * 60 + start.getUTCMinutes();
+      const endMinutes = fine.getUTCHours() * 60 + fine.getUTCMinutes();
       
       // Supporto per turni che superano la mezzanotte (Overnight)
       const isOvernight = startMinutes > endMinutes;
@@ -152,6 +153,8 @@ function parseTimeString(timeStr) {
   
   const [hh, mm] = timeStr.split(':').map(Number);
   // Forza la data al 1° Gennaio 1970 per ignorare la parte calendario
+  // new Date(y, m, d, h, min) crea una data basata sul fuso orario locale.
+  // Poiché la convertiamo in ISO (UTC), è perfetto.
   const d = new Date(1970, 0, 1, hh, mm, 0, 0);
   return d.toISOString();
 }

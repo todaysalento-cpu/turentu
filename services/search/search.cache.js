@@ -8,10 +8,11 @@ export const CacheStore = {
     veicoliCache: new Map(),
     disponibilitaCache: new Map(),
     corseCache: new Map(),
+    prenotazioniCache: new Map(), // Aggiunta per completezza
     lastSync: 0
 };
 
-// --- FUNZIONI DI EXPORT (Assicurati che queste siano presenti) ---
+// --- FUNZIONI DI GESTIONE DISPONIBILITÀ ---
 
 export const upsertDisponibilita = (d) => {
     const normalized = {
@@ -24,16 +25,20 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
 
-// Aggiungi questa funzione per risolvere l'errore nel router
+// --- FUNZIONI DI GESTIONE PRENOTAZIONI ---
+
 export const upsertPrenotazione = async (prenotazione) => {
-    // Logica per aggiornare la cache locale o Redis
     console.log(`📝 [CACHE] Aggiornamento prenotazione: ${prenotazione.id}`);
-    // Esempio: CacheStore.prenotazioni.set(prenotazione.id, prenotazione);
+    CacheStore.prenotazioniCache.set(Number(prenotazione.id), prenotazione);
 };
+
+// --- FUNZIONI DI GESTIONE VEICOLI ---
 
 export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), v);
 };
+
+// --- FUNZIONI DI GESTIONE CORSE ---
 
 export const upsertCorsa = async (c, indicizzare = false) => {
     CacheStore.corseCache.set(Number(c.id), c);
@@ -42,7 +47,24 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     }
 };
 
+export const removeCorsa = async (corsaId) => {
+    const id = Number(corsaId);
+    CacheStore.corseCache.delete(id);
+    
+    // Rimozione dagli indici Redis
+    const hashes = await redisClient.get(`corsa:hashes:${id}`);
+    if (hashes) {
+        const hashList = JSON.parse(hashes);
+        const pipeline = redisClient.multi();
+        hashList.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
+        pipeline.del(`corsa:hashes:${id}`);
+        await pipeline.exec();
+    }
+    console.log(`🗑️ [CACHE] Corsa ${id} rimossa correttamente.`);
+};
+
 // --- SYNC ENGINE ---
+
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
     
@@ -75,6 +97,7 @@ export async function loadCachesUltra(force = false) {
 }
 
 // --- UTILS REDIS ---
+
 async function aggiornaIndiciRedis(corsaId, coords) {
     if (!redisClient || !coords || coords.length === 0) return;
     const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[1], p[0], 5)))];

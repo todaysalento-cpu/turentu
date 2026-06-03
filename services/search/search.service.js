@@ -13,6 +13,18 @@ const getSafeDate = (val) => {
     return isNaN(d.getTime()) ? new Date() : d;
 };
 
+/**
+ * Normalizza le coordinate: garantisce [Lon, Lat]
+ */
+const normalizeCoords = (coords) => {
+    if (!Array.isArray(coords) || coords.length === 0) return coords;
+    // Se è un array di array (polilinea) e il primo elemento sembra [Lat, Lon] (es. > 20)
+    if (Array.isArray(coords[0]) && Math.abs(coords[0][0]) > 20) {
+        return coords.map(c => [c[1], c[0]]);
+    }
+    return coords;
+};
+
 export async function cercaSlotUltra(richiesta) {
   console.log(`\n🔍 [SERVICE] Ricerca | Lat: ${richiesta.coord?.lat} Lon: ${richiesta.coord?.lon}`);
   
@@ -26,26 +38,25 @@ export async function cercaSlotUltra(richiesta) {
   // 1. RECUPERO GEOSPAZIALE
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
-  console.log(`📍 [REDIS] Ricerca in Geohash:`, hashes);
   
   const [corsaResults, slotResults] = await Promise.all([
     Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`))),
     Promise.all(hashes.map(h => redisClient.sMembers(`slot:in_area:${h}`)))
   ]);
 
-  // LOG: Verifica cosa torna da Redis
-  hashes.forEach((h, i) => {
-      console.log(`   Hash ${h} -> Corse: ${corsaResults[i].length}, Slot: ${slotResults[i].length}`);
-  });
+  // Recupero e Normalizzazione Geometria
+  const corseCandidate = [...new Set(corsaResults.flat())].map(id => {
+      const c = CacheStore.corseCache.get(Number(id));
+      if (!c) return null;
+      // Applichiamo la normalizzazione protettiva
+      c.decodedCoords = normalizeCoords(c.decodedCoords);
+      return c;
+  }).filter(Boolean);
 
-  const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
   const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
-  
-  console.log(`   Totale ID Slot unici trovati: ${slotCandidateIds.length}`);
   const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
-  console.log(`   Oggetti Slot validi nel CacheStore: ${candidatiPool.length}`);
 
-  // 2. FILTRO CORSE
+  // 2. FILTRO CORSE (Motore Geometrico/Saturazione)
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
 
@@ -64,18 +75,11 @@ export async function cercaSlotUltra(richiesta) {
   let risultatiPool = [];
   if (richiesta.tipo_richiesto === 'pop-bus') {
       const veicoliDisponibiliNelPool = candidatiPool.filter(s => {
-          if (veicoliImpegnati.has(s.veicolo_id)) {
-              console.log(`   [POOL] Veicolo ${s.veicolo_id} scartato: Impegnato in corsa forte.`);
-              return false;
-          }
+          if (veicoliImpegnati.has(s.veicolo_id)) return false;
           
           const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
-          const isDisp = dispVeicolo.some(st => st.disponibile);
-          if (!isDisp) console.log(`   [POOL] Veicolo ${s.veicolo_id} scartato: Turno non disponibile.`);
-          return isDisp;
+          return dispVeicolo.some(st => st.disponibile);
       });
-
-      console.log(`   [POOL] Veicoli disponibili dopo filtri: ${veicoliDisponibiliNelPool.length}`);
 
       const capacitaTotale = veicoliDisponibiliNelPool.reduce((sum, s) => {
           const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));

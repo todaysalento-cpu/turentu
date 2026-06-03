@@ -4,7 +4,6 @@ import { redisClient } from '../../redis.js';
 import { loadCachesUltra, CacheStore } from './search.cache.js'; 
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-// Assumiamo l'esistenza di un metodo Batch
 import { getDisponibilitaBatch } from './disponibilita/disponibilita.service.js'; 
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -27,7 +26,6 @@ export async function cercaSlotUltra(richiesta) {
   const candidateIds = [...new Set(results.flat())];
   const corseCandidate = candidateIds.map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
 
-  // Recupero prenotazioni in pipeline singola
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -41,7 +39,12 @@ export async function cercaSlotUltra(richiesta) {
     prenotazioniBatch
   );
 
-  const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
+  const risultatiCondivise = corseEsistenti.map(c => ({ 
+    ...c, 
+    tipo: 'condivisa', 
+    tipo_corsa: 'condivisa', 
+    is_slot: false 
+  }));
 
   // 2. FILTRO ESCLUSIVITÀ RIEMPIMENTO
   const esisteRiempimentoEsistente = risultatiCondivise.some(c => 
@@ -53,13 +56,11 @@ export async function cercaSlotUltra(richiesta) {
   const TOLLERANZA_SLOT_KM = 50;
   const veicoliImpegnati = new Set(risultatiCondivise.map(c => c.veicolo_id));
   
-  // Prepariamo i candidati slot
   const candidatiSlot = Array.from(CacheStore.disponibilitaCache.values()).filter(s => {
     const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
     return v?.lat && v?.lon && !veicoliImpegnati.has(s.veicolo_id);
   });
 
-  // Chiamata Batch per la disponibilità (Elimina l'imbuto)
   const driverIds = [...new Set(candidatiSlot.map(s => s.driver_id))];
   const disponibilitàMap = await getDisponibilitaBatch(driverIds, targetDate);
 
@@ -79,11 +80,16 @@ export async function cercaSlotUltra(richiesta) {
   const slotsValidi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots.filter(Boolean));
 
   // 4. ASSEMBLAGGIO FINALE
-  const risultatiFinali = [
-    ...risultatiCondivise,
-    ...(richiesta.tipo_richiesto === 'privata' ? slotsValidi.map(s => ({ ...s, tipo: 'privata', is_slot: true })) : []),
-    ...(richiesta.tipo_richiesto !== 'privata' && !esisteRiempimentoEsistente ? slotsValidi.map(s => ({ ...s, tipo: 'riempimento', is_slot: true, stato: 'da_attivare' })) : [])
-  ];
+  // Qui forziamo il tipo_corsa in base alla logica di ricerca, così il formatter lo legge correttamente
+  const slotsFormattati = slotsValidi.map(s => {
+    let tipo = 'privata';
+    if (richiesta.tipo_richiesto !== 'privata' && !esisteRiempimentoEsistente) {
+      tipo = 'riempimento';
+    }
+    return { ...s, tipo: tipo, tipo_corsa: tipo, is_slot: true };
+  });
+
+  const risultatiFinali = [...risultatiCondivise, ...slotsFormattati];
 
   return risultatiFinali.length > 0 
     ? await formatResults(richiesta, risultatiFinali, risultatiCondivise, CacheStore.veicoliCache)

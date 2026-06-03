@@ -40,19 +40,38 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     let risultatiDaFormattare = [...slots, ...corseStandard];
 
+    // LOGICA AGGIORNATA: Range dinamico e Posti Mancanti per il pool di riempimento
     if (riempimentiInAttesa.length > 0) {
         const poolId = 'pool_' + uuidv4();
-        const prezzi = riempimentiInAttesa.map(r => Number(r.prezzo_fisso || 0)).filter(p => p > 0);
+        
+        const datiPool = await Promise.all(riempimentiInAttesa.map(async (r) => {
+            const soglia = Number(r.posti_soglia || 1);
+            const attuali = Number(r.posti_prenotati || 0);
+            const mancanti = Math.max(0, soglia - attuali);
+
+            // Prezzo massimo (al raggiungimento della soglia)
+            const pMax = await calcolaPrezzo(r, richiesta.posti_richiesti, 'riempimento', 0, r.distanza || 0);
+            
+            // Prezzo minimo (ipotetico a pieno carico)
+            const postiTotali = Number(r.posti_totali || soglia);
+            const pMin = (Number(r.euro_km || 1.0) * (r.distanza || 0) / postiTotali) * richiesta.posti_richiesti;
+            
+            return { pMin, pMax, mancanti };
+        }));
+
+        const prezziMin = datiPool.map(p => p.pMin);
+        const prezziMax = datiPool.map(p => p.pMax);
+        const totaleMancanti = datiPool.reduce((acc, curr) => acc + curr.mancanti, 0);
         
         risultatiDaFormattare.push({
             id: poolId,
             tipo: 'riempimento_pool',
             corse_ids: riempimentiInAttesa.map(r => r.id),
             rangePrezzo: {
-                min: prezzi.length ? Math.min(...prezzi) : 0,
-                max: prezzi.length ? Math.max(...prezzi) : 0
+                min: Math.max(0.50, Math.min(...prezziMin)).toFixed(2),
+                max: Math.max(0.50, Math.max(...prezziMax)).toFixed(2)
             },
-            percorsoVisualizzato: riempimentiInAttesa[0].decodedCoords,
+            postiMancanti: totaleMancanti,
             is_pool: true
         });
     }
@@ -64,7 +83,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     ...item, 
                     localitaOrigine, 
                     localitaDestinazione, 
-                    messaggio: "Corse in attesa di soglia: pre-autorizza il costo massimo per unirti al pool." 
+                    messaggio: `Corse in attesa di soglia: mancano ${item.postiMancanti} posti per l'attivazione. Pre-autorizza per unirti.` 
                 };
             }
 
@@ -74,7 +93,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
                 const viaggio = await getDurataDistanza(origine, richiesta.coordDest);
                 const dist = viaggio.distanzaKm || 0;
-                // Mantengo 'disponibile' come tipo base per lo slot, ma leggo tipo_corsa se esiste
                 const tipoCorsa = item.tipo_corsa || 'disponibile';
                 const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCorsa, dist, dist);
 
@@ -110,7 +128,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const totalPoints = decodedCoords.length;
             const ratio = (totalPoints > 1) ? (endIdx - startIdx) / (totalPoints - 1) : 1;
             const distDinamica = (item.distanzaKm || item.distanza || 0) * ratio;
-            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.stato, distDinamica, distDinamica);
+            
+            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distDinamica, item.distanza, item.posti_prenotati);
 
             return {
                 id: item.id,

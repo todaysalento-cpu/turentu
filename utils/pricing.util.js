@@ -14,74 +14,44 @@ export async function getTariffe(veicolo_id, tipo) {
 }
 
 /**
- * Calcolo Prezzo Dinamico
+ * Motore di Calcolo Prezzi Turentu
+ * @param {Object} corsa - Dati della corsa
+ * @param {Number} postiRichiesti - Posti per questa prenotazione
+ * @param {String} tipo - 'privata' | 'condivisa' | 'riempimento'
+ * @param {Number} kmUtente - Km effettivi della tratta utente
+ * @param {Number} kmTotali - Km totali della corsa
+ * @param {Number} totPasseggeriCorrenti - Passeggeri già presenti (per condivisa)
  */
-export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotati = 0, kmTotaliCorsa = 0, overrideOccupazione = null) {
-  const richiesti = Number(postiRichiesti) || 1;
-  const tipoTariffa = 'standard';
+export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0) {
+  const richiesti = Math.max(1, Number(postiRichiesti));
+  const { prezzoKm, prezzoPasseggero } = await getTariffe(corsa.veicolo_id, tipo);
 
-  let prezzoKm = 1.00; // Default di sicurezza
-  let prezzoPasseggero = 0.00;
+  // Lavoriamo in centesimi per evitare errori di precisione float
+  const PREZZO_MINIMO = 50; // 0.50€
 
-  try {
-    const tariffe = await getTariffe(corsa.veicolo_id, tipoTariffa);
-    prezzoKm = tariffe.prezzoKm;
-    prezzoPasseggero = tariffe.prezzoPasseggero;
-  } catch (err) {
-    console.warn(`⚠️ [PRICING] Tariffe mancanti per veicolo ${corsa.veicolo_id}, uso fallback.`);
-  }
+  switch (tipo) {
+    case 'privata':
+      // Formula: euro_km * km tratta
+      return Math.max(PREZZO_MINIMO, Math.round(prezzoKm * kmUtente * 100) / 100);
 
-  const kmTotali = kmTotaliCorsa > 0 ? kmTotaliCorsa : Number(corsa.distanza ?? 0);
-  const kmUtente = kmPrenotati > 0 ? kmPrenotati : kmTotali;
-
-  switch (statoSlot) {
-    // LOGICA RIEMPIMENTO (Basata solo su euro_km e soglia)
-    case 'da_attivare': {
-      const costoTotaleCorsa = kmTotali * prezzoKm;
-      const postiSoglia = Number(corsa.posti_soglia || 1);
+    case 'condivisa':
+      // Formula: ((euro_km * km_totali) + (Passeggeri_successivi * €_passeggero)) / Totale_passeggeri
+      const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
+      const passeggeriSuccessivi = Math.max(0, totPasseggeriFinale - 1);
       
-      // Prezzo basato su euro_km distribuito equamente sulla soglia di attivazione
-      const prezzoUnitario = postiSoglia > 0 ? (costoTotaleCorsa / postiSoglia) : costoTotaleCorsa;
+      const costoBase = (prezzoKm * kmTotali) + (passeggeriSuccessivi * prezzoPasseggero);
+      const prezzoFinale = (costoBase / totPasseggeriFinale) * (kmUtente / kmTotali);
       
-      return Math.max(0.50, prezzoUnitario * richiesti);
-    }
+      return Math.max(PREZZO_MINIMO, Math.round(prezzoFinale * 100) / 100);
 
-    case 'prenotabile': {
-      let numPrenotazioni, passPrecedenti;
-
-      if (overrideOccupazione) {
-        numPrenotazioni = overrideOccupazione.num;
-        passPrecedenti = overrideOccupazione.totPass;
-      } else {
-        const { rows } = await pool.query(
-          `SELECT COUNT(*) as num, COALESCE(SUM(posti_richiesti), 0) as tot 
-           FROM prenotazioni WHERE corsa_id = $1`, [corsa.id]
-        );
-        numPrenotazioni = Number(rows[0].num);
-        passPrecedenti = Number(rows[0].tot);
-      }
+    case 'riempimento':
+      // Formula: (euro_km * km_totali) / n_passeggeri_soglia
+      const soglia = Math.max(1, Number(corsa.posti_soglia || 1));
+      const prezzoUnitarioSoglia = (prezzoKm * kmTotali) / soglia;
       
-      const totPasseggeri = passPrecedenti + richiesti;
-      const prezzoBaseCorsa = kmTotali * prezzoKm;
-      
-      const quotaVariabile = totPasseggeri > 1 ? (prezzoPasseggero * richiesti) : 0;
-      const quotaCondivisa = prezzoBaseCorsa + quotaVariabile;
-      const coefficienteTratta = kmTotali > 0 ? (kmUtente / kmTotali) : 0;
-      
-      const prezzoFinale = (quotaCondivisa / totPasseggeri) * coefficienteTratta;
-      return Math.max(0.50, prezzoFinale);
-    }
+      return Math.max(PREZZO_MINIMO, Math.round(prezzoUnitarioSoglia * richiesti * 100) / 100);
 
-    case 'pubblicato': {
-      return Math.max(0.50, (prezzoPasseggero > 0 ? prezzoPasseggero : prezzoKm) * richiesti);
-    }
-
-    case 'libero': {
-      return Math.max(0.50, (prezzoKm * kmUtente) + (prezzoPasseggero * richiesti));
-    }
-
-    default: {
-      return Math.max(0.50, (prezzoKm * kmUtente));
-    }
+    default:
+      return Math.max(PREZZO_MINIMO, Math.round(prezzoKm * kmUtente * 100) / 100);
   }
 }

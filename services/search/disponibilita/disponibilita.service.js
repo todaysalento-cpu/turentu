@@ -4,8 +4,6 @@ import { CacheStore } from '../search.cache.js';
 
 /**
  * VERSIONE OTTIMIZZATA: Valuta la disponibilità di più driver in un unico batch.
- * @param {Array<number>} driverIds - Array di ID driver
- * @param {Date} targetDate - Data/ora della corsa
  */
 export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) {
   const tuttiITurni = Array.from(CacheStore.disponibilitaCache.values());
@@ -15,7 +13,6 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
   const results = new Map();
 
   for (const driverId of driverIds) {
-    // Filtro turni specifici per driver
     const turniDriver = tuttiITurni.filter(d => d.driver_id === driverId);
     
     const stati = turniDriver.map(d => {
@@ -35,14 +32,14 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
         }
       }
 
-      // 3. Verifica ORARIO (Date-Agnostic)
+      // 3. Verifica ORARIO
       if (disponibile) {
         const start = new Date(d.start);
         const fine = new Date(d.fine);
         const startM = start.getUTCHours() * 60 + start.getUTCMinutes();
         const endM = fine.getUTCHours() * 60 + fine.getUTCMinutes();
         
-        if (startM > endM) { // Overnight
+        if (startM > endM) {
           if (!(targetMinutes >= startM || targetMinutes <= endM)) disponibile = false;
         } else {
           if (targetMinutes < startM || targetMinutes > endM) disponibile = false;
@@ -56,9 +53,6 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
   return results;
 }
 
-/**
- * Singola valutazione (mantenuta per retrocompatibilità)
- */
 export async function getDisponibilita(driver_id, targetDate = new Date()) {
   const batchResult = await getDisponibilitaBatch([driver_id], targetDate);
   return batchResult.get(driver_id) || [];
@@ -67,7 +61,7 @@ export async function getDisponibilita(driver_id, targetDate = new Date()) {
 // --- CRUD OPERAZIONI ---
 
 export async function createDisponibilita(turno) {
-  let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
+  let { veicolo_id, start, fine, tipo_corsa = 'privata', manual = false, giorni_esclusi = [], inattivita = [] } = turno;
 
   start = parseTimeString(start);
   fine = parseTimeString(fine);
@@ -78,17 +72,18 @@ export async function createDisponibilita(turno) {
 
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo
-      (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
-      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      (veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi, inattivita)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
       ON CONFLICT (veicolo_id)
       DO UPDATE SET
         start = EXCLUDED.start,
         fine = EXCLUDED.fine,
+        tipo_corsa = EXCLUDED.tipo_corsa,
         manual = EXCLUDED.manual,
         giorni_esclusi = EXCLUDED.giorni_esclusi,
         inattivita = EXCLUDED.inattivita
       RETURNING *`,
-    [veicolo_id, start, fine, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
+    [veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
   );
 
   let nuovoTurno = res.rows[0];
@@ -99,7 +94,8 @@ export async function createDisponibilita(turno) {
     ...nuovoTurno,
     veicolo_id: Number(nuovoTurno.veicolo_id),
     is_slot: true,
-    tipo: 'disponibilita'
+    tipo: 'disponibilita',
+    tipo_corsa: nuovoTurno.tipo_corsa
   });
   
   return nuovoTurno;
@@ -137,7 +133,8 @@ export async function updateDisponibilita(id, update) {
     ...turnoAggiornato,
     veicolo_id: Number(turnoAggiornato.veicolo_id),
     is_slot: true,
-    tipo: 'disponibilita'
+    tipo: 'disponibilita',
+    tipo_corsa: turnoAggiornato.tipo_corsa
   });
   
   return turnoAggiornato;

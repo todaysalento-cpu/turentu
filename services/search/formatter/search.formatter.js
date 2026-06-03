@@ -7,13 +7,18 @@ import * as CacheModule from '../search.cache.js';
 const localitaCache = new Map();
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; // 60% dei posti totali per attivare
 
-const getSafeISO = (dateInput) => {
+/**
+ * Utility per gestire date potenzialmente corrotte dal DB
+ */
+const safeDate = (dateInput) => {
     const d = new Date(dateInput);
-    return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+    return !isNaN(d.getTime()) ? d : new Date();
 };
 
+const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
+
 const calcolaArrivo = (startISO, durataMinuti = 20) => {
-    const d = new Date(startISO);
+    const d = safeDate(startISO);
     d.setMinutes(d.getMinutes() + (durataMinuti || 20));
     return d.toISOString();
 };
@@ -41,6 +46,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     let risultatiDaFormattare = [...slots, ...corseStandard];
 
+    // Logica Pool Dinamica
     if (riempimentiInAttesa.length > 0) {
         const poolId = 'pool_' + uuidv4();
         
@@ -48,11 +54,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const totali = Number(r.posti_totali || 1);
             const attuali = Number(r.posti_prenotati || 0);
             
-            // Soglia dinamica calcolata in base alla percentuale
             const postiMinimi = Math.ceil(totali * SOGLIA_ATTIVAZIONE_PERCENT);
             const mancanti = Math.max(0, postiMinimi - attuali);
 
-            // Protezione calcolo prezzo con fallback
             let pMax = 0;
             try {
                 pMax = await calcolaPrezzo(r, richiesta.posti_richiesti, 'riempimento', 0, r.distanza || 0);
@@ -80,6 +84,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         });
     }
 
+    // Mappatura finale con gestione robusta errori
     const formattati = await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
             if (item.is_pool) {
@@ -91,24 +96,20 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 };
             }
 
-            if (item.is_slot) {
-                // ... (Logica slot invariata) ...
-            }
-
-            // GESTIONE CORSE STANDARD / RIEMPIMENTO CON FALLBACK
-            const decodedCoords = item.decodedCoords || [];
-            const distDinamica = (item.distanzaKm || item.distanza || 0) * (item.decodedCoords?.length > 1 ? 1 : 1);
-            
+            // GESTIONE CORSE / SLOT
+            const isSlot = !!item.is_slot;
             let prezzo = 0;
+            
             try {
-                prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distDinamica, item.distanza, item.posti_prenotati);
+                const dist = item.distanza || 0;
+                prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, dist, dist, item.posti_prenotati);
             } catch (err) {
                 console.warn(`⚠️ Tariffa non trovata per ${item.id}, fallback applicato.`);
-                prezzo = (item.distanza || 0) * 0.45; // Prezzo fallback standard
+                prezzo = (item.distanza || 0) * 0.45;
             }
 
             return {
-                id: item.id,
+                id: item.id || uuidv4(),
                 veicolo_id: Number(item.veicolo_id),
                 marca: item.marca || "Veicolo",
                 modello: item.modello || "",

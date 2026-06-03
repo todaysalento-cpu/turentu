@@ -42,7 +42,6 @@ import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
 import chatRouter from './routes/chat.routes.js';
-// AGGIORNATO: Corretto il percorso del file search
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';
@@ -89,14 +88,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// ======================= STRIPE WEBHOOK =======================
+// ======================= MIDDLEWARE & ROUTES =======================
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
-
-// ======================= MIDDLEWARE =======================
 app.use(cookieParser());
 app.use(express.json());
 
-// ======================= ROUTES =======================
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
@@ -118,7 +114,6 @@ app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
 
-// ======================= HEALTH CHECK =======================
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 
 // ======================= ERROR HANDLERS =======================
@@ -142,18 +137,27 @@ const startServer = async () => {
     flowRegistry.register(onboardingFlow);
     console.log('🟢 Flussi registrati');
 
-    // 2. Connessione Redis e Caricamento Cache
+    // 2. Connessione Redis
     if (redisClient && !redisClient.isOpen) await redisClient.connect();
     console.log('🟢 Redis pronto');
 
-    await loadCachesUltra();
-    console.log('🗃️ Cache caricate');
+    // 3. Caricamento Cache (Resiliente)
+    try {
+      await loadCachesUltra();
+      console.log('🗃️ Cache caricate');
+    } catch (err) {
+      console.error('⚠️ Errore caricamento cache (ignorato):', err.message);
+    }
 
-    // 3. Cleanup Pendings
-    const count = await pendingService.cleanupExpired();
-    console.log(`🧹 Cleanup pending completato: ${count}`);
+    // 4. Cleanup Pendings (Resiliente)
+    try {
+      const count = await pendingService.cleanupExpired();
+      console.log(`🧹 Cleanup pending completato: ${count}`);
+    } catch (err) {
+      console.error('⚠️ Errore cleanup pendings (ignorato):', err.message);
+    }
 
-    // 4. Avvio Ascolto
+    // 5. Avvio Ascolto
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Server in ascolto su porta ${port}`);
     });

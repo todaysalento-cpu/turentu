@@ -29,10 +29,7 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
 }
 
 /**
- * Motore di ricerca ottimizzato (Batch Processing)
- * @param {Object} richiesta - Richiesta utente
- * @param {Array} corseCandidate - Corse pre-filtrate geograficamente
- * @param {Array} prenotazioniBatch - Array di array di prenotazioni già fetched
+ * Motore di ricerca ottimizzato (Batch Processing in memoria)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
     const corseValide = [];
@@ -76,7 +73,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         if (endIdx <= startIdx) return;
 
         // VALIDAZIONE ATOMICA IN MEMORIA
-        // Utilizziamo le prenotazioniBatch caricate precedentemente nel servizio principale
         const prenotazioniCorsa = prenotazioniBatch[index] || [];
         const isDisponibile = verificaDisponibilitaInMemoria(c, startIdx, endIdx, richiesta.posti_richiesti, prenotazioniCorsa);
 
@@ -100,10 +96,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
  * Logica di controllo posti occupati nel segmento
  */
 function verificaDisponibilitaInMemoria(corsa, startIdx, endIdx, postiRichiesti, prenotazioni) {
-    // 1. Somma posti occupati in ogni segmento del range richiesto
     for (let i = startIdx; i < endIdx; i++) {
         const occupazioneSegmento = prenotazioni.reduce((acc, p) => {
-            // Se la prenotazione esistente sovrappone il segmento i
             if (p.startIdx <= i && p.endIdx > i) return acc + p.posti_richiesti;
             return acc;
         }, 0);
@@ -113,6 +107,14 @@ function verificaDisponibilitaInMemoria(corsa, startIdx, endIdx, postiRichiesti,
     return true;
 }
 
+/**
+ * Filtra gli slot disponibili (veicoli liberi)
+ */
 export function filterSlotOnly(richiesta, slots) {
-    return slots.filter(s => s.disponibile && s.posti_totali >= richiesta.posti_richiesti);
+    if (!slots || !Array.isArray(slots)) return [];
+    
+    return slots.filter(s => 
+        s.disponibile === true && 
+        Number(s.posti_totali || 0) >= Number(richiesta.posti_richiesti || 0)
+    );
 }

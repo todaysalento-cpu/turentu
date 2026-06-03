@@ -11,6 +11,13 @@ const getSafeISO = (dateInput) => {
     return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
 };
 
+// Helper per calcolare l'ora di arrivo
+const calcolaArrivo = (startISO, durataMinuti = 20) => {
+    const d = new Date(startISO);
+    d.setMinutes(d.getMinutes() + (durataMinuti || 20));
+    return d.toISOString();
+};
+
 async function getLocalitaSafeCached(coord) {
     if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
@@ -20,26 +27,20 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
-/**
- * FormatResults ottimizzato per ridurre l'I/O asincrono e migliorare le performance
- */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
     const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
 
-    // 1. OTTIMIZZAZIONE: Recupero località in parallelo una sola volta
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         getLocalitaSafeCached(richiesta.coord),
         getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // 2. SEPARAZIONE DEI RISULTATI
     const slots = risultatiFiltrati.filter(item => item.is_slot);
     const corseStandard = risultatiFiltrati.filter(item => !item.is_slot && !(item.tipo_corsa === 'riempimento' && item.stato === 'da_attivare'));
     const riempimentiInAttesa = risultatiFiltrati.filter(item => !item.is_slot && item.tipo_corsa === 'riempimento' && item.stato === 'da_attivare');
 
     let risultatiDaFormattare = [...slots, ...corseStandard];
 
-    // 3. AGGREGAZIONE RIEMPIMENTI (Logica Pool)
     if (riempimentiInAttesa.length > 0) {
         const poolId = 'pool_' + uuidv4();
         const prezzi = riempimentiInAttesa.map(r => Number(r.prezzo_fisso || 0)).filter(p => p > 0);
@@ -57,10 +58,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         });
     }
 
-    // 4. FORMATTAZIONE UNIFICATA
     const formattati = await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // --- GESTIONE POOL ---
             if (item.is_pool) {
                 return { 
                     ...item, 
@@ -70,7 +69,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 };
             }
 
-            // --- GESTIONE SLOT ---
             if (item.is_slot) {
                 const vId = Number(item.veicolo_id);
                 const v = !isNaN(vId) ? veicoliMap.get(vId) : null;
@@ -83,22 +81,26 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
+                    modello: v?.modello ?? "",
                     tipo: 'disponibile',
+                    badge: 'Disponibile',
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: getSafeISO(item.start_datetime || new Date()),
+                    oraArrivo: calcolaArrivo(item.start_datetime || new Date(), 30),
                     prezzo: Number(prezzo?.toFixed(2)) || 0,
                     postiDisponibili: Number(item.posti_totali || 0),
+                    postiTotali: Number(item.posti_totali || 0),
+                    postiPrenotati: 0,
                     percorsoVisualizzato: null
                 };
             }
 
-            // --- GESTIONE CORSE STANDARD ---
+            // GESTIONE CORSE STANDARD
             const decodedCoords = item.decodedCoords || [];
             const startIdx = item.startIdx ?? 0;
             const endIdx = item.endIdx ?? (decodedCoords.length - 1);
             
-            // Calcolo percorso dinamico
             const line = turf.lineString(decodedCoords);
             const segment = (startIdx < endIdx && decodedCoords.length > 1) 
                 ? turf.lineSlice(turf.point(decodedCoords[startIdx]), turf.point(decodedCoords[endIdx]), line) 
@@ -112,12 +114,19 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             return {
                 id: item.id,
                 veicolo_id: Number(item.veicolo_id),
+                marca: item.marca || "Veicolo",
+                modello: item.modello || "",
                 tipo: item.tipo_corsa,
+                badge: item.tipo_corsa?.toUpperCase() || 'STANDARD',
                 fermata_fusione: !!item.fermata_fusione,
                 localitaOrigine,
                 localitaDestinazione,
+                oraPartenza: getSafeISO(item.start_datetime),
+                oraArrivo: item.arrivo_datetime ? getSafeISO(item.arrivo_datetime) : calcolaArrivo(item.start_datetime, 20),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
-                postiDisponibili: Number(item.postiDisponibili || 0),
+                postiDisponibili: Number(item.posti_disponibili ?? item.postiDisponibili ?? 0),
+                postiTotali: Number(item.posti_totali ?? 0),
+                postiPrenotati: Number(item.posti_prenotati ?? 0),
                 percorsoVisualizzato: segment.geometry.coordinates
             };
 

@@ -73,23 +73,25 @@ export async function cercaSlotUltra(richiesta) {
     return { 
       ...s, 
       disponibile: disponibilitàDriver.some(st => st.disponibile), 
-      posti_totali: Number(v.posti_totali || 0) 
+      posti_totali: Number(v.posti_totali || 0),
+      // Manteniamo il tipo se presente nel veicolo/slot
+      tipo_corsa: s.tipo_corsa || v.tipo_corsa || 'privata'
     };
   });
 
   const slotsValidi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots.filter(Boolean));
 
   // 4. ASSEMBLAGGIO FINALE
-  // Qui forziamo il tipo_corsa in base alla logica di ricerca, così il formatter lo legge correttamente
   const slotsFormattati = slotsValidi.map(s => {
-    let tipo = 'privata';
-    if (richiesta.tipo_richiesto !== 'privata' && !esisteRiempimentoEsistente) {
-      tipo = 'riempimento';
-    }
+    const tipo = s.tipo_corsa || (richiesta.tipo_richiesto === 'privata' ? 'privata' : 'riempimento');
     return { ...s, tipo: tipo, tipo_corsa: tipo, is_slot: true };
   });
 
-  const risultatiFinali = [...risultatiCondivise, ...slotsFormattati];
+  // Filtro di sanità per dati corrotti (es. posti > 100)
+  const risultatiFinali = [...risultatiCondivise, ...slotsFormattati].filter(item => {
+    const posti = Number(item.posti_totali || item.postiTotali || 0);
+    return posti > 0 && posti < 100;
+  });
 
   return risultatiFinali.length > 0 
     ? await formatResults(richiesta, risultatiFinali, risultatiCondivise, CacheStore.veicoliCache)

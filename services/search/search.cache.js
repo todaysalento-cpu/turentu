@@ -1,5 +1,6 @@
 import { pool } from '../../db/db.js';
 import ngeohash from 'ngeohash';
+import polyline from 'polyline'; // Assicurati di avere installato 'polyline'
 import { redisClient } from '../../redis.js';
 
 const SYNC_TTL_MS = 60000; // 1 minuto
@@ -55,7 +56,13 @@ export const removeVeicolo = async (veicoloId) => {
 
 // --- GESTIONE CORSE ---
 export const upsertCorsa = async (c, indicizzare = false) => {
+    // Decodifica la polyline salvata nel database
+    if (c.percorso_polyline) {
+        c.decodedCoords = polyline.decode(c.percorso_polyline);
+    }
+    
     CacheStore.corseCache.set(Number(c.id), c);
+    
     if (indicizzare && c.decodedCoords) {
         await aggiornaIndiciRedis(c.id, c.decodedCoords);
     }
@@ -87,7 +94,7 @@ export async function loadCachesUltra(force = false) {
             client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
-            client.query("SELECT *, ST_AsText(percorso) as wkt FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
+            client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));
@@ -103,6 +110,7 @@ export async function loadCachesUltra(force = false) {
         console.log(`📦 [SYNC] Completata con successo.`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico:", err);
+        throw err; // Rilancia per far fallire il boot se il DB non è raggiungibile
     } finally {
         client.release();
     }
@@ -111,7 +119,7 @@ export async function loadCachesUltra(force = false) {
 // --- UTILS REDIS ---
 async function aggiornaIndiciRedis(corsaId, coords) {
     if (!redisClient || !coords || coords.length === 0) return;
-    const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[1], p[0], 5)))];
+    const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[0], p[1], 5)))];
     const pipeline = redisClient.multi();
     newHashes.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
     pipeline.set(`corsa:hashes:${corsaId}`, JSON.stringify(newHashes));

@@ -20,7 +20,7 @@ if (!global.__CACHESTORE__) {
 export const CacheStore = global.__CACHESTORE__;
 const SYNC_TTL_MS = 30000; // 30 secondi di cache forzata
 
-// --- GESTIONE PRENOTAZIONI ---
+// --- GESTIONE PRENOTAZIONI (Resiliente) ---
 export const upsertPrenotazione = async (prenotazione) => {
     const corsaId = Number(prenotazione.corsa_id);
     const pId = Number(prenotazione.id);
@@ -31,7 +31,18 @@ export const upsertPrenotazione = async (prenotazione) => {
     CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
 
     if (redisClient) {
-        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
+        const key = `corsa:prenotazioni:${corsaId}`;
+        try {
+            // Verifica tipo prima di scrivere: garantiamo che sia un HASH
+            const type = await redisClient.type(key);
+            if (type !== 'none' && type !== 'hash') {
+                console.warn(`⚠️ [CACHE] Rilevato tipo ${type} errato su ${key}. Ripristino forzato.`);
+                await redisClient.del(key);
+            }
+            await redisClient.hSet(key, pId.toString(), JSON.stringify(prenotazione));
+        } catch (err) {
+            console.error(`❌ [CACHE] Errore critico durante upsertPrenotazione per ${key}:`, err);
+        }
     }
 };
 
@@ -96,7 +107,7 @@ export const removeCorsa = async (corsaId) => {
     }
 };
 
-// --- SYNC ENGINE (Aggiornato) ---
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
     
@@ -112,7 +123,6 @@ export async function loadCachesUltra(force = false) {
         dRes.rows.forEach(d => upsertDisponibilita(d));
         
         for (const c of cRes.rows) {
-            // Aggiorniamo la memoria senza forzare Redis a ogni riga per velocizzare il sync
             await upsertCorsa(c, true); 
         }
 
@@ -134,13 +144,9 @@ async function aggiornaIndiciRedis(corsaId, coords) {
     
     const pipeline = redisClient.multi();
     
-    // Pulizia vecchi indici
     oldHashes.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, corsaId.toString()));
-    
-    // Inserimento nuovi indici
     newHashes.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
     
-    // Salvataggio stato
     pipeline.set(`corsa:hashes:${corsaId}`, JSON.stringify(newHashes));
     
     await pipeline.exec();

@@ -1,8 +1,6 @@
-import * as turf from '@turf/turf';
 import { v4 as uuidv4 } from 'uuid';
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getLocalitaSafe } from '../../../utils/maps.util.js';
-import * as CacheModule from '../search.cache.js';
 
 const localitaCache = new Map();
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; 
@@ -24,33 +22,31 @@ async function getLocalitaSafeCached(coord) {
 }
 
 /**
- * Formatter aggiornato per gestire l'integrazione tra corse atomiche e Pool aggregato
+ * Formatter per gestire l'integrazione tra corse atomiche e Pool aggregato
  */
-export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
+export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         getLocalitaSafeCached(richiesta.coord),
         getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // 1. Separazione dei tipi di risultato
-    const slots = risultatiFiltrati.filter(item => item.is_slot && item.tipo_corsa !== 'pop-bus');
-    const corseStandard = risultatiFiltrati.filter(item => !item.is_slot && item.tipo_corsa !== 'pop-bus');
-    const popBusPool = risultatiFiltrati.filter(item => item.tipo_corsa === 'pop-bus');
+    // 1. Separazione tramite flag di pool (più pulito della stringa tipo_corsa)
+    const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
+    const altriRisultati = risultatiFiltrati.filter(item => !item.is_pool);
 
-    let risultatiDaFormattare = [...slots, ...corseStandard];
+    let risultatiDaFormattare = [...altriRisultati];
 
-    // 2. Logica Pool Dinamica
+    // 2. Logica Pool Aggregata
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
-        // Assumiamo 0 se non abbiamo dati di prenotazione nel pool aggregato
+        // Assicurati che i dati in ingresso abbiano posti_prenotati (default a 0)
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
         const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
 
         risultatiDaFormattare.push({
-            id: 'pool_pop_bus_' + uuidv4(),
-            tipo_corsa: 'pop-bus',
+            id: 'pool_pop_bus_fixed_id', // ID costante per stabilità UI
             is_pool: true,
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
@@ -62,14 +58,14 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     }
 
     // 3. Mappatura finale
-    const formattati = await Promise.all(risultatiDaFormattare.map(async (item) => {
+    return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
             if (item.is_pool) {
                 return { 
                     ...item, 
+                    tipo: 'pop-bus',
                     localitaOrigine, 
                     localitaDestinazione,
-                    tipo: 'pop-bus',
                     prezzo: "Variabile"
                 };
             }
@@ -82,21 +78,19 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             ).catch(() => (item.distanza || 0) * 0.45);
 
             return {
-                id: item.id || uuidv4(),
+                id: item.id,
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: item.tipo_corsa || 'standard',
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza: getSafeISO(item.start_datetime || new Date()),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
-                postiDisponibili: Number((item.posti_totali || 0) - (item.posti_prenotati || 0)),
+                postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0)
             };
         } catch (err) {
-            console.error(`💥 Errore formattazione:`, err);
+            console.error(`💥 Errore formattazione risultato:`, err);
             return null;
         }
-    }));
-
-    return formattati.filter(r => r !== null);
+    }))).filter(r => r !== null);
 }

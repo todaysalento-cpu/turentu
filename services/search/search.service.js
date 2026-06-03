@@ -20,7 +20,6 @@ export async function cercaSlotUltra(richiesta) {
 
   const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
-  const pStart = turf.point([lon, lat]);
   const targetDate = getSafeDate(richiesta.start_datetime || Date.now());
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
@@ -35,8 +34,10 @@ export async function cercaSlotUltra(richiesta) {
 
   // Estraggo ID e recupero oggetti da CacheStore
   const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
-  const slotCandidateIds = [...new Set(slotResults.flat())];
-  const candidatiPool = slotCandidateIds.map(id => CacheStore.disponibilitaCache.get(Number(id))).filter(Boolean);
+  
+  // slotCandidateIds ora contiene VEICOLO_ID
+  const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
+  const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
 
   // 2. FILTRO CORSE ESISTENTI
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
@@ -53,16 +54,17 @@ export async function cercaSlotUltra(richiesta) {
   // 3. LOGICA DI POOL AGGREGATO (Pop Bus)
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   
-  // Filtro i candidati recuperati da Redis per disponibilità oraria e impegni
-  const driverIds = [...new Set(candidatiPool.map(s => s.driver_id).filter(Boolean))];
-  const disponibilitàMap = await getDisponibilitaBatch(driverIds, targetDate, impegniForti);
+  // Chiamata Batch basata su veicoli (non più driver)
+  const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
   let risultatiPool = [];
   if (richiesta.tipo_richiesto === 'pop-bus') {
       const veicoliDisponibiliNelPool = candidatiPool.filter(s => {
           if (veicoliImpegnati.has(s.veicolo_id)) return false;
-          const dispDriver = disponibilitàMap.get(s.driver_id) || [];
-          return dispDriver.some(st => st.disponibile);
+          
+          // Verifica disponibilità usando l'indice veicolo_id
+          const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
+          return dispVeicolo.some(st => st.disponibile);
       });
 
       const capacitaTotale = veicoliDisponibiliNelPool.reduce((sum, s) => {

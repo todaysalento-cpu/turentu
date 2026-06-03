@@ -4,7 +4,7 @@ import * as turf from '@turf/turf';
  * Helper per snap su linea o nodi specifici
  */
 function getSnapResult(route, point, tolleranzaKm, corsa) {
-    // Gestione nodi per corse dinamiche
+    // Gestione nodi per corse dinamiche (riempimento o pop-bus)
     if ((corsa.tipo_corsa === 'riempimento' || corsa.tipo_corsa === 'pop-bus') && corsa.fermate_pianificate?.nodi) {
         let nearestNode = null;
         let minDistance = tolleranzaKm;
@@ -30,12 +30,12 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
 }
 
 /**
- * Motore di ricerca aggiornato: gestisce separatamente corse e pool
+ * Motore di ricerca: focalizzato sulle corse classiche
  */
-export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, poolVeicoliDisponibili = []) {
-    if (!richiesta.coord || !richiesta.coordDest) return { corse: [], poolDisponibile: false };
+export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
+    if (!richiesta.coord || !richiesta.coordDest) return { corse: [] };
 
-    console.log(`🔍 [ENGINE] Analisi | Corse candidate: ${corseCandidate.length} | Pool veicoli: ${poolVeicoliDisponibili.length}`);
+    console.log(`🔍 [ENGINE] Analisi corse candidate: ${corseCandidate.length}`);
 
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
@@ -43,9 +43,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const TOLLERANZA_KM = 0.5; 
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-    // 1. Filtro Corse Classiche (Atomiche)
+    // Filtro Corse Classiche (esclude pop-bus)
     const corseValide = corseCandidate.filter((c, index) => {
-        // Ignoriamo i 'pop-bus' qui, verranno gestiti come offerta di pool
         if (c.tipo_corsa === 'pop-bus') return false;
         if (!c.decodedCoords || c.decodedCoords.length < 2) return false;
 
@@ -65,23 +64,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         return isDisponibile;
     });
 
-    // 2. Verifica disponibilità Pool Aggregato
-    const isPoolDisponibile = richiesta.tipo_richiesto === 'pop-bus' && 
-                              verificaDisponibilitaPool(poolVeicoliDisponibili, postiRichiesti);
-
-    return { 
-        corse: corseValide, 
-        poolDisponibile: isPoolDisponibile 
-    };
-}
-
-/**
- * Logica calcolo disponibilità su Pool Aggregato
- */
-function verificaDisponibilitaPool(poolVeicoli, postiRichiesti) {
-    const capacitaTotalePool = poolVeicoli.reduce((sum, v) => sum + Number(v.posti_totali || 0), 0);
-    console.log(`📊 [POOL-STATS] Capacità totale rilevata: ${capacitaTotalePool} posti.`);
-    return capacitaTotalePool >= postiRichiesti;
+    return { corse: corseValide };
 }
 
 /**
@@ -89,7 +72,6 @@ function verificaDisponibilitaPool(poolVeicoli, postiRichiesti) {
  */
 function verificaDisponibilitaInMemoria(corsa, startIdx, endIdx, postiRichiesti, prenotazioni) {
     const postiTotali = Number(corsa.posti_totali || 0);
-    // Garantiamo startIdx < endIdx
     const s = Math.min(startIdx, endIdx);
     const e = Math.max(startIdx, endIdx);
 

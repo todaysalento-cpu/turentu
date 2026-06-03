@@ -8,58 +8,62 @@ const safeDate = (val) => {
 };
 
 /**
- * VERSIONE AGGIORNATA: Gestione Pool Dinamico con filtraggio mirato
+ * VERSIONE AGGIORNATA: Lookup diretto tramite indice veicoloToDisponibilita
  */
-export async function getDisponibilitaBatch(driverIds, targetDate = new Date(), impegniForti = []) {
+export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
   const targetDayOfWeek = targetDate.getDay();
-  // Utilizziamo UTC per coerenza con il salvataggio in DB
   const targetMinutes = targetDate.getUTCHours() * 60 + targetDate.getUTCMinutes();
   
   const results = new Map();
 
-  for (const dId of driverIds) {
-    const driverId = Number(dId);
+  for (const vId of veicoloIds) {
+    const veicoloId = Number(vId);
     
-    // Filtro mirato: recuperiamo solo i turni del driver corrente dalla CacheStore
-    const turniDriver = Array.from(CacheStore.disponibilitaCache.values())
-                             .filter(t => Number(t.driver_id) === driverId);
+    // ACCESSO DIRETTO: Ora usiamo la nuova mappa creata nel CacheStore
+    const turno = CacheStore.veicoloToDisponibilita.get(veicoloId);
     
-    // Verifica impegni "Forti" (Privata/Condivisa che blocca il driver)
+    if (!turno) {
+      results.set(veicoloId, []); // Nessun turno trovato per questo veicolo
+      continue;
+    }
+
+    const driverId = Number(turno.driver_id);
+    
+    // Verifica impegni "Forti"
     const isImpegnatoInCorsaForte = impegniForti.some(i => 
       Number(i.driver_id) === driverId && 
       targetDate >= safeDate(i.start_datetime) && 
       targetDate <= safeDate(i.arrivo_datetime)
     );
-    
-    const stati = turniDriver.map(d => {
-      // 1. GESTIONE STATO DI OCCUPAZIONE:
-      // Se il driver è in una corsa forte, NON può fare 'privata' o 'condivisa'.
-      // Permettiamo comunque l'inclusione nel pool se il turno è 'pop-bus'.
-      if (isImpegnatoInCorsaForte && d.tipo_corsa !== 'pop-bus') {
-        return { ...d, disponibile: false, motivo: 'impegnato_corsa_forte' };
+
+    // Valutazione disponibilità per il singolo turno trovato
+    const stato = (() => {
+      // 1. GESTIONE STATO DI OCCUPAZIONE
+      if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
+        return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
 
       // 2. LOGICA TURNI (Giorno)
-      const giorniEsclusi = new Set((Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : []).map(Number));
-      if (giorniEsclusi.has(targetDayOfWeek)) return { ...d, disponibile: false };
+      const giorniEsclusi = new Set((Array.isArray(turno.giorni_esclusi) ? turno.giorni_esclusi : []).map(Number));
+      if (giorniEsclusi.has(targetDayOfWeek)) return { ...turno, disponibile: false };
 
       // 3. Verifica PERIODI DI INATTIVITÀ
-      if (Array.isArray(d.inattivita)) {
-        const isInactive = d.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine));
-        if (isInactive) return { ...d, disponibile: false };
+      if (Array.isArray(turno.inattivita)) {
+        const isInactive = turno.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine));
+        if (isInactive) return { ...turno, disponibile: false };
       }
 
-      // 4. VERIFICA ORARIO (Utilizzo di minuti totali basati su UTC)
-      const startM = toMinutes(d.start);
-      const endM = toMinutes(d.fine);
+      // 4. VERIFICA ORARIO
+      const startM = toMinutes(turno.start);
+      const endM = toMinutes(turno.fine);
       const disponibile = (startM > endM) 
         ? (targetMinutes >= startM || targetMinutes <= endM)
         : (targetMinutes >= startM && targetMinutes <= endM);
 
-      return { ...d, disponibile };
-    });
+      return { ...turno, disponibile };
+    })();
 
-    results.set(driverId, stati);
+    results.set(veicoloId, [stato]);
   }
   return results;
 }
@@ -114,9 +118,7 @@ export async function createDisponibilita(turno) {
 
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
-  // Gestione sia ISO string che formato "HH:mm"
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   const [hh, mm] = timeStr.split(':').map(Number);
-  // Usiamo una data di riferimento standard ma leggiamo le componenti UTC
   return new Date(Date.UTC(1970, 0, 1, hh, mm, 0)).toISOString();
 }

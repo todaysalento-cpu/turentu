@@ -34,7 +34,7 @@ export const removeDisponibilita = async (disponibilitaId) => {
     }
     
     CacheStore.disponibilitaCache.delete(id);
-    console.log(`🗑️ [CACHE] Disponibilità ${id} rimossa correttamente.`);
+    console.log(`🗑️ [CACHE] Disponibilità ${id} rimossa.`);
 };
 
 // --- GESTIONE PRENOTAZIONI ---
@@ -46,6 +46,11 @@ export const upsertPrenotazione = async (prenotazione) => {
 // --- GESTIONE VEICOLI ---
 export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), v);
+};
+
+export const removeVeicolo = async (veicoloId) => {
+    CacheStore.veicoliCache.delete(Number(veicoloId));
+    console.log(`🗑️ [CACHE] Veicolo ${veicoloId} rimosso.`);
 };
 
 // --- GESTIONE CORSE ---
@@ -68,7 +73,7 @@ export const removeCorsa = async (corsaId) => {
         pipeline.del(`corsa:hashes:${id}`);
         await pipeline.exec();
     }
-    console.log(`🗑️ [CACHE] Corsa ${id} rimossa correttamente.`);
+    console.log(`🗑️ [CACHE] Corsa ${id} rimossa.`);
 };
 
 // --- SYNC ENGINE ---

@@ -2,23 +2,19 @@ import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
 import { CacheStore } from '../search.cache.js';
 
-/**
- * Helper robusto per date: forza il confronto a 0 se la data è invalida
- */
 const safeDate = (val) => {
   const d = new Date(val);
   return isNaN(d.getTime()) ? new Date(0) : d;
 };
 
 /**
- * VERSIONE OTTIMIZZATA: Utilizza una Map per il look-up O(1) invece di filtrare l'intero array.
+ * VERSIONE AGGIORNATA: Gestione Pool Dinamico
  */
-export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) {
+export async function getDisponibilitaBatch(driverIds, targetDate = new Date(), impegniForti = []) {
   const tuttiITurni = Array.from(CacheStore.disponibilitaCache.values());
   const targetDayOfWeek = targetDate.getDay();
   const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
   
-  // PRE-INDICIZZAZIONE: Raggruppiamo i turni per driverId (O(N))
   const turniMap = new Map();
   for (const turno of tuttiITurni) {
     const dId = Number(turno.driver_id);
@@ -32,12 +28,27 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
     const dId = Number(driverId);
     const turniDriver = turniMap.get(dId) || [];
     
+    // Verifica impegni "Forti" (Privata/Condivisa che blocca il driver)
+    const isImpegnatoInCorsaForte = impegniForti.some(i => 
+      Number(i.driver_id) === dId && 
+      targetDate >= safeDate(i.start_datetime) && 
+      targetDate <= safeDate(i.arrivo_datetime)
+    );
+    
     const stati = turniDriver.map(d => {
-      // 1. Verifica GIORNI ESCLUSI (Set per look-up rapido)
+      // 1. GESTIONE STATO DI OCCUPAZIONE:
+      // Se il driver è in una corsa forte, NON può fare 'privata' o 'condivisa'.
+      // Tuttavia, il sistema permette di mantenere il driver nel "Pool Pop Bus" 
+      // anche se ha impegni, a patto che il turno sia specificamente 'pop-bus'.
+      if (isImpegnatoInCorsaForte && d.tipo_corsa !== 'pop-bus') {
+        return { ...d, disponibile: false, motivo: 'impegnato_corsa_forte' };
+      }
+
+      // 2. LOGICA TURNI (Giorno ed Orario)
       const giorniEsclusi = new Set((Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : []).map(Number));
       if (giorniEsclusi.has(targetDayOfWeek)) return { ...d, disponibile: false };
 
-      // 2. Verifica PERIODI DI INATTIVITÀ
+      // 3. Verifica PERIODI DI INATTIVITÀ
       if (Array.isArray(d.inattivita)) {
         for (const i of d.inattivita) {
           if (targetDate >= safeDate(i.start) && targetDate <= safeDate(i.fine)) {
@@ -46,12 +57,9 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
         }
       }
 
-      // 3. Verifica ORARIO
-      const start = new Date(d.start);
-      const fine = new Date(d.fine);
-      const startM = start.getHours() * 60 + start.getMinutes();
-      const endM = fine.getHours() * 60 + fine.getMinutes();
-      
+      // 4. VERIFICA ORARIO
+      const startM = parseMinutes(d.start);
+      const endM = parseMinutes(d.fine);
       const disponibile = (startM > endM) 
         ? (targetMinutes >= startM || targetMinutes <= endM)
         : (targetMinutes >= startM && targetMinutes <= endM);
@@ -64,19 +72,24 @@ export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) 
   return results;
 }
 
-// --- CRUD OPERAZIONI ---
+// Helper dedicato per parsing orario
+function parseMinutes(timeStr) {
+    const d = new Date(timeStr);
+    return d.getHours() * 60 + d.getMinutes();
+}
 
+// --- CRUD OPERAZIONI ---
+// (Invariate, assicurano la persistenza del tipo_corsa anche per i turni pop-bus)
 export async function createDisponibilita(turno) {
   let { veicolo_id, start, fine, tipo_corsa = 'privata', manual = false, giorni_esclusi = [], inattivita = [] } = turno;
-
+  
   start = parseTimeString(start);
   fine = parseTimeString(fine);
 
   if (!start || !fine || new Date(start) >= new Date(fine)) {
-    throw new Error('Orario non valido: start deve essere prima di fine');
+    throw new Error('Orario non valido');
   }
 
-  // Eseguiamo l'insert
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi, inattivita)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
@@ -97,7 +110,6 @@ export async function createDisponibilita(turno) {
     tipo: 'disponibilita'
   };
 
-  // Aggiornamento cache con dati normalizzati
   CacheManager.disponibilita.update({
     ...finalTurno,
     veicolo_id: Number(finalTurno.veicolo_id),
@@ -110,8 +122,6 @@ export async function createDisponibilita(turno) {
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
-  
   const [hh, mm] = timeStr.split(':').map(Number);
-  // Usa il 1970 per gestire solo l'orario come confronto temporale
   return new Date(1970, 0, 1, hh, mm, 0, 0).toISOString();
 }

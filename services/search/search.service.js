@@ -22,7 +22,7 @@ const normalizeCoords = (coords) => {
 };
 
 export async function cercaSlotUltra(richiesta) {
-  console.log(`\n🔍 [SERVICE] Ricerca | Tipo: ${richiesta.tipo_richiesto} | Lat: ${richiesta.coord?.lat}`);
+  console.log(`\n🔍 [SERVICE] Ricerca Universale | Lat: ${richiesta.coord?.lat} Lon: ${richiesta.coord?.lon}`);
   
   await loadCachesUltra();
 
@@ -52,7 +52,7 @@ export async function cercaSlotUltra(richiesta) {
   
   console.log(`   [POOL] Candidati totali da Redis: ${candidatiPool.length}`);
 
-  // 2. FILTRO CORSE
+  // 2. FILTRO CORSE (Condivise/Private)
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
 
@@ -64,47 +64,47 @@ export async function cercaSlotUltra(richiesta) {
 
   const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
-  // 3. LOGICA POOL (Pop Bus)
+  // 3. LOGICA POOL (Pop Bus) - ESEGUITA SEMPRE
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
   let risultatiPool = [];
-  if (richiesta.tipo_richiesto === 'pop-bus') {
-      const veicoliDisponibiliNelPool = candidatiPool.filter(s => {
-          if (veicoliImpegnati.has(s.veicolo_id)) {
-              console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Impegnato in corsa forte.`);
-              return false;
-          }
-          
-          const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
-          const isDisp = dispVeicolo.some(st => st.disponibile);
-          
-          if (!isDisp) {
-              console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Turni non disponibili o saturi.`);
-          }
-          return isDisp;
-      });
-
-      console.log(`   ✅ [POOL] Veicoli disponibili filtrati: ${veicoliDisponibiliNelPool.length}`);
-
-      const capacitaTotale = veicoliDisponibiliNelPool.reduce((sum, s) => {
-          const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
-          return sum + Number(v?.posti_totali || 0);
-      }, 0);
-
-      if (capacitaTotale >= postiRichiesti) {
-          risultatiPool.push({
-              tipo: 'pop-bus', tipo_corsa: 'pop-bus', posti_totali: capacitaTotale,
-              disponibile: true, is_slot: true, is_pool: true
-          });
+  const veicoliDisponibiliNelPool = candidatiPool.filter(s => {
+      if (veicoliImpegnati.has(s.veicolo_id)) {
+          console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Impegnato in corsa forte.`);
+          return false;
       }
-  } else {
-      console.log(`   ⚠️ [POOL] Saltato: Tipo richiesto è '${richiesta.tipo_richiesto}'`);
+      
+      const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
+      const isDisp = dispVeicolo.some(st => st.disponibile);
+      
+      if (!isDisp) {
+          console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Turni non disponibili.`);
+      }
+      return isDisp;
+  });
+
+  console.log(`   ✅ [POOL] Veicoli disponibili filtrati: ${veicoliDisponibiliNelPool.length}`);
+
+  const capacitaTotale = veicoliDisponibiliNelPool.reduce((sum, s) => {
+      const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+      return sum + Number(v?.posti_totali || 0);
+  }, 0);
+
+  if (capacitaTotale >= postiRichiesti) {
+      risultatiPool.push({
+          tipo: 'pop-bus', 
+          tipo_corsa: 'pop-bus', 
+          posti_totali: capacitaTotale,
+          disponibile: true, 
+          is_slot: true, 
+          is_pool: true
+      });
   }
 
   // 4. ASSEMBLEA
   const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
-  console.log(`🏁 [FINALE] Risultati totali: ${risultatiFinali.length}`);
+  console.log(`🏁 [FINALE] Risultati totali: ${risultatiFinali.length} (Condivise: ${risultatiCondivise.length}, Pool: ${risultatiPool.length})`);
 
   return risultatiFinali.length > 0 
     ? await formatResults(richiesta, risultatiFinali, risultatiCondivise)

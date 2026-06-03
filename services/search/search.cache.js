@@ -8,12 +8,11 @@ export const CacheStore = {
     veicoliCache: new Map(),
     disponibilitaCache: new Map(),
     corseCache: new Map(),
-    prenotazioniCache: new Map(), // Aggiunta per completezza
+    prenotazioniCache: new Map(),
     lastSync: 0
 };
 
-// --- FUNZIONI DI GESTIONE DISPONIBILITÀ ---
-
+// --- GESTIONE DISPONIBILITÀ ---
 export const upsertDisponibilita = (d) => {
     const normalized = {
         ...d,
@@ -25,21 +24,18 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
 
-// --- FUNZIONI DI GESTIONE PRENOTAZIONI ---
-
+// --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
     console.log(`📝 [CACHE] Aggiornamento prenotazione: ${prenotazione.id}`);
     CacheStore.prenotazioniCache.set(Number(prenotazione.id), prenotazione);
 };
 
-// --- FUNZIONI DI GESTIONE VEICOLI ---
-
+// --- GESTIONE VEICOLI ---
 export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), v);
 };
 
-// --- FUNZIONI DI GESTIONE CORSE ---
-
+// --- GESTIONE CORSE ---
 export const upsertCorsa = async (c, indicizzare = false) => {
     CacheStore.corseCache.set(Number(c.id), c);
     if (indicizzare && c.decodedCoords) {
@@ -64,7 +60,6 @@ export const removeCorsa = async (corsaId) => {
 };
 
 // --- SYNC ENGINE ---
-
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
     
@@ -97,7 +92,6 @@ export async function loadCachesUltra(force = false) {
 }
 
 // --- UTILS REDIS ---
-
 async function aggiornaIndiciRedis(corsaId, coords) {
     if (!redisClient || !coords || coords.length === 0) return;
     const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[1], p[0], 5)))];

@@ -28,13 +28,15 @@ export const upsertPrenotazione = async (prenotazione) => {
     CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
 
     if (redisClient) {
-        const key = `corsa:prenotazioni:${corsaId}`;
-        try {
-            await redisClient.hSet(key, pId.toString(), JSON.stringify(prenotazione));
-        } catch (err) {
-            console.error(`❌ [CACHE] Errore upsertPrenotazione:`, err);
-        }
+        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
     }
+};
+
+export const removePrenotazione = async (corsaId, prenotazioneId) => {
+    const cId = Number(corsaId);
+    const pId = Number(prenotazioneId);
+    if (CacheStore.prenotazioniCache.has(cId)) CacheStore.prenotazioniCache.get(cId).delete(pId);
+    if (redisClient) await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
 };
 
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
@@ -43,8 +45,9 @@ export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
 };
 
+export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
+
 export const upsertDisponibilita = (d) => {
-    // IMPORTANTE: driver_id deve essere sempre presente qui
     const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
@@ -54,6 +57,8 @@ export const upsertDisponibilita = (d) => {
     };
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
+
+export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
 
 // --- CORE: CORSE ---
 export const upsertCorsa = async (c, updateRedis = true) => {
@@ -75,7 +80,19 @@ export const upsertCorsa = async (c, updateRedis = true) => {
     if (updateRedis && redisClient) await aggiornaIndiciRedis(corsaId, decodedCoords);
 };
 
-// --- SYNC ENGINE (Riparato con JOIN) ---
+export const removeCorsa = async (corsaId) => {
+    const id = Number(corsaId);
+    CacheStore.corseCache.delete(id);
+    CacheStore.prenotazioniCache.delete(id);
+    if (redisClient) {
+        const pipeline = redisClient.multi();
+        pipeline.del(`corsa:prenotazioni:${id}`);
+        pipeline.del(`corsa:hashes:${id}`);
+        await pipeline.exec();
+    }
+};
+
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
     
@@ -83,7 +100,6 @@ export async function loadCachesUltra(force = false) {
     try {
         const [vRes, dRes, cRes] = await Promise.all([
             client.query("SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali FROM veicolo"),
-            // JOIN fondamentale per caricare il driver_id in cache
             client.query(`SELECT dv.*, v.driver_id 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
@@ -95,7 +111,7 @@ export async function loadCachesUltra(force = false) {
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
 
         CacheStore.lastSync = Date.now();
-        console.log(`📦 [SYNC] Completata. Corse: ${CacheStore.corseCache.size} | Disp: ${CacheStore.disponibilitaCache.size}`);
+        console.log(`📦 [SYNC] Completata.`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico:", err);
     } finally {

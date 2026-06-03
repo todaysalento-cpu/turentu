@@ -3,7 +3,7 @@ import { CacheManager } from '../../../utils/cacheManager.js';
 import { CacheStore } from '../search.cache.js';
 
 /**
- * Helper robusto per date
+ * Helper robusto per date: forza il confronto a 0 se la data è invalida
  */
 const safeDate = (val) => {
   const d = new Date(val);
@@ -11,54 +11,55 @@ const safeDate = (val) => {
 };
 
 /**
- * VERSIONE OTTIMIZZATA: Valuta la disponibilità di più driver in un unico batch.
+ * VERSIONE OTTIMIZZATA: Utilizza una Map per il look-up O(1) invece di filtrare l'intero array.
  */
 export async function getDisponibilitaBatch(driverIds, targetDate = new Date()) {
   const tuttiITurni = Array.from(CacheStore.disponibilitaCache.values());
   const targetDayOfWeek = targetDate.getDay();
   const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
   
+  // PRE-INDICIZZAZIONE: Raggruppiamo i turni per driverId (O(N))
+  const turniMap = new Map();
+  for (const turno of tuttiITurni) {
+    const dId = Number(turno.driver_id);
+    if (!turniMap.has(dId)) turniMap.set(dId, []);
+    turniMap.get(dId).push(turno);
+  }
+
   const results = new Map();
 
   for (const driverId of driverIds) {
-    // Filtro garantito: assicurati che nella tua inizializzazione cache 
-    // tu stia iniettando il driver_id correttamente.
-    const turniDriver = tuttiITurni.filter(d => Number(d.driver_id) === Number(driverId));
+    const dId = Number(driverId);
+    const turniDriver = turniMap.get(dId) || [];
     
     const stati = turniDriver.map(d => {
-      let disponibile = true;
-
-      // 1. Verifica GIORNI ESCLUSI
-      const giorniEsclusiNum = Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi.map(Number) : [];
-      if (giorniEsclusiNum.includes(targetDayOfWeek)) disponibile = false;
+      // 1. Verifica GIORNI ESCLUSI (Set per look-up rapido)
+      const giorniEsclusi = new Set((Array.isArray(d.giorni_esclusi) ? d.giorni_esclusi : []).map(Number));
+      if (giorniEsclusi.has(targetDayOfWeek)) return { ...d, disponibile: false };
 
       // 2. Verifica PERIODI DI INATTIVITÀ
-      if (disponibile && Array.isArray(d.inattivita)) {
+      if (Array.isArray(d.inattivita)) {
         for (const i of d.inattivita) {
           if (targetDate >= safeDate(i.start) && targetDate <= safeDate(i.fine)) {
-            disponibile = false;
-            break;
+            return { ...d, disponibile: false };
           }
         }
       }
 
-      // 3. Verifica ORARIO (Uso di Date locali per confronto coerente)
-      if (disponibile) {
-        const start = safeDate(d.start);
-        const fine = safeDate(d.fine);
-        const startM = start.getHours() * 60 + start.getMinutes();
-        const endM = fine.getHours() * 60 + fine.getMinutes();
-        
-        if (startM > endM) {
-          if (!(targetMinutes >= startM || targetMinutes <= endM)) disponibile = false;
-        } else {
-          if (targetMinutes < startM || targetMinutes > endM) disponibile = false;
-        }
-      }
+      // 3. Verifica ORARIO
+      const start = new Date(d.start);
+      const fine = new Date(d.fine);
+      const startM = start.getHours() * 60 + start.getMinutes();
+      const endM = fine.getHours() * 60 + fine.getMinutes();
+      
+      const disponibile = (startM > endM) 
+        ? (targetMinutes >= startM || targetMinutes <= endM)
+        : (targetMinutes >= startM && targetMinutes <= endM);
+
       return { ...d, disponibile };
     });
 
-    results.set(driverId, stati);
+    results.set(dId, stati);
   }
   return results;
 }
@@ -75,7 +76,7 @@ export async function createDisponibilita(turno) {
     throw new Error('Orario non valido: start deve essere prima di fine');
   }
 
-  // Eseguiamo l'insert e recuperiamo subito il driver_id con una JOIN
+  // Eseguiamo l'insert
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi, inattivita)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
@@ -88,28 +89,29 @@ export async function createDisponibilita(turno) {
 
   const nuovoTurno = res.rows[0];
   const driverRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [veicolo_id]);
-  nuovoTurno.driver_id = driverRes.rows[0]?.driver_id;
-
-  CacheManager.disponibilita.update({
+  
+  const finalTurno = {
     ...nuovoTurno,
-    veicolo_id: Number(nuovoTurno.veicolo_id),
-    driver_id: nuovoTurno.driver_id, // Fondamentale per il filtro
+    driver_id: driverRes.rows[0]?.driver_id,
     is_slot: true,
-    tipo: 'disponibilita',
-    tipo_corsa: nuovoTurno.tipo_corsa
+    tipo: 'disponibilita'
+  };
+
+  // Aggiornamento cache con dati normalizzati
+  CacheManager.disponibilita.update({
+    ...finalTurno,
+    veicolo_id: Number(finalTurno.veicolo_id),
+    driver_id: Number(finalTurno.driver_id)
   });
   
-  return nuovoTurno;
+  return finalTurno;
 }
-
-// ... (updateDisponibilita e deleteDisponibilita restano simili, ma ricorda di iniettare driver_id nel CacheManager.update) ...
 
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
-  // Se è già un ISO string o contiene T, gestiscilo come data
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   
   const [hh, mm] = timeStr.split(':').map(Number);
-  const date = new Date(1970, 0, 1, hh, mm, 0, 0);
-  return date.toISOString();
+  // Usa il 1970 per gestire solo l'orario come confronto temporale
+  return new Date(1970, 0, 1, hh, mm, 0, 0).toISOString();
 }

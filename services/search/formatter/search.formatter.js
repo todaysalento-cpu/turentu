@@ -33,14 +33,12 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // 1. Separazione per tipologia
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
     const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
     const corseCondivise = risultatiFiltrati.filter(item => !item.is_pool && item.tipo !== 'privata_slot');
 
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
-    // 2. Logica Pool Aggregata
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
@@ -56,12 +54,11 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
             messaggio: mancanti > 0 
-                ? `Pop Bus in formazione: mancano ${mancanti} posti per l'attivazione.` 
-                : `Pop Bus attivo! Posti disponibili.`
+                ? `Pop Bus in formazione: mancano ${mancanti} posti.` 
+                : `Pop Bus attivo!`
         });
     }
 
-    // 3. Mappatura finale
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
             // A. Caso Pool (Aggregato)
@@ -70,11 +67,12 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     ...item, 
                     localitaOrigine, 
                     localitaDestinazione,
-                    prezzo: "Variabile"
+                    prezzo: 0, // Sempre un numero
+                    prezzo_display: "Variabile"
                 };
             }
 
-            // B. Caso Slot Privato (Veicolo Singolo)
+            // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
                 return {
                     id: `slot_privato_${item.veicolo_id}`,
@@ -84,20 +82,19 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: getSafeISO(richiesta.start_datetime),
-                    prezzo: "Su richiesta",
+                    prezzo: 0, // Sempre un numero
+                    prezzo_display: "Su richiesta",
                     postiDisponibili: Number(item.posti_totali || 0),
                     postiTotali: Number(item.posti_totali || 0),
                     is_privato: true
                 };
             }
 
-            // C. Caso Corsa Condivisa (Standard)
-            const prezzo = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti, 
-                item.tipo_corsa, 
-                item.distanza || 0
-            ).catch(() => (item.distanza || 0) * 0.45);
+            // C. Caso Corsa Condivisa
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, item.distanza || 0)
+                .catch(() => (item.distanza || 0) * 0.45);
+            
+            const prezzoVal = Number(p) || 0;
 
             return {
                 id: item.id,
@@ -106,7 +103,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza: getSafeISO(item.start_datetime || new Date()),
-                prezzo: Number(prezzo?.toFixed(2)) || 0,
+                prezzo: prezzoVal, // Numero sicuro
+                prezzo_display: prezzoVal.toFixed(0), // Formattato qui
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0)
             };

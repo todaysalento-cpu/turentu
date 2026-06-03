@@ -24,6 +24,19 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
 
+export const removeDisponibilita = async (disponibilitaId) => {
+    const id = Number(disponibilitaId);
+    const d = CacheStore.disponibilitaCache.get(id);
+    
+    if (d && d.lat && d.lon) {
+        const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
+        await redisClient.sRem(`slot:in_area:${hash}`, id.toString());
+    }
+    
+    CacheStore.disponibilitaCache.delete(id);
+    console.log(`🗑️ [CACHE] Disponibilità ${id} rimossa correttamente.`);
+};
+
 // --- GESTIONE PRENOTAZIONI ---
 export const upsertPrenotazione = async (prenotazione) => {
     console.log(`📝 [CACHE] Aggiornamento prenotazione: ${prenotazione.id}`);
@@ -47,7 +60,6 @@ export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
     
-    // Rimozione dagli indici Redis
     const hashes = await redisClient.get(`corsa:hashes:${id}`);
     if (hashes) {
         const hashList = JSON.parse(hashes);

@@ -11,7 +11,6 @@ const getSafeISO = (dateInput) => {
     return !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
 };
 
-// Helper per calcolare l'ora di arrivo
 const calcolaArrivo = (startISO, durataMinuti = 20) => {
     const d = new Date(startISO);
     d.setMinutes(d.getMinutes() + (durataMinuti || 20));
@@ -75,15 +74,17 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 const origine = v ? { lat: v.lat, lon: v.lon } : richiesta.coord;
                 const viaggio = await getDurataDistanza(origine, richiesta.coordDest);
                 const dist = viaggio.distanzaKm || 0;
-                const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, 'disponibile', dist, dist);
+                // Mantengo 'disponibile' come tipo base per lo slot, ma leggo tipo_corsa se esiste
+                const tipoCorsa = item.tipo_corsa || 'disponibile';
+                const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCorsa, dist, dist);
 
                 return {
                     id: item.id || uuidv4(),
                     veicolo_id: vId,
                     marca: v?.marca ?? "Servizio",
                     modello: v?.modello ?? "",
-                    tipo: 'disponibile',
-                    badge: 'Disponibile',
+                    tipo: tipoCorsa,
+                    badge: tipoCorsa.toUpperCase(),
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: getSafeISO(item.start_datetime || new Date()),
@@ -116,7 +117,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 veicolo_id: Number(item.veicolo_id),
                 marca: item.marca || "Veicolo",
                 modello: item.modello || "",
-                tipo: item.tipo_corsa,
+                tipo: item.tipo_corsa || 'standard',
                 badge: item.tipo_corsa?.toUpperCase() || 'STANDARD',
                 fermata_fusione: !!item.fermata_fusione,
                 localitaOrigine,

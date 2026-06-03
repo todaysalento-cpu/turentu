@@ -1,9 +1,10 @@
 import * as turf from '@turf/turf';
 
 /**
- * Helper ottimizzato con logging
+ * Helper per snap su linea o nodi specifici
  */
 function getSnapResult(route, point, tolleranzaKm, corsa) {
+    // Gestione nodi per corse dinamiche
     if ((corsa.tipo_corsa === 'riempimento' || corsa.tipo_corsa === 'pop-bus') && corsa.fermate_pianificate?.nodi) {
         let nearestNode = null;
         let minDistance = tolleranzaKm;
@@ -17,6 +18,8 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
         }
         return nearestNode;
     }
+    
+    // Gestione standard su polilinea
     if (!route) return null;
     const nearest = turf.nearestPointOnLine(route, point);
     const dist = turf.distance(point, nearest, { units: 'kilometers' });
@@ -27,12 +30,12 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
 }
 
 /**
- * Motore di ricerca aggiornato con tracciamento log
+ * Motore di ricerca aggiornato: gestisce separatamente corse e pool
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, poolVeicoliDisponibili = []) {
-    if (!richiesta.coord || !richiesta.coordDest) return { corse: [] };
+    if (!richiesta.coord || !richiesta.coordDest) return { corse: [], poolDisponibile: false };
 
-    console.log(`🔍 [ENGINE] Inizio filtro su ${corseCandidate.length} corse. Pool size: ${poolVeicoliDisponibili.length}`);
+    console.log(`🔍 [ENGINE] Analisi | Corse candidate: ${corseCandidate.length} | Pool veicoli: ${poolVeicoliDisponibili.length}`);
 
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
@@ -40,20 +43,15 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const TOLLERANZA_KM = 0.5; 
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
+    // 1. Filtro Corse Classiche (Atomiche)
     const corseValide = corseCandidate.filter((c, index) => {
-        // LOGICA POOL AGGREGATO
-        if (c.tipo_corsa === 'pop-bus' && c.stato === 'da_attivare') {
-            const isDisp = verificaDisponibilitaPool(poolVeicoliDisponibili, postiRichiesti);
-            console.log(`🚌 [POOL] Verifica Pop-Bus: ${isDisp ? 'DISPONIBILE' : 'NON DISPONIBILE'} per ${postiRichiesti} posti.`);
-            return isDisp;
-        }
-
-        // LOGICA CORSE ATOMICHE
+        // Ignoriamo i 'pop-bus' qui, verranno gestiti come offerta di pool
+        if (c.tipo_corsa === 'pop-bus') return false;
         if (!c.decodedCoords || c.decodedCoords.length < 2) return false;
 
         const route = turf.lineString(c.decodedCoords);
-        let startSnap = getSnapResult(route, pStart, TOLLERANZA_KM, c);
-        let endSnap = getSnapResult(route, pEnd, TOLLERANZA_KM, c);
+        const startSnap = getSnapResult(route, pStart, TOLLERANZA_KM, c);
+        const endSnap = getSnapResult(route, pEnd, TOLLERANZA_KM, c);
 
         if (!startSnap?.properties || !endSnap?.properties) return false;
 
@@ -67,7 +65,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         return isDisponibile;
     });
 
-    return { corse: corseValide };
+    // 2. Verifica disponibilità Pool Aggregato
+    const isPoolDisponibile = richiesta.tipo_richiesto === 'pop-bus' && 
+                              verificaDisponibilitaPool(poolVeicoliDisponibili, postiRichiesti);
+
+    return { 
+        corse: corseValide, 
+        poolDisponibile: isPoolDisponibile 
+    };
 }
 
 /**
@@ -84,9 +89,14 @@ function verificaDisponibilitaPool(poolVeicoli, postiRichiesti) {
  */
 function verificaDisponibilitaInMemoria(corsa, startIdx, endIdx, postiRichiesti, prenotazioni) {
     const postiTotali = Number(corsa.posti_totali || 0);
-    for (let i = startIdx; i < endIdx; i++) {
+    // Garantiamo startIdx < endIdx
+    const s = Math.min(startIdx, endIdx);
+    const e = Math.max(startIdx, endIdx);
+
+    for (let i = s; i < e; i++) {
         let occupazioneSegmento = 0;
         for (const p of prenotazioni) {
+            // Verifica sovrapposizione segmenti
             if (Number(p.startIdx) <= i && Number(p.endIdx) > i) {
                 occupazioneSegmento += Number(p.posti_richiesti);
             }

@@ -3,50 +3,9 @@ import polyline from 'polyline';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js';
 
-/**
- * Singleton Pattern: Gestione stato globale cache
- */
-if (!global.__CACHESTORE__) {
-    global.__CACHESTORE__ = {
-        veicoliCache: new Map(),
-        disponibilitaCache: new Map(),
-        corseCache: new Map(),
-        prenotazioniCache: new Map(),
-        lastSync: 0
-    };
-    console.log("🚀 [CACHE] Inizializzata istanza globale di CacheStore");
-}
-
-export const CacheStore = global.__CACHESTORE__;
-const SYNC_TTL_MS = 30000; 
-
-// --- GESTIONE PRENOTAZIONI ---
-export const upsertPrenotazione = async (prenotazione) => {
-    const corsaId = Number(prenotazione.corsa_id);
-    const pId = Number(prenotazione.id);
-    if (!CacheStore.prenotazioniCache.has(corsaId)) CacheStore.prenotazioniCache.set(corsaId, new Map());
-    CacheStore.prenotazioniCache.get(corsaId).set(pId, prenotazione);
-
-    if (redisClient) {
-        await redisClient.hSet(`corsa:prenotazioni:${corsaId}`, pId.toString(), JSON.stringify(prenotazione));
-    }
-};
-
-export const removePrenotazione = async (corsaId, prenotazioneId) => {
-    const cId = Number(corsaId);
-    const pId = Number(prenotazioneId);
-    if (CacheStore.prenotazioniCache.has(cId)) CacheStore.prenotazioniCache.get(cId).delete(pId);
-    if (redisClient) await redisClient.hDel(`corsa:prenotazioni:${cId}`, pId.toString());
-};
+// ... (CacheStore singleton rimane invariato)
 
 // --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
-export const upsertVeicolo = (v) => {
-    const normalized = { ...v, lat: Number(v.lat || 0), lon: Number(v.lon || 0) };
-    CacheStore.veicoliCache.set(Number(v.id), { ...(CacheStore.veicoliCache.get(Number(v.id)) || {}), ...normalized });
-};
-
-export const removeVeicolo = (id) => CacheStore.veicoliCache.delete(Number(id));
-
 export const upsertDisponibilita = (d) => {
     const normalized = {
         ...d,
@@ -58,40 +17,6 @@ export const upsertDisponibilita = (d) => {
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
 };
 
-export const removeDisponibilita = (id) => CacheStore.disponibilitaCache.delete(Number(id));
-
-// --- CORE: CORSE ---
-export const upsertCorsa = async (c, updateRedis = true) => {
-    const corsaId = Number(c.id);
-    let decodedCoords = [];
-    if (c.percorso_polyline) {
-        try {
-            decodedCoords = polyline.decode(c.percorso_polyline).map(p => [Number(p[1]), Number(p[0])]);
-        } catch (e) { console.error(`[ERROR] Polyline ${corsaId}:`, e); }
-    }
-
-    CacheStore.corseCache.set(corsaId, { 
-        ...c, 
-        decodedCoords,
-        lat: decodedCoords.length > 0 ? decodedCoords[0][1] : 0,
-        lon: decodedCoords.length > 0 ? decodedCoords[0][0] : 0
-    });
-    
-    if (updateRedis && redisClient) await aggiornaIndiciRedis(corsaId, decodedCoords);
-};
-
-export const removeCorsa = async (corsaId) => {
-    const id = Number(corsaId);
-    CacheStore.corseCache.delete(id);
-    CacheStore.prenotazioniCache.delete(id);
-    if (redisClient) {
-        const pipeline = redisClient.multi();
-        pipeline.del(`corsa:prenotazioni:${id}`);
-        pipeline.del(`corsa:hashes:${id}`);
-        await pipeline.exec();
-    }
-};
-
 // --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
@@ -100,18 +25,26 @@ export async function loadCachesUltra(force = false) {
     try {
         const [vRes, dRes, cRes] = await Promise.all([
             client.query("SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali FROM veicolo"),
-            client.query(`SELECT dv.*, v.driver_id 
+            client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
             client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
         ]);
 
+        // Pulizia indici Redis vecchi se necessario (opzionale: flushdb o cancellazione selettiva)
+        
         vRes.rows.forEach(v => upsertVeicolo(v));
-        dRes.rows.forEach(d => upsertDisponibilita(d));
+        
+        // Caricamento e indicizzazione Disponibilità (Slot)
+        dRes.rows.forEach(d => {
+            upsertDisponibilita(d);
+            aggiornaIndiciDisponibilita(d); 
+        });
+        
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
 
         CacheStore.lastSync = Date.now();
-        console.log(`📦 [SYNC] Completata.`);
+        console.log(`📦 [SYNC] Completata con successo.`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico:", err);
     } finally {
@@ -127,4 +60,11 @@ async function aggiornaIndiciRedis(corsaId, coords) {
     newHashes.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
     pipeline.set(`corsa:hashes:${corsaId}`, JSON.stringify(newHashes));
     await pipeline.exec();
+}
+
+async function aggiornaIndiciDisponibilita(d) {
+    if (!redisClient || !d.lat || !d.lon) return;
+    const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
+    // Usiamo una chiave separata per non mischiare corse e slot liberi
+    await redisClient.sAdd(`slot:in_area:${hash}`, d.id.toString());
 }

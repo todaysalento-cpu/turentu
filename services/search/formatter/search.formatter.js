@@ -23,26 +23,26 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
+/**
+ * Formatter aggiornato per gestire l'integrazione tra corse atomiche e Pool aggregato
+ */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali, injectedVeicoliMap = null) {
-    const veicoliMap = injectedVeicoliMap || CacheModule.CacheStore.veicoliCache;
-
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         getLocalitaSafeCached(richiesta.coord),
         getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // Dividiamo i risultati in base alla natura: Slot (Veicoli), Corse (Standard), Pool (Pop Bus)
+    // 1. Separazione dei tipi di risultato
     const slots = risultatiFiltrati.filter(item => item.is_slot && item.tipo_corsa !== 'pop-bus');
     const corseStandard = risultatiFiltrati.filter(item => !item.is_slot && item.tipo_corsa !== 'pop-bus');
-    
-    // Identifichiamo il pool di Pop Bus (sia corse in attesa che "Virtual Pool")
     const popBusPool = risultatiFiltrati.filter(item => item.tipo_corsa === 'pop-bus');
 
     let risultatiDaFormattare = [...slots, ...corseStandard];
 
-    // LOGICA POOL DINAMICA (Pop Bus)
+    // 2. Logica Pool Dinamica
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
+        // Assumiamo 0 se non abbiamo dati di prenotazione nel pool aggregato
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
@@ -50,32 +50,36 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
         risultatiDaFormattare.push({
             id: 'pool_pop_bus_' + uuidv4(),
-            tipo: 'pop-bus',
+            tipo_corsa: 'pop-bus',
             is_pool: true,
-            postiTotali: postiTotaliPool,
-            postiPrenotati: postiPrenotatiPool,
-            postiMancanti: mancanti,
+            posti_totali: postiTotaliPool,
+            posti_prenotati: postiPrenotatiPool,
+            mancanti: mancanti,
             messaggio: mancanti > 0 
                 ? `Pop Bus in formazione: mancano ${mancanti} posti per l'attivazione.` 
                 : `Pop Bus attivo! Posti disponibili.`
         });
     }
 
-    // Mappatura finale
+    // 3. Mappatura finale
     const formattati = await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // Caso: Pool Pop Bus Aggregato
             if (item.is_pool) {
                 return { 
                     ...item, 
                     localitaOrigine, 
                     localitaDestinazione,
-                    prezzo: "Variabile" // O logica di stima basata su media
+                    tipo: 'pop-bus',
+                    prezzo: "Variabile"
                 };
             }
 
-            // Caso: Corsa singola o Slot
-            const prezzo = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, item.distanza || 0).catch(() => (item.distanza || 0) * 0.45);
+            const prezzo = await calcolaPrezzo(
+                item, 
+                richiesta.posti_richiesti, 
+                item.tipo_corsa, 
+                item.distanza || 0
+            ).catch(() => (item.distanza || 0) * 0.45);
 
             return {
                 id: item.id || uuidv4(),
@@ -85,10 +89,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 localitaDestinazione,
                 oraPartenza: getSafeISO(item.start_datetime || new Date()),
                 prezzo: Number(prezzo?.toFixed(2)) || 0,
-                postiDisponibili: Number(item.posti_totali - (item.posti_prenotati || 0)),
+                postiDisponibili: Number((item.posti_totali || 0) - (item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0)
             };
-
         } catch (err) {
             console.error(`💥 Errore formattazione:`, err);
             return null;

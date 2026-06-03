@@ -4,12 +4,13 @@ import { redisClient } from '../../redis.js';
 import { loadCachesUltra, CacheStore } from './search.cache.js'; 
 import { filterDisponibilita, filterSlotOnly } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { getDisponibilita } from './disponibilita/disponibilita.service.js';
+// Assumiamo l'esistenza di un metodo Batch
+import { getDisponibilitaBatch } from './disponibilita/disponibilita.service.js'; 
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
 export async function cercaSlotUltra(richiesta) {
-  console.log(`\n🔍 [SERVICE] Inizio ricerca dinamica | Posti: ${richiesta.posti_richiesti}`);
+  console.log(`\n🔍 [SERVICE] Ricerca | Tipo: ${richiesta.tipo_richiesto} | Posti: ${richiesta.posti_richiesti}`);
   
   await loadCachesUltra();
 
@@ -19,16 +20,14 @@ export async function cercaSlotUltra(richiesta) {
   const targetDate = new Date(richiesta.start_datetime || Date.now());
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-  // 1. Recupero corse candidato
+  // 1. RECUPERO CORSE (Redis + Local Cache)
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
   const results = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
   const candidateIds = [...new Set(results.flat())];
-  console.log(`[DEBUG 1] Candidati trovati da Redis: ${candidateIds.length}`);
-  
   const corseCandidate = candidateIds.map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
 
-  // 2. Recupero prenotazioni batch
+  // Recupero prenotazioni in pipeline singola
   let prenotazioniBatch = [];
   if (corseCandidate.length > 0) {
     const pipeline = redisClient.multi();
@@ -36,59 +35,57 @@ export async function cercaSlotUltra(richiesta) {
     prenotazioniBatch = await pipeline.exec();
   }
 
-  // 3. ESECUZIONE FILTRI CORSE
-  const { corse: corseValide } = await filterDisponibilita(
+  const { corse: corseEsistenti } = await filterDisponibilita(
     { ...richiesta, posti_richiesti: postiRichiesti, coord: { lat, lon } },
     corseCandidate,
     prenotazioniBatch
   );
-  
-  console.log(`[DEBUG 2] Corse valide dopo filtro engine: ${corseValide.length}`);
 
-  // 4. Gestione Slot Generici
-  const TOLLERANZA_SLOT_KM = 50; 
-  const allSlots = await Promise.all(
-    Array.from(CacheStore.disponibilitaCache.values()).map(async (s) => {
-      const veicolo = CacheStore.veicoliCache.get(Number(s.veicolo_id));
-      if (!veicolo?.lat || !veicolo?.lon) return null;
+  const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
-      const dist = turf.distance(pStart, turf.point([veicolo.lon, veicolo.lat]), { units: 'kilometers' });
-      if (dist > TOLLERANZA_SLOT_KM) return null;
-
-      const stati = await getDisponibilita(s.driver_id, targetDate);
-      return {
-        ...s,
-        disponibile: stati.some(st => st.disponibile),
-        posti_totali: veicolo ? Number(veicolo.posti_totali || 0) : 0
-      };
-    })
+  // 2. FILTRO ESCLUSIVITÀ RIEMPIMENTO
+  const esisteRiempimentoEsistente = risultatiCondivise.some(c => 
+    c.tipo_corsa === 'riempimento' && c.stato === 'da_attivare' &&
+    c.path_geohashes?.some(h => hashes.includes(h))
   );
+
+  // 3. RECUPERO SLOT (Batching ottimizzato)
+  const TOLLERANZA_SLOT_KM = 50;
+  const veicoliImpegnati = new Set(risultatiCondivise.map(c => c.veicolo_id));
   
-  const slotsLiberi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots.filter(Boolean));
+  // Prepariamo i candidati slot
+  const candidatiSlot = Array.from(CacheStore.disponibilitaCache.values()).filter(s => {
+    const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+    return v?.lat && v?.lon && !veicoliImpegnati.has(s.veicolo_id);
+  });
 
-  // 5. SEPARAZIONE E FUSIONE
-  const risultatiCorse = corseValide.map(c => ({ ...c, is_slot: false }));
-  
-  // Filtriamo gli slot che sono già coperti da corse attive (stesso veicolo)
-  const risultatiSlot = slotsLiberi.filter(s => 
-    !risultatiCorse.some(c => c.veicolo_id === s.veicolo_id)
-  ).map(s => ({ ...s, is_slot: true }));
+  // Chiamata Batch per la disponibilità (Elimina l'imbuto)
+  const driverIds = [...new Set(candidatiSlot.map(s => s.driver_id))];
+  const disponibilitàMap = await getDisponibilitaBatch(driverIds, targetDate);
 
-  const risultatiFinali = [...risultatiCorse, ...risultatiSlot];
-  
-  console.log(`[DEBUG 3] Risultati finali: ${risultatiFinali.length} (Corse: ${risultatiCorse.length}, Slot: ${risultatiSlot.length})`);
-  console.log(`[DEBUG 3] IDs inviati:`, risultatiFinali.map(r => r.id));
+  const allSlots = candidatiSlot.map(s => {
+    const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+    const dist = turf.distance(pStart, turf.point([v.lon, v.lat]), { units: 'kilometers' });
+    if (dist > TOLLERANZA_SLOT_KM) return null;
 
-  if (risultatiFinali.length === 0) {
-    console.log("📡 [DEBUG API] Nessun risultato da inviare.");
-    return [];
-  }
+    const disponibilitàDriver = disponibilitàMap.get(s.driver_id) || [];
+    return { 
+      ...s, 
+      disponibile: disponibilitàDriver.some(st => st.disponibile), 
+      posti_totali: Number(v.posti_totali || 0) 
+    };
+  });
 
-  // 6. Formattazione finale
-  try {
-    return await formatResults(richiesta, risultatiFinali, corseValide, CacheStore.veicoliCache);
-  } catch (err) {
-    console.error("💥 [SERVICE] Errore in formatResults:", err);
-    return []; 
-  }
+  const slotsValidi = filterSlotOnly({ posti_richiesti: postiRichiesti }, allSlots.filter(Boolean));
+
+  // 4. ASSEMBLAGGIO FINALE
+  const risultatiFinali = [
+    ...risultatiCondivise,
+    ...(richiesta.tipo_richiesto === 'privata' ? slotsValidi.map(s => ({ ...s, tipo: 'privata', is_slot: true })) : []),
+    ...(richiesta.tipo_richiesto !== 'privata' && !esisteRiempimentoEsistente ? slotsValidi.map(s => ({ ...s, tipo: 'riempimento', is_slot: true, stato: 'da_attivare' })) : [])
+  ];
+
+  return risultatiFinali.length > 0 
+    ? await formatResults(richiesta, risultatiFinali, risultatiCondivise, CacheStore.veicoliCache)
+    : [];
 }

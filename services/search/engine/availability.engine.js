@@ -1,106 +1,104 @@
 import * as turf from '@turf/turf';
 
 /**
- * Motore di calcolo occupazione: determina i posti liberi e occupati su un segmento specifico
+ * Helper per agganciare la posizione alla polilinea o ai nodi predefiniti
  */
-function calcolaOccupazioneSuTratta(corsa, startIdx, endIdx, prenotazioniRaw) {
-    // 1. Parsing sicuro dei dati provenienti da Redis
-    const prenotazioni = prenotazioniRaw.map(p => {
-        try {
-            // Se è già un oggetto (magari da una cache in memoria), lo teniamo; altrimenti parsiamo
-            return typeof p === 'string' ? JSON.parse(p) : p;
-        } catch (e) {
-            console.error("Errore parse prenotazione:", e);
-            return null;
-        }
-    }).filter(Boolean);
+function getSnapResult(route, point, tolleranzaKm, corsa) {
+    // 1. Logica Nodi Predefiniti (Prioritaria per corse evento/riempimento)
+    if (corsa.tipo_corsa === 'riempimento' && corsa.fermate_pianificate?.nodi) {
+        let nearestNode = null;
+        let minDistance = tolleranzaKm;
 
-    const puntiCritici = new Set([startIdx, endIdx]);
-    
-    // Identifichiamo i punti dove cambia l'occupazione lungo il tragitto
-    prenotazioni.forEach(p => {
-        const sIdx = p.start_index_polyline ?? 0;
-        const eIdx = p.end_index_polyline ?? (corsa.decodedCoords ? corsa.decodedCoords.length : 0);
-        if (sIdx > startIdx && sIdx < endIdx) puntiCritici.add(sIdx);
-        if (eIdx > startIdx && eIdx < endIdx) puntiCritici.add(eIdx);
-    });
-
-    let maxOccupazione = 0;
-    
-    // Calcoliamo l'occupazione per ogni segmento critico
-    for (let punto of puntiCritici) {
-        const occupazioneAlPunto = prenotazioni.reduce((acc, p) => {
-            const sIdx = p.start_index_polyline ?? 0;
-            const eIdx = p.end_index_polyline ?? (corsa.decodedCoords ? corsa.decodedCoords.length : 0);
-            
-            // Se la prenotazione copre il punto, sommiamo i posti
-            if (punto >= sIdx && punto < eIdx) {
-                return acc + (Number(p.posti_richiesti) || 0);
+        for (const nodo of corsa.fermate_pianificate.nodi) {
+            const dist = turf.distance(point, turf.point(nodo.coord), { units: 'kilometers' });
+            if (dist < minDistance) {
+                minDistance = dist;
+                nearestNode = {
+                    geometry: { coordinates: nodo.coord },
+                    properties: { index: nodo.index }
+                };
             }
-            return acc;
-        }, 0);
-        
-        if (occupazioneAlPunto > maxOccupazione) maxOccupazione = occupazioneAlPunto;
+        }
+        return nearestNode;
     }
 
-    const postiTotali = Number(corsa.posti_totali || 0);
-    return {
-        postiDisponibili: Math.max(0, postiTotali - maxOccupazione),
-        postiPrenotati: maxOccupazione
-    };
+    // 2. Comportamento Standard (Snap-to-Route generico)
+    const nearest = turf.nearestPointOnLine(route, point);
+    const dist = turf.distance(point, nearest, { units: 'kilometers' });
+    return dist <= tolleranzaKm ? nearest : null;
 }
 
 /**
- * Filtra le corse basandosi sulla disponibilità spaziale, temporale e di posti
+ * Motore di ricerca ottimizzato con Logica di Fusione Fermate e Pre-filtro
  */
-export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
+export async function filterDisponibilita(db, richiesta, corseCandidate) {
     const corseValide = [];
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     
-    const reqDate = new Date(richiesta.start_datetime).toDateString();
-    const TOLLERANZA_KM = 150; 
+    // Costanti di tuning (aumenta MIN_DIST_FUSIONE se vuoi fermate più "agglomerate")
+    const TOLLERANZA_KM = 0.5; 
+    const MIN_DIST_FUSIONE = 0.4; 
 
-    for (let i = 0; i < corseCandidate.length; i++) {
-        const c = corseCandidate[i];
+    for (const c of corseCandidate) {
         if (!c.decodedCoords || c.decodedCoords.length < 2) continue;
 
-        // 1. FILTRO TEMPORALE
-        const corsaDate = new Date(c.start_datetime || c.oraPartenza).toDateString();
-        if (corsaDate !== reqDate) continue;
-
-        // 2. FILTRO SPAZIALE
         const route = turf.lineString(c.decodedCoords);
-        const distStart = turf.pointToLineDistance(pStart, route);
-        const distEnd = turf.pointToLineDistance(pEnd, route);
+        let startSnap = getSnapResult(route, pStart, TOLLERANZA_KM, c);
+        let endSnap = getSnapResult(route, pEnd, TOLLERANZA_KM, c);
+
+        if (!startSnap || !endSnap) continue;
+
+        let isFusione = false;
         
-        if (distStart > TOLLERANZA_KM || distEnd > TOLLERANZA_KM) continue;
+        // Logica Condivisa: Fusione o Validazione
+        if (c.tipo_corsa === 'condivisa') {
+            const esistenti = c.fermate_pianificate?.nodi || [];
+            const maxFermate = c.max_fermate_consentite || 5;
 
-        // 3. FILTRO DIREZIONE
-        const startIdx = turf.nearestPointOnLine(route, pStart).properties.index;
-        const endIdx = turf.nearestPointOnLine(route, pEnd).properties.index;
+            // Tentativo Fusione Salita
+            const salitaVicina = esistenti.find(f => turf.distance(startSnap.geometry.coordinates, f.coord) < MIN_DIST_FUSIONE);
+            if (salitaVicina) {
+                startSnap.properties.index = salitaVicina.index;
+                isFusione = true;
+            } else if (esistenti.length >= maxFermate) {
+                continue; 
+            }
+
+            // Tentativo Fusione Discesa
+            const discesaVicina = esistenti.find(f => turf.distance(endSnap.geometry.coordinates, f.coord) < MIN_DIST_FUSIONE);
+            if (discesaVicina) {
+                endSnap.properties.index = discesaVicina.index;
+                isFusione = true;
+            } else if (esistenti.length + (salitaVicina ? 0 : 1) >= maxFermate) {
+                continue; 
+            }
+        }
+
+        const startIdx = startSnap.properties.index;
+        const endIdx = endSnap.properties.index;
         
-        if (endIdx <= startIdx) continue; 
+        // Validazione sequenza (la discesa deve essere successiva alla salita)
+        if (endIdx <= startIdx) continue;
 
-        // 4. CALCOLO DISPONIBILITÀ (Passiamo l'array corretto estratto dal batch)
-        const prenotazioni = prenotazioniBatch[i] || [];
-        const { postiDisponibili, postiPrenotati } = calcolaOccupazioneSuTratta(c, startIdx, endIdx, prenotazioni);
+        // Verifica capacità atomica
+        // NOTA: Per alta scala, qui dovresti chiamare una funzione batch invece di una query singola
+        const { rows } = await db.query(
+            "SELECT verifica_disponibilita($1, $2, $3, $4) as disponibile", 
+            [c.id, startIdx, endIdx, richiesta.posti_richiesti]
+        );
 
-        if (postiDisponibili >= richiesta.posti_richiesti) {
+        if (rows[0]?.disponibile) {
             corseValide.push({ 
                 ...c, 
-                postiDisponibili, 
-                postiPrenotati, 
                 startIdx, 
-                endIdx 
+                endIdx,
+                fermataSalita: startSnap.geometry.coordinates,
+                fermataDiscesa: endSnap.geometry.coordinates,
+                is_nodo_predefinito: (c.tipo_corsa === 'riempimento'),
+                fermata_fusione: isFusione
             });
         }
     }
-    
-    console.log(`[ENGINE] Ricerca completata per ${reqDate}: trovate ${corseValide.length} corse valide.`);
-    return { corse: corseValide };
-}
-
-export function filterSlotOnly(richiesta, allSlots) {
-    return allSlots.filter(s => s.disponibile && (s.posti_totali >= richiesta.posti_richiesti));
+    return corseValide;
 }

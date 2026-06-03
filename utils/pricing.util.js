@@ -15,14 +15,13 @@ export async function getTariffe(veicolo_id, tipo) {
 
 /**
  * Calcolo Prezzo Dinamico
- * @param {Object} overrideOccupazione - { num: number, totPass: number } per testare senza DB
  */
 export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotati = 0, kmTotaliCorsa = 0, overrideOccupazione = null) {
   const richiesti = Number(postiRichiesti) || 1;
   const tipoTariffa = 'standard';
 
-  let prezzoKm = 0.50;
-  let prezzoPasseggero = 2.00;
+  let prezzoKm = 1.00; // Default di sicurezza
+  let prezzoPasseggero = 0.00;
 
   try {
     const tariffe = await getTariffe(corsa.veicolo_id, tipoTariffa);
@@ -36,6 +35,17 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
   const kmUtente = kmPrenotati > 0 ? kmPrenotati : kmTotali;
 
   switch (statoSlot) {
+    // LOGICA RIEMPIMENTO (Basata solo su euro_km e soglia)
+    case 'da_attivare': {
+      const costoTotaleCorsa = kmTotali * prezzoKm;
+      const postiSoglia = Number(corsa.posti_soglia || 1);
+      
+      // Prezzo basato su euro_km distribuito equamente sulla soglia di attivazione
+      const prezzoUnitario = postiSoglia > 0 ? (costoTotaleCorsa / postiSoglia) : costoTotaleCorsa;
+      
+      return Math.max(0.50, prezzoUnitario * richiesti);
+    }
+
     case 'prenotabile': {
       let numPrenotazioni, passPrecedenti;
 
@@ -54,15 +64,11 @@ export async function calcolaPrezzo(corsa, postiRichiesti, statoSlot, kmPrenotat
       const totPasseggeri = passPrecedenti + richiesti;
       const prezzoBaseCorsa = kmTotali * prezzoKm;
       
-      // LOGICA AGGIORNATA: La quota variabile scatta solo se c'è condivisione (tot > 1)
       const quotaVariabile = totPasseggeri > 1 ? (prezzoPasseggero * richiesti) : 0;
-      
       const quotaCondivisa = prezzoBaseCorsa + quotaVariabile;
       const coefficienteTratta = kmTotali > 0 ? (kmUtente / kmTotali) : 0;
       
-      // Calcolo finale distribuito sui passeggeri totali
       const prezzoFinale = (quotaCondivisa / totPasseggeri) * coefficienteTratta;
-        
       return Math.max(0.50, prezzoFinale);
     }
 

@@ -2,7 +2,7 @@ import { pool } from '../../db/db.js';
 import Stripe from 'stripe';
 import { getTariffe, calcolaPrezzo } from '../../utils/pricing.util.js';
 import { CacheManager } from '../../utils/cacheManager.js';
-import { upsertCorsa, removeCorsa } from '../search/search.cache.js';
+import { removeCorsa } from '../search/search.cache.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -38,7 +38,7 @@ export async function accettaCorsa(corsa_id) {
     const res = await client.query(`UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, [corsa_id]);
     const c = res.rows[0];
     if (c) { 
-        // Quando la corsa viene accettata, non deve più apparire nei risultati di ricerca
+        // Quando viene accettata, la rimuoviamo dalla ricerca (non più disponibile)
         removeCorsa(corsa_id); 
         CacheManager.corsa.update(c); 
     }
@@ -62,19 +62,18 @@ export async function toggleCorsa(corsa_id, action) {
 
     if (!corsaRes.rows.length) throw new Error('Corsa non trovata');
     const corsa = corsaRes.rows[0];
+    
+    // Aggiorniamo la dashboard dell'autista
     CacheManager.corsa.update(corsa);
 
-    // Gestione Indice Spaziale:
-    // Una volta iniziata o completata, la corsa deve essere rimossa dall'indice GeoIndex
-    if (action === 'start' || action === 'end') {
-      removeCorsa(corsa_id);
-    }
+    // Gestione Spaziale:
+    // Una corsa in corso o terminata NON deve apparire nei motori di ricerca passeggeri
+    await removeCorsa(corsa_id);
 
+    // Gestione Pagamenti (solo al completamento)
     if (action === 'end') {
-      // Recupero info per finalizzazione pagamenti
       const prenRes = await client.query(
-        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, 
-                pr.posti_richiesti
+        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, pr.posti_richiesti
          FROM public.pagamenti p 
          JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
          WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
@@ -84,28 +83,24 @@ export async function toggleCorsa(corsa_id, action) {
       for (const pren of prenRes.rows) {
         if (!pren.stripe_payment_intent) continue;
 
-        let importoFinale = 0;
-        if (corsa.tipo_corsa === 'privata') {
-            importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, 'pubblicato');
-        } else {
-            importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, 'prenotabile');
-        }
-        
         try {
+          // Calcolo dinamico basato sul tipo di corsa
+          const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
+          const importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
+          
           const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
           if (pi.status === 'requires_capture') {
-            const amountToCapture = Math.min(Math.round(importoFinale * 100), pi.amount);
-            await stripe.paymentIntents.capture(pren.stripe_payment_intent, { amount_to_capture: amountToCapture });
-            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, [amountToCapture / 100, pren.pagamento_id]);
+            await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
+              amount_to_capture: Math.round(importoFinale * 100) 
+            });
+            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
+              [importoFinale, pren.pagamento_id]);
           }
         } catch (err) {
           console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
           await client.query(`UPDATE public.pagamenti SET stato = 'fallito' WHERE id = $1`, [pren.pagamento_id]);
         }
       }
-    } else if (action === 'start') {
-        // Se necessario, aggiorniamo la cache (se la corsa fosse ancora in stato 'accettata')
-        upsertCorsa(corsa);
     }
 
     await client.query('COMMIT');

@@ -49,10 +49,8 @@ export async function cercaSlotUltra(richiesta) {
 
   const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
   const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
-  
-  console.log(`   [POOL] Candidati totali da Redis: ${candidatiPool.length}`);
 
-  // 2. FILTRO CORSE (Condivise/Private)
+  // 2. FILTRO CORSE (Condivise)
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
 
@@ -64,47 +62,62 @@ export async function cercaSlotUltra(richiesta) {
 
   const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
-  // 3. LOGICA POOL (Pop Bus) - ESEGUITA SEMPRE
+  // 3. LOGICA AGGREGATA: POOL E SLOT PRIVATI
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
   let risultatiPool = [];
-  const veicoliDisponibiliNelPool = candidatiPool.filter(s => {
-      if (veicoliImpegnati.has(s.veicolo_id)) {
-          console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Impegnato in corsa forte.`);
-          return false;
-      }
-      
+  let risultatiSlotPrivati = [];
+
+  candidatiPool.forEach(s => {
       const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
       const isDisp = dispVeicolo.some(st => st.disponibile);
-      
-      if (!isDisp) {
-          console.log(`   ❌ [POOL] Veicolo ${s.veicolo_id} scartato: Turni non disponibili.`);
+      const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+
+      if (isDisp && v) {
+          // A. Slot Privati (Granulari - Singolo veicolo)
+          if (!veicoliImpegnati.has(s.veicolo_id)) {
+              risultatiSlotPrivati.push({
+                  tipo: 'privata_slot',
+                  veicolo_id: s.veicolo_id,
+                  modello: v.modello,
+                  posti_totali: v.posti_totali,
+                  disponibile: true,
+                  is_slot: true,
+                  is_pool: false,
+                  messaggio: "Acquista corsa privata dedicata"
+              });
+          }
       }
-      return isDisp;
   });
 
-  console.log(`   ✅ [POOL] Veicoli disponibili filtrati: ${veicoliDisponibiliNelPool.length}`);
+  // B. Pool (Pop-Bus - Aggregato)
+  const veicoliPerPool = candidatiPool.filter(s => 
+      !veicoliImpegnati.has(s.veicolo_id) && 
+      (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
+  );
 
-  const capacitaTotale = veicoliDisponibiliNelPool.reduce((sum, s) => {
+  const capacitaTotale = veicoliPerPool.reduce((sum, s) => {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       return sum + Number(v?.posti_totali || 0);
   }, 0);
 
   if (capacitaTotale >= postiRichiesti) {
       risultatiPool.push({
-          tipo: 'pop-bus', 
-          tipo_corsa: 'pop-bus', 
+          tipo: 'pop-bus',
+          tipo_corsa: 'pop-bus',
           posti_totali: capacitaTotale,
-          disponibile: true, 
-          is_slot: true, 
-          is_pool: true
+          disponibile: true,
+          is_slot: true,
+          is_pool: true,
+          messaggio: "Prenota posto su bus condiviso"
       });
   }
 
   // 4. ASSEMBLEA
-  const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
-  console.log(`🏁 [FINALE] Risultati totali: ${risultatiFinali.length} (Condivise: ${risultatiCondivise.length}, Pool: ${risultatiPool.length})`);
+  const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
+  
+  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length} (Condivise: ${risultatiCondivise.length}, Slot Privati: ${risultatiSlotPrivati.length}, Pool: ${risultatiPool.length})`);
 
   return risultatiFinali.length > 0 
     ? await formatResults(richiesta, risultatiFinali, risultatiCondivise)

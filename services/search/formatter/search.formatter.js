@@ -22,7 +22,10 @@ async function getLocalitaSafeCached(coord) {
 }
 
 /**
- * Formatter per gestire l'integrazione tra corse atomiche e Pool aggregato
+ * Formatter aggiornato per gestire: 
+ * 1. Pop-Bus (Pool aggregato)
+ * 2. Slot Privati (Veicoli singoli)
+ * 3. Corse Condivise (Standard)
  */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
@@ -30,24 +33,25 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // 1. Separazione tramite flag di pool (più pulito della stringa tipo_corsa)
+    // 1. Separazione per tipologia
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
-    const altriRisultati = risultatiFiltrati.filter(item => !item.is_pool);
+    const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
+    const corseCondivise = risultatiFiltrati.filter(item => !item.is_pool && item.tipo !== 'privata_slot');
 
-    let risultatiDaFormattare = [...altriRisultati];
+    let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
     // 2. Logica Pool Aggregata
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
-        // Assicurati che i dati in ingresso abbiano posti_prenotati (default a 0)
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
         const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
 
         risultatiDaFormattare.push({
-            id: 'pool_pop_bus_fixed_id', // ID costante per stabilità UI
+            id: 'pool_pop_bus_fixed_id',
             is_pool: true,
+            tipo: 'pop-bus',
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
@@ -60,16 +64,34 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     // 3. Mappatura finale
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
+            // A. Caso Pool (Aggregato)
             if (item.is_pool) {
                 return { 
                     ...item, 
-                    tipo: 'pop-bus',
                     localitaOrigine, 
                     localitaDestinazione,
                     prezzo: "Variabile"
                 };
             }
 
+            // B. Caso Slot Privato (Veicolo Singolo)
+            if (item.tipo === 'privata_slot') {
+                return {
+                    id: `slot_privato_${item.veicolo_id}`,
+                    veicolo_id: Number(item.veicolo_id),
+                    tipo: 'privata',
+                    modello: item.modello,
+                    localitaOrigine,
+                    localitaDestinazione,
+                    oraPartenza: getSafeISO(richiesta.start_datetime),
+                    prezzo: "Su richiesta",
+                    postiDisponibili: Number(item.posti_totali || 0),
+                    postiTotali: Number(item.posti_totali || 0),
+                    is_privato: true
+                };
+            }
+
+            // C. Caso Corsa Condivisa (Standard)
             const prezzo = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti, 

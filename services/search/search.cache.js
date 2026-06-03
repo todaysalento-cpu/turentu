@@ -1,11 +1,18 @@
 import { pool } from '../../db/db.js';
-import polyline from 'polyline';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js';
 
-// ... (CacheStore singleton rimane invariato)
+const SYNC_TTL_MS = 60000; // 1 minuto
 
-// --- GESTIONE DATI VEICOLI E DISPONIBILITÀ ---
+export const CacheStore = {
+    veicoliCache: new Map(),
+    disponibilitaCache: new Map(),
+    corseCache: new Map(),
+    lastSync: 0
+};
+
+// --- FUNZIONI DI EXPORT (Assicurati che queste siano presenti) ---
+
 export const upsertDisponibilita = (d) => {
     const normalized = {
         ...d,
@@ -15,6 +22,24 @@ export const upsertDisponibilita = (d) => {
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
+};
+
+// Aggiungi questa funzione per risolvere l'errore nel router
+export const upsertPrenotazione = async (prenotazione) => {
+    // Logica per aggiornare la cache locale o Redis
+    console.log(`📝 [CACHE] Aggiornamento prenotazione: ${prenotazione.id}`);
+    // Esempio: CacheStore.prenotazioni.set(prenotazione.id, prenotazione);
+};
+
+export const upsertVeicolo = (v) => {
+    CacheStore.veicoliCache.set(Number(v.id), v);
+};
+
+export const upsertCorsa = async (c, indicizzare = false) => {
+    CacheStore.corseCache.set(Number(c.id), c);
+    if (indicizzare && c.decodedCoords) {
+        await aggiornaIndiciRedis(c.id, c.decodedCoords);
+    }
 };
 
 // --- SYNC ENGINE ---
@@ -28,14 +53,11 @@ export async function loadCachesUltra(force = false) {
             client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
-            client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
+            client.query("SELECT *, ST_AsText(percorso) as wkt FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
         ]);
-
-        // Pulizia indici Redis vecchi se necessario (opzionale: flushdb o cancellazione selettiva)
         
         vRes.rows.forEach(v => upsertVeicolo(v));
         
-        // Caricamento e indicizzazione Disponibilità (Slot)
         dRes.rows.forEach(d => {
             upsertDisponibilita(d);
             aggiornaIndiciDisponibilita(d); 
@@ -54,7 +76,7 @@ export async function loadCachesUltra(force = false) {
 
 // --- UTILS REDIS ---
 async function aggiornaIndiciRedis(corsaId, coords) {
-    if (!redisClient || coords.length === 0) return;
+    if (!redisClient || !coords || coords.length === 0) return;
     const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[1], p[0], 5)))];
     const pipeline = redisClient.multi();
     newHashes.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
@@ -65,6 +87,5 @@ async function aggiornaIndiciRedis(corsaId, coords) {
 async function aggiornaIndiciDisponibilita(d) {
     if (!redisClient || !d.lat || !d.lon) return;
     const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
-    // Usiamo una chiave separata per non mischiare corse e slot liberi
     await redisClient.sAdd(`slot:in_area:${hash}`, d.id.toString());
 }

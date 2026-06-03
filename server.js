@@ -42,6 +42,7 @@ import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
 import chatRouter from './routes/chat.routes.js';
+// AGGIORNATO: Corretto il percorso del file search
 import searchRouter from './routes/search.routes.js';
 import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
 import autistaStatusRouter from './routes/autistaStatus.routes.js';

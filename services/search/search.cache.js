@@ -91,7 +91,7 @@ export async function loadCachesUltra(force = false) {
     const client = await pool.connect();
     try {
         const [vRes, dRes, cRes] = await Promise.all([
-            // AGGIORNATA: Inclusione di marca, modello, rating e servizi
+            // Query veicoli con metadati
             client.query(`
                 SELECT 
                     id, 
@@ -104,10 +104,23 @@ export async function loadCachesUltra(force = false) {
                     servizi
                 FROM veicolo
             `),
+            // Query disponibilità con JOIN veicolo
             client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
-            client.query("SELECT * FROM corse WHERE stato IN ('prenotabile', 'in_corso', 'da_attivare') AND start_datetime > NOW() - INTERVAL '1 hour'")
+            // AGGIORNATA: Query corse con JOIN per recuperare i dettagli del veicolo
+            client.query(`
+                SELECT 
+                    c.*, 
+                    v.marca, 
+                    v.modello, 
+                    v.rating, 
+                    v.servizi 
+                FROM corse c
+                LEFT JOIN veicolo v ON c.veicolo_id = v.id
+                WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') 
+                AND c.start_datetime > NOW() - INTERVAL '1 hour'
+            `)
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));

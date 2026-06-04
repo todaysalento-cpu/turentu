@@ -12,6 +12,13 @@ const safeDate = (dateInput) => {
 
 const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
 
+// Funzione helper per calcolare l'orario di arrivo
+const calcolaArrivo = (partenzaISO, durataMinuti) => {
+    const d = new Date(partenzaISO);
+    d.setMinutes(d.getMinutes() + (Number(durataMinuti) || 0));
+    return d.toISOString();
+};
+
 async function getLocalitaSafeCached(coord) {
     if (!coord || typeof coord.lat === 'undefined') return "N/D";
     const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
@@ -22,10 +29,8 @@ async function getLocalitaSafeCached(coord) {
 }
 
 /**
- * Formatter aggiornato per gestire: 
- * 1. Pop-Bus (Pool aggregato)
- * 2. Slot Privati (Veicoli singoli)
- * 3. Corse Condivise (Standard)
+ * Formatter aggiornato: gestisce Pool, Slot Privati e Corse Condivise
+ * con calcolo sicuro di prezzo e orario di arrivo.
  */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
@@ -42,7 +47,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
-        
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
         const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
 
@@ -53,27 +57,26 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
-            messaggio: mancanti > 0 
-                ? `Pop Bus in formazione: mancano ${mancanti} posti.` 
-                : `Pop Bus attivo!`
+            messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`
         });
     }
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // A. Caso Pool (Aggregato)
+            // A. Caso Pool
             if (item.is_pool) {
                 return { 
                     ...item, 
                     localitaOrigine, 
                     localitaDestinazione,
-                    prezzo: 0, // Sempre un numero
+                    prezzo: 0, 
                     prezzo_display: "Variabile"
                 };
             }
 
             // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
+                const oraPartenza = getSafeISO(richiesta.start_datetime);
                 return {
                     id: `slot_privato_${item.veicolo_id}`,
                     veicolo_id: Number(item.veicolo_id),
@@ -81,8 +84,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     modello: item.modello,
                     localitaOrigine,
                     localitaDestinazione,
-                    oraPartenza: getSafeISO(richiesta.start_datetime),
-                    prezzo: 0, // Sempre un numero
+                    oraPartenza,
+                    oraArrivo: calcolaArrivo(oraPartenza, item.durata_minuti || 60),
+                    prezzo: 0, 
                     prezzo_display: "Su richiesta",
                     postiDisponibili: Number(item.posti_totali || 0),
                     postiTotali: Number(item.posti_totali || 0),
@@ -95,6 +99,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 .catch(() => (item.distanza || 0) * 0.45);
             
             const prezzoVal = Number(p) || 0;
+            const oraPartenza = getSafeISO(item.start_datetime || new Date());
 
             return {
                 id: item.id,
@@ -102,9 +107,10 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 tipo: item.tipo_corsa || 'standard',
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza: getSafeISO(item.start_datetime || new Date()),
-                prezzo: prezzoVal, // Numero sicuro
-                prezzo_display: prezzoVal.toFixed(0), // Formattato qui
+                oraPartenza,
+                oraArrivo: calcolaArrivo(oraPartenza, item.durata_minuti || 60),
+                prezzo: prezzoVal, 
+                prezzo_display: prezzoVal.toFixed(0), 
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0)
             };

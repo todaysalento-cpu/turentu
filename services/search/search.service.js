@@ -115,17 +115,17 @@ export async function cercaSlotUltra(richiesta) {
       });
   }
 
-  // 4. ASSEMBLEA
+  // 4. ASSEMBLEA E PREPARAZIONE CONTESTO ESPLICITO
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
-  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length}`);
-
-  // PRESERVAZIONE DATI: Creiamo un oggetto arricchito con le località della richiesta originale
+  // Creiamo un contesto che assicura la presenza delle stringhe località
   const context = {
     ...richiesta,
-    localitaOrigine: richiesta.localitaOrigine || "Partenza",
-    localitaDestinazione: richiesta.localitaDestinazione || "Destinazione"
+    localitaOrigine: richiesta.localitaOrigine?.description || richiesta.localitaOrigine || "Partenza",
+    localitaDestinazione: richiesta.localitaDestinazione?.description || richiesta.localitaDestinazione || "Destinazione"
   };
+  
+  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length}`);
 
   return risultatiFinali.length > 0 
     ? await formatResults(context, risultatiFinali, risultatiCondivise)

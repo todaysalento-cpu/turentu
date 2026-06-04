@@ -34,7 +34,7 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    // 1. Estrazione robusta delle località (Priorità input frontend)
+    // 1. Estrazione robusta delle località
     const getValoreLocalita = async (val, coord) => {
         if (typeof val === 'string' && val !== "N/D" && val !== "Località sconosciuta") return val;
         if (val?.description && val.description !== "N/D") return val.description;
@@ -73,13 +73,17 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // A. Gestione Pool
             if (item.is_pool) {
-                return { ...item, prezzo: 0, prezzo_display: "Variabile" };
+                return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
             }
 
+            // 🟢 CALCOLO DISTANZA DI SICUREZZA
+            // Convertiamo in Km (assumendo il DB passi metri, altrimenti normalizzare)
+            const distMetri = Number(item.distanza || richiesta.distanza || 10000); 
+            const distKm = distMetri / 1000;
+
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
-            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, item.distanza);
+            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
 
             const baseResult = {
                 id: item.id || `slot_privato_${item.veicolo_id}`,
@@ -95,15 +99,16 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 postiTotali: Number(item.posti_totali || 0)
             };
 
-            // B. Calcolo Prezzo (Condivisa o Privata)
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || 'standard');
+            
+            // 🟢 Passiamo i km calcolati (distKm) al motore di prezzo
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti, 
                 tipoCalcolo, 
-                item.distanza || 0, 
-                item.distanza || 0
-            ).catch(() => (item.distanza || 0) * 0.45);
+                distKm, 
+                distKm
+            ).catch(() => distKm * 0.45);
             
             const prezzoVal = Number(p) || 0;
 

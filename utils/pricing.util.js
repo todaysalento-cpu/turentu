@@ -1,16 +1,23 @@
 import { pool } from '../db/db.js';
 
+/**
+ * Recupera le tariffe dal database.
+ * Se il tipo richiesto è 'privata' e non esiste, effettua il fallback su 'standard'.
+ */
 export async function getTariffe(veicolo_id, tipo) {
-  console.log(`🔍 [PRICING] Query DB | Veicolo: ${veicolo_id}, Tipo: ${tipo}`);
+  // Logica di compatibilità: le corse private usano la tariffa 'standard'
+  const tipoDaCercare = (tipo === 'privata') ? 'standard' : tipo;
+  
+  console.log(`🔍 [PRICING] Query DB | Veicolo: ${veicolo_id}, Tipo richiesto: ${tipo}, Tipo cercato: ${tipoDaCercare}`);
   
   try {
     const res = await pool.query(
       'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $2 LIMIT 1',
-      [veicolo_id, tipo]
+      [veicolo_id, tipoDaCercare]
     );
     
     if (res.rows.length === 0) {
-      console.warn(`⚠️ [PRICING] Nessuna tariffa trovata per Veicolo ${veicolo_id}, Tipo: ${tipo}`);
+      console.warn(`⚠️ [PRICING] Nessuna tariffa trovata per Veicolo ${veicolo_id}, Tipo: ${tipoDaCercare}`);
       throw new Error('Tariffa non trovata');
     }
     
@@ -28,7 +35,7 @@ export async function getTariffe(veicolo_id, tipo) {
 }
 
 /**
- * Motore di Calcolo Prezzi Turentu (Versione Debug)
+ * Motore di Calcolo Prezzi Turentu
  */
 export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0) {
   const richiesti = Math.max(1, Number(postiRichiesti) || 1);
@@ -39,7 +46,7 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
 
   try {
     const { prezzoKm, prezzoPasseggero } = await getTariffe(corsa.veicolo_id, tipo);
-    const PREZZO_MINIMO = 0.50; // In euro (calcolato su float, poi arrotondato)
+    const PREZZO_MINIMO = 0.50; 
     let prezzoFinale = 0;
 
     switch (tipo) {
@@ -74,6 +81,6 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
 
   } catch (err) {
     console.error(`💥 [PRICING] Errore critico nel calcolo:`, err);
-    return 0.50; // Fallback di sicurezza per non bloccare l'UI
+    return 0.50; // Fallback di sicurezza
   }
 }

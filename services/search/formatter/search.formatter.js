@@ -4,7 +4,7 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 
 const localitaCache = new Map();
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; 
-const VELOCITA_MEDIA_KM_MIN = 1.0; // 1km al minuto (60km/h)
+const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
 const safeDate = (dateInput) => {
     const d = new Date(dateInput);
@@ -13,15 +13,9 @@ const safeDate = (dateInput) => {
 
 const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
 
-/**
- * Calcola l'orario di arrivo in modo intelligente:
- * 1. Usa la data dal DB se presente (corsa confermata)
- * 2. Stima basandosi sulla distanza se non presente (slot libero)
- */
 const determinaArrivo = (partenzaISO, arrivoDB, distanzaMetri) => {
     if (arrivoDB) return getSafeISO(arrivoDB);
     
-    // Fallback: stima basata su distanza (minimo 30 minuti)
     const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
     const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
     
@@ -77,21 +71,29 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
             const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, item.distanza);
 
+            // Costruzione base dell'oggetto risultato con i nuovi campi
+            const baseResult = {
+                id: item.id || `slot_privato_${item.veicolo_id}`,
+                veicolo_id: Number(item.veicolo_id || 0),
+                localitaOrigine,
+                localitaDestinazione,
+                oraPartenza,
+                oraArrivo,
+                marca: item.marca || 'N/D',
+                modello: item.modello || 'N/D',
+                rating: Number(item.rating || 0),
+                servizi: item.servizi || {},
+                postiTotali: Number(item.posti_totali || 0)
+            };
+
             // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
                 return {
-                    id: `slot_privato_${item.veicolo_id}`,
-                    veicolo_id: Number(item.veicolo_id),
+                    ...baseResult,
                     tipo: 'privata',
-                    modello: item.modello,
-                    localitaOrigine,
-                    localitaDestinazione,
-                    oraPartenza,
-                    oraArrivo,
                     prezzo: 0, 
                     prezzo_display: "Su richiesta",
                     postiDisponibili: Number(item.posti_totali || 0),
-                    postiTotali: Number(item.posti_totali || 0),
                     is_privato: true
                 };
             }
@@ -103,17 +105,11 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const prezzoVal = Number(p) || 0;
 
             return {
-                id: item.id,
-                veicolo_id: Number(item.veicolo_id || 0),
+                ...baseResult,
                 tipo: item.tipo_corsa || 'standard',
-                localitaOrigine,
-                localitaDestinazione,
-                oraPartenza,
-                oraArrivo,
                 prezzo: prezzoVal, 
                 prezzo_display: prezzoVal.toFixed(0), 
-                postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
-                postiTotali: Number(item.posti_totali || 0)
+                postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0))
             };
         } catch (err) {
             console.error(`💥 Errore formattazione risultato:`, err);

@@ -115,17 +115,25 @@ export async function cercaSlotUltra(richiesta) {
       });
   }
 
-  // 4. ASSEMBLEA E PREPARAZIONE CONTESTO ESPLICITO
+  // 4. CALCOLO DISTANZA REALE E ASSEMBLEA
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
-  // Creiamo un contesto che assicura la presenza delle stringhe località
+  // Calcolo distanza geometrica reale (Turf.js usa [Lon, Lat])
+  let distanzaMetri = 10000; // Default di sicurezza
+  if (richiesta.coord && richiesta.coordDest) {
+      const from = turf.point([lon, lat]);
+      const to = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+      distanzaMetri = turf.distance(from, to, { units: 'meters' });
+  }
+
   const context = {
     ...richiesta,
+    distanzaMetri: distanzaMetri,
     localitaOrigine: richiesta.localitaOrigine?.description || richiesta.localitaOrigine || "Partenza",
     localitaDestinazione: richiesta.localitaDestinazione?.description || richiesta.localitaDestinazione || "Destinazione"
   };
   
-  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length}`);
+  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length} | Distanza Calcolata: ${(distanzaMetri/1000).toFixed(2)} km`);
 
   return risultatiFinali.length > 0 
     ? await formatResults(context, risultatiFinali, risultatiCondivise)

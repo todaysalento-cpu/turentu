@@ -31,6 +31,11 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
+/**
+ * @param {Object} richiesta - Contesto della richiesta (incluso distanzaMetri calcolata)
+ * @param {Array} risultatiFiltrati - Lista corse/slot
+ * @param {Array} corseOriginali
+ */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const getValoreLocalita = async (val, coord) => {
         if (typeof val === 'string' && val !== "N/D" && val !== "Località sconosciuta") return val;
@@ -43,87 +48,63 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         getValoreLocalita(richiesta.localitaDestinazione, richiesta.coordDest)
     ]);
 
+    // La distanza calcolata da Turf in cercaSlotUltra è ora disponibile in richiesta.distanzaMetri
+    const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
+
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
     const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
     const corseCondivise = risultatiFiltrati.filter(item => !item.is_pool && item.tipo !== 'privata_slot');
 
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
-    // Distanza di fallback sicura (es. 10km se non specificata)
-    const distFallbackMetri = Number(richiesta.distanza || 10000);
-
     if (popBusPool.length > 0) {
+        // ... (Logica Pool invariata)
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
         const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
 
         risultatiDaFormattare.push({
-            id: 'pool_pop_bus_fixed_id',
-            is_pool: true,
-            tipo: 'pop-bus',
-            posti_totali: postiTotaliPool,
-            posti_prenotati: postiPrenotatiPool,
-            mancanti: mancanti,
+            id: 'pool_pop_bus_fixed_id', is_pool: true, tipo: 'pop-bus',
+            posti_totali: postiTotaliPool, posti_prenotati: postiPrenotatiPool, mancanti: mancanti,
             messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`,
-            localitaOrigine,
-            localitaDestinazione
+            localitaOrigine, localitaDestinazione
         });
     }
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            if (item.is_pool) {
-                return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
-            }
+            if (item.is_pool) return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
 
-            // 🟢 LOGICA DISTANZA: Se item.distanza è assente, usiamo quella della richiesta (fallback)
-            const distMetri = Number(item.distanza || distFallbackMetri);
-            const distKm = distMetri / 1000;
+            // 🟢 DISTANZA: Per corse condivise usiamo la loro specifica, altrimenti la distanza reale calcolata (distanzaRealeMetri)
+            const distMetri = Number(item.distanza || distanzaRealeMetri);
+            const distKm = Math.max(0.1, distMetri / 1000);
 
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
             const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
 
-            const baseResult = {
-                id: item.id || `slot_privato_${item.veicolo_id}`,
-                veicolo_id: Number(item.veicolo_id || 0),
-                localitaOrigine,
-                localitaDestinazione,
-                oraPartenza,
-                oraArrivo,
-                marca: item.marca || 'N/D',
-                modello: item.modello || 'N/D',
-                rating: Number(item.rating || 0),
-                servizi: item.servizi || {},
-                postiTotali: Number(item.posti_totali || 0)
-            };
-
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || 'standard');
             
-            // 🟢 Passiamo i km calcolati (distKm) sia come Utente che Totali
-            // Assicuriamo che distKm > 0 per evitare il NaN nella divisione
-            const kmRiferimento = Math.max(0.1, distKm);
-
-            const p = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti, 
-                tipoCalcolo, 
-                kmRiferimento, 
-                kmRiferimento
-            ).catch(() => kmRiferimento * 0.45);
+            // Pricing basato sulla distanza reale
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKm, distKm)
+                .catch(() => distKm * 0.45);
             
             const prezzoVal = Number(p) || 0;
 
             return {
-                ...baseResult,
+                id: item.id || `slot_privato_${item.veicolo_id}`,
+                veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
-                prezzo: prezzoVal, 
-                prezzo_display: prezzoVal.toFixed(0), 
+                localitaOrigine, localitaDestinazione, oraPartenza, oraArrivo,
+                marca: item.marca || 'N/D', modello: item.modello || 'N/D',
+                rating: Number(item.rating || 0), servizi: item.servizi || {},
+                prezzo: prezzoVal, prezzo_display: prezzoVal.toFixed(0),
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
+                postiTotali: Number(item.posti_totali || 0),
                 is_privato: item.tipo === 'privata_slot'
             };
         } catch (err) {
-            console.error(`💥 Errore formattazione risultato:`, err);
+            console.error(`💥 Errore formattazione:`, err);
             return null;
         }
     }))).filter(r => r !== null);

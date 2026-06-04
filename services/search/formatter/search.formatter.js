@@ -4,6 +4,7 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 
 const localitaCache = new Map();
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; 
+const VELOCITA_MEDIA_KM_MIN = 1.0; // 1km al minuto (60km/h)
 
 const safeDate = (dateInput) => {
     const d = new Date(dateInput);
@@ -12,10 +13,20 @@ const safeDate = (dateInput) => {
 
 const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
 
-// Funzione helper per calcolare l'orario di arrivo
-const calcolaArrivo = (partenzaISO, durataMinuti) => {
+/**
+ * Calcola l'orario di arrivo in modo intelligente:
+ * 1. Usa la data dal DB se presente (corsa confermata)
+ * 2. Stima basandosi sulla distanza se non presente (slot libero)
+ */
+const determinaArrivo = (partenzaISO, arrivoDB, distanzaMetri) => {
+    if (arrivoDB) return getSafeISO(arrivoDB);
+    
+    // Fallback: stima basata su distanza (minimo 30 minuti)
+    const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
+    const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
+    
     const d = new Date(partenzaISO);
-    d.setMinutes(d.getMinutes() + (Number(durataMinuti) || 0));
+    d.setMinutes(d.getMinutes() + durataMinuti);
     return d.toISOString();
 };
 
@@ -28,10 +39,6 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
-/**
- * Formatter aggiornato: gestisce Pool, Slot Privati e Corse Condivise
- * con calcolo sicuro di prezzo e orario di arrivo.
- */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         getLocalitaSafeCached(richiesta.coord),
@@ -63,20 +70,15 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // A. Caso Pool
             if (item.is_pool) {
-                return { 
-                    ...item, 
-                    localitaOrigine, 
-                    localitaDestinazione,
-                    prezzo: 0, 
-                    prezzo_display: "Variabile"
-                };
+                return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
             }
+
+            const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
+            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, item.distanza);
 
             // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
-                const oraPartenza = getSafeISO(richiesta.start_datetime);
                 return {
                     id: `slot_privato_${item.veicolo_id}`,
                     veicolo_id: Number(item.veicolo_id),
@@ -85,7 +87,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza,
-                    oraArrivo: calcolaArrivo(oraPartenza, item.durata_minuti || 60),
+                    oraArrivo,
                     prezzo: 0, 
                     prezzo_display: "Su richiesta",
                     postiDisponibili: Number(item.posti_totali || 0),
@@ -99,7 +101,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 .catch(() => (item.distanza || 0) * 0.45);
             
             const prezzoVal = Number(p) || 0;
-            const oraPartenza = getSafeISO(item.start_datetime || new Date());
 
             return {
                 id: item.id,
@@ -108,7 +109,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza,
-                oraArrivo: calcolaArrivo(oraPartenza, item.durata_minuti || 60),
+                oraArrivo,
                 prezzo: prezzoVal, 
                 prezzo_display: prezzoVal.toFixed(0), 
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),

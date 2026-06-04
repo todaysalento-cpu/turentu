@@ -80,7 +80,12 @@ export async function cercaSlotUltra(richiesta) {
               risultatiSlotPrivati.push({
                   tipo: 'privata_slot',
                   veicolo_id: s.veicolo_id,
-                  modello: v.modello,
+                  // --- MAPPATURA AGGIORNATA ---
+                  marca: v.marca || 'N/D',
+                  modello: v.modello || 'N/D',
+                  rating: Number(v.rating || 0),
+                  servizi: v.servizi || {},
+                  // ---------------------------
                   posti_totali: v.posti_totali,
                   disponibile: true,
                   is_slot: true,

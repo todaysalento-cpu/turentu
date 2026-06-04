@@ -34,7 +34,6 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    // 1. Estrazione robusta delle località
     const getValoreLocalita = async (val, coord) => {
         if (typeof val === 'string' && val !== "N/D" && val !== "Località sconosciuta") return val;
         if (val?.description && val.description !== "N/D") return val.description;
@@ -77,9 +76,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
             }
 
-            // 🟢 CALCOLO DISTANZA DI SICUREZZA
-            // Convertiamo in Km (assumendo il DB passi metri, altrimenti normalizzare)
-            const distMetri = Number(item.distanza || richiesta.distanza || 10000); 
+            // 🟢 DISTANZA REALE (In metri, calcolata via turf.lineSlice in filterDisponibilita)
+            const distMetri = Number(item.distanza || 0); 
             const distKm = distMetri / 1000;
 
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
@@ -101,7 +99,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || 'standard');
             
-            // 🟢 Passiamo i km calcolati (distKm) al motore di prezzo
+            // 🟢 Il motore di pricing ora lavora su distanze reali (es. 24.5km)
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti, 

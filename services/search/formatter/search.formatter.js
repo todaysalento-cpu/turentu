@@ -34,13 +34,16 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    // PRIORITÀ: Usa i nomi inviati dal frontend, fallback su geocoding se necessario
-    const rawOrigine = richiesta.localitaOrigine?.description || richiesta.localitaOrigine;
-    const rawDestinazione = richiesta.localitaDestinazione?.description || richiesta.localitaDestinazione;
+    // 1. Estrazione robusta delle località (Priorità input frontend)
+    const getValoreLocalita = async (val, coord) => {
+        if (typeof val === 'string' && val !== "N/D" && val !== "Località sconosciuta") return val;
+        if (val?.description && val.description !== "N/D") return val.description;
+        return await getLocalitaSafeCached(coord);
+    };
 
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        rawOrigine && rawOrigine !== "N/D" ? Promise.resolve(rawOrigine) : getLocalitaSafeCached(richiesta.coord),
-        rawDestinazione && rawDestinazione !== "N/D" ? Promise.resolve(rawDestinazione) : getLocalitaSafeCached(richiesta.coordDest)
+        getValoreLocalita(richiesta.localitaOrigine, richiesta.coord),
+        getValoreLocalita(richiesta.localitaDestinazione, richiesta.coordDest)
     ]);
 
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
@@ -62,14 +65,17 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
-            messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`
+            messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`,
+            localitaOrigine,
+            localitaDestinazione
         });
     }
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
+            // A. Gestione Pool
             if (item.is_pool) {
-                return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
+                return { ...item, prezzo: 0, prezzo_display: "Variabile" };
             }
 
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
@@ -89,28 +95,25 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 postiTotali: Number(item.posti_totali || 0)
             };
 
-            if (item.tipo === 'privata_slot') {
-                return {
-                    ...baseResult,
-                    tipo: 'privata',
-                    prezzo: 0, 
-                    prezzo_display: "Su richiesta",
-                    postiDisponibili: Number(item.posti_totali || 0),
-                    is_privato: true
-                };
-            }
-
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, item.distanza || 0)
-                .catch(() => (item.distanza || 0) * 0.45);
+            // B. Calcolo Prezzo (Condivisa o Privata)
+            const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || 'standard');
+            const p = await calcolaPrezzo(
+                item, 
+                richiesta.posti_richiesti, 
+                tipoCalcolo, 
+                item.distanza || 0, 
+                item.distanza || 0
+            ).catch(() => (item.distanza || 0) * 0.45);
             
             const prezzoVal = Number(p) || 0;
 
             return {
                 ...baseResult,
-                tipo: item.tipo_corsa || 'standard',
+                tipo: tipoCalcolo,
                 prezzo: prezzoVal, 
                 prezzo_display: prezzoVal.toFixed(0), 
-                postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0))
+                postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
+                is_privato: item.tipo === 'privata_slot'
             };
         } catch (err) {
             console.error(`💥 Errore formattazione risultato:`, err);

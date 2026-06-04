@@ -2,11 +2,11 @@ import { pool } from '../db/db.js';
 
 /**
  * Recupera le tariffe dal database.
- * Se il tipo richiesto è 'privata' e non esiste, effettua il fallback su 'standard'.
+ * Fallback automatico a 'standard' per tipi 'privata' o 'condivisa'.
  */
 export async function getTariffe(veicolo_id, tipo) {
-  // Logica di compatibilità: le corse private usano la tariffa 'standard'
-  const tipoDaCercare = (tipo === 'privata') ? 'standard' : tipo;
+  // LOGICA: Tutte le corse (privata/condivisa) ricadono sulla tariffa 'standard'
+  const tipoDaCercare = (tipo === 'privata' || tipo === 'condivisa') ? 'standard' : tipo;
   
   console.log(`🔍 [PRICING] Query DB | Veicolo: ${veicolo_id}, Tipo richiesto: ${tipo}, Tipo cercato: ${tipoDaCercare}`);
   

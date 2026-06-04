@@ -75,14 +75,17 @@ export async function cercaSlotUltra(richiesta) {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
 
       if (isDisp && v) {
+          // A. Slot Privati (Granulari - Singolo veicolo)
           if (!veicoliImpegnati.has(s.veicolo_id)) {
               risultatiSlotPrivati.push({
                   tipo: 'privata_slot',
                   veicolo_id: s.veicolo_id,
+                  // --- MAPPATURA AGGIORNATA ---
                   marca: v.marca || 'N/D',
                   modello: v.modello || 'N/D',
                   rating: Number(v.rating || 0),
                   servizi: v.servizi || {},
+                  // ---------------------------
                   posti_totali: v.posti_totali,
                   disponibile: true,
                   is_slot: true,
@@ -93,6 +96,7 @@ export async function cercaSlotUltra(richiesta) {
       }
   });
 
+  // B. Pool (Pop-Bus - Aggregato)
   const veicoliPerPool = candidatiPool.filter(s => 
       !veicoliImpegnati.has(s.veicolo_id) && 
       (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
@@ -118,16 +122,9 @@ export async function cercaSlotUltra(richiesta) {
   // 4. ASSEMBLEA
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
-  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length}`);
-
-  // PRESERVAZIONE DATI: Creiamo un oggetto arricchito con le località della richiesta originale
-  const context = {
-    ...richiesta,
-    localitaOrigine: richiesta.localitaOrigine || "Partenza",
-    localitaDestinazione: richiesta.localitaDestinazione || "Destinazione"
-  };
+  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length} (Condivise: ${risultatiCondivise.length}, Slot Privati: ${risultatiSlotPrivati.length}, Pool: ${risultatiPool.length})`);
 
   return risultatiFinali.length > 0 
-    ? await formatResults(context, risultatiFinali, risultatiCondivise)
+    ? await formatResults(richiesta, risultatiFinali, risultatiCondivise)
     : [];
 }

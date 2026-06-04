@@ -91,7 +91,19 @@ export async function loadCachesUltra(force = false) {
     const client = await pool.connect();
     try {
         const [vRes, dRes, cRes] = await Promise.all([
-            client.query("SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali FROM veicolo"),
+            // AGGIORNATA: Inclusione di marca, modello, rating e servizi
+            client.query(`
+                SELECT 
+                    id, 
+                    ST_Y(coord::geometry) as lat, 
+                    ST_X(coord::geometry) as lon, 
+                    posti_totali,
+                    marca,
+                    modello,
+                    rating,
+                    servizi
+                FROM veicolo
+            `),
             client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                           FROM disponibilita_veicolo dv 
                           JOIN veicolo v ON dv.veicolo_id = v.id`),
@@ -128,6 +140,5 @@ async function aggiornaIndiciRedis(corsaId, coords) {
 async function aggiornaIndiciDisponibilita(d) {
     if (!redisClient || !d.lat || !d.lon) return;
     const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
-    // CORRETTO: Salviamo il veicolo_id come riferimento geografico
     await redisClient.sAdd(`slot:in_area:${hash}`, d.veicolo_id.toString());
 }

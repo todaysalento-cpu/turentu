@@ -37,7 +37,7 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    console.log(`[DEBUG] Inizio formattazione. Risultati filtrati: ${risultatiFiltrati.length}`);
+    console.log(`[DEBUG] Inizio formattazione. Risultati totali da processare: ${risultatiFiltrati.length}`);
 
     const getValoreLocalita = async (val, coord) => {
         if (typeof val === 'string' && val !== "N/D") return val;
@@ -50,48 +50,47 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     ]);
 
     const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
-    const distKm = distanzaRealeMetri / 1000;
 
-    const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
+    // 1. SEPARAZIONE FLUSSI (Logica basata su proprietà calcolate nel motore)
     const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
-    const corseCondivise = risultatiFiltrati.filter(item => !item.is_pool && item.tipo !== 'privata_slot');
+    const corseCondivise = risultatiFiltrati.filter(item => item.tipo === 'condivisa');
+    
+    // Identifichiamo tutti i veicoli idonei per il pool tramite flag is_pool_eligible (creato nel filtro)
+    const veicoliIdoneiPool = risultatiFiltrati.filter(item => item.is_pool_eligible === true);
 
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
-    // LOGICA POOL CON LOG DI DEBUG
-    if (popBusPool.length > 0) {
-        console.log(`[DEBUG] Analisi pool: ${popBusPool.length} corse trovate.`);
+    // 2. GENERAZIONE ENTITÀ VIRTULALE "POP BUS" (Aggregazione dinamica)
+    if (veicoliIdoneiPool.length > 0) {
+        console.log(`[DEBUG] Aggregazione Pool: ${veicoliIdoneiPool.length} veicoli idonei.`);
         
-        // Pulizia dati: teniamo solo corse con posti > 0
-        const poolValido = popBusPool.filter(c => Number(c.posti_totali || 0) > 0);
+        const postiTotaliPool = veicoliIdoneiPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
+        const idsVeicoliPool = [...new Set(veicoliIdoneiPool.map(c => Number(c.veicolo_id)))];
         
-        const postiTotaliPool = poolValido.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
-        const postiPrenotatiPool = poolValido.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
-        const idsVeicoliPool = poolValido.map(c => Number(c.veicolo_id)).filter(id => !isNaN(id));
-        
+        // Calcolo soglia attivazione dinamico
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
-        const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
-
-        console.log(`[DEBUG] Pool creato. Tot: ${postiTotaliPool}, Mancanti: ${mancanti}, Veicoli ID: ${idsVeicoliPool}`);
-
+        
         risultatiDaFormattare.push({
             id: 'pool_pop_bus_fixed_id', 
             is_pool: true, 
             tipo: 'pop-bus',
-            posti_totali: postiTotaliPool, 
-            posti_prenotati: postiPrenotatiPool, 
-            mancanti: mancanti,
-            veicoli_pool_ids: idsVeicoliPool, // Fondamentale per il pricing engine
-            messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`,
-            localitaOrigine, localitaDestinazione, distMetri: distanzaRealeMetri
+            posti_totali: postiTotaliPool,
+            posti_prenotati: 0, // Placeholder: il pricing engine gestirà la logica dei posti presi
+            veicoli_pool_ids: idsVeicoliPool, 
+            messaggio: `Pop Bus disponibile: ${postiTotaliPool} posti totali in flotta.`,
+            localitaOrigine, 
+            localitaDestinazione, 
+            distMetri: distanzaRealeMetri
         });
     }
 
+    // 3. FORMATTAZIONE FINALE
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
             const distMetri = Number(item.distMetri || item.distanza || distanzaRealeMetri);
             const distKmCalc = Math.max(0.1, distMetri / 1000);
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
+            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
             
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
@@ -104,15 +103,18 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
                 localitaOrigine, localitaDestinazione,
-                oraPartenza,
+                oraPartenza, oraArrivo,
                 marca: item.marca || 'N/D',
                 modello: item.modello || 'N/D',
+                rating: Number(item.rating || 0),
+                servizi: parseServizi(item.servizi),
                 prezzo: prezzoVal,
                 prezzo_display: prezzoVal.toFixed(0),
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0),
+                is_privato: item.tipo === 'privata_slot',
                 is_pool: !!item.is_pool,
-                messaggio: item.messaggio || undefined
+                messaggio: item.messaggio
             };
         } catch (err) {
             console.error(`💥 Errore formattazione ID ${item.id}:`, err);

@@ -104,22 +104,25 @@ export async function cercaSlotUltra(richiesta) {
   }, 0);
 
   if (capacitaTotale >= postiRichiesti) {
+      // Estraiamo gli ID per il Pricing Engine
+      const veicoliPoolIds = veicoliPerPool.map(s => Number(s.veicolo_id));
+
       risultatiPool.push({
           tipo: 'pop-bus',
           tipo_corsa: 'pop-bus',
           posti_totali: capacitaTotale,
+          veicoli_pool_ids: veicoliPoolIds, // Passiamo gli ID per l'aggregazione di prezzo
           disponibile: true,
           is_slot: true,
           is_pool: true,
-          messaggio: "Prenota posto su bus condiviso"
+          messaggio: `Prenota posto su bus condiviso (Capacità: ${capacitaTotale} posti)`
       });
   }
 
   // 4. CALCOLO DISTANZA REALE E ASSEMBLEA
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
-  // Calcolo distanza geometrica reale (Turf.js usa [Lon, Lat])
-  let distanzaMetri = 10000; // Default di sicurezza
+  let distanzaMetri = 10000;
   if (richiesta.coord && richiesta.coordDest) {
       const from = turf.point([lon, lat]);
       const to = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);

@@ -4,6 +4,7 @@ import * as turf from '@turf/turf';
  * Helper per snap su linea o nodi specifici
  */
 function getSnapResult(route, point, tolleranzaKm, corsa) {
+    // Gestione nodi per corse dinamiche o pianificate
     if ((corsa.tipo_corsa === 'riempimento' || corsa.tipo_corsa === 'pop-bus') && corsa.fermate_pianificate?.nodi) {
         let nearestNode = null;
         let minDistance = tolleranzaKm;
@@ -28,7 +29,8 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
 }
 
 /**
- * Motore di ricerca aggiornato con calcolo distanza reale
+ * Motore di ricerca aggiornato: non esclude più il pop-bus a priori,
+ * ma valuta la disponibilità e marca come idoneo per l'aggregazione.
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
     if (!richiesta.coord || !richiesta.coordDest) return { corse: [] };
@@ -41,7 +43,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
     const corseValide = corseCandidate.filter((c, index) => {
-        if (c.tipo_corsa === 'pop-bus') return false;
+        // RIMOSSO il blocco che escludeva 'pop-bus'. 
+        // Ora analizziamo tutte le corse che hanno una geometria valida.
         if (!c.decodedCoords || c.decodedCoords.length < 2) return false;
 
         const route = turf.lineString(c.decodedCoords);
@@ -50,21 +53,24 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
         if (!startSnap?.properties || !endSnap?.properties) return false;
 
-        // 🟢 CALCOLO DISTANZA REALE (Geometria su polilinea)
-        // Utilizziamo lineSlice per estrarre esattamente il pezzo di rotta tra i due punti
+        // CALCOLO DISTANZA REALE
         const slicedRoute = turf.lineSlice(startSnap, endSnap, route);
-        const distanzaRealeMetri = turf.length(slicedRoute, { units: 'meters' });
+        c.distanza = Math.round(turf.length(slicedRoute, { units: 'meters' }));
         
-        // Inseriamo la distanza calcolata direttamente nell'oggetto corsa
-        c.distanza = Math.round(distanzaRealeMetri);
-
         const startIdx = Number(startSnap.properties.index);
         const endIdx = Number(endSnap.properties.index);
         
         console.log(`   ✅ [CORSA ${c.id}] Snap OK | Indici: ${startIdx}->${endIdx} | Distanza: ${(c.distanza/1000).toFixed(2)} km`);
         
         const prenotazioni = Array.isArray(prenotazioniBatch[index]) ? prenotazioniBatch[index] : [];
-        return verificaDisponibilitaInMemoria(c, startIdx, endIdx, postiRichiesti, prenotazioni);
+        
+        // Verifichiamo se la corsa ha spazio
+        const isDisponibile = verificaDisponibilitaInMemoria(c, startIdx, endIdx, postiRichiesti, prenotazioni);
+        
+        // MARCATURA: la corsa è idonea al pool se è disponibile e non è già piena
+        c.is_pool_eligible = isDisponibile; 
+        
+        return true; // Restituiamo tutte le corse che coprono la tratta
     });
 
     return { corse: corseValide };

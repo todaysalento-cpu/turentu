@@ -1,19 +1,40 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
 import { getCorseByAutista, accettaCorsa, toggleCorsa } from '../services/corsa/corse.service.js';
-import { getAddress } from '../utils/geo.util.js';
 import { getIO } from '../socket.js';
 import { CacheManager } from '../utils/cacheManager.js';
-// 1. Importa i metodi di sincronizzazione della cache di ricerca
 import { upsertCorsa, removeCorsa } from '../services/search/search.cache.js'; 
 
 export const corseRouter = express.Router();
+
+// Middleware di autenticazione per tutte le rotte sotto corseRouter
 corseRouter.use(authMiddleware);
 
-// ... (populateAddresses resta invariato)
+// --- HELPER TEMPORANEO (se non lo hai già importato da un file esterno) ---
+const populateAddresses = async (corsa) => {
+    // Implementa la logica di geocoding o ritorno dell'oggetto originale
+    return corsa; 
+};
 
 // ======================================================
-// 3️⃣ ACCETTA CORSA (AGGIORNATO)
+// 1️⃣ GET CORSE AUTISTA TODAY (LA ROTTA MANCANTE)
+// ======================================================
+corseRouter.get('/autista/today', async (req, res) => {
+    try {
+        // req.user.id viene iniettato dal tuo authMiddleware
+        const driverId = req.user.id; 
+        const corse = await getCorseByAutista(driverId, 'today');
+        
+        // Risposta al frontend con la lista delle corse
+        res.json(corse);
+    } catch (err) {
+        console.error("❌ Errore in GET /api/corse/autista/today:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================================
+// 3️⃣ ACCETTA CORSA
 // ======================================================
 corseRouter.post('/:id/accetta', async (req, res) => {
   const corsaId = Number(req.params.id);
@@ -24,7 +45,7 @@ corseRouter.post('/:id/accetta', async (req, res) => {
     corsa = await populateAddresses(corsa);
 
     CacheManager.corsa.update(corsa);
-    // 2. Aggiorna motore di ricerca: la corsa è accettata
+    // Aggiorna motore di ricerca: la corsa è accettata
     upsertCorsa(corsa); 
 
     const io = getIO();
@@ -37,7 +58,7 @@ corseRouter.post('/:id/accetta', async (req, res) => {
 });
 
 // ======================================================
-// 5️⃣ END CORSA (AGGIORNATO)
+// 5️⃣ END CORSA
 // ======================================================
 corseRouter.post('/:id/end', async (req, res) => {
   const corsaId = Number(req.params.id);
@@ -45,7 +66,7 @@ corseRouter.post('/:id/end', async (req, res) => {
     const corsa = await toggleCorsa(corsaId, 'end');
     
     CacheManager.corsa.update(corsa);
-    // 3. Rimuovi dal motore di ricerca: la corsa è conclusa
+    // Rimuovi dal motore di ricerca: la corsa è conclusa
     removeCorsa(corsaId); 
 
     const io = getIO();

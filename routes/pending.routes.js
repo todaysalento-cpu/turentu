@@ -4,12 +4,30 @@ import { authMiddleware } from '../middleware/auth.js';
 import { sendNotification, getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
-// Import necessari per la sincronizzazione della cache
 import { upsertCorsa } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 
 const router = express.Router();
 router.use(authMiddleware);
+
+// -------------------- GET pendings per veicolo --------------------
+// Questa rotta risolve l'errore 404 che ricevevi all'avvio
+router.get('/autista/:veicolo_id', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { veicolo_id } = req.params;
+        const result = await client.query(
+            `SELECT * FROM pending WHERE veicolo_id = $1 AND stato = 'pending'`,
+            [veicolo_id]
+        );
+        res.json({ pendings: result.rows });
+    } catch (err) {
+        console.error("❌ Errore in GET /api/pending/autista/:id:", err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
 
 // -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
@@ -70,11 +88,9 @@ router.post('/:id/accetta', async (req, res) => {
         await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
       }
 
-      // 🔥 AGGIORNAMENTO CACHE (Motore di ricerca e CacheManager)
       upsertCorsa(corsa);
       CacheManager.corsa.update(corsa);
 
-      // Logica pagamenti
       const prenotazioneRes = await client.query(
         `SELECT id FROM prenotazioni WHERE cliente_id = $1 AND corsa_id = $2 ORDER BY id DESC LIMIT 1`,
         [p.cliente_id, corsa.id]
@@ -96,7 +112,6 @@ router.post('/:id/accetta', async (req, res) => {
 
     await client.query('COMMIT');
     
-    // Notifiche (post-commit)
     const io = getIO();
     for (const data of notificheDaInviare) {
       const { p, corsa, driverId, driverNome } = data;

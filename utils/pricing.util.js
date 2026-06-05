@@ -1,13 +1,8 @@
 import { pool } from '../db/db.js';
 
-// Costante per la soglia di attivazione (puoi spostarla in un file config)
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6;
 
-/**
- * Recupera le tariffe dal database.
- */
 export async function getTariffe(veicolo_id, tipo) {
-  // Per 'pop-bus', recuperiamo la tariffa 'standard' come base di calcolo
   const tipoDaCercare = (tipo === 'pop-bus') ? 'standard' : tipo;
   
   const res = await pool.query(
@@ -15,7 +10,7 @@ export async function getTariffe(veicolo_id, tipo) {
     [veicolo_id, tipoDaCercare]
   );
   
-  if (res.rows.length === 0) throw new Error('Tariffa non trovata');
+  if (res.rows.length === 0) throw new Error(`Tariffa non trovata per veicolo ${veicolo_id} e tipo ${tipoDaCercare}`);
   
   return {
     prezzoKm: Number(res.rows[0].euro_km) || 0,
@@ -23,46 +18,48 @@ export async function getTariffe(veicolo_id, tipo) {
   };
 }
 
-/**
- * Motore di Calcolo Prezzi Turentu
- */
 export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0) {
   const richiesti = Math.max(1, Number(postiRichiesti));
   const { prezzoKm, prezzoPasseggero } = await getTariffe(corsa.veicolo_id, tipo);
 
-  // Lavoriamo in centesimi per evitare errori di precisione float
-  const PREZZO_MINIMO = 50; // 0.50€
+  const PREZZO_MINIMO = 0.50; // Corretto a 0.50 per rappresentare 50 centesimi
+
+  // Log per debug del calcolo
+  console.log(`[Pricing Engine] Tipo: ${tipo}, KmUtente: ${kmUtente}, KmTotali: ${kmTotali}, PrezzoKm: ${prezzoKm}`);
+
+  let prezzoCalcolato = 0;
 
   switch (tipo) {
     case 'privata':
-      // Formula: euro_km * km tratta
-      return Math.max(PREZZO_MINIMO, Math.round(prezzoKm * kmUtente * 100) / 100);
+      prezzoCalcolato = prezzoKm * kmUtente;
+      break;
 
     case 'condivisa':
-      // Formula: ((euro_km * km_totali) + (Passeggeri_successivi * €_passeggero)) / Totale_passeggeri
       const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
       const passeggeriSuccessivi = Math.max(0, totPasseggeriFinale - 1);
-      
       const costoBase = (prezzoKm * kmTotali) + (passeggeriSuccessivi * prezzoPasseggero);
-      const prezzoFinale = (costoBase / totPasseggeriFinale) * (kmUtente / kmTotali);
-      
-      return Math.max(PREZZO_MINIMO, Math.round(prezzoFinale * 100) / 100);
+      prezzoCalcolato = (costoBase / totPasseggeriFinale) * (kmUtente / kmTotali);
+      break;
 
     case 'riempimento':
-      // Formula: (euro_km * km_totali) / n_passeggeri_soglia
       const soglia = Math.max(1, Number(corsa.posti_soglia || 1));
       const prezzoUnitarioSoglia = (prezzoKm * kmTotali) / soglia;
-      
-      return Math.max(PREZZO_MINIMO, Math.round(prezzoUnitarioSoglia * richiesti * 100) / 100);
+      prezzoCalcolato = prezzoUnitarioSoglia * richiesti;
+      break;
 
     case 'pop-bus':
-      // FORMULA: (kmUtente * euro_km) / posti_totali * soglia_attivazione
+      // FORMULA: (kmUtente * euro_km) / (posti_totali * soglia)
       const postiTotali = Number(corsa.posti_totali || 1);
-      const prezzoPool = ((kmUtente * prezzoKm) / postiTotali) * SOGLIA_ATTIVAZIONE_PERCENT;
-      
-      return Math.max(PREZZO_MINIMO, Math.round(prezzoPool * 100) / 100);
+      prezzoCalcolato = (kmUtente * prezzoKm) / (postiTotali * SOGLIA_ATTIVAZIONE_PERCENT);
+      console.log(`[Pricing Engine] Dettaglio Pop-Bus: KmUtente=${kmUtente}, PrezzoKm=${prezzoKm}, PostiTot=${postiTotali} -> Prezzo: ${prezzoCalcolato}`);
+      break;
 
     default:
-      return Math.max(PREZZO_MINIMO, Math.round(prezzoKm * kmUtente * 100) / 100);
+      prezzoCalcolato = prezzoKm * kmUtente;
   }
+
+  const risultatoFinale = Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);
+  
+  console.log(`[Pricing Engine] Risultato Finale: ${risultatoFinale}`);
+  return risultatoFinale;
 }

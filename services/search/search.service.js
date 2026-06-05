@@ -50,7 +50,7 @@ export async function cercaSlotUltra(richiesta) {
   const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
   const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
 
-  // 2. FILTRO CORSE (Condivise)
+  // 2. FILTRO CORSE
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
 
@@ -60,9 +60,16 @@ export async function cercaSlotUltra(richiesta) {
     prenotazioniBatch
   );
 
-  const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
+  const risultatiCondivise = corseEsistenti.map(c => ({ 
+      ...c, 
+      tipo: 'condivisa', 
+      is_slot: false,
+      // Passiamo le coordinate esistenti della corsa
+      origine: c.origine || richiesta.coord,
+      destinazione: c.destinazione || richiesta.coordDest
+  }));
 
-  // 3. LOGICA AGGREGATA: POOL E SLOT PRIVATI
+  // 3. LOGICA AGGREGATA: SLOT PRIVATI E POP-BUS
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
@@ -75,15 +82,13 @@ export async function cercaSlotUltra(richiesta) {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
 
       if (isDisp && v) {
-          // A. Slot Privati (Granulari - Singolo veicolo)
           if (!veicoliImpegnati.has(s.veicolo_id)) {
               risultatiSlotPrivati.push({
                   tipo: 'privata_slot',
                   veicolo_id: s.veicolo_id,
-                  // 🔥 INIEZIONE COORDINATE PER VALIDAZIONE BACKEND
+                  // 🔥 INIEZIONE COORDINATE
                   origine: richiesta.coord,
-                  destinazione: richiesta.coordDest || richiesta.coord, 
-                  // ---------------------------
+                  destinazione: richiesta.coordDest,
                   marca: v.marca || 'N/D',
                   modello: v.modello || 'N/D',
                   rating: Number(v.rating || 0),
@@ -98,13 +103,12 @@ export async function cercaSlotUltra(richiesta) {
       }
   });
 
-  // B. Pool (Pop-Bus - Aggregato)
-  const veicoliPerPool = candidatiPool.filter(s => 
+  const veicoliDisponibiliPerPool = candidatiPool.filter(s => 
       !veicoliImpegnati.has(s.veicolo_id) && 
       (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
   );
 
-  const capacitaTotale = veicoliPerPool.reduce((sum, s) => {
+  const capacitaTotale = veicoliDisponibiliPerPool.reduce((sum, s) => {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       return sum + Number(v?.posti_totali || 0);
   }, 0);
@@ -113,24 +117,35 @@ export async function cercaSlotUltra(richiesta) {
       risultatiPool.push({
           tipo: 'pop-bus',
           tipo_corsa: 'pop-bus',
-          // 🔥 INIEZIONE COORDINATE PER VALIDAZIONE BACKEND
+          // 🔥 INIEZIONE COORDINATE
           origine: richiesta.coord,
-          destinazione: richiesta.coordDest || richiesta.coord,
-          // ---------------------------
+          destinazione: richiesta.coordDest,
           posti_totali: capacitaTotale,
+          veicoli_pool_ids: veicoliDisponibiliPerPool.map(s => Number(s.veicolo_id)),
           disponibile: true,
           is_slot: true,
           is_pool: true,
-          messaggio: "Prenota posto su bus condiviso"
+          messaggio: "Pop Bus: Servizio condiviso disponibile per questa tratta"
       });
   }
 
-  // 4. ASSEMBLEA
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
-  console.log(`🏁 [FINALE] Risultati: ${risultatiFinali.length} (Condivise: ${risultatiCondivise.length}, Slot Privati: ${risultatiSlotPrivati.length}, Pool: ${risultatiPool.length})`);
+  let distanzaMetri = 10000;
+  if (richiesta.coord && richiesta.coordDest) {
+      const from = turf.point([lon, lat]);
+      const to = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
+      distanzaMetri = turf.distance(from, to, { units: 'meters' });
+  }
 
+  const context = {
+    ...richiesta,
+    distanzaMetri: distanzaMetri,
+    localitaOrigine: richiesta.localitaOrigine?.description || richiesta.localitaOrigine || "Partenza",
+    localitaDestinazione: richiesta.localitaDestinazione?.description || richiesta.localitaDestinazione || "Destinazione"
+  };
+  
   return risultatiFinali.length > 0 
-    ? await formatResults(richiesta, risultatiFinali, risultatiCondivise)
+    ? await formatResults(context, risultatiFinali, risultatiCondivise)
     : [];
 }

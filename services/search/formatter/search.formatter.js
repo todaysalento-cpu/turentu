@@ -32,8 +32,7 @@ async function getLocalitaSafeCached(coord) {
 }
 
 /**
- * Formatter aggiornato: gestisce la normalizzazione dei servizi, 
- * la distanza reale e il calcolo prezzi per ogni tipologia
+ * Formatter aggiornato: gestisce la normalizzazione dei servizi e la distanza reale
  */
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
@@ -47,7 +46,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
-    // Aggregazione Pool
     if (popBusPool.length > 0) {
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
@@ -61,11 +59,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
-            messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`,
-            localitaOrigine,
-            localitaDestinazione,
-            // Passiamo l'info per il pricing
-            data_aggregazione: { posti_totali: postiTotaliPool } 
+            messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`
         });
     }
 
@@ -81,10 +75,12 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 servizi: normalizzaServizi(item.servizi)
             };
 
-            // A. Caso Pool (Pop Bus)
+            // A. Caso Pool
             if (item.is_pool) {
-                const p = await calcolaPrezzo(item.data_aggregazione, richiesta.posti_richiesti, 'pop-bus', distKm, distKm);
+                // Calcoliamo il prezzo con la nuova logica specifica per pop-bus
+                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
+                
                 return { 
                     ...item, 
                     localitaOrigine, 

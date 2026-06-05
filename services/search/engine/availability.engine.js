@@ -1,10 +1,11 @@
 import * as turf from '@turf/turf';
 
 /**
- * Helper per snap su linea o nodi specifici con logica di debug
+ * Helper per snap su linea o nodi specifici
  */
 function getSnapResult(route, point, tolleranzaKm, corsa) {
-    if ((corsa.tipo_corsa === 'riempimento' || corsa.tipo_corsa === 'pop-bus') && corsa.fermate_pianificate?.nodi) {
+    // Gestione nodi solo per corse di tipo 'riempimento'
+    if (corsa.tipo_corsa === 'riempimento' && corsa.fermate_pianificate?.nodi) {
         let nearestNode = null;
         let minDistance = tolleranzaKm;
         for (const nodo of corsa.fermate_pianificate.nodi) {
@@ -28,7 +29,8 @@ function getSnapResult(route, point, tolleranzaKm, corsa) {
 }
 
 /**
- * Motore di ricerca con log estesi per debuggare il Pop Bus
+ * Motore dedicato alla validazione delle sole corse di linea (condivise).
+ * Il Pop Bus è ora gestito esternamente in cercaSlotUltra.js.
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
     if (!richiesta.coord || !richiesta.coordDest) {
@@ -36,7 +38,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         return { corse: [] };
     }
 
-    console.log(`🔍 [ENGINE] Inizio analisi su ${corseCandidate.length} corse.`);
+    console.log(`🔍 [ENGINE] Inizio analisi su ${corseCandidate.length} corse di linea.`);
 
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
@@ -44,6 +46,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
     const corseValide = corseCandidate.filter((c, index) => {
+        // ESCLUSIONE: le corse 'pop-bus' non vanno processate qui
+        if (c.tipo_corsa === 'pop-bus') return false; 
+
         if (!c.decodedCoords || c.decodedCoords.length < 2) {
             console.log(`❌ [CORSA ${c.id}] Scartata: Geometria non valida.`);
             return false;
@@ -67,15 +72,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const prenotazioni = Array.isArray(prenotazioniBatch[index]) ? prenotazioniBatch[index] : [];
         const isDisponibile = verificaDisponibilitaInMemoria(c, startIdx, endIdx, postiRichiesti, prenotazioni);
         
-        c.is_pool_eligible = isDisponibile; 
-
         if (isDisponibile) {
             console.log(`✅ [CORSA ${c.id}] IDONEA | Tipo: ${c.tipo_corsa} | Dist: ${(c.distanza/1000).toFixed(2)}km`);
+            return true;
         } else {
             console.log(`⚠️ [CORSA ${c.id}] Disponibile: NO (Saturazione raggiunta).`);
+            return false;
         }
-        
-        return true; 
     });
 
     return { corse: corseValide };

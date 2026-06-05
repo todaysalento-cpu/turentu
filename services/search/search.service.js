@@ -50,7 +50,7 @@ export async function cercaSlotUltra(richiesta) {
   const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
   const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
 
-  // 2. FILTRO CORSE (Condivise)
+  // 2. FILTRO CORSE (Condivise su rotta esistente)
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
 
@@ -62,19 +62,21 @@ export async function cercaSlotUltra(richiesta) {
 
   const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
-  // 3. LOGICA AGGREGATA: POOL E SLOT PRIVATI
+  // 3. LOGICA AGGREGATA: SLOT PRIVATI E POP-BUS (On-demand)
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
   let risultatiPool = [];
   let risultatiSlotPrivati = [];
 
+  // Mappa di tutti i veicoli pronti nel geohash
   candidatiPool.forEach(s => {
       const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
       const isDisp = dispVeicolo.some(st => st.disponibile);
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
 
       if (isDisp && v) {
+          // Aggiunta agli slot privati
           if (!veicoliImpegnati.has(s.veicolo_id)) {
               risultatiSlotPrivati.push({
                   tipo: 'privata_slot',
@@ -93,33 +95,31 @@ export async function cercaSlotUltra(richiesta) {
       }
   });
 
-  const veicoliPerPool = candidatiPool.filter(s => 
+  // Generazione dinamica Pop-Bus (indipendente dalle corse di linea)
+  const veicoliDisponibiliPerPool = candidatiPool.filter(s => 
       !veicoliImpegnati.has(s.veicolo_id) && 
       (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
   );
 
-  const capacitaTotale = veicoliPerPool.reduce((sum, s) => {
+  const capacitaTotale = veicoliDisponibiliPerPool.reduce((sum, s) => {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       return sum + Number(v?.posti_totali || 0);
   }, 0);
 
   if (capacitaTotale >= postiRichiesti) {
-      // Estraiamo gli ID per il Pricing Engine
-      const veicoliPoolIds = veicoliPerPool.map(s => Number(s.veicolo_id));
-
       risultatiPool.push({
           tipo: 'pop-bus',
           tipo_corsa: 'pop-bus',
           posti_totali: capacitaTotale,
-          veicoli_pool_ids: veicoliPoolIds, // Passiamo gli ID per l'aggregazione di prezzo
+          veicoli_pool_ids: veicoliDisponibiliPerPool.map(s => Number(s.veicolo_id)),
           disponibile: true,
           is_slot: true,
           is_pool: true,
-          messaggio: `Prenota posto su bus condiviso (Capacità: ${capacitaTotale} posti)`
+          messaggio: "Pop Bus: Servizio condiviso disponibile per questa tratta"
       });
   }
 
-  // 4. CALCOLO DISTANZA REALE E ASSEMBLEA
+  // 4. ASSEMBLAGGIO FINALE
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   
   let distanzaMetri = 10000;

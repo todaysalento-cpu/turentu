@@ -1,12 +1,66 @@
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getLocalitaSafe } from '../../../utils/maps.util.js';
 
-// ... (resto delle costanti e funzioni helper invariate)
+const localitaCache = new Map();
+const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; 
+
+const safeDate = (dateInput) => {
+    const d = new Date(dateInput);
+    return !isNaN(d.getTime()) ? d : new Date();
+};
+
+const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
+
+const normalizzaServizi = (servizi) => {
+    if (Array.isArray(servizi)) {
+        return servizi.reduce((acc, s) => ({ ...acc, [s]: true }), {});
+    }
+    return servizi || {};
+};
+
+async function getLocalitaSafeCached(locInput) {
+    if (typeof locInput === 'string') return locInput;
+    if (locInput && locInput.description) return locInput.description;
+    if (!locInput || typeof locInput.lat === 'undefined') return "N/D";
+    
+    const key = `${locInput.lat.toFixed(3)}_${locInput.lon.toFixed(3)}`;
+    if (localitaCache.has(key)) return localitaCache.get(key);
+    
+    const loc = await getLocalitaSafe(locInput);
+    localitaCache.set(key, loc);
+    return loc;
+}
 
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    // ... (parte iniziale di recupero localita invariata)
+    console.log(`[DEBUG] Inizio formattazione per ${risultatiFiltrati.length} risultati.`);
+    
+    const [localitaOrigine, localitaDestinazione] = await Promise.all([
+        getLocalitaSafeCached(richiesta.localitaOrigine || richiesta.coord),
+        getLocalitaSafeCached(richiesta.localitaDestinazione || richiesta.coordDest)
+    ]);
 
-    // ... (costruzione risultatiDaFormattare invariata)
+    const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
+    const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
+    const corseCondivise = risultatiFiltrati.filter(item => !item.is_pool && item.tipo !== 'privata_slot');
+
+    let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
+
+    if (popBusPool.length > 0) {
+        const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
+        const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
+        const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
+        const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
+
+        risultatiDaFormattare.push({
+            id: 'pool_pop_bus_fixed_id',
+            is_pool: true,
+            tipo: 'pop-bus',
+            posti_totali: postiTotaliPool,
+            posti_prenotati: postiPrenotatiPool,
+            mancanti: mancanti,
+            messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`
+        });
+    }
 
     const distTrattaMetri = Number(richiesta.distanzaMetri || 10000);
     const distKm = distTrattaMetri / 1000;
@@ -20,19 +74,11 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 servizi: normalizzaServizi(item.servizi)
             };
 
-            // LOG INGRESSO GENERALE
-            console.log(`[DEBUG] Elaborazione ID: ${item.id || 'N/A'}, Tipo: ${item.tipo}, Km: ${distKm}`);
-
             // A. Caso Pool
             if (item.is_pool) {
-                console.log(`[DEBUG] Chiamata calcolaPrezzo POOL. Veicolo: ${item.veicolo_id}, Posti: ${richiesta.posti_richiesti}`);
-                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm)
-                    .catch((err) => {
-                        console.error(`[ERROR] Fallimento calcolo POOL:`, err);
-                        return 0;
-                    });
-                
-                console.log(`[DEBUG] Risultato POOL: ${p}`);
+                console.log(`[DEBUG] Calcolo POOL. Distanza: ${distKm}km`);
+                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm);
+                console.log(`[DEBUG] Prezzo POOL calcolato: ${p}`);
                 const prezzoVal = Number(p) || 0;
                 return { 
                     ...item, 
@@ -45,13 +91,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
-                console.log(`[DEBUG] Chiamata calcolaPrezzo PRIVATA. Veicolo: ${item.veicolo_id}`);
-                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'privata', distKm)
-                    .catch((err) => {
-                        console.error(`[ERROR] Fallimento calcolo PRIVATA:`, err);
-                        return distKm * 0.5;
-                    });
-                
+                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'privata', distKm);
                 const prezzoVal = Number(p) || 0;
                 return {
                     id: `slot_privato_${item.veicolo_id}`,
@@ -69,14 +109,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             // C. Caso Corsa Condivisa
             const distItemKm = (item.distanza || distTrattaMetri) / 1000;
-            console.log(`[DEBUG] Chiamata calcolaPrezzo CONDIVISA. Tipo: ${item.tipo_corsa}, Km: ${distItemKm}`);
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distItemKm)
-                .catch((err) => {
-                    console.error(`[ERROR] Fallimento calcolo CONDIVISA:`, err);
-                    return distItemKm * 0.45;
-                });
-            
-            console.log(`[DEBUG] Risultato CONDIVISA: ${p}`);
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distItemKm);
             const prezzoVal = Number(p) || 0;
 
             return {
@@ -92,7 +125,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 postiTotali: Number(item.posti_totali || 0)
             };
         } catch (err) {
-            console.error(`💥 Errore formattazione risultato per ${item.id}:`, err);
+            console.error(`💥 [ERROR] Formattazione fallita per ${item.id}:`, err);
             return null;
         }
     }))).filter(r => r !== null);

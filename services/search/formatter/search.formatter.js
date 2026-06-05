@@ -54,7 +54,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
     const corseCondivise = risultatiFiltrati.filter(item => item.tipo === 'condivisa');
     
-    const veicoliIdoneiPool = risultatiFiltrati.filter(item => item.is_pool_eligible === true);
+    // CORREZIONE: Aggiornato per cercare is_pool invece di is_pool_eligible
+    const veicoliIdoneiPool = risultatiFiltrati.filter(item => item.is_pool === true);
 
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
@@ -97,7 +98,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 tipo: tipoCalcolo,
                 localitaOrigine, localitaDestinazione,
                 oraPartenza, oraArrivo,
-                // Per il Pop Bus, lasciamo marca/modello come definiti nell'item o null/undefined
                 marca: item.is_pool ? null : (item.marca || 'N/D'),
                 modello: item.is_pool ? null : (item.modello || 'N/D'),
                 rating: Number(item.rating || 0),

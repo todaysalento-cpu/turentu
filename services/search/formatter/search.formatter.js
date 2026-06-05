@@ -77,10 +77,10 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             // A. Caso Pool
             if (item.is_pool) {
-                // Calcoliamo il prezzo con la nuova logica specifica per pop-bus
+                // Invochiamo il calcolo specifico per pop-bus
                 const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
-                
+
                 return { 
                     ...item, 
                     localitaOrigine, 

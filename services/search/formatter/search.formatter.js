@@ -13,6 +13,17 @@ const safeDate = (dateInput) => {
 
 const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
 
+// Helper per parsare i servizi in modo sicuro
+const parseServizi = (servizi) => {
+    if (!servizi) return {};
+    if (typeof servizi === 'object') return servizi;
+    try {
+        return JSON.parse(servizi);
+    } catch (e) {
+        return {};
+    }
+};
+
 const determinaArrivo = (partenzaISO, arrivoDB, distanzaMetri) => {
     if (arrivoDB) return getSafeISO(arrivoDB);
     const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
@@ -32,7 +43,7 @@ async function getLocalitaSafeCached(coord) {
 }
 
 /**
- * @param {Object} richiesta - Contesto della richiesta (incluso distanzaMetri calcolata)
+ * @param {Object} richiesta - Contesto della richiesta
  * @param {Array} risultatiFiltrati - Lista corse/slot
  * @param {Array} corseOriginali
  */
@@ -48,7 +59,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         getValoreLocalita(richiesta.localitaDestinazione, richiesta.coordDest)
     ]);
 
-    // La distanza calcolata da Turf in cercaSlotUltra è ora disponibile in richiesta.distanzaMetri
     const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
 
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
@@ -58,7 +68,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
     if (popBusPool.length > 0) {
-        // ... (Logica Pool invariata)
         const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
@@ -74,9 +83,15 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            if (item.is_pool) return { ...item, localitaOrigine, localitaDestinazione, prezzo: 0, prezzo_display: "Variabile" };
+            if (item.is_pool) return { 
+                ...item, 
+                localitaOrigine, 
+                localitaDestinazione, 
+                prezzo: 0, 
+                prezzo_display: "Variabile",
+                servizi: {} 
+            };
 
-            // 🟢 DISTANZA: Per corse condivise usiamo la loro specifica, altrimenti la distanza reale calcolata (distanzaRealeMetri)
             const distMetri = Number(item.distanza || distanzaRealeMetri);
             const distKm = Math.max(0.1, distMetri / 1000);
 
@@ -85,7 +100,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || 'standard');
             
-            // Pricing basato sulla distanza reale
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKm, distKm)
                 .catch(() => distKm * 0.45);
             
@@ -95,10 +109,17 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 id: item.id || `slot_privato_${item.veicolo_id}`,
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
-                localitaOrigine, localitaDestinazione, oraPartenza, oraArrivo,
-                marca: item.marca || 'N/D', modello: item.modello || 'N/D',
-                rating: Number(item.rating || 0), servizi: item.servizi || {},
-                prezzo: prezzoVal, prezzo_display: prezzoVal.toFixed(0),
+                localitaOrigine, 
+                localitaDestinazione, 
+                oraPartenza, 
+                oraArrivo,
+                marca: item.marca || 'N/D', 
+                modello: item.modello || 'N/D',
+                rating: Number(item.rating || 0), 
+                // 🟢 Gestione corretta dei servizi
+                servizi: parseServizi(item.servizi), 
+                prezzo: prezzoVal, 
+                prezzo_display: prezzoVal.toFixed(0),
                 postiDisponibili: Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0),
                 is_privato: item.tipo === 'privata_slot'

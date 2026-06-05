@@ -2,9 +2,13 @@ import { pool } from '../db/db.js';
 
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6;
 
-// Funzione di utilità per trovare il massimo euro_km in una lista di veicoli
+/**
+ * Trova le tariffe massime tra un gruppo di veicoli (usata per il pool pop-bus)
+ */
 async function getMaxTariffaPool(veicoli_ids) {
-  if (!veicoli_ids || veicoli_ids.length === 0) return { prezzoKm: 0, prezzoPasseggero: 0 };
+  if (!veicoli_ids || veicoli_ids.length === 0) {
+    return { prezzoKm: 0.50, prezzoPasseggero: 1.00 }; // Fallback di sicurezza
+  }
   
   const res = await pool.query(
     'SELECT MAX(euro_km) as max_km, MAX(prezzo_passeggero) as max_pass FROM tariffe WHERE veicolo_id = ANY($1) AND tipo = $2',
@@ -12,17 +16,24 @@ async function getMaxTariffaPool(veicoli_ids) {
   );
   
   return {
-    prezzoKm: Number(res.rows[0].max_km) || 0,
-    prezzoPasseggero: Number(res.rows[0].max_pass) || 0
+    prezzoKm: Number(res.rows[0].max_km) || 0.50,
+    prezzoPasseggero: Number(res.rows[0].max_pass) || 1.00
   };
 }
 
+/**
+ * Recupera la tariffa standard per un singolo veicolo
+ */
 export async function getTariffe(veicolo_id, tipo) {
-  const tipoDaCercare = 'standard'; 
-  
+  // Gestione robusta: se veicolo_id manca, non crashiamo ma logghiamo e usiamo default
+  if (!veicolo_id) {
+    console.warn(`⚠️ getTariffe chiamato senza veicolo_id per tipo: ${tipo}. Uso valori di sicurezza.`);
+    return { prezzoKm: 0.50, prezzoPasseggero: 1.00 };
+  }
+
   const res = await pool.query(
     'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $2 LIMIT 1',
-    [veicolo_id, tipoDaCercare]
+    [veicolo_id, 'standard']
   );
   
   if (res.rows.length === 0) {
@@ -35,16 +46,19 @@ export async function getTariffe(veicolo_id, tipo) {
   };
 }
 
+/**
+ * Calcola il prezzo finale della corsa
+ */
 export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0) {
   const richiesti = Math.max(1, Number(postiRichiesti));
   let prezzoKm, prezzoPasseggero;
 
-  // LOGICA SPECIALE PER POOL: Scegliamo il massimo tra i veicoli del pool
+  // LOGICA SPECIALE PER POOL: Scegliamo il MAX tra i veicoli del pool
   if (tipo === 'pop-bus' && corsa.veicoli_pool_ids && corsa.veicoli_pool_ids.length > 0) {
     const maxTariffa = await getMaxTariffaPool(corsa.veicoli_pool_ids);
     prezzoKm = maxTariffa.prezzoKm;
     prezzoPasseggero = maxTariffa.prezzoPasseggero;
-    console.log(`[Pricing Engine] Pop-Bus: Usato MAX Tariffa del pool: ${prezzoKm}`);
+    console.log(`[Pricing Engine] Pop-Bus: MAX Tariffa applicata (da pool): ${prezzoKm}`);
   } else {
     // Logica standard per singolo veicolo
     const info = await getTariffe(corsa.veicolo_id, tipo);
@@ -75,6 +89,7 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
 
     case 'pop-bus':
       const postiTotali = Number(corsa.posti_totali || 1);
+      // La formula usa il prezzoKm (che ora è il massimo del pool)
       prezzoCalcolato = (kmUtente * prezzoKm) / (postiTotali * SOGLIA_ATTIVAZIONE_PERCENT);
       break;
 

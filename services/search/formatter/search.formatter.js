@@ -50,6 +50,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
         const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
         const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
         const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
+        
+        // ESTRAZIONE ID VEICOLI DEL POOL per il Pricing Engine
+        const idsVeicoliPool = popBusPool.map(item => Number(item.veicolo_id)).filter(id => !isNaN(id));
 
         risultatiDaFormattare.push({
             id: 'pool_pop_bus_fixed_id',
@@ -58,6 +61,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             posti_totali: postiTotaliPool,
             posti_prenotati: postiPrenotatiPool,
             mancanti: mancanti,
+            veicoli_pool_ids: idsVeicoliPool, // Passiamo gli ID al Pricing Engine
             messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`
         });
     }
@@ -77,21 +81,21 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             // A. Caso Pool
             if (item.is_pool) {
                 console.log(`[DEBUG] Calcolo POOL. Distanza: ${distKm}km`);
-                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm);
-                console.log(`[DEBUG] Prezzo POOL calcolato: ${p}`);
+                // calcolaPrezzo ora userà item.veicoli_pool_ids per trovare il MAX
+                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
                 return { 
                     ...item, 
                     localitaOrigine, localitaDestinazione, 
                     prezzo: prezzoVal, 
-                    prezzo_display: prezzoVal.toFixed(0),
+                    prezzo_display: prezzoVal.toFixed(0), 
                     marca: "Pop Bus", modello: "Condiviso"
                 };
             }
 
             // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
-                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'privata', distKm);
+                const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'privata', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
                 return {
                     id: `slot_privato_${item.veicolo_id}`,
@@ -109,7 +113,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
             // C. Caso Corsa Condivisa
             const distItemKm = (item.distanza || distTrattaMetri) / 1000;
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distItemKm);
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distItemKm, distItemKm);
             const prezzoVal = Number(p) || 0;
 
             return {

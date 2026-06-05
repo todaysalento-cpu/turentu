@@ -8,7 +8,16 @@ const safeDate = (val) => {
 };
 
 /**
- * VERSIONE AGGIORNATA: Lookup diretto tramite indice veicoloToDisponibilita
+ * 1. FUNZIONE SINGOLA (Richiesta dal tuo Router)
+ * Fa da wrapper per la logica batch.
+ */
+export async function getDisponibilita(veicoloId) {
+  const risultati = await getDisponibilitaBatch([veicoloId]);
+  return risultati.get(Number(veicoloId)) || [];
+}
+
+/**
+ * 2. VERSIONE BATCH: Lookup diretto tramite indice veicoloToDisponibilita
  */
 export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
   const targetDayOfWeek = targetDate.getDay();
@@ -23,7 +32,7 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
     const turno = CacheStore.veicoloToDisponibilita.get(veicoloId);
     
     if (!turno) {
-      results.set(veicoloId, []); // Nessun turno trovato per questo veicolo
+      results.set(veicoloId, []); 
       continue;
     }
 
@@ -36,24 +45,20 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
       targetDate <= safeDate(i.arrivo_datetime)
     );
 
-    // Valutazione disponibilità per il singolo turno trovato
+    // Valutazione disponibilità
     const stato = (() => {
-      // 1. GESTIONE STATO DI OCCUPAZIONE
       if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
         return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
 
-      // 2. LOGICA TURNI (Giorno)
       const giorniEsclusi = new Set((Array.isArray(turno.giorni_esclusi) ? turno.giorni_esclusi : []).map(Number));
       if (giorniEsclusi.has(targetDayOfWeek)) return { ...turno, disponibile: false };
 
-      // 3. Verifica PERIODI DI INATTIVITÀ
       if (Array.isArray(turno.inattivita)) {
         const isInactive = turno.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine));
         if (isInactive) return { ...turno, disponibile: false };
       }
 
-      // 4. VERIFICA ORARIO
       const startM = toMinutes(turno.start);
       const endM = toMinutes(turno.fine);
       const disponibile = (startM > endM) 
@@ -68,9 +73,6 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
   return results;
 }
 
-/**
- * Helper per estrarre minuti dal giorno in modo coerente (UTC)
- */
 function toMinutes(timeStr) {
   const d = new Date(timeStr);
   return d.getUTCHours() * 60 + d.getUTCMinutes();

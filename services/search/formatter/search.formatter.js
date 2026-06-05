@@ -53,7 +53,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     ]);
 
     const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
-    const distKm = distanzaRealeMetri / 1000;
 
     const popBusPool = risultatiFiltrati.filter(item => item.is_pool);
     const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
@@ -71,7 +70,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             id: 'pool_pop_bus_fixed_id', is_pool: true, tipo: 'pop-bus',
             posti_totali: postiTotaliPool, posti_prenotati: postiPrenotatiPool, mancanti: mancanti,
             messaggio: mancanti > 0 ? `Mancano ${mancanti} posti.` : `Pop Bus attivo!`,
-            localitaOrigine, localitaDestinazione, distMetri: distanzaRealeMetri
+            localitaOrigine, localitaDestinazione, distMetri: distanzaRealeMetri,
+            marca: "Pop Bus", modello: "Condiviso"
         });
     }
 
@@ -81,7 +81,9 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const distKmCalc = Math.max(0.1, distMetri / 1000);
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
             const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
-            const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
+            
+            // Logica determinazione tipo per pricing
+            const tipoCalcolo = item.is_pool ? 'pop-bus' : (item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard'));
             
             // Calcolo Prezzo
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)

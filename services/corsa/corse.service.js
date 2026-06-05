@@ -19,36 +19,65 @@ export function parseDurataMinuti(durata) {
 
 /* ===================== 1️⃣ CORSE PER AUTISTA ===================== */
 export async function getCorseByAutista(driver_id, status = '') {
+  if (!driver_id) throw new Error("ID autista mancante");
+  
   const client = await pool.connect();
   try {
     await client.query('SET search_path TO public');
-    let query = `SELECT c.*, v.driver_id, v.modello AS veicolo FROM public.corse c JOIN public.veicolo v ON c.veicolo_id = v.id WHERE v.driver_id = $1`;
+    
+    // Query corretta per recuperare corse in base al driver_id
+    let query = `
+      SELECT c.*, v.driver_id, v.modello AS veicolo 
+      FROM public.corse c 
+      JOIN public.veicolo v ON c.veicolo_id = v.id 
+      WHERE v.driver_id = $1
+    `;
     const params = [driver_id];
-    if (status === 'today') query += ` AND c.start_datetime::date = CURRENT_DATE`;
-    else if (status) { query += ` AND c."stato" = $2`; params.push(status); }
+    
+    if (status === 'today') {
+      query += ` AND c.start_datetime::date = CURRENT_DATE`;
+    } else if (status) {
+      query += ` AND c."stato" = $2`;
+      params.push(status);
+    }
+    
     const res = await client.query(query, params);
-    return res.rows.map(c => ({ ...c, durataMinuti: parseDurataMinuti(c.durata) }));
-  } finally { client.release(); }
+    
+    // Mappatura sicura
+    return res.rows.map(c => ({ 
+      ...c, 
+      durataMinuti: parseDurataMinuti(c.durata) 
+    }));
+  } finally { 
+    client.release(); 
+  }
 }
 
 /* ===================== 2️⃣ ACCETTA CORSA ===================== */
 export async function accettaCorsa(corsa_id) {
+  if (!corsa_id) return null;
   const client = await pool.connect();
   try {
-    const res = await client.query(`UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, [corsa_id]);
+    const res = await client.query(
+      `UPDATE public.corse SET "stato" = 'accettata' WHERE id = $1 RETURNING *`, 
+      [corsa_id]
+    );
+    
     const c = res.rows[0];
     if (c) { 
-        // Quando viene accettata, la rimuoviamo dalla ricerca (non più disponibile)
         removeCorsa(corsa_id); 
         CacheManager.corsa.update(c); 
     }
-    return c ? c : null;
-  } finally { client.release(); }
+    return c || null;
+  } finally { 
+    client.release(); 
+  }
 }
 
 /* ===================== 3️⃣ START / END CORSA ===================== */
 export async function toggleCorsa(corsa_id, action) {
   if (!['start', 'end'].includes(action)) throw new Error('Azione non valida');
+  if (!corsa_id) throw new Error('ID corsa mancante');
 
   const client = await pool.connect();
   try {
@@ -63,14 +92,9 @@ export async function toggleCorsa(corsa_id, action) {
     if (!corsaRes.rows.length) throw new Error('Corsa non trovata');
     const corsa = corsaRes.rows[0];
     
-    // Aggiorniamo la dashboard dell'autista
     CacheManager.corsa.update(corsa);
-
-    // Gestione Spaziale:
-    // Una corsa in corso o terminata NON deve apparire nei motori di ricerca passeggeri
     await removeCorsa(corsa_id);
 
-    // Gestione Pagamenti (solo al completamento)
     if (action === 'end') {
       const prenRes = await client.query(
         `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, pr.posti_richiesti
@@ -84,7 +108,6 @@ export async function toggleCorsa(corsa_id, action) {
         if (!pren.stripe_payment_intent) continue;
 
         try {
-          // Calcolo dinamico basato sul tipo di corsa
           const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
           const importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
           
@@ -104,7 +127,7 @@ export async function toggleCorsa(corsa_id, action) {
     }
 
     await client.query('COMMIT');
-    return { id: corsa.id, stato: newStato };
+    return { ...corsa, stato: newStato }; // Restituiamo l'oggetto completo
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

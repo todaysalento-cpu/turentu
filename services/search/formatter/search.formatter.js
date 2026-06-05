@@ -46,24 +46,32 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
     if (popBusPool.length > 0) {
-        const postiTotaliPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
-        const postiPrenotatiPool = popBusPool.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
-        const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
-        const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
-        
-        // ESTRAZIONE ID VEICOLI DEL POOL per il Pricing Engine
-        const idsVeicoliPool = popBusPool.map(item => Number(item.veicolo_id)).filter(id => !isNaN(id));
-
-        risultatiDaFormattare.push({
-            id: 'pool_pop_bus_fixed_id',
-            is_pool: true,
-            tipo: 'pop-bus',
-            posti_totali: postiTotaliPool,
-            posti_prenotati: postiPrenotatiPool,
-            mancanti: mancanti,
-            veicoli_pool_ids: idsVeicoliPool, // Passiamo gli ID al Pricing Engine
-            messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`
+        // FILTRO RIGOROSO: Escludiamo dati sporchi (es. posti > 50)
+        const poolValido = popBusPool.filter(item => {
+            const p = Number(item.posti_totali || 0);
+            return p > 0 && p <= 50; 
         });
+
+        if (poolValido.length > 0) {
+            const postiTotaliPool = poolValido.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0);
+            const postiPrenotatiPool = poolValido.reduce((acc, curr) => acc + Number(curr.posti_prenotati || 0), 0);
+            const postiMinimiPerAttivazione = Math.ceil(postiTotaliPool * SOGLIA_ATTIVAZIONE_PERCENT);
+            const mancanti = Math.max(0, postiMinimiPerAttivazione - postiPrenotatiPool);
+            
+            // ESTRAZIONE ID VEICOLI PULITI
+            const idsVeicoliPool = poolValido.map(item => Number(item.veicolo_id)).filter(id => !isNaN(id));
+
+            risultatiDaFormattare.push({
+                id: 'pool_pop_bus_fixed_id',
+                is_pool: true,
+                tipo: 'pop-bus',
+                posti_totali: postiTotaliPool,
+                posti_prenotati: postiPrenotatiPool,
+                mancanti: mancanti,
+                veicoli_pool_ids: idsVeicoliPool, // Ora popolato con soli ID validi
+                messaggio: mancanti > 0 ? `Pop Bus in formazione: mancano ${mancanti} posti.` : `Pop Bus attivo!`
+            });
+        }
     }
 
     const distTrattaMetri = Number(richiesta.distanzaMetri || 10000);
@@ -78,10 +86,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 servizi: normalizzaServizi(item.servizi)
             };
 
-            // A. Caso Pool
             if (item.is_pool) {
-                console.log(`[DEBUG] Calcolo POOL. Distanza: ${distKm}km`);
-                // calcolaPrezzo ora userà item.veicoli_pool_ids per trovare il MAX
                 const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'pop-bus', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
                 return { 
@@ -93,7 +98,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 };
             }
 
-            // B. Caso Slot Privato
             if (item.tipo === 'privata_slot') {
                 const p = await calcolaPrezzo(item, richiesta.posti_richiesti, 'privata', distKm, distKm);
                 const prezzoVal = Number(p) || 0;
@@ -111,7 +115,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 };
             }
 
-            // C. Caso Corsa Condivisa
             const distItemKm = (item.distanza || distTrattaMetri) / 1000;
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo_corsa, distItemKm, distItemKm);
             const prezzoVal = Number(p) || 0;

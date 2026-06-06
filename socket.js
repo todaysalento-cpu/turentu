@@ -18,14 +18,18 @@ const log = (label, data = {}) =>
 export const sendNotification = ({ userId, role, notification }) => {
   if (!io || !userId || !role || !notification) return;
   
-  // Normalizzazione del ruolo per evitare mismatch (es. 'Autista' vs 'autista')
   const cleanRole = role.toLowerCase();
   const room = `${cleanRole}_${userId}`;
   
-  // Debug diagnostico per capire se il client è realmente in ascolto
+  // LOG DI DIAGNOSTICA AVANZATA
   const clients = io.sockets.adapter.rooms.get(room);
   if (!clients || clients.size === 0) {
-    log("NOTIFICATION_LOST", { room, reason: "No clients in room" });
+    log("NOTIFICATION_LOST", { 
+      room, 
+      userId, 
+      reason: "No clients in room - Client disconnesso o mancata iscrizione alla stanza",
+      activeRooms: Array.from(io.sockets.adapter.rooms.keys()).filter(r => r.includes(userId))
+    });
   } else {
     log("NOTIFICATION_SENT", { room, userId, role: cleanRole, targetClients: clients.size });
   }
@@ -40,12 +44,16 @@ export const setupSocket = (ioServer) => {
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("NO_TOKEN"));
+    if (!token) {
+      log("AUTH_FAILED", { error: "NO_TOKEN" });
+      return next(new Error("NO_TOKEN"));
+    }
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       socket.user = { id: decoded.id, role: (decoded.role || "cliente").toLowerCase() };
       next();
     } catch (err) {
+      log("AUTH_FAILED", { error: "JWT_INVALID" });
       next(new Error("JWT_INVALID"));
     }
   });
@@ -53,8 +61,13 @@ export const setupSocket = (ioServer) => {
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
     const room = `${role}_${userId}`;
+    
+    // JOIN AUTOMATICO
     socket.join(room);
-    log("SOCKET_CONNECTED", { userId, role, room });
+    
+    // LOG DI VERIFICA CONNESSIONE
+    const allRooms = Array.from(socket.rooms);
+    log("SOCKET_CONNECTED", { userId, role, room, currentSocketRooms: allRooms });
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
@@ -62,8 +75,9 @@ export const setupSocket = (ioServer) => {
       const clId = Number(cliente_id);
       if (!cId || !clId) return;
 
-      socket.join(`chat_${cId}_${clId}`);
-      log("JOINED_CHAT", { corsa_id: cId, cliente_id: clId });
+      const chatRoom = `chat_${cId}_${clId}`;
+      socket.join(chatRoom);
+      log("JOINED_CHAT", { corsa_id: cId, cliente_id: clId, room: chatRoom });
 
       try {
         const { rows } = await pool.query(
@@ -132,7 +146,6 @@ export const setupSocket = (ioServer) => {
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientRoom = `${targetRole}_${recipientId}`;
         
-        // Verifica disponibilità in tempo reale
         const clients = io.sockets.adapter.rooms.get(recipientRoom);
         const isOnline = clients && clients.size > 0;
 

@@ -6,7 +6,6 @@ import { CacheManager } from '../../utils/cacheManager.js';
 import { getRouteGeometry } from '../../utils/maps.util.js'; 
 import polyline from 'polyline';
 import ngeohash from 'ngeohash';
-// Import necessario per sincronizzare il motore di ricerca
 import { upsertCorsa } from '../search/search.cache.js'; 
 
 export async function createCorsaFromPending(pending, veicolo, client) {
@@ -31,7 +30,7 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     const coordOrig = pending.coordOrigine ?? { lat: pending.origine_lat ?? 0, lon: pending.origine_lon ?? 0 };
     const coordDest = pending.coordDestinazione ?? { lat: pending.destinazione_lat ?? 0, lon: pending.destinazione_lon ?? 0 };
 
-    // --- GEOMETRIA PER RIDESHARING DINAMICO ---
+    // --- GEOMETRIA ---
     let polylineString = '';
     let pathGeohashes = [];
     try {
@@ -39,12 +38,10 @@ export async function createCorsaFromPending(pending, veicolo, client) {
       polylineString = routeData.polyline;
       
       const coords = polyline.decode(polylineString);
-      
       const step = Math.max(1, Math.floor(coords.length / 10));
       pathGeohashes = coords
         .filter((_, index) => index % step === 0)
         .map(c => ngeohash.encode(c[0], c[1], 5));
-        
     } catch (e) {
       console.warn('Fallback: Impossibile generare geometria percorso', e);
     }
@@ -67,8 +64,8 @@ export async function createCorsaFromPending(pending, veicolo, client) {
         (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), 
         `${durataMin} minutes`, postiTotali, 
         (pending.distanza ?? 0), 
-        coordOrig.lat, coordOrig.lon, // $8, $9
-        coordDest.lat, coordDest.lon, // $10, $11
+        coordOrig.lat, coordOrig.lon,
+        coordDest.lat, coordDest.lon,
         (pending.origine_address ?? 'N/D'), (pending.destinazione_address ?? 'N/D'),
         polylineString, pathGeohashes
       ]
@@ -77,13 +74,24 @@ export async function createCorsaFromPending(pending, veicolo, client) {
     const corsa = res.rows[0];
     
     // --- PRENOTAZIONE E CACHE ---
-    const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, postiRichiesti, client);
+    // Definiamo i segmenti (usando i valori dal pending o default)
+    const segmenti = { 
+        startIdx: pending.start_index_polyline ?? 0, 
+        endIdx: pending.end_index_polyline ?? 100 
+    };
+
+    // Chiamata corretta con tutti i parametri richiesti dal servizio
+    const prenotazione = await prenotazioneService.prenotaCorsa(
+        corsa, 
+        pending.cliente_id ?? pending.clienteId, 
+        postiRichiesti, 
+        segmenti, 
+        client
+    );
+
     await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
 
-    // Aggiornamento CacheManager (Stato)
     CacheManager.corsa.update(corsa);
-    
-    // Sincronizzazione Motore di Ricerca (Filtri/Geohash)
     upsertCorsa(corsa);
 
     if (localClient) await client.query('COMMIT');

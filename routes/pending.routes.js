@@ -11,7 +11,6 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // -------------------- GET pendings per veicolo --------------------
-// Questa rotta risolve l'errore 404 che ricevevi all'avvio
 router.get('/autista/:veicolo_id', async (req, res) => {
     const client = await pool.connect();
     try {
@@ -51,6 +50,7 @@ router.post('/:id/accetta', async (req, res) => {
       return res.status(400).json({ message: 'Non disponibile' });
     }
 
+    // Aggiornamento stato pending
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
@@ -67,6 +67,12 @@ router.post('/:id/accetta', async (req, res) => {
       const driverId = driverRes.rows[0]?.driver_id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
 
+      // PREPARAZIONE SEGMENTI PER IL SERVIZIO DI PRENOTAZIONE
+      const segmenti = { 
+          startIdx: p.start_index_polyline ?? 0, 
+          endIdx: p.end_index_polyline ?? 100 
+      };
+
       let corsa;
       if (!p.corsa_id) {
         const existing = await client.query(
@@ -75,7 +81,7 @@ router.post('/:id/accetta', async (req, res) => {
         );
         if (existing.rows.length) {
           corsa = existing.rows[0];
-          await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
+          await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
         } else {
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
           const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client);
@@ -85,7 +91,7 @@ router.post('/:id/accetta', async (req, res) => {
       } else {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [p.corsa_id]);
         corsa = corsaRes.rows[0];
-        await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, client);
+        await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
       }
 
       upsertCorsa(corsa);
@@ -100,9 +106,9 @@ router.post('/:id/accetta', async (req, res) => {
       if (p.payment_intent_id && prenotazioneId) {
         await client.query(
           `INSERT INTO pagamenti (prenotazione_id, importo, stato, stripe_payment_intent, corsa_id, updated_at)
-           VALUES ($1, $2, 'autorizzazione', $3, $4, NOW())
-           ON CONFLICT (stripe_payment_intent) 
-           DO UPDATE SET prenotazione_id = $1, corsa_id = $4`,
+            VALUES ($1, $2, 'autorizzazione', $3, $4, NOW())
+            ON CONFLICT (stripe_payment_intent) 
+            DO UPDATE SET prenotazione_id = $1, corsa_id = $4`,
           [prenotazioneId, p.prezzo, p.payment_intent_id, corsa.id]
         );
       }

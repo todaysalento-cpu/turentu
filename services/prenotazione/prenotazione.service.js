@@ -23,16 +23,15 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       throw new Error("Parametri di prenotazione mancanti o invalidi");
     }
 
-    // 1. VERIFICA DINAMICA (Sostituisce il FOR UPDATE su contatore statico)
-    // Verifichiamo il picco di occupazione sovrapposto al segmento richiesto
+    // 1. VERIFICA DINAMICA
     const checkRes = await client.query(
       `SELECT MAX(occupazione_segmento) as max_occ 
        FROM (
           SELECT SUM(p.posti_richiesti) as occupazione_segmento
           FROM prenotazioni p
           WHERE p.corsa_id = $1
-          -- Corretto: riferimento a colonne con suffisso _polyline
-          AND p.start_index_polyline < $3 AND p.end_index_polyline > $2
+          AND p.start_index_polyline < $3 
+          AND p.end_index_polyline > $2
           GROUP BY p.start_index_polyline, p.end_index_polyline
        ) as sub`,
       [corsa.id, segmenti.startIdx, segmenti.endIdx]
@@ -46,14 +45,21 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     }
 
     // 2. INSERISCI PRENOTAZIONE CON SEGMENTI
+    // Aggiunta colonna 'posti_prenotati' impostata pari a 'posti_richiesti' per soddisfare il NOT NULL constraint
     const prenRes = await client.query(
-      `INSERT INTO prenotazioni (corsa_id, cliente_id, posti_richiesti, start_index_polyline, end_index_polyline) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      `INSERT INTO prenotazioni (
+          corsa_id, 
+          cliente_id, 
+          posti_richiesti, 
+          posti_prenotati, 
+          start_index_polyline, 
+          end_index_polyline
+       ) 
+       VALUES ($1, $2, $3, $3, $4, $5) RETURNING *`,
       [corsa.id, clienteId, postiRichiesti, segmenti.startIdx, segmenti.endIdx]
     );
 
     // 3. AGGIORNAMENTO CACHE
-    // Aggiorniamo la corsa con il nuovo picco calcolato correttamente sulle colonne _polyline
     const corsaAggiornata = await client.query(
         `SELECT c.*, 
         (SELECT MAX(occ) FROM (

@@ -13,8 +13,7 @@ router.get('/', async (req, res) => {
   try {
     const utente_id = req.user.id;
     
-    // CORREZIONE: Recuperiamo le disponibilità filtrando per il driver_id del veicolo
-    // Non usiamo getDisponibilita(utente_id) perché si aspetta un ID veicolo
+    // Recuperiamo le disponibilità filtrando per il driver_id del veicolo
     const query = `
       SELECT d.* FROM disponibilita_veicolo d
       JOIN veicolo v ON d.veicolo_id = v.id
@@ -106,7 +105,8 @@ router.put('/:id', async (req, res) => {
 });
 
 // -------------------- DELETE turno --------------------
-router.delete/:id', async (req, res) => {
+// CORRETTO: aggiunta la parentesi mancante nel path
+router.delete('/:id', async (req, res) => {
   try {
     const utente_id = req.user.id;
     const id = req.params.id;

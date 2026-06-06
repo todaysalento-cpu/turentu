@@ -17,9 +17,20 @@ const log = (label, data = {}) =>
 /* ================= NOTIFICATIONS ================= */
 export const sendNotification = ({ userId, role, notification }) => {
   if (!io || !userId || !role || !notification) return;
-  const room = `${role}_${userId}`;
+  
+  // Normalizzazione del ruolo per evitare mismatch (es. 'Autista' vs 'autista')
+  const cleanRole = role.toLowerCase();
+  const room = `${cleanRole}_${userId}`;
+  
+  // Debug diagnostico per capire se il client è realmente in ascolto
+  const clients = io.sockets.adapter.rooms.get(room);
+  if (!clients || clients.size === 0) {
+    log("NOTIFICATION_LOST", { room, reason: "No clients in room" });
+  } else {
+    log("NOTIFICATION_SENT", { room, userId, role: cleanRole, targetClients: clients.size });
+  }
+
   io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
-  log("NOTIFICATION_SENT", { room, userId, role });
 };
 
 /* ================= SOCKET SETUP ================= */
@@ -41,7 +52,9 @@ export const setupSocket = (ioServer) => {
 
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
-    socket.join(`${role}_${userId}`);
+    const room = `${role}_${userId}`;
+    socket.join(room);
+    log("SOCKET_CONNECTED", { userId, role, room });
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
@@ -50,6 +63,7 @@ export const setupSocket = (ioServer) => {
       if (!cId || !clId) return;
 
       socket.join(`chat_${cId}_${clId}`);
+      log("JOINED_CHAT", { corsa_id: cId, cliente_id: clId });
 
       try {
         const { rows } = await pool.query(
@@ -94,7 +108,6 @@ export const setupSocket = (ioServer) => {
         const cId = Number(corsa_id);
         const clId = Number(cliente_id);
         
-        // Verifica contenuto minimo (testo o audio)
         if (!text?.trim() && !audio_url) return;
 
         const threadRes = await pool.query(
@@ -118,7 +131,10 @@ export const setupSocket = (ioServer) => {
         const recipientId = role === "cliente" ? thread.driver_id : clId;
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientRoom = `${targetRole}_${recipientId}`;
-        const isOnline = io.sockets.adapter.rooms.get(recipientRoom)?.size > 0;
+        
+        // Verifica disponibilità in tempo reale
+        const clients = io.sockets.adapter.rooms.get(recipientRoom);
+        const isOnline = clients && clients.size > 0;
 
         io.to(`chat_${cId}_${clId}`).emit("new_message", {
           id: String(msg.id),
@@ -159,6 +175,7 @@ export const setupSocket = (ioServer) => {
 
         if (result.rowCount > 0) {
           io.to(`${role}_${userId}`).emit("unread_count_reset", { corsa_id: cId, cliente_id: clId });
+          
           const threadRes = await pool.query(`SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`, [cId, clId]);
           const thread = threadRes.rows[0];
           if (thread) {
@@ -178,6 +195,6 @@ export const setupSocket = (ioServer) => {
       }
     });
 
-    socket.on("disconnect", () => log("DISCONNECT", { userId }));
+    socket.on("disconnect", (reason) => log("DISCONNECT", { userId, reason }));
   });
 };

@@ -18,14 +18,13 @@ export function parseDurataMinuti(durata) {
 }
 
 /* ===================== 1️⃣ CORSE PER AUTISTA ===================== */
-export async function getCorseByAutista(driver_id, status = '') {
+export async function getCorseByAutista(driver_id, status = 'tutte') {
   if (!driver_id) throw new Error("ID autista mancante");
   
   const client = await pool.connect();
   try {
     await client.query('SET search_path TO public');
     
-    // Query corretta per recuperare corse in base al driver_id
     let query = `
       SELECT c.*, v.driver_id, v.modello AS veicolo 
       FROM public.corse c 
@@ -34,16 +33,22 @@ export async function getCorseByAutista(driver_id, status = '') {
     `;
     const params = [driver_id];
     
+    // Logica flessibile:
+    // 'today' -> Filtra solo per oggi
+    // 'tutte' (default) -> Nessun filtro sullo stato
+    // altro -> Filtra per lo stato specifico (in_corso, completata, etc.)
     if (status === 'today') {
       query += ` AND c.start_datetime::date = CURRENT_DATE`;
-    } else if (status) {
+    } else if (status && status !== 'tutte') {
       query += ` AND c."stato" = $2`;
       params.push(status);
     }
     
+    // Ordinamento per mostrare sempre le più recenti per prime
+    query += ` ORDER BY c.start_datetime DESC`;
+    
     const res = await client.query(query, params);
     
-    // Mappatura sicura
     return res.rows.map(c => ({ 
       ...c, 
       durataMinuti: parseDurataMinuti(c.durata) 
@@ -127,7 +132,7 @@ export async function toggleCorsa(corsa_id, action) {
     }
 
     await client.query('COMMIT');
-    return { ...corsa, stato: newStato }; // Restituiamo l'oggetto completo
+    return { ...corsa, stato: newStato };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

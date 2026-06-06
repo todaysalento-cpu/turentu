@@ -37,8 +37,8 @@ router.post('/:id/accetta', async (req, res) => {
     const id = Number(req.params.id);
     await client.query('BEGIN');
 
+    // 1. Recupero e blocco del record pending
     const pendingRes = await client.query(`SELECT * FROM pending WHERE id = $1 FOR UPDATE`, [id]);
-
     if (!pendingRes.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Pending non trovato' });
@@ -50,7 +50,7 @@ router.post('/:id/accetta', async (req, res) => {
       return res.status(400).json({ message: 'Non disponibile' });
     }
 
-    // Aggiornamento stato pending
+    // 2. Aggiornamento stato
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
@@ -67,36 +67,45 @@ router.post('/:id/accetta', async (req, res) => {
       const driverId = driverRes.rows[0]?.driver_id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
 
-      // PREPARAZIONE SEGMENTI PER IL SERVIZIO DI PRENOTAZIONE
       const segmenti = { 
           startIdx: p.start_index_polyline ?? 0, 
           endIdx: p.end_index_polyline ?? 100 
       };
 
+      // 3. LOGICA UNIFICATA: Determinazione Corsa
       let corsa;
       if (!p.corsa_id) {
+        // Cerca corsa esistente compatibile
         const existing = await client.query(
           `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
           [p.veicolo_id, p.start_datetime]
         );
+        
         if (existing.rows.length) {
           corsa = existing.rows[0];
-          await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
         } else {
+          // Creazione nuova corsa se non esiste
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
           const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client);
           corsa = resCorsa.corsa;
+          // Associa subito il nuovo ID al record pending nella stessa transazione
           await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
         }
       } else {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [p.corsa_id]);
         corsa = corsaRes.rows[0];
-        await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
       }
 
+      if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
+
+      // 4. PRENOTAZIONE (Eseguita sempre su corsa valida)
+      await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
+
+      // 5. Aggiornamento Cache
       upsertCorsa(corsa);
       CacheManager.corsa.update(corsa);
 
+      // 6. Gestione Pagamenti
       const prenotazioneRes = await client.query(
         `SELECT id FROM prenotazioni WHERE cliente_id = $1 AND corsa_id = $2 ORDER BY id DESC LIMIT 1`,
         [p.cliente_id, corsa.id]
@@ -118,10 +127,12 @@ router.post('/:id/accetta', async (req, res) => {
 
     await client.query('COMMIT');
     
+    // 7. Invio Notifiche (post-commit)
     const io = getIO();
     for (const data of notificheDaInviare) {
       const { p, corsa, driverId, driverNome } = data;
       const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
+      
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
       io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });

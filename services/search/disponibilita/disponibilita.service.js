@@ -47,6 +47,7 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
 
     // Valutazione disponibilità
     const stato = (() => {
+      // Nota: 'tipo_corsa' viene gestito qui via logica, non via DB
       if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
         return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
@@ -80,7 +81,8 @@ function toMinutes(timeStr) {
 
 // --- CRUD OPERAZIONI ---
 export async function createDisponibilita(turno) {
-  let { veicolo_id, start, fine, tipo_corsa = 'privata', manual = false, giorni_esclusi = [], inattivita = [] } = turno;
+  // Rimosso 'tipo_corsa' dalla destrutturazione poiché non presente in tabella
+  let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
   
   start = parseTimeString(start);
   fine = parseTimeString(fine);
@@ -89,14 +91,19 @@ export async function createDisponibilita(turno) {
     throw new Error('Orario non valido');
   }
 
+  // Rimosso 'tipo_corsa' dalla query SQL e dai parametri
   const res = await pool.query(
-    `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi, inattivita)
-     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
      ON CONFLICT (veicolo_id)
-     DO UPDATE SET start = EXCLUDED.start, fine = EXCLUDED.fine, tipo_corsa = EXCLUDED.tipo_corsa, 
-                   manual = EXCLUDED.manual, giorni_esclusi = EXCLUDED.giorni_esclusi, inattivita = EXCLUDED.inattivita
+     DO UPDATE SET 
+        start = EXCLUDED.start, 
+        fine = EXCLUDED.fine, 
+        manual = EXCLUDED.manual, 
+        giorni_esclusi = EXCLUDED.giorni_esclusi, 
+        inattivita = EXCLUDED.inattivita
      RETURNING *`,
-    [veicolo_id, start, fine, tipo_corsa, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
+    [veicolo_id, start, fine, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
   );
 
   const nuovoTurno = res.rows[0];

@@ -12,8 +12,19 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
   try {
     const utente_id = req.user.id;
-    const disponibilita = await disponibilitaService.getDisponibilita(utente_id);
-    res.json(disponibilita);
+    
+    // CORREZIONE: Recuperiamo le disponibilità filtrando per il driver_id del veicolo
+    // Non usiamo getDisponibilita(utente_id) perché si aspetta un ID veicolo
+    const query = `
+      SELECT d.* FROM disponibilita_veicolo d
+      JOIN veicolo v ON d.veicolo_id = v.id
+      WHERE v.driver_id = $1
+    `;
+    
+    const result = await pool.query(query, [utente_id]);
+    
+    console.log(`✅ [GET /disponibilita] Trovati ${result.rows.length} record per driver ${utente_id}`);
+    res.json(result.rows);
   } catch (err) {
     console.error('❌ Disponibilità error:', err);
     res.status(500).json({ error: err.message });
@@ -27,16 +38,13 @@ router.post('/', async (req, res) => {
     const body = req.body;
 
     console.log('📥 POST /disponibilita body:', body);
-    console.log('📥 Utente:', utente_id);
 
     const { veicolo_id, start, fine, giorni_esclusi = [], inattivita = [] } = body;
 
     if (!veicolo_id || !start || !fine) {
-      console.warn('⚠️ Dati mancanti:', { veicolo_id, start, fine });
       return res.status(400).json({ message: 'Dati mancanti' });
     }
 
-    // ✅ driver_id al posto di utente_id
     const veicolo = await pool.query(
       'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
       [veicolo_id, utente_id]
@@ -57,7 +65,6 @@ router.post('/', async (req, res) => {
 
     console.log('✅ Disponibilità creata:', turno);
     res.json(turno);
-
   } catch (err) {
     console.error('❌ Creazione disponibilità error:', err);
     res.status(500).json({ error: err.message });
@@ -69,13 +76,8 @@ router.put('/:id', async (req, res) => {
   try {
     const utente_id = req.user.id;
     const id = req.params.id;
-    const body = req.body;
+    const { start, fine, giorni_esclusi = [], inattivita = [] } = req.body;
 
-    console.log('📥 PUT /disponibilita/:id', { id, body, utente_id });
-
-    const { start, fine, giorni_esclusi = [], inattivita = [] } = body;
-
-    // ✅ driver_id al posto di utente_id
     const turno = await pool.query(
       `SELECT d.id 
        FROM disponibilita_veicolo d
@@ -85,7 +87,6 @@ router.put('/:id', async (req, res) => {
     );
 
     if (!turno.rows.length) {
-      console.warn('⚠️ Non autorizzato a modificare turno', { id, utente_id });
       return res.status(403).json({ message: 'Non autorizzato' });
     }
 
@@ -98,7 +99,6 @@ router.put('/:id', async (req, res) => {
 
     console.log('✅ Disponibilità aggiornata:', updated);
     res.json(updated);
-
   } catch (err) {
     console.error('❌ Update disponibilità error:', err);
     res.status(500).json({ error: err.message });
@@ -106,14 +106,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // -------------------- DELETE turno --------------------
-router.delete('/:id', async (req, res) => {
+router.delete/:id', async (req, res) => {
   try {
     const utente_id = req.user.id;
     const id = req.params.id;
 
-    console.log('📥 DELETE /disponibilita/:id', { id, utente_id });
-
-    // ✅ driver_id al posto di utente_id
     const turno = await pool.query(
       `SELECT d.id 
        FROM disponibilita_veicolo d
@@ -123,14 +120,12 @@ router.delete('/:id', async (req, res) => {
     );
 
     if (!turno.rows.length) {
-      console.warn('⚠️ Non autorizzato a cancellare turno', { id, utente_id });
       return res.status(403).json({ message: 'Non autorizzato' });
     }
 
     await disponibilitaService.deleteDisponibilita(id);
     console.log('✅ Turno eliminato:', id);
     res.json({ message: 'Eliminato' });
-
   } catch (err) {
     console.error('❌ Delete disponibilità error:', err);
     res.status(500).json({ error: err.message });

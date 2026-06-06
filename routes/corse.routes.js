@@ -34,6 +34,25 @@ corseRouter.get('/autista/today', async (req, res) => {
 });
 
 // ======================================================
+// 2️⃣ GET TUTTE LE CORSE AUTISTA
+// ======================================================
+corseRouter.get('/autista/all', async (req, res) => {
+    try {
+        const driverId = req.user.id;
+        const status = req.query.status;
+        // Se viene passato uno status (es. in_corso), lo usiamo, altrimenti 'tutte'
+        const filter = (status && status !== 'tutte') ? status : 'tutte';
+        
+        const corse = await getCorseByAutista(driverId, filter);
+        
+        res.json(corse);
+    } catch (err) {
+        console.error("❌ Errore in GET /api/corse/autista/all:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================================
 // 3️⃣ ACCETTA CORSA
 // ======================================================
 corseRouter.post('/:id/accetta', async (req, res) => {

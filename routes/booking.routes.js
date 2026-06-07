@@ -29,6 +29,7 @@ function generatePendingMessage({ role, startAddress, endAddress, startDatetime 
 router.post('/payment-intent', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   const notificheDaInviare = [];
+  console.log(`💳 [PAYMENT] Inizio flusso per user: ${req.user.id}`);
 
   try {
     const { type, prezzo, slots } = req.body;
@@ -45,6 +46,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
       capture_method: 'manual',
     });
+    console.log(`💳 [STRIPE] Intent creato: ${paymentIntent.id}`);
 
     await client.query('BEGIN');
     const pendingRows = [];
@@ -58,7 +60,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       if (!origine?.lat || !destinazione?.lat) throw new Error("Coordinate incomplete");
 
       if (is_pool) {
-        // 🔥 LOGICA POP BUS: Inserimento in tabella dedicata
+        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus`);
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa')
@@ -67,7 +69,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         );
         pendingRows.push({ ...result.rows[0], is_pool: true });
       } else {
-        // 🔥 LOGICA CORSE PRIVATE: Inserimento in pending
+        console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${veicolo_id}`);
         let durataMinuti = slot.durataMinuti ?? slot.durata_minuti ?? 30;
         let dist = Number(distanzaKm ?? 0);
         
@@ -87,29 +89,36 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         pendingRows.push(pItem);
         await upsertPrenotazione(pItem);
 
-        // Notifiche solo per corse con autista privato
+        // Notifiche
         const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [veicolo_id]);
         const driverId = driverRes.rows[0]?.driver_id;
+        
         if (driverId) {
+          console.log(`🔔 [NOTIF] Inserimento notifica DB per Autista ID: ${driverId}`);
           const notif = await client.query(
             `INSERT INTO notifications(user_id, type, message, seen, created_at) VALUES ($1, 'pending', $2, false, NOW()) RETURNING *`, 
             [driverId, generatePendingMessage({ role: 'autista', startAddress: localitaOrigine, endAddress: localitaDestinazione, startDatetime: start_datetime })]
           );
           notificheDaInviare.push({ userId: driverId, notification: notif.rows[0] });
+        } else {
+          console.warn(`⚠️ [NOTIF] Driver non trovato per veicolo ${veicolo_id}`);
         }
       }
     }
 
     await client.query('COMMIT');
+    console.log(`✅ [PAYMENT] Transazione completata.`);
 
+    // Invio notifiche socket
     for (const notifData of notificheDaInviare) {
+      console.log(`🚀 [SOCKET] Invio notifica real-time a Autista: ${notifData.userId}`);
       sendNotification({ userId: notifData.userId, role: 'autista', notification: notifData.notification });
     }
 
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Payment Flow Error:', err);
+    console.error('❌ [PAYMENT] Errore critico:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

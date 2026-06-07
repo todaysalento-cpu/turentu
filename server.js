@@ -1,6 +1,16 @@
-// --- DEBUG FATALE ---
-process.on('uncaughtException', (err) => { console.error('--- CRASH FATALE ---', err); process.exit(1); });
-process.on('unhandledRejection', (reason, promise) => { console.error('--- REJECTION NON GESTITA ---', reason); process.exit(1); });
+// --- DEBUG FATALE: Intercetta crash all'avvio su Render ---
+process.on('uncaughtException', (err) => {
+  console.error('--- CRASH FATALE (uncaughtException) ---');
+  console.error(err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('--- REJECTION NON GESTITA (unhandledRejection) ---');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+  process.exit(1);
+});
 
 import express from 'express';
 import cors from 'cors';
@@ -8,27 +18,76 @@ import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import http from 'http';
 import { Server } from 'socket.io';
-import { createAdapter } from "@socket.io/redis-adapter"; // <--- IMPORT AGGIUNTO
+import { createAdapter } from "@socket.io/redis-adapter"; // <--- ADAPTER AGGIUNTO
 
 // ======================= SOCKET + REDIS =======================
 import { setupSocket } from './socket.js';
 import { redisClient } from './redis.js';
 
-// ... (tutti gli altri import rimangono identici)
+// ======================= FLOW REGISTRY =======================
 import { flowRegistry } from './core/registry/flowRegistry.js';
 import { onboardingFlow } from './core/registry/flows/onboarding.flow.js';
+
+// ======================= ROUTES =======================
+import flowsRouter from './routes/flows.routes.js';
+import adminRouter from './routes/admin/index.js';
+import bookingRouter from './routes/booking.routes.js';
+import { bookingClienteRouter } from './routes/booking.cliente.routes.js';
+import { router as stripeWebhookRouter } from './routes/stripe-webhook.js';
+import { router as authRouter } from './routes/auth.routes.js';
+import { disponibilitaRouter } from './routes/disponibilita.routes.js';
+import { veicoloRouter } from './routes/veicolo.routes.js';
+import { corseRouter } from './routes/corse.routes.js';
+import { pendingRouter } from './routes/pending.routes.js';
+import { tariffeRouter } from './routes/tariffe.routes.js';
+import distanzaRouter from './routes/distanza.route.js';
+import { notificationsRouter } from './routes/notification.routes.js';
+import chatRouter from './routes/chat.routes.js';
+import searchRouter from './routes/search.routes.js';
+import autistaProfiloRouter from './routes/autistaProfilo.routes.js';
+import autistaStatusRouter from './routes/autistaStatus.routes.js';
+import documentiAutistaRouter from './routes/documentiAutista.routes.js';
+import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
+import prenotazioniRouter from './routes/prenotazioni.routes.js';
+import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
+
+// ======================= SERVICES =======================
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
-import { stripeWebhookRouter, authRouter, notificationsRouter, bookingRouter, bookingClienteRouter, disponibilitaRouter, veicoloRouter, corseRouter, pendingRouter, tariffeRouter, distanzaRouter, chatRouter, searchRouter, autistaProfiloRouter, autistaStatusRouter, documentiAutistaRouter, documentiVeicoloRouter, prenotazioniRouter, pagamentiAutistaRouter, adminRouter, flowsRouter } from './routes/index.js'; // Assumendo che tu abbia un barrel file per le rotte
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// ======================= CORS & MIDDLEWARE =======================
+// ======================= CORS =======================
 const isAllowedOrigin = (origin) => !origin || ['http://localhost:3000', 'https://turentumi.vercel.app'].includes(origin) || origin.endsWith('.vercel.app');
 app.use(cors({ origin: (origin, callback) => isAllowedOrigin(origin) ? callback(null, true) : callback(new Error('CORS non consentito')), credentials: true }));
-app.use(express.json());
 app.use(cookieParser());
+app.use(express.json());
+
+// ======================= MIDDLEWARE & ROUTES =======================
+app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/booking', bookingRouter);
+app.use('/api/booking', bookingClienteRouter);
+app.use('/api/disponibilita', disponibilitaRouter);
+app.use('/api/veicolo', veicoloRouter);
+app.use('/api/corse', corseRouter);
+app.use('/api/pending', pendingRouter);
+app.use('/api/prenotazioni', prenotazioniRouter);
+app.use('/api/pagamenti', pagamentiAutistaRouter);
+app.use('/api/tariffe', tariffeRouter);
+app.use('/api/distanza', distanzaRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/autista/profilo', autistaProfiloRouter);
+app.use('/api/autista', autistaStatusRouter);
+app.use('/api/autista/documenti', documentiAutistaRouter);
+app.use('/api/documenti', documentiVeicoloRouter);
+app.use('/api/flows', flowsRouter);
+
+app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);
@@ -46,22 +105,18 @@ const startServer = async () => {
     await Promise.all([pubClient.connect(), subClient.connect()]);
     
     io.adapter(createAdapter(pubClient, subClient));
-    console.log('🟢 Redis Adapter per Socket.io configurato');
+    console.log('🟢 Redis Adapter configurato correttamente');
 
     // 2. Setup Socket
     setupSocket(io);
 
-    // 3. Registrazione Flussi
+    // 3. Registrazione Flussi e Cache
     flowRegistry.register(onboardingFlow);
-    
-    // 4. Caricamento Cache e Cleanup
     await loadCachesUltra().catch(e => console.error('⚠️ Errore cache:', e.message));
     await pendingService.cleanupExpired().catch(e => console.error('⚠️ Errore cleanup:', e.message));
 
-    // 5. Avvio Ascolto
-    server.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 Server in ascolto su porta ${port}`);
-    });
+    // 4. Avvio Ascolto
+    server.listen(port, '0.0.0.0', () => console.log(`🚀 Server in ascolto su porta ${port}`));
   } catch (err) {
     console.error('💥 Errore critico durante l\'avvio:', err);
     process.exit(1);

@@ -1,5 +1,5 @@
 import { pool } from '../../db/db.js';
-import { sendPush } from './pushService.js'; 
+import { sendPush } from './push.service.js'; 
 import { getIO } from '../../socket.js';
 
 /**

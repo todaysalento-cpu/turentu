@@ -1,48 +1,53 @@
-// ======================= PUSH SERVICE (EXPO) =======================
-
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+import { pool } from '../../db/db.js';
+import { sendPush } from '../pushService.js'; 
+import { getIO } from '../../socket.js';
 
 /**
- * Invia una push notification tramite Expo Push API
- *
- * @param {string} token - Expo Push Token (ExponentPushToken[...])
- * @param {string} title - Titolo notifica
- * @param {string} body - Corpo messaggio
- * @param {object} data - Dati extra (deep link, id, ecc.)
+ * Servizio centralizzato per l'invio di notifiche
  */
-export async function sendPush(token, title, body, data = {}) {
-  if (!token) {
-    console.warn('⚠️ sendPush: token mancante');
-    return;
-  }
-
+export const notifyUser = async (userId, { type, message, role, data = {} }) => {
   try {
-    const response = await fetch(EXPO_PUSH_URL, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: token,
-        sound: 'default',
-        title,
-        body,
-        data,
-      }),
-    });
+    // 1. SALVATAGGIO NEL DATABASE
+    const result = await pool.query(
+      `INSERT INTO notifications(user_id, type, message, seen, created_at) 
+       VALUES ($1, $2, $3, false, NOW()) RETURNING *`,
+      [userId, type, message]
+    );
+    const notification = result.rows[0];
 
-    const result = await response.json();
-
-    if (result?.data?.status === 'error') {
-      console.error('❌ Push error:', result);
-    } else {
-      console.log('📲 Push inviata:', result);
+    // 2. INVIO VIA SOCKET (Real-time per app attiva)
+    try {
+      const io = getIO();
+      // Normalizzazione della room: autista_ID o cliente_ID
+      const room = `${role === 'driver' ? 'autista' : role}_${userId}`;
+      io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
+      console.log(`🚀 [SOCKET] Notifica inviata in stanza: ${room}`);
+    } catch (e) {
+      console.warn("⚠️ [SOCKET] Socket non disponibile:", e.message);
     }
 
-    return result;
+    // 3. INVIO PUSH (Background per app chiusa)
+    const tokenRes = await pool.query(
+      'SELECT push_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1', 
+      [userId]
+    );
+
+    if (tokenRes.rows.length > 0) {
+      const token = tokenRes.rows[0].push_token;
+      await sendPush(
+        token, 
+        'Nuova Notifica', 
+        message, 
+        { ...data, notificationId: notification.id }
+      );
+      console.log(`📲 [PUSH] Notifica inviata all'utente ${userId}`);
+    } else {
+      console.log(`ℹ️ [PUSH] Nessun token registrato per l'utente ${userId}`);
+    }
+    
+    return notification;
   } catch (err) {
-    console.error('❌ sendPush error:', err.message);
+    console.error('❌ [NOTIFY_SERVICE] Errore critico:', err);
+    throw err;
   }
-}
+};

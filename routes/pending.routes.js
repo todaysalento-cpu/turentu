@@ -1,11 +1,13 @@
 import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { sendNotification, getIO } from '../socket.js';
+import { getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 import { upsertCorsa } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
+// Importiamo il servizio centralizzato per le notifiche
+import { notifyUser } from '../services/notifications/notification.service.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -75,7 +77,6 @@ router.post('/:id/accetta', async (req, res) => {
       // 3. LOGICA UNIFICATA: Determinazione Corsa
       let corsa;
       if (!p.corsa_id) {
-        // Cerca corsa esistente compatibile
         const existing = await client.query(
           `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
           [p.veicolo_id, p.start_datetime]
@@ -84,11 +85,9 @@ router.post('/:id/accetta', async (req, res) => {
         if (existing.rows.length) {
           corsa = existing.rows[0];
         } else {
-          // Creazione nuova corsa se non esiste
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
           const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client);
           corsa = resCorsa.corsa;
-          // Associa subito il nuovo ID al record pending nella stessa transazione
           await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
         }
       } else {
@@ -98,7 +97,7 @@ router.post('/:id/accetta', async (req, res) => {
 
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
-      // 4. PRENOTAZIONE (Eseguita sempre su corsa valida)
+      // 4. PRENOTAZIONE
       await prenotaCorsa(corsa, p.cliente_id, p.posti_richiesti, segmenti, client);
 
       // 5. Aggiornamento Cache
@@ -133,10 +132,20 @@ router.post('/:id/accetta', async (req, res) => {
       const { p, corsa, driverId, driverNome } = data;
       const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
       
+      // Socket: Autista
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
+      
+      // Socket: Cliente (Real-time)
       io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });
-      sendNotification({ userId: p.cliente_id, title: 'Viaggio accettato', message: `Il tuo viaggio è stato accettato da ${driverNome}`, type: 'pending' });
+      
+      // Servizio Centralizzato: Cliente (Socket + Push background)
+      await notifyUser(p.cliente_id, { 
+        type: 'pending', 
+        message: `Il tuo viaggio è stato accettato da ${driverNome}`,
+        role: 'cliente',
+        data: { corsaId: corsa.id }
+      });
     }
 
     res.json({ ok: true });

@@ -75,48 +75,52 @@ export async function cercaSlotUltra(richiesta) {
   let risultatiPool = [];
   let risultatiSlotPrivati = [];
 
+  console.log(`🔍 [DEBUG POOL] Candidati totali da Redis: ${candidatiPool.length}`);
+
   candidatiPool.forEach(s => {
       const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
       const isDisp = dispVeicolo.some(st => st.disponibile);
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+      const impegnato = veicoliImpegnati.has(s.veicolo_id);
 
-      if (isDisp && v) {
-          if (!veicoliImpegnati.has(s.veicolo_id)) {
-              risultatiSlotPrivati.push({
-                  tipo: 'privata_slot',
-                  veicolo_id: s.veicolo_id,
-                  origine: richiesta.coord,
-                  destinazione: richiesta.coordDest,
-                  marca: v.marca || 'N/D',
-                  modello: v.modello || 'N/D',
-                  rating: Number(v.rating || 0),
-                  servizi: v.servizi || {},
-                  posti_totali: v.posti_totali,
-                  disponibile: true,
-                  is_slot: true,
-                  is_pool: false,
-                  messaggio: "Acquista corsa privata dedicata"
-              });
-          }
+      console.log(`🔍 [DEBUG VEICOLO ${s.veicolo_id}] Disp: ${isDisp} | Impegnato: ${impegnato} | CacheFound: ${!!v}`);
+
+      if (isDisp && v && !impegnato) {
+          risultatiSlotPrivati.push({
+              tipo: 'privata_slot',
+              veicolo_id: s.veicolo_id,
+              origine: richiesta.coord,
+              destinazione: richiesta.coordDest,
+              marca: v.marca || 'N/D',
+              modello: v.modello || 'N/D',
+              rating: Number(v.rating || 0),
+              servizi: v.servizi || {},
+              posti_totali: v.posti_totali,
+              disponibile: true,
+              is_slot: true,
+              is_pool: false,
+              messaggio: "Acquista corsa privata dedicata"
+          });
       }
   });
 
-  // FILTRO SICURO PER VEICOLI DISPONIBILI
   const veicoliDisponibiliPerPool = candidatiPool.filter(s => 
       s.veicolo_id !== undefined && 
       !veicoliImpegnati.has(s.veicolo_id) && 
       (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
   );
 
-  // PULIZIA RIGOROSA DEGLI ID
   const veicoliPoolIds = veicoliDisponibiliPerPool
       .map(s => Number(s.veicolo_id))
       .filter(id => !isNaN(id) && id > 0);
 
   const capacitaTotale = veicoliDisponibiliPerPool.reduce((sum, s) => {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
-      return sum + Number(v?.posti_totali || 0);
+      const posti = Number(v?.posti_totali || 0);
+      return sum + posti;
   }, 0);
+
+  console.log(`🔍 [DEBUG POOL FINAL] Disponibili: ${veicoliDisponibiliPerPool.length} | Capacità Totale: ${capacitaTotale} | Richiesti: ${postiRichiesti}`);
 
   if (capacitaTotale >= postiRichiesti && veicoliPoolIds.length > 0) {
       risultatiPool.push({
@@ -131,6 +135,8 @@ export async function cercaSlotUltra(richiesta) {
           is_pool: true,
           messaggio: "Pop Bus: Servizio condiviso disponibile per questa tratta"
       });
+  } else {
+      console.log(`⚠️ [DEBUG POOL] Pop Bus non creato: condizioni non soddisfatte.`);
   }
 
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];

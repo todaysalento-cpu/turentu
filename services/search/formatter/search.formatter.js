@@ -45,14 +45,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
 
-    // Mappatura pulita dei risultati
-    let risultatiDaFormattare = risultatiFiltrati.map(item => {
-        // Se è un elemento pool, lo passiamo intatto (è già stato validato nel service)
-        if (item.is_pool) return item;
-        return item;
-    });
-
-    return (await Promise.all(risultatiDaFormattare.map(async (item) => {
+    return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
             const distMetri = Number(item.distMetri || item.distanza || distanzaRealeMetri);
             const distKmCalc = Math.max(0.1, distMetri / 1000);
@@ -70,7 +63,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const prezzoVal = Number(p) || 0;
 
             return {
-                id: item.id || `slot_privato_${item.veicolo_id}`,
+                // LOGICA ID: Se è pool mantieni l'ID originale, altrimenti usa il prefisso
+                id: item.is_pool ? item.id : (item.id || `slot_privato_${item.veicolo_id}`),
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
                 localitaOrigine, 

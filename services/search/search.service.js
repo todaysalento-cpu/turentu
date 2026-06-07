@@ -64,7 +64,6 @@ export async function cercaSlotUltra(richiesta) {
       ...c, 
       tipo: 'condivisa', 
       is_slot: false,
-      // Passiamo le coordinate esistenti della corsa
       origine: c.origine || richiesta.coord,
       destinazione: c.destinazione || richiesta.coordDest
   }));
@@ -86,7 +85,6 @@ export async function cercaSlotUltra(richiesta) {
               risultatiSlotPrivati.push({
                   tipo: 'privata_slot',
                   veicolo_id: s.veicolo_id,
-                  // 🔥 INIEZIONE COORDINATE
                   origine: richiesta.coord,
                   destinazione: richiesta.coordDest,
                   marca: v.marca || 'N/D',
@@ -103,25 +101,31 @@ export async function cercaSlotUltra(richiesta) {
       }
   });
 
+  // FILTRO SICURO PER VEICOLI DISPONIBILI
   const veicoliDisponibiliPerPool = candidatiPool.filter(s => 
+      s.veicolo_id !== undefined && 
       !veicoliImpegnati.has(s.veicolo_id) && 
       (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
   );
+
+  // PULIZIA RIGOROSA DEGLI ID
+  const veicoliPoolIds = veicoliDisponibiliPerPool
+      .map(s => Number(s.veicolo_id))
+      .filter(id => !isNaN(id) && id > 0);
 
   const capacitaTotale = veicoliDisponibiliPerPool.reduce((sum, s) => {
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       return sum + Number(v?.posti_totali || 0);
   }, 0);
 
-  if (capacitaTotale >= postiRichiesti) {
+  if (capacitaTotale >= postiRichiesti && veicoliPoolIds.length > 0) {
       risultatiPool.push({
           tipo: 'pop-bus',
           tipo_corsa: 'pop-bus',
-          // 🔥 INIEZIONE COORDINATE
           origine: richiesta.coord,
           destinazione: richiesta.coordDest,
           posti_totali: capacitaTotale,
-          veicoli_pool_ids: veicoliDisponibiliPerPool.map(s => Number(s.veicolo_id)),
+          veicoli_pool_ids: veicoliPoolIds,
           disponibile: true,
           is_slot: true,
           is_pool: true,

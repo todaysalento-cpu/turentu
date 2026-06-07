@@ -4,28 +4,14 @@ import crypto from "crypto";
 
 let io;
 
-/* ================= IO ================= */
-export const getIO = () => {
-  if (!io) throw new Error("Socket.io non inizializzato!");
-  return io;
-};
-
 /* ================= LOG ================= */
 const log = (label, data = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), label, ...data }, null, 2));
 
 /* ================= NOTIFICATIONS ================= */
 export const sendNotification = async ({ userId, role, notification }) => {
-  if (!io) {
-    log("SOCKET_ERROR", { message: "IO non inizializzato" });
-    return;
-  }
-  if (!userId || !role || !notification) {
-    log("SOCKET_ERROR", { message: "Parametri mancanti", userId, role });
-    return;
-  }
+  if (!io) return log("SOCKET_ERROR", { message: "IO non inizializzato" });
   
-  // Normalizzazione identica a quella usata nella connessione
   const room = `${role.toLowerCase()}_${userId}`;
   log("SOCKET_SENDING_NOTIFICATION", { room, notificationId: notification.id });
   
@@ -37,18 +23,23 @@ export const setupSocket = (ioServer) => {
   io = ioServer;
   const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
+  // Middleware Autenticazione
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("NO_TOKEN"));
+    if (!token) {
+      log("SOCKET_AUTH_FAILED", { reason: "NO_TOKEN", ip: socket.handshake.address });
+      return next(new Error("NO_TOKEN"));
+    }
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      // Forza il ruolo in minuscolo per evitare mismatch di stanze
       socket.user = { 
         id: Number(decoded.id), 
         role: (decoded.role || "cliente").toLowerCase() 
       };
+      log("SOCKET_AUTH_SUCCESS", { userId: socket.user.id, role: socket.user.role });
       next();
     } catch (err) {
+      log("SOCKET_AUTH_FAILED", { reason: "JWT_INVALID", ip: socket.handshake.address });
       next(new Error("JWT_INVALID"));
     }
   });
@@ -56,20 +47,19 @@ export const setupSocket = (ioServer) => {
   io.on("connection", (socket) => {
     const { id: userId, role } = socket.user;
     const room = `${role}_${userId}`;
-    
     socket.join(room);
-    log("SOCKET_CONNECTION", { userId, role, room });
+    
+    log("SOCKET_CONNECTION_ESTABLISHED", { userId, role, room });
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
       const cId = Number(corsa_id);
       const clId = Number(cliente_id);
-      
-      if (!cId || isNaN(cId) || !clId || isNaN(clId)) return;
+      if (isNaN(cId) || isNaN(clId)) return;
 
       const chatRoom = `chat_${cId}_${clId}`;
       socket.join(chatRoom);
-      log("JOIN_CHAT", { room: chatRoom, userId });
+      log("JOIN_CHAT", { chatRoom, userId });
       
       try {
         const { rows } = await pool.query(
@@ -81,6 +71,7 @@ export const setupSocket = (ioServer) => {
           [cId, clId]
         );
         socket.emit("init_chat", { corsa_id: cId, cliente_id: clId, messages: rows });
+        log("INIT_CHAT_SUCCESS", { count: rows.length });
       } catch (err) {
         log("INIT_CHAT_FAILED", { error: err.message });
       }
@@ -88,11 +79,11 @@ export const setupSocket = (ioServer) => {
 
     /* ================= SEND MESSAGE ================= */
     socket.on("send_message", async (payload) => {
+      log("SEND_MESSAGE_RECEIVED", { corsa_id: payload.corsa_id, senderId: userId });
       try {
         const cId = Number(payload.corsa_id);
         const clId = Number(payload.cliente_id);
-        if (isNaN(cId) || isNaN(clId)) throw new Error("INVALID_IDS");
-
+        
         const msgKey = payload.client_msg_id || crypto.randomUUID();
         
         const msgRes = await pool.query(
@@ -108,15 +99,16 @@ export const setupSocket = (ioServer) => {
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientId = role === "cliente" ? threadRes.rows[0]?.driver_id : clId;
         
+        // Emette il messaggio nella stanza chat
         io.to(`chat_${cId}_${clId}`).emit("new_message", { ...msg, corsa_id: cId, cliente_id: clId });
         
         if (recipientId) {
           const targetRoom = `${targetRole}_${recipientId}`;
-          log("SENDING_UNREAD_COUNT", { targetRoom });
           io.to(targetRoom).emit("unread_count_updated", { corsa_id: cId, cliente_id: clId, increment: 1 });
+          log("SEND_MESSAGE_SUCCESS", { recipientRoom: targetRoom });
         }
       } catch (err) {
-        log("SEND_FAILED", { error: err.message });
+        log("SEND_MESSAGE_FAILED", { error: err.message });
       }
     });
 
@@ -124,10 +116,8 @@ export const setupSocket = (ioServer) => {
     socket.on("mark_as_read", async ({ corsa_id, cliente_id, message_ids = [] }) => {
       try {
         const cId = Number(corsa_id);
-        const clId = Number(cliente_id);
         const ids = message_ids.map(Number).filter(id => !isNaN(id));
-        
-        if (!ids.length || isNaN(cId) || isNaN(clId)) return;
+        if (!ids.length) return;
 
         await pool.query(
           `INSERT INTO message_receipts (message_id, user_id, read_at)
@@ -135,11 +125,15 @@ export const setupSocket = (ioServer) => {
           [ids, userId]
         );
 
-        io.to(`${role}_${userId}`).emit("unread_count_reset", { corsa_id: cId, cliente_id: clId });
-        log("MARK_AS_READ_SUCCESS", { userId, corsa_id });
+        io.to(`${role}_${userId}`).emit("unread_count_reset", { corsa_id: cId, cliente_id });
+        log("MARK_READ_SUCCESS", { userId, count: ids.length });
       } catch (err) {
-        log("READ_FAILED", { error: err.message });
+        log("MARK_READ_FAILED", { error: err.message });
       }
+    });
+
+    socket.on("disconnect", (reason) => {
+      log("SOCKET_DISCONNECTED", { userId, reason });
     });
   });
 };

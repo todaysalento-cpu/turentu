@@ -1,14 +1,14 @@
 import { pool } from '../db/db.js';
 
 const SOGLIA_ATTIVAZIONE_PERCENT = 0.6;
+const TARIFF_DEFAULT = { prezzoKm: 0.50, prezzoPasseggero: 1.00 };
 
 /**
- * Trova le tariffe massime tra un gruppo di veicoli
+ * Trova le tariffe massime tra un gruppo di veicoli (sempre tipo 'standard')
  */
 async function getMaxTariffaPool(veicoli_ids) {
   if (!veicoli_ids || !Array.isArray(veicoli_ids) || veicoli_ids.length === 0) {
-    console.log("⚠️ [PRICING] Pool vuoto, ritorno default");
-    return { prezzoKm: 0.50, prezzoPasseggero: 1.00 };
+    return TARIFF_DEFAULT;
   }
   
   const res = await pool.query(
@@ -21,47 +21,32 @@ async function getMaxTariffaPool(veicoli_ids) {
     prezzoPasseggero: Number(res.rows[0].max_pass) || 1.00
   };
 
-  console.log(`🔍 [PRICING] Pool Tariffe trovate: KM=${tariffa.prezzoKm}, Pass=${tariffa.prezzoPasseggero} per ${veicoli_ids.length} veicoli`);
+  console.log(`🔍 [PRICING] Pool Tariffe (Standard): KM=${tariffa.prezzoKm}, Pass=${tariffa.prezzoPasseggero} per ${veicoli_ids.length} veicoli`);
   return tariffa;
 }
 
 /**
- * Recupera la tariffa specifica o fallback su standard per veicolo
+ * Recupera la tariffa 'standard' per un veicolo
  */
-export async function getTariffe(veicolo_id, tipo) {
+export async function getTariffe(veicolo_id) {
   if (!veicolo_id) {
-    console.warn("⚠️ [PRICING] Veicolo ID nullo, ritorno default");
-    return { prezzoKm: 0.50, prezzoPasseggero: 1.00 };
+    return TARIFF_DEFAULT;
   }
 
-  // 1. Tenta recupero tariffa specifica per tipo
-  let res = await pool.query(
+  const res = await pool.query(
     'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $2 LIMIT 1',
-    [veicolo_id, tipo]
+    [veicolo_id, 'standard']
   );
   
-  // 2. Fallback: Se non trova il tipo specifico, cerca lo 'standard'
-  if (res.rows.length === 0 && tipo !== 'standard') {
-    console.warn(`⚠️ [PRICING] Tariffa '${tipo}' non trovata per veicolo ${veicolo_id}. Fallback su 'standard'.`);
-    res = await pool.query(
-      'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $2 LIMIT 1',
-      [veicolo_id, 'standard']
-    );
-  }
-
-  // 3. Se ancora non trova nulla, logga ma non crashare
   if (res.rows.length === 0) {
-    console.error(`❌ [PRICING] Nessuna tariffa disponibile per veicolo ${veicolo_id}. Uso default.`);
-    return { prezzoKm: 0.50, prezzoPasseggero: 1.00 };
+    console.error(`❌ [PRICING] Nessuna tariffa standard trovata per veicolo ${veicolo_id}`);
+    return TARIFF_DEFAULT;
   }
   
-  const t = {
+  return {
     prezzoKm: Number(res.rows[0].euro_km) || 0.50,
     prezzoPasseggero: Number(res.rows[0].prezzo_passeggero) || 1.00
   };
-  
-  console.log(`🔍 [PRICING] Tariffa singola veicolo ${veicolo_id}: KM=${t.prezzoKm}`);
-  return t;
 }
 
 /**
@@ -73,19 +58,13 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
   const richiesti = Math.max(1, Number(postiRichiesti));
   let prezzoKm, prezzoPasseggero;
 
-  // 1. Recupero tariffe
-  if (tipo === 'pop-bus') {
-    if (corsa.veicoli_pool_ids && corsa.veicoli_pool_ids.length > 0) {
-      const maxTariffa = await getMaxTariffaPool(corsa.veicoli_pool_ids);
-      prezzoKm = maxTariffa.prezzoKm;
-      prezzoPasseggero = maxTariffa.prezzoPasseggero;
-    } else {
-      const info = await getTariffe(corsa.veicolo_id, 'standard');
-      prezzoKm = info.prezzoKm;
-      prezzoPasseggero = info.prezzoPasseggero;
-    }
+  // 1. Recupero tariffe: sempre 'standard' come concordato
+  if (tipo === 'pop-bus' && corsa.veicoli_pool_ids?.length > 0) {
+    const maxTariffa = await getMaxTariffaPool(corsa.veicoli_pool_ids);
+    prezzoKm = maxTariffa.prezzoKm;
+    prezzoPasseggero = maxTariffa.prezzoPasseggero;
   } else {
-    const info = await getTariffe(corsa.veicolo_id, tipo);
+    const info = await getTariffe(corsa.veicolo_id);
     prezzoKm = info.prezzoKm;
     prezzoPasseggero = info.prezzoPasseggero;
   }
@@ -115,7 +94,6 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
     case 'pop-bus':
       const postiTotali = Number(corsa.posti_totali || 1);
       prezzoCalcolato = (kmUtente * prezzoKm) / (postiTotali * SOGLIA_ATTIVAZIONE_PERCENT);
-      console.log(`🔍 [PRICING] Pop-Bus | PostiTotali: ${postiTotali} | Prezzo Base: ${prezzoCalcolato.toFixed(2)}`);
       break;
 
     default:

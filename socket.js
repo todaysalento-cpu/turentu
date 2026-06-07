@@ -30,7 +30,18 @@ export const sendNotification = async ({ userId, role, notification }) => {
   }
   
   const room = `${role.toLowerCase()}_${userId}`;
-  log("SOCKET_SENDING_NOTIFICATION", { room, notificationId: notification.id });
+  
+  // LOG DI DEBUG: Ispezione stanze prima dell'invio
+  const rooms = io.sockets.adapter.rooms;
+  const isRoomActive = rooms.has(room);
+  const clientsInRoom = isRoomActive ? io.sockets.adapter.rooms.get(room).size : 0;
+  
+  log("SOCKET_SENDING_NOTIFICATION", { 
+    room, 
+    notificationId: notification.id,
+    roomExists: isRoomActive,
+    clientsConnectedToRoom: clientsInRoom 
+  });
   
   io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
 };
@@ -40,7 +51,6 @@ export const setupSocket = (ioServer) => {
   io = ioServer;
   const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
-  // Middleware di autenticazione
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) {
@@ -66,7 +76,13 @@ export const setupSocket = (ioServer) => {
     const room = `${role}_${userId}`;
     
     socket.join(room);
-    log("SOCKET_CONNECTION", { userId, role, room, socketId: socket.id });
+    log("SOCKET_CONNECTION", { 
+      userId, 
+      role, 
+      room, 
+      socketId: socket.id,
+      totalRooms: io.sockets.adapter.rooms.size 
+    });
 
     /* ================= JOIN CHAT ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
@@ -121,7 +137,6 @@ export const setupSocket = (ioServer) => {
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientId = role === "cliente" ? threadRes.rows[0]?.driver_id : clId;
         
-        // Emette messaggio
         io.to(`chat_${cId}_${clId}`).emit("new_message", { ...msg, corsa_id: cId, cliente_id: clId });
         log("SEND_MESSAGE_BROADCAST", { chatRoom: `chat_${cId}_${clId}` });
         

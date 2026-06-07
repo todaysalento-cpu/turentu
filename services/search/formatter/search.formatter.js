@@ -53,6 +53,13 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
             
+            // --- LOG DI DEBUG PER IL PRICING ---
+            console.log(`🔍 [DEBUG PRICING] ID: ${item.id} | Tipo: ${tipoCalcolo}`);
+            console.log(`   Input: Posti Richiesti: ${richiesta.posti_richiesti} | Distanza KM: ${distKmCalc.toFixed(2)}`);
+            if (item.is_pool) {
+                console.log(`   Pool Info: Veicoli ID: ${item.veicoli_pool_ids?.join(', ') || 'Nessuno'} | Tot Posti: ${item.posti_totali}`);
+            }
+
             // Chiamata al pricing
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
                 .catch(err => { 
@@ -61,9 +68,10 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 });
             
             const prezzoVal = Number(p) || 0;
+            console.log(`   Risultato: Prezzo Finale: ${prezzoVal}€`);
+            // ------------------------------------
 
             return {
-                // LOGICA ID: Se è pool mantieni l'ID originale, altrimenti usa il prefisso
                 id: item.is_pool ? item.id : (item.id || `slot_privato_${item.veicolo_id}`),
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
@@ -83,7 +91,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 postiTotali: Number(item.posti_totali || 0),
                 is_privato: item.tipo === 'privata_slot',
                 is_pool: !!item.is_pool,
-                veicoli_pool_ids: item.veicoli_pool_ids || [], // Propaga la lista validata dal Service
+                veicoli_pool_ids: item.veicoli_pool_ids || [], 
                 messaggio: item.messaggio
             };
         } catch (err) {

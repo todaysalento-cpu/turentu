@@ -2,7 +2,6 @@ import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getLocalitaSafe } from '../../../utils/maps.util.js';
 
 const localitaCache = new Map();
-const SOGLIA_ATTIVAZIONE_PERCENT = 0.6; 
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
 const safeDate = (dateInput) => {
@@ -39,62 +38,29 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
     console.log(`[DEBUG] Inizio formattazione. Risultati totali: ${risultatiFiltrati.length}`);
 
-    const getValoreLocalita = async (val, coord) => {
-        if (typeof val === 'string' && val !== "N/D") return val;
-        return await getLocalitaSafeCached(coord);
-    };
-
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        getValoreLocalita(richiesta.localitaOrigine, richiesta.coord),
-        getValoreLocalita(richiesta.localitaDestinazione, richiesta.coordDest)
+        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") ? richiesta.localitaOrigine : getLocalitaSafeCached(richiesta.coord),
+        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") ? richiesta.localitaDestinazione : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
     const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
 
-    const slotPrivati = risultatiFiltrati.filter(item => item.tipo === 'privata_slot');
-    const corseCondivise = risultatiFiltrati.filter(item => item.tipo === 'condivisa');
-    const veicoliIdoneiPool = risultatiFiltrati.filter(item => item.is_pool === true);
-
-    let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
-
-    if (veicoliIdoneiPool.length > 0) {
-        // LOG DI DIAGNOSTICA PER IL POOL
-        const rawIds = veicoliIdoneiPool.map(c => c.veicolo_id);
-        const parsedIds = veicoliIdoneiPool.map(c => Number(c.veicolo_id));
-        console.log("[DEBUG] Creazione Pool | Raw IDs:", rawIds, "| Parsed IDs:", parsedIds);
-        
-        if (parsedIds.includes(NaN)) {
-            console.error("🚨 [CRITICAL] Rilevato NaN negli ID del Pool! Dati incriminati:", veicoliIdoneiPool.filter(c => isNaN(Number(c.veicolo_id))));
-        }
-
-        risultatiDaFormattare.push({
-            id: 'pool_pop_bus_fixed_id', 
-            veicolo_id: 0, 
-            is_pool: true, 
-            tipo: 'pop-bus',
-            posti_totali: veicoliIdoneiPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0),
-            veicoli_pool_ids: [...new Set(parsedIds.filter(id => !isNaN(id)))],
-            messaggio: "Pop Bus disponibile",
-            localitaOrigine, localitaDestinazione,
-            distMetri: distanzaRealeMetri,
-            origine: richiesta.coord,
-            destinazione: richiesta.coordDest
-        });
-    }
+    // Mappatura pulita dei risultati
+    let risultatiDaFormattare = risultatiFiltrati.map(item => {
+        // Se è un elemento pool, lo passiamo intatto (è già stato validato nel service)
+        if (item.is_pool) return item;
+        return item;
+    });
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
-            // Log per debuggare il calcolo prezzo
-            if (item.id === 'pool_pop_bus_fixed_id') {
-                console.log("[DEBUG] Pricing Pool | Veicoli IDs:", item.veicoli_pool_ids);
-            }
-
             const distMetri = Number(item.distMetri || item.distanza || distanzaRealeMetri);
             const distKmCalc = Math.max(0.1, distMetri / 1000);
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
             const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
             
+            // Chiamata al pricing
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
                 .catch(err => { 
                     console.error(`[ERROR] Pricing fallito per ${item.id}:`, err); 
@@ -107,7 +73,8 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 id: item.id || `slot_privato_${item.veicolo_id}`,
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
-                localitaOrigine, localitaDestinazione,
+                localitaOrigine, 
+                localitaDestinazione,
                 origine: item.origine || richiesta.coord,
                 destinazione: item.destinazione || richiesta.coordDest,
                 oraPartenza, 
@@ -122,6 +89,7 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 postiTotali: Number(item.posti_totali || 0),
                 is_privato: item.tipo === 'privata_slot',
                 is_pool: !!item.is_pool,
+                veicoli_pool_ids: item.veicoli_pool_ids || [], // Propaga la lista validata dal Service
                 messaggio: item.messaggio
             };
         } catch (err) {

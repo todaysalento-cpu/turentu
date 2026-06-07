@@ -19,16 +19,15 @@ const log = (label, data = {}) =>
 export const sendNotification = async ({ userId, role, notification }) => {
   if (!io) return;
   
-  // Normalizzazione: forziamo userId a numero e ruolo a lowercase
+  // Normalizzazione rigorosa per invio
   const uId = Number(userId);
-  const r = String(role).toLowerCase();
+  const r = String(role).toLowerCase() === 'driver' ? 'autista' : String(role).toLowerCase();
   const room = `${r}_${uId}`;
   
-  // Con l'adapter Redis, io.to(room) pubblica il messaggio sul canale Redis
-  // indipendentemente da quanti client vede la memoria locale.
   log("SOCKET_SENDING_NOTIFICATION", { 
     room, 
-    notificationId: notification?.id
+    notificationId: notification?.id,
+    targetUserId: uId
   });
   
   io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
@@ -45,13 +44,19 @@ export const setupSocket = (ioServer) => {
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      // Normalizziamo l'oggetto utente subito
+      
+      // Normalizzazione ruoli e ID
+      let rawRole = String(decoded.role || decoded.tipo || "cliente").toLowerCase();
+      const finalRole = rawRole === 'driver' ? 'autista' : rawRole;
+      
       socket.user = { 
         id: Number(decoded.id), 
-        role: String(decoded.role || "cliente").toLowerCase() 
+        role: finalRole 
       };
+      
       next();
     } catch (err) {
+      log("SOCKET_AUTH_ERROR", { error: err.message });
       next(new Error("JWT_INVALID"));
     }
   });
@@ -60,21 +65,19 @@ export const setupSocket = (ioServer) => {
     const { id: userId, role } = socket.user;
     const room = `${role}_${userId}`;
     
-    // Join alla connessione
     socket.join(room);
     log("SOCKET_CONNECTION", { userId, role, room, socketId: socket.id });
 
-    // Meccanismo di auto-ripristino stanza (chiamabile dal client)
     socket.on("force_join_room", () => {
       socket.join(room);
-      log("SOCKET_FORCED_JOIN", { userId, room, socketId: socket.id });
+      log("SOCKET_FORCED_JOIN", { userId, role, room, socketId: socket.id });
     });
 
     /* ================= CHAT LOGIC ================= */
     socket.on("join_chat", async ({ corsa_id, cliente_id }) => {
       const chatRoom = `chat_${Number(corsa_id)}_${Number(cliente_id)}`;
       socket.join(chatRoom);
-      log("JOIN_CHAT", { room: chatRoom, userId });
+      log("JOIN_CHAT", { chatRoom, userId });
     });
 
     socket.on("send_message", async (payload) => {
@@ -91,10 +94,8 @@ export const setupSocket = (ioServer) => {
 
         const threadRes = await pool.query(`SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`, [cId, clId]);
         
-        // Emette messaggio nella chat room
         io.to(`chat_${cId}_${clId}`).emit("new_message", { ...msgRes.rows[0], corsa_id: cId, cliente_id: clId });
         
-        // Notifica incremento messaggi non letti
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientId = role === "cliente" ? threadRes.rows[0]?.driver_id : clId;
         

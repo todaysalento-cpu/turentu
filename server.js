@@ -60,16 +60,21 @@ const port = process.env.PORT || 3001;
 
 // ======================= CORS AGGIORNATO E PERMISSIVO =======================
 const isAllowedOrigin = (origin, callback) => {
-  // 1. Permetti sempre richieste senza Origin (App Mobile, Postman, ecc.)
+  // 1. Permetti sempre richieste senza Origin (App Mobile, Postman, etc.)
   if (!origin) return callback(null, true);
 
-  // 2. Permetti domini specifici
-  const allowed = ['http://localhost:3000', 'https://turentumi.vercel.app'];
-  if (allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+  // 2. Definizione domini consentiti
+  const allowed = [
+    'http://localhost:3000', 
+    'https://turentumi.vercel.app',
+    'https://turentu.onrender.com' // Aggiunto il dominio del backend
+  ];
+  
+  // 3. Controllo dinamico
+  if (allowed.includes(origin) || origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) {
     return callback(null, true);
   }
 
-  // 3. Blocca tutto il resto
   console.error(`⚠️ [CORS] Bloccata origine non autorizzata: ${origin}`);
   callback(new Error('CORS non consentito'));
 };

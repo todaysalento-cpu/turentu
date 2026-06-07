@@ -1,6 +1,7 @@
 import * as turf from '@turf/turf';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js';
+import { pool } from '../../db/db.js'; // Import necessario per le query al DB
 import { loadCachesUltra, CacheStore } from './search.cache.js'; 
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
@@ -68,22 +69,47 @@ export async function cercaSlotUltra(richiesta) {
       destinazione: c.destinazione || richiesta.coordDest
   }));
 
-  // 3. LOGICA AGGREGATA: SLOT PRIVATI E POP-BUS
+  // 3. LOGICA AGGREGATA: SLOT PRIVATI E DIRETTRICI VIRTUALI (POP-BUS)
   const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
   const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
 
-  let risultatiPool = [];
   let risultatiSlotPrivati = [];
+  let risultatiPool = [];
 
-  console.log(`🔍 [DEBUG POOL] Candidati totali da Redis: ${candidatiPool.length}`);
+  // Ricerca Direttrici Virtuali attive (PostgreSQL)
+  const { rows: direttriciAttive } = await pool.query(`
+      SELECT id, capacita_totale, posti_occupati, partenza_prevista 
+      FROM direttrici_virtuali 
+      WHERE stato IN ('in_formazione', 'confermata')
+      AND ST_DWithin(linea_geografica, ST_SetSRID(ST_MakePoint($1, $2), 4326), 2000)
+      AND partenza_prevista BETWEEN $3 AND ($3 + interval '2 hours')
+  `, [lon, lat, targetDate.toISOString()]);
 
+  // Gestione Pop-Bus (Direttrici)
+  direttriciAttive.forEach(dir => {
+      const postiDisponibili = dir.capacita_totale - dir.posti_occupati;
+      if (postiDisponibili >= postiRichiesti) {
+          risultatiPool.push({
+              tipo: 'pop-bus',
+              tipo_corsa: 'pop-bus',
+              direttrice_id: dir.id,
+              origine: richiesta.coord,
+              destinazione: richiesta.coordDest,
+              posti_totali: postiDisponibili,
+              disponibile: true,
+              is_slot: true,
+              is_pool: true,
+              messaggio: "Pop Bus: Unisciti a questa direttrice già attiva!"
+          });
+      }
+  });
+
+  // Gestione Slot Privati (Logica esistente)
   candidatiPool.forEach(s => {
       const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
       const isDisp = dispVeicolo.some(st => st.disponibile);
       const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
       const impegnato = veicoliImpegnati.has(s.veicolo_id);
-
-      console.log(`🔍 [DEBUG VEICOLO ${s.veicolo_id}] Disp: ${isDisp} | Impegnato: ${impegnato} | CacheFound: ${!!v}`);
 
       if (isDisp && v && !impegnato) {
           risultatiSlotPrivati.push({
@@ -103,41 +129,6 @@ export async function cercaSlotUltra(richiesta) {
           });
       }
   });
-
-  const veicoliDisponibiliPerPool = candidatiPool.filter(s => 
-      s.veicolo_id !== undefined && 
-      !veicoliImpegnati.has(s.veicolo_id) && 
-      (disponibilitàMap.get(s.veicolo_id) || []).some(st => st.disponibile)
-  );
-
-  const veicoliPoolIds = veicoliDisponibiliPerPool
-      .map(s => Number(s.veicolo_id))
-      .filter(id => !isNaN(id) && id > 0);
-
-  const capacitaTotale = veicoliDisponibiliPerPool.reduce((sum, s) => {
-      const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
-      const posti = Number(v?.posti_totali || 0);
-      return sum + posti;
-  }, 0);
-
-  console.log(`🔍 [DEBUG POOL FINAL] Disponibili: ${veicoliDisponibiliPerPool.length} | Capacità Totale: ${capacitaTotale} | Richiesti: ${postiRichiesti}`);
-
-  if (capacitaTotale >= postiRichiesti && veicoliPoolIds.length > 0) {
-      risultatiPool.push({
-          tipo: 'pop-bus',
-          tipo_corsa: 'pop-bus',
-          origine: richiesta.coord,
-          destinazione: richiesta.coordDest,
-          posti_totali: capacitaTotale,
-          veicoli_pool_ids: veicoliPoolIds,
-          disponibile: true,
-          is_slot: true,
-          is_pool: true,
-          messaggio: "Pop Bus: Servizio condiviso disponibile per questa tratta"
-      });
-  } else {
-      console.log(`⚠️ [DEBUG POOL] Pop Bus non creato: condizioni non soddisfatte.`);
-  }
 
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
   

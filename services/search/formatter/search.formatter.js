@@ -58,16 +58,25 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
     let risultatiDaFormattare = [...corseCondivise, ...slotPrivati];
 
     if (veicoliIdoneiPool.length > 0) {
+        // LOG DI DIAGNOSTICA PER IL POOL
+        const rawIds = veicoliIdoneiPool.map(c => c.veicolo_id);
+        const parsedIds = veicoliIdoneiPool.map(c => Number(c.veicolo_id));
+        console.log("[DEBUG] Creazione Pool | Raw IDs:", rawIds, "| Parsed IDs:", parsedIds);
+        
+        if (parsedIds.includes(NaN)) {
+            console.error("🚨 [CRITICAL] Rilevato NaN negli ID del Pool! Dati incriminati:", veicoliIdoneiPool.filter(c => isNaN(Number(c.veicolo_id))));
+        }
+
         risultatiDaFormattare.push({
             id: 'pool_pop_bus_fixed_id', 
+            veicolo_id: 0, 
             is_pool: true, 
             tipo: 'pop-bus',
             posti_totali: veicoliIdoneiPool.reduce((acc, curr) => acc + Number(curr.posti_totali || 0), 0),
-            veicoli_pool_ids: [...new Set(veicoliIdoneiPool.map(c => Number(c.veicolo_id)))],
+            veicoli_pool_ids: [...new Set(parsedIds.filter(id => !isNaN(id)))],
             messaggio: "Pop Bus disponibile",
             localitaOrigine, localitaDestinazione,
             distMetri: distanzaRealeMetri,
-            // Propagazione coordinate per il blocco aggregato
             origine: richiesta.coord,
             destinazione: richiesta.coordDest
         });
@@ -75,6 +84,11 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
 
     return (await Promise.all(risultatiDaFormattare.map(async (item) => {
         try {
+            // Log per debuggare il calcolo prezzo
+            if (item.id === 'pool_pop_bus_fixed_id') {
+                console.log("[DEBUG] Pricing Pool | Veicoli IDs:", item.veicoli_pool_ids);
+            }
+
             const distMetri = Number(item.distMetri || item.distanza || distanzaRealeMetri);
             const distKmCalc = Math.max(0.1, distMetri / 1000);
             const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
@@ -82,7 +96,10 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
             
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
-                .catch(err => { console.error(`[ERROR] Pricing fallito per ${item.id}:`, err); return distKmCalc * 0.45; });
+                .catch(err => { 
+                    console.error(`[ERROR] Pricing fallito per ${item.id}:`, err); 
+                    return distKmCalc * 0.45; 
+                });
             
             const prezzoVal = Number(p) || 0;
 
@@ -91,7 +108,6 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
                 veicolo_id: Number(item.veicolo_id || 0),
                 tipo: tipoCalcolo,
                 localitaOrigine, localitaDestinazione,
-                // Assicurazione che le coordinate siano presenti per il pagamento
                 origine: item.origine || richiesta.coord,
                 destinazione: item.destinazione || richiesta.coordDest,
                 oraPartenza, 

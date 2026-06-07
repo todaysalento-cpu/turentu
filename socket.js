@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
 import { pool } from "./db/db.js";
-import crypto from "crypto";
 
 let io;
 
@@ -20,19 +19,16 @@ const log = (label, data = {}) =>
 export const sendNotification = async ({ userId, role, notification }) => {
   if (!io) return;
   
-  // Normalizzazione rigorosa: tutto in minuscolo
-  const room = `${String(role).toLowerCase()}_${userId}`;
+  // Normalizzazione: forziamo userId a numero e ruolo a lowercase
+  const uId = Number(userId);
+  const r = String(role).toLowerCase();
+  const room = `${r}_${uId}`;
   
-  // Debug: Ispezione profonda dello stato delle stanze
-  const roomSet = io.sockets.adapter.rooms.get(room);
-  const isRoomActive = !!roomSet;
-  const clientsCount = isRoomActive ? roomSet.size : 0;
-  
+  // Con l'adapter Redis, io.to(room) pubblica il messaggio sul canale Redis
+  // indipendentemente da quanti client vede la memoria locale.
   log("SOCKET_SENDING_NOTIFICATION", { 
     room, 
-    notificationId: notification.id,
-    roomExists: isRoomActive,
-    clientsConnected: clientsCount
+    notificationId: notification?.id
   });
   
   io.to(room).emit("new_notification", { ...notification, sentAt: Date.now() });
@@ -49,9 +45,10 @@ export const setupSocket = (ioServer) => {
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
+      // Normalizziamo l'oggetto utente subito
       socket.user = { 
         id: Number(decoded.id), 
-        role: (decoded.role || "cliente").toLowerCase() 
+        role: String(decoded.role || "cliente").toLowerCase() 
       };
       next();
     } catch (err) {
@@ -70,7 +67,7 @@ export const setupSocket = (ioServer) => {
     // Meccanismo di auto-ripristino stanza (chiamabile dal client)
     socket.on("force_join_room", () => {
       socket.join(room);
-      log("SOCKET_FORCED_JOIN", { userId, room });
+      log("SOCKET_FORCED_JOIN", { userId, room, socketId: socket.id });
     });
 
     /* ================= CHAT LOGIC ================= */
@@ -94,14 +91,19 @@ export const setupSocket = (ioServer) => {
 
         const threadRes = await pool.query(`SELECT driver_id FROM chat_threads WHERE corsa_id=$1 AND cliente_id=$2`, [cId, clId]);
         
-        // Emette messaggio
+        // Emette messaggio nella chat room
         io.to(`chat_${cId}_${clId}`).emit("new_message", { ...msgRes.rows[0], corsa_id: cId, cliente_id: clId });
         
+        // Notifica incremento messaggi non letti
         const targetRole = role === "cliente" ? "autista" : "cliente";
         const recipientId = role === "cliente" ? threadRes.rows[0]?.driver_id : clId;
         
         if (recipientId) {
-          io.to(`${targetRole}_${recipientId}`).emit("unread_count_updated", { corsa_id: cId, cliente_id: clId, increment: 1 });
+          io.to(`${targetRole}_${Number(recipientId)}`).emit("unread_count_updated", { 
+            corsa_id: cId, 
+            cliente_id: clId, 
+            increment: 1 
+          });
         }
       } catch (err) {
         log("SEND_MESSAGE_FAILED", { error: err.message });

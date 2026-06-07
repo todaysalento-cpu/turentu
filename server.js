@@ -58,11 +58,26 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 const app = express();
 const port = process.env.PORT || 3001;
 
-// ======================= CORS =======================
-const isAllowedOrigin = (origin) => !origin || ['http://localhost:3000', 'https://turentumi.vercel.app'].includes(origin) || origin.endsWith('.vercel.app');
-app.use(cors({ origin: (origin, callback) => isAllowedOrigin(origin) ? callback(null, true) : callback(new Error('CORS non consentito')), credentials: true }));
+// ======================= CORS AGGIORNATO =======================
+// Permettiamo 'undefined' come origin per supportare le richieste da app mobile native
+const isAllowedOrigin = (origin, callback) => {
+  if (!origin || ['http://localhost:3000', 'https://turentumi.vercel.app'].includes(origin) || origin.endsWith('.vercel.app')) {
+    callback(null, true);
+  } else {
+    console.error(`⚠️ [CORS] Bloccata origine non autorizzata: ${origin}`);
+    callback(new Error('CORS non consentito'));
+  }
+};
+
+app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
+
+// Log di debug per monitorare le richieste in ingresso
+app.use((req, res, next) => {
+  console.log(`📡 [REQ] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+  next();
+});
 
 // ======================= MIDDLEWARE & ROUTES =======================
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
@@ -91,12 +106,13 @@ app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);
-// Inizializzazione Socket con configurazione resiliente per proxy esterni
+
 const io = new Server(server, { 
-  cors: { origin: isAllowedOrigin, credentials: true },
+  cors: { origin: (origin, cb) => isAllowedOrigin(origin, cb), credentials: true },
   pingTimeout: 60000, 
   pingInterval: 25000,
-  transports: ['polling', 'websocket'] 
+  transports: ['polling', 'websocket'],
+  path: "/socket.io/"
 });
 
 const startServer = async () => {
@@ -110,6 +126,7 @@ const startServer = async () => {
     const pubClient = redisClient.duplicate();
     const subClient = pubClient.duplicate();
     await Promise.all([pubClient.connect(), subClient.connect()]);
+    console.log('🟢 [REDIS] Connessione Redis stabilita');
     
     io.adapter(createAdapter(pubClient, subClient));
     console.log('🟢 [REDIS] Adapter configurato correttamente');
@@ -124,7 +141,7 @@ const startServer = async () => {
     await loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore cache:', e.message));
     await pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore cleanup:', e.message));
 
-    // 4. Avvio Ascolto (Solo dopo che tutto è pronto)
+    // 4. Avvio Ascolto
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
     });

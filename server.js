@@ -58,22 +58,27 @@ import { loadCachesUltra } from './services/search/search.cache.js';
 const app = express();
 const port = process.env.PORT || 3001;
 
-// ======================= CORS AGGIORNATO =======================
-// Permettiamo 'undefined' come origin per supportare le richieste da app mobile native
+// ======================= CORS AGGIORNATO E PERMISSIVO =======================
 const isAllowedOrigin = (origin, callback) => {
-  if (!origin || ['http://localhost:3000', 'https://turentumi.vercel.app'].includes(origin) || origin.endsWith('.vercel.app')) {
-    callback(null, true);
-  } else {
-    console.error(`⚠️ [CORS] Bloccata origine non autorizzata: ${origin}`);
-    callback(new Error('CORS non consentito'));
+  // 1. Permetti sempre richieste senza Origin (App Mobile, Postman, ecc.)
+  if (!origin) return callback(null, true);
+
+  // 2. Permetti domini specifici
+  const allowed = ['http://localhost:3000', 'https://turentumi.vercel.app'];
+  if (allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+    return callback(null, true);
   }
+
+  // 3. Blocca tutto il resto
+  console.error(`⚠️ [CORS] Bloccata origine non autorizzata: ${origin}`);
+  callback(new Error('CORS non consentito'));
 };
 
 app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
 
-// Log di debug per monitorare le richieste in ingresso
+// Log di debug
 app.use((req, res, next) => {
   console.log(`📡 [REQ] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
   next();
@@ -108,7 +113,10 @@ app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 const server = http.createServer(app);
 
 const io = new Server(server, { 
-  cors: { origin: (origin, cb) => isAllowedOrigin(origin, cb), credentials: true },
+  cors: { 
+    origin: isAllowedOrigin, 
+    credentials: true 
+  },
   pingTimeout: 60000, 
   pingInterval: 25000,
   transports: ['polling', 'websocket'],
@@ -119,33 +127,22 @@ const startServer = async () => {
   try {
     console.log('🔄 [INIT] Inizializzazione sistema...');
 
-    // 1. Connessione Redis e configurazione Adapter
-    console.log('🔄 [REDIS] Connessione in corso...');
     if (redisClient && !redisClient.isOpen) await redisClient.connect();
     
     const pubClient = redisClient.duplicate();
     const subClient = pubClient.duplicate();
     await Promise.all([pubClient.connect(), subClient.connect()]);
-    console.log('🟢 [REDIS] Connessione Redis stabilita');
     
     io.adapter(createAdapter(pubClient, subClient));
-    console.log('🟢 [REDIS] Adapter configurato correttamente');
-
-    // 2. Setup Socket
-    console.log('🔄 [SOCKET] Configurazione listener...');
     setupSocket(io);
 
-    // 3. Registrazione Flussi e Cache
-    console.log('🔄 [CORE] Registrazione flussi e cache...');
     flowRegistry.register(onboardingFlow);
     await loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore cache:', e.message));
     await pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore cleanup:', e.message));
 
-    // 4. Avvio Ascolto
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
     });
-    
   } catch (err) {
     console.error('💥 [CRITICAL] Errore critico durante l\'avvio:', err);
     process.exit(1);

@@ -18,7 +18,7 @@ import 'dotenv/config';
 import cookieParser from 'cookie-parser';
 import http from 'http';
 import { Server } from 'socket.io';
-import { createAdapter } from "@socket.io/redis-adapter"; // <--- ADAPTER AGGIUNTO
+import { createAdapter } from "@socket.io/redis-adapter";
 
 // ======================= SOCKET + REDIS =======================
 import { setupSocket } from './socket.js';
@@ -91,13 +91,20 @@ app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: isAllowedOrigin, credentials: true } });
+// Inizializzazione Socket con configurazione resiliente per proxy esterni
+const io = new Server(server, { 
+  cors: { origin: isAllowedOrigin, credentials: true },
+  pingTimeout: 60000, 
+  pingInterval: 25000,
+  transports: ['polling', 'websocket'] 
+});
 
 const startServer = async () => {
   try {
-    console.log('🔄 Inizializzazione sistema...');
+    console.log('🔄 [INIT] Inizializzazione sistema...');
 
     // 1. Connessione Redis e configurazione Adapter
+    console.log('🔄 [REDIS] Connessione in corso...');
     if (redisClient && !redisClient.isOpen) await redisClient.connect();
     
     const pubClient = redisClient.duplicate();
@@ -105,20 +112,25 @@ const startServer = async () => {
     await Promise.all([pubClient.connect(), subClient.connect()]);
     
     io.adapter(createAdapter(pubClient, subClient));
-    console.log('🟢 Redis Adapter configurato correttamente');
+    console.log('🟢 [REDIS] Adapter configurato correttamente');
 
     // 2. Setup Socket
+    console.log('🔄 [SOCKET] Configurazione listener...');
     setupSocket(io);
 
     // 3. Registrazione Flussi e Cache
+    console.log('🔄 [CORE] Registrazione flussi e cache...');
     flowRegistry.register(onboardingFlow);
-    await loadCachesUltra().catch(e => console.error('⚠️ Errore cache:', e.message));
-    await pendingService.cleanupExpired().catch(e => console.error('⚠️ Errore cleanup:', e.message));
+    await loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore cache:', e.message));
+    await pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore cleanup:', e.message));
 
-    // 4. Avvio Ascolto
-    server.listen(port, '0.0.0.0', () => console.log(`🚀 Server in ascolto su porta ${port}`));
+    // 4. Avvio Ascolto (Solo dopo che tutto è pronto)
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
+    });
+    
   } catch (err) {
-    console.error('💥 Errore critico durante l\'avvio:', err);
+    console.error('💥 [CRITICAL] Errore critico durante l\'avvio:', err);
     process.exit(1);
   }
 };

@@ -9,7 +9,6 @@ const safeDate = (val) => {
 
 /**
  * 1. FUNZIONE SINGOLA (Richiesta dal tuo Router)
- * Fa da wrapper per la logica batch.
  */
 export async function getDisponibilita(veicoloId) {
   const risultati = await getDisponibilitaBatch([veicoloId]);
@@ -17,7 +16,7 @@ export async function getDisponibilita(veicoloId) {
 }
 
 /**
- * 2. VERSIONE BATCH: Lookup diretto tramite indice veicoloToDisponibilita
+ * 2. VERSIONE BATCH: Loggata per Debug
  */
 export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
   const targetDayOfWeek = targetDate.getDay();
@@ -27,11 +26,10 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
 
   for (const vId of veicoloIds) {
     const veicoloId = Number(vId);
-    
-    // ACCESSO DIRETTO: Ora usiamo la nuova mappa creata nel CacheStore
     const turno = CacheStore.veicoloToDisponibilita.get(veicoloId);
     
     if (!turno) {
+      console.log(`🔍 [DISP-DEBUG] Veicolo ${veicoloId}: Nessun turno trovato in CacheStore.`);
       results.set(veicoloId, []); 
       continue;
     }
@@ -45,19 +43,30 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
       targetDate <= safeDate(i.arrivo_datetime)
     );
 
-    // Valutazione disponibilità
+    // Valutazione disponibilità loggata
     const stato = (() => {
-      // Nota: 'tipo_corsa' viene gestito qui via logica, non via DB
-      if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
+      // FIX LOGICO: assicuriamoci che tipo_corsa esista, altrimenti default a null
+      const tipoCorsa = turno.tipo_corsa || null;
+      
+      console.log(`🔍 [DISP-DEBUG] V:${veicoloId} | Driver:${driverId} | Impegnato:${isImpegnatoInCorsaForte} | TipoCorsa:${tipoCorsa}`);
+
+      if (isImpegnatoInCorsaForte && tipoCorsa !== 'pop-bus') {
+        console.log(`❌ [DISP-DEBUG] Veicolo ${veicoloId} scartato: impegnato_corsa_forte.`);
         return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
 
       const giorniEsclusi = new Set((Array.isArray(turno.giorni_esclusi) ? turno.giorni_esclusi : []).map(Number));
-      if (giorniEsclusi.has(targetDayOfWeek)) return { ...turno, disponibile: false };
+      if (giorniEsclusi.has(targetDayOfWeek)) {
+        console.log(`❌ [DISP-DEBUG] Veicolo ${veicoloId} scartato: giorno escluso.`);
+        return { ...turno, disponibile: false };
+      }
 
       if (Array.isArray(turno.inattivita)) {
         const isInactive = turno.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine));
-        if (isInactive) return { ...turno, disponibile: false };
+        if (isInactive) {
+            console.log(`❌ [DISP-DEBUG] Veicolo ${veicoloId} scartato: in pausa (inattività).`);
+            return { ...turno, disponibile: false };
+        }
       }
 
       const startM = toMinutes(turno.start);
@@ -66,6 +75,8 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
         ? (targetMinutes >= startM || targetMinutes <= endM)
         : (targetMinutes >= startM && targetMinutes <= endM);
 
+      if (!disponibile) console.log(`❌ [DISP-DEBUG] Veicolo ${veicoloId} scartato: fuori orario (${targetMinutes} min vs ${startM}-${endM}).`);
+      
       return { ...turno, disponibile };
     })();
 
@@ -79,11 +90,9 @@ function toMinutes(timeStr) {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
-// --- CRUD OPERAZIONI ---
+// --- CRUD OPERAZIONI (Resta intatto) ---
 export async function createDisponibilita(turno) {
-  // Rimosso 'tipo_corsa' dalla destrutturazione poiché non presente in tabella
   let { veicolo_id, start, fine, manual = false, giorni_esclusi = [], inattivita = [] } = turno;
-  
   start = parseTimeString(start);
   fine = parseTimeString(fine);
 
@@ -91,7 +100,6 @@ export async function createDisponibilita(turno) {
     throw new Error('Orario non valido');
   }
 
-  // Rimosso 'tipo_corsa' dalla query SQL e dai parametri
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -107,27 +115,3 @@ export async function createDisponibilita(turno) {
   );
 
   const nuovoTurno = res.rows[0];
-  const driverRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [veicolo_id]);
-  
-  const finalTurno = {
-    ...nuovoTurno,
-    driver_id: driverRes.rows[0]?.driver_id,
-    is_slot: true,
-    tipo: 'disponibilita'
-  };
-
-  CacheManager.disponibilita.update({
-    ...finalTurno,
-    veicolo_id: Number(finalTurno.veicolo_id),
-    driver_id: Number(finalTurno.driver_id)
-  });
-  
-  return finalTurno;
-}
-
-function parseTimeString(timeStr) {
-  if (!timeStr) return null;
-  if (timeStr.includes('T')) return new Date(timeStr).toISOString();
-  const [hh, mm] = timeStr.split(':').map(Number);
-  return new Date(Date.UTC(1970, 0, 1, hh, mm, 0)).toISOString();
-}

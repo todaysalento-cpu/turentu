@@ -1,5 +1,5 @@
 import { pool } from '../../db/db.js';
-import { getIO } from '../socket.js';
+import { getIO } from '../../socket.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();

@@ -60,20 +60,29 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       if (!origine?.lat || !destinazione?.lat) throw new Error("Coordinate incomplete");
 
       if (is_pool) {
-        // Estrazione ID direttrice: se è la nostra proposta dinamica, risulterà null
-        const dirId = (direttrice_id && direttrice_id !== 'proposta_dinamica') 
-            ? parseInt(direttrice_id.toString().replace('direttrice_', '')) 
-            : null;
-
-        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus | DirettriceID: ${dirId || 'DINAMICA'}`);
+        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus`);
         
+        // 1. Inserimento in richieste_pop_bus (senza direttrice_id)
         const result = await client.query(
-          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, direttrice_id)
-           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8)
-           RETURNING *`,
-          [clienteId, origine.lon, origine.lat, destinazione.lon, destinazione.lat, start_datetime, posti_richiesti, dirId]
+          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
+           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa')
+           RETURNING id`,
+          [clienteId, origine.lon, origine.lat, destinazione.lon, destinazione.lat, start_datetime, posti_richiesti]
         );
-        pendingRows.push({ ...result.rows[0], is_pool: true });
+        
+        const richiestaId = result.rows[0].id;
+
+        // 2. Collegamento opzionale se non è proposta dinamica
+        if (direttrice_id && direttrice_id !== 'proposta_dinamica') {
+          const dirId = parseInt(direttrice_id.toString().replace('direttrice_', ''));
+          await client.query(
+            `INSERT INTO direttrici_richieste (direttrice_id, richiesta_id) VALUES ($1, $2)`,
+            [dirId, richiestaId]
+          );
+          console.log(`🚌 [POOL] Richiesta ${richiestaId} collegata a direttrice ${dirId}`);
+        }
+
+        pendingRows.push({ id: richiestaId, is_pool: true });
       } else {
         console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${veicolo_id}`);
         let durataMinuti = slot.durataMinuti ?? slot.durata_minuti ?? 30;
@@ -95,7 +104,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         pendingRows.push(pItem);
         await upsertPrenotazione(pItem);
 
-        // Notifiche
         const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [veicolo_id]);
         const driverId = driverRes.rows[0]?.driver_id;
         

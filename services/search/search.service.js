@@ -5,7 +5,7 @@ import { loadCachesUltra, CacheStore } from './search.cache.js';
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 import { getDisponibilitaBatch } from './disponibilita/disponibilita.service.js'; 
-import { pool } from '../../../db/db.js'; // IMPORTA IL TUO POOL DB
+import { pool } from '../../db/db.js'; // IMPORTA IL TUO POOL DB
 
 const GEOHASH_PRECISION_TRATTA = 5;
 

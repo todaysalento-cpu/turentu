@@ -6,8 +6,8 @@ import polyline from 'polyline';
 import ngeohash from 'ngeohash';
 import { upsertCorsa } from '../search/search.cache.js'; 
 
-// --- FUNZIONE DI SUPPORTO PER POPBUS ---
-async function createCorsaFromDirettrice(direttriceId, autistaId, client) {
+// --- FUNZIONE DI SUPPORTO PER POPBUS (ORA ESPORTATA) ---
+export async function createCorsaFromDirettrice(direttriceId, autistaId, client) {
     const dirRes = await client.query(`
         SELECT d.*, v.posti_totali 
         FROM direttrici_virtuali d
@@ -18,7 +18,7 @@ async function createCorsaFromDirettrice(direttriceId, autistaId, client) {
     
     const res = await client.query(`
         INSERT INTO corse (
-            direttrice_id, autista_id, tipo_corsa, stato, start_datetime, posti_totali,
+            direttrice_id, autistaId, tipo_corsa, stato, start_datetime, posti_totali,
             origine, destinazione
         ) VALUES ($1, $2, 'popbus', 'confermata', $3, $4, 
                   ST_SetSRID(ST_MakePoint($5,$6),4326), 
@@ -39,7 +39,7 @@ async function createCorsaFromDirettrice(direttriceId, autistaId, client) {
     return corsa;
 }
 
-// --- FUNZIONE PRINCIPALE (Mantenuta intatta nel suo flusso principale) ---
+// --- FUNZIONE PRINCIPALE (Mantenuta intatta) ---
 export async function createCorsaFromPending(pending, veicolo, client, isPopBus = false, autistaId = null) {
   let localClient = false;
   if (!client) {
@@ -56,7 +56,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
     if (isPopBus) {
         corsa = await createCorsaFromDirettrice(pending.direttrice_id, autistaId, client);
     } else {
-        // --- LOGICA PRIVATE (Il tuo codice originale intatto) ---
+        // --- LOGICA PRIVATE ---
         const startDatetime = new Date(pending.start_datetime || pending.startDatetime);
         const durataMin = Number(pending.durataMinuti ?? pending.durata_minuti ?? 30);
         const arrivoDatetime = new Date(startDatetime.getTime() + durataMin * 60 * 1000);

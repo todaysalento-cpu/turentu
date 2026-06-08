@@ -24,12 +24,11 @@ const normalizeCoords = (coords) => {
 };
 
 function getSnapResult(point, nodi, tolleranzaKm) {
-    const res = nodi.reduce((prev, curr) => {
+    return nodi.reduce((prev, curr) => {
         const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
         return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
             ? { ...curr, dist } : prev;
     }, null);
-    return res;
 }
 
 async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
@@ -43,11 +42,12 @@ async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
         AND n_start.offset_metri < $3 
         AND n_end.offset_metri > $2
     `, [direttriceId, startOffset, endOffset]);
+    
     return Number(rows[0]?.carico || 0);
 }
 
 export async function cercaSlotUltra(richiesta) {
-  console.log(`\n🔍 [DEBUG] Inizio ricerca per: ${richiesta.coord?.lat}, ${richiesta.coord?.lon}`);
+  console.log(`\n🔍 [SERVICE] Ricerca Universale | Origine: ${richiesta.coord?.lat}, ${richiesta.coord?.lon} | Dest: ${richiesta.coordDest?.lat}, ${richiesta.coordDest?.lon}`);
   
   await loadCachesUltra();
 
@@ -55,7 +55,9 @@ export async function cercaSlotUltra(richiesta) {
   const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
   const destLat = Number(richiesta.coordDest?.lat);
   const destLon = Number(richiesta.coordDest?.lon);
-  
+  const targetDate = getSafeDate(richiesta.start_datetime || Date.now());
+  const postiRichiesti = Number(richiesta.posti_richiesti || 1);
+
   // 1. RECUPERO GEOSPAZIALE
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
@@ -65,12 +67,53 @@ export async function cercaSlotUltra(richiesta) {
     Promise.all(hashes.map(h => redisClient.sMembers(`slot:in_area:${h}`)))
   ]);
 
-  const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
-  const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
-  
-  console.log(`🔍 [DEBUG] Corse trovate in zona: ${corseCandidate.length}, Slot trovati: ${slotCandidateIds.length}`);
+  const corseCandidate = [...new Set(corsaResults.flat())].map(id => {
+      const c = CacheStore.corseCache.get(Number(id));
+      if (!c) return null;
+      c.decodedCoords = normalizeCoords(c.decodedCoords);
+      return c;
+  }).filter(Boolean);
 
-  // 2. LOGICA POP-BUS
+  const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
+  const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
+  
+  console.log(`🔍 [DEBUG] Corse Candidate: ${corseCandidate.length} | Slot Candidati (ID): ${slotCandidateIds.length}`);
+
+  // 2. FILTRO CORSE DI LINEA
+  const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
+  const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
+
+  const { corse: corseEsistenti } = await filterDisponibilita(
+    { ...richiesta, posti_richiesti: postiRichiesti, coord: { lat, lon } },
+    corseCandidate,
+    prenotazioniBatch
+  );
+
+  const risultatiCondivise = corseEsistenti.map(c => ({ 
+      ...c, tipo: 'condivisa', is_slot: false,
+      origine: c.origine || richiesta.coord, destinazione: c.destinazione || richiesta.coordDest
+  }));
+
+  // 3. LOGICA SLOT PRIVATI
+  const veicoliImpegnati = new Set(impegniForti.map(c => c.veicolo_id));
+  const disponibilitàMap = await getDisponibilitaBatch(slotCandidateIds, targetDate, impegniForti);
+  let risultatiSlotPrivati = [];
+
+  candidatiPool.forEach(s => {
+      const dispVeicolo = disponibilitàMap.get(s.veicolo_id) || [];
+      const isDisp = dispVeicolo.some(st => st.disponibile);
+      const v = CacheStore.veicoliCache.get(Number(s.veicolo_id));
+      if (isDisp && v && !veicoliImpegnati.has(s.veicolo_id)) {
+          risultatiSlotPrivati.push({
+              tipo: 'privata_slot', veicolo_id: s.veicolo_id,
+              origine: richiesta.coord, destinazione: richiesta.coordDest,
+              marca: v.marca || 'N/D', posti_totali: v.posti_totali, disponibile: true,
+              is_slot: true, is_pool: false, messaggio: "Acquista corsa privata dedicata"
+          });
+      }
+  });
+
+  // 4. LOGICA POP-BUS
   let risultatiPool = [];
   const { rows: direttriciAttive } = await pool.query(`
       SELECT DISTINCT d.id, d.capacita_totale, d.stato 
@@ -82,33 +125,35 @@ export async function cercaSlotUltra(richiesta) {
       AND ST_DWithin(n2.posizione, ST_SetSRID(ST_MakePoint($3, $4), 4326), 2000)
   `, [lon, lat, destLon, destLat]);
 
-  console.log(`🔍 [DEBUG] Direttrici attive trovate: ${direttriciAttive.length}`);
+  console.log(`🔍 [DEBUG] Direttrici virtuali trovate nel DB: ${direttriciAttive.length}`);
 
   for (const dir of direttriciAttive) {
       const nodi = CacheStore.nodiCache.get(dir.id) || [];
       const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
       const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
-      console.log(`🔍 [DEBUG] Verifica direttrice ${dir.id}: startNode=${!!startNode}, endNode=${!!endNode}`);
-
       if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
           const caricoAttuale = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
           const postiDisponibili = dir.capacita_totale - caricoAttuale;
-          
-          console.log(`🔍 [DEBUG] Direttrice ${dir.id} | Posti: ${postiDisponibili}`);
 
-          if (postiDisponibili >= 1) {
+          if (postiDisponibili >= postiRichiesti) {
               risultatiPool.push({
                   tipo: 'pop-bus', tipo_corsa: dir.stato, direttrice_id: dir.id,
-                  posti_disponibili: postiDisponibili, is_pool: true, messaggio: `Pop Bus ${dir.stato}`
+                  origine: richiesta.coord, destinazione: richiesta.coordDest,
+                  posti_disponibili: postiDisponibili, disponibile: true,
+                  is_slot: true, is_pool: true, messaggio: `Pop Bus ${dir.stato}`
               });
+          } else {
+              console.log(`🔍 [DEBUG] Direttrice ${dir.id} piena o posti insufficienti.`);
           }
+      } else {
+          console.log(`🔍 [DEBUG] Direttrice ${dir.id} non valida (Snap fallito o ordine offset errato).`);
       }
   }
 
-  // 3. FALLBACK
+  // 5. FALLBACK: Innesco nuova direttrice
   if (risultatiPool.length === 0) {
-      console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, controllo fallback...");
+      console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {
           const { rows: veicoliPool } = await pool.query(`
               SELECT id, capacita_totale FROM veicolo 
@@ -116,17 +161,20 @@ export async function cercaSlotUltra(richiesta) {
               AND ST_DWithin(posizione_attuale, ST_SetSRID(ST_MakePoint($1, $2), 4326), 5000) LIMIT 3
           `, [lon, lat]);
           
-          console.log(`🔍 [DEBUG] Veicoli fallback trovati: ${veicoliPool.length}`);
-          
           veicoliPool.forEach(v => risultatiPool.push({
               tipo: 'pop-bus', tipo_corsa: 'nuova_proposta', veicolo_id: v.id,
-              is_pool: true, messaggio: "Attiva un nuovo Pop-Bus"
+              origine: richiesta.coord, destinazione: richiesta.coordDest,
+              posti_totali: v.capacita_totale, posti_disponibili: v.capacita_totale,
+              disponibile: true, is_slot: true, is_pool: true,
+              messaggio: "Attiva un nuovo Pop-Bus"
           }));
-      } catch (e) { console.error("⚠️ Errore fallback:", e); }
+          console.log(`🔍 [DEBUG] Proposte fallback generate: ${veicoliPool.length}`);
+      } catch (e) { console.error("⚠️ Fallback non disponibile (ERRORE DB):", e); }
   }
 
-  // 4. CONCLUSIONE
-  const risultatiFinali = [...risultatiPool]; // Aggiungi qui anche le altre categorie
-  console.log(`✅ [DEBUG] Risultati finali pronti: ${risultatiFinali.length}`);
-  return await formatResults(richiesta, risultatiFinali);
+  // 6. CONCLUSIONE
+  const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
+  console.log(`✅ [DEBUG] Totale risultati calcolati: ${risultatiFinali.length}`);
+  
+  return risultatiFinali.length > 0 ? await formatResults(richiesta, risultatiFinali) : [];
 }

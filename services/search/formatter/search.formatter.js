@@ -17,10 +17,8 @@ const parseServizi = (servizi) => {
     try { return JSON.parse(servizi); } catch (e) { return {}; }
 };
 
-/**
- * Calcola l'orario di arrivo basato sulla distanza reale (offset)
- */
-const determinaArrivo = (partenzaISO, distanzaMetri) => {
+const determinaArrivo = (partenzaISO, arrivoDB, distanzaMetri) => {
+    if (arrivoDB) return getSafeISO(arrivoDB);
     const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
     const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
     const d = new Date(partenzaISO);
@@ -37,61 +35,68 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
-export async function formatResults(richiesta, risultatiFiltrati) {
-    console.log(`[DEBUG] Formattazione Pop-Bus Aware | Risultati: ${risultatiFiltrati.length}`);
+export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
+    console.log(`[DEBUG] Inizio formattazione. Risultati totali: ${risultatiFiltrati.length}`);
 
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
-            ? richiesta.localitaOrigine 
-            : getLocalitaSafeCached(richiesta.coord),
-        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
-            ? richiesta.localitaDestinazione 
-            : getLocalitaSafeCached(richiesta.coordDest)
+        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") ? richiesta.localitaOrigine : getLocalitaSafeCached(richiesta.coord),
+        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") ? richiesta.localitaDestinazione : getLocalitaSafeCached(richiesta.coordDest)
     ]);
+
+    const distanzaRealeMetri = Number(richiesta.distanzaMetri || 10000);
 
     return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
-            // 1. LOGICA DISTANZA: Gli item POOL usano gli offset, gli altri la distanza euclidea della richiesta
-            const distMetri = item.is_pool 
-                ? Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)) 
-                : Number(richiesta.distanzaMetri || 10000);
-            
+            const distMetri = Number(item.distMetri || item.distanza || distanzaRealeMetri);
             const distKmCalc = Math.max(0.1, distMetri / 1000);
-            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
-            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // 2. PRICING: Passaggio dell'intero oggetto item per permettere pricing basato su 'direttrice_id'
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo, distKmCalc)
+            // Gestione date: priorità all'orario della direttrice se esiste
+            const oraPartenza = getSafeISO(item.partenza || item.start_datetime || richiesta.start_datetime);
+            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
+            
+            // Determina il tipo per il pricing
+            const tipoCalcolo = item.tipo === 'pop-bus' ? 'popbus' : (item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard'));
+            
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
                 .catch(err => { 
-                    console.error(`[ERROR] Pricing fallito per ${item.id}:`, err); 
+                    console.error(`[ERROR] Pricing fallito per ${item.id || item.direttrice_id}:`, err); 
                     return distKmCalc * 0.45; 
                 });
             
             const prezzoVal = Number(p) || 0;
 
-            // 3. COSTRUZIONE OGGETTO RISULTATO
+            // Logica ID sicura per gestire proposte dinamiche e direttrici
+            const getSafeId = () => {
+                if (item.is_pool) {
+                    const dirId = item.direttrice_id === 'proposta_dinamica' ? 'nuova_proposta' : item.direttrice_id;
+                    return `direttrice_${dirId}`;
+                }
+                return item.id || `slot_privato_${item.veicolo_id}`;
+            };
+
             return {
-                id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
-                tipo: item.tipo, // 'pop-bus', 'condivisa', 'privata_slot'
-                direttrice_id: item.direttrice_id || null,
+                id: getSafeId(),
                 veicolo_id: Number(item.veicolo_id || 0),
-                localitaOrigine,
+                direttrice_id: item.direttrice_id || null,
+                tipo: tipoCalcolo,
+                localitaOrigine, 
                 localitaDestinazione,
-                oraPartenza,
+                origine: item.origine || richiesta.coord,
+                destinazione: item.destinazione || richiesta.coordDest,
+                oraPartenza, 
                 oraArrivo,
+                marca: item.is_pool ? null : (item.marca || 'N/D'),
+                modello: item.is_pool ? null : (item.modello || 'N/D'),
+                rating: Number(item.rating || 0),
+                servizi: parseServizi(item.servizi),
                 prezzo: prezzoVal,
-                prezzo_display: Math.ceil(prezzoVal).toString(),
-                
-                // Gestione specifica Pop-Bus
-                postiDisponibili: item.posti_disponibili,
+                prezzo_display: prezzoVal.toFixed(0),
+                postiDisponibili: item.is_pool ? item.posti_disponibili : Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
                 postiTotali: Number(item.posti_totali || 0),
+                is_privato: item.tipo === 'privata_slot',
                 is_pool: !!item.is_pool,
-                is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
-                
-                messaggio: item.messaggio || (item.is_pool ? "Servizio condiviso" : "Corsa disponibile"),
-                marca: item.marca || null,
-                modello: item.modello || null,
-                servizi: parseServizi(item.servizi)
+                veicoli_pool_ids: item.veicoli_pool_ids || [], 
+                messaggio: item.messaggio
             };
         } catch (err) {
             console.error(`💥 Errore formattazione ID ${item.id}:`, err);

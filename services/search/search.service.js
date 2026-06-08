@@ -31,6 +31,9 @@ function getSnapResult(point, nodi, tolleranzaKm) {
     }, null);
 }
 
+/**
+ * CALCOLO DINAMICO: Verifica carico su segmento specifico [startOffset, endOffset]
+ */
 async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
     const { rows } = await pool.query(`
         SELECT SUM(r.posti_richiesti) as carico
@@ -155,16 +158,17 @@ export async function cercaSlotUltra(richiesta) {
   if (risultatiPool.length === 0) {
       console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {
+          // CORRETTO: Utilizzo della colonna "coord" (geography) e "posti_totali" (integer)
           const { rows: veicoliPool } = await pool.query(`
-              SELECT id, capacita_totale FROM veicolo 
+              SELECT id, posti_totali FROM veicolo 
               WHERE tipo = 'pool' AND stato = 'disponibile' 
-              AND ST_DWithin(posizione_attuale, ST_SetSRID(ST_MakePoint($1, $2), 4326), 5000) LIMIT 3
+              AND ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 5000) LIMIT 3
           `, [lon, lat]);
           
           veicoliPool.forEach(v => risultatiPool.push({
               tipo: 'pop-bus', tipo_corsa: 'nuova_proposta', veicolo_id: v.id,
               origine: richiesta.coord, destinazione: richiesta.coordDest,
-              posti_totali: v.capacita_totale, posti_disponibili: v.capacita_totale,
+              posti_totali: v.posti_totali, posti_disponibili: v.posti_totali,
               disponibile: true, is_slot: true, is_pool: true,
               messaggio: "Attiva un nuovo Pop-Bus"
           }));

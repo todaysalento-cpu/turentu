@@ -154,23 +154,33 @@ export async function cercaSlotUltra(richiesta) {
       }
   }
 
-  // 5. FALLBACK: Innesco nuova direttrice
+  // 5. FALLBACK: Innesco nuova direttrice (Proposta Unica Aggregata)
   if (risultatiPool.length === 0) {
       console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {
-          const { rows: veicoliPool } = await pool.query(`
-              SELECT id, posti_totali FROM veicolo 
-              WHERE ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 30000) LIMIT 3
+          const { rows: checkVeicoli } = await pool.query(`
+              SELECT count(*) as disponibili 
+              FROM veicolo 
+              WHERE ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 30000)
           `, [lon, lat]);
           
-          veicoliPool.forEach(v => risultatiPool.push({
-              tipo: 'pop-bus', tipo_corsa: 'nuova_proposta', veicolo_id: v.id,
-              origine: richiesta.coord, destinazione: richiesta.coordDest,
-              posti_totali: v.posti_totali, posti_disponibili: v.posti_totali,
-              disponibile: true, is_slot: true, is_pool: true,
-              messaggio: "Attiva un nuovo Pop-Bus"
-          }));
-          console.log(`🔍 [DEBUG] Proposte fallback generate: ${veicoliPool.length}`);
+          if (Number(checkVeicoli[0]?.disponibili) > 0) {
+              risultatiPool.push({
+                  tipo: 'pop-bus', 
+                  tipo_corsa: 'nuova_proposta', 
+                  veicolo_id: null,
+                  direttrice_id: 'proposta_dinamica',
+                  origine: richiesta.coord, 
+                  destinazione: richiesta.coordDest,
+                  posti_totali: 8, 
+                  posti_disponibili: 8,
+                  disponibile: true, 
+                  is_slot: true, 
+                  is_pool: true,
+                  messaggio: "Attiva un nuovo Pop-Bus in zona"
+              });
+              console.log(`🔍 [DEBUG] Proposta fallback generata.`);
+          }
       } catch (e) { console.error("⚠️ Fallback non disponibile (ERRORE DB):", e); }
   }
 

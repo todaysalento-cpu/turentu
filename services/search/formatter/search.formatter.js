@@ -17,8 +17,10 @@ const parseServizi = (servizi) => {
     try { return JSON.parse(servizi); } catch (e) { return {}; }
 };
 
-const determinaArrivo = (partenzaISO, arrivoDB, distanzaMetri) => {
-    if (arrivoDB) return getSafeISO(arrivoDB);
+/**
+ * Calcola l'orario di arrivo basato sulla distanza reale (offset)
+ */
+const determinaArrivo = (partenzaISO, distanzaMetri) => {
     const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
     const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
     const d = new Date(partenzaISO);
@@ -35,30 +37,31 @@ async function getLocalitaSafeCached(coord) {
     return loc;
 }
 
-export async function formatResults(richiesta, risultatiFiltrati, corseOriginali) {
-    console.log(`[DEBUG] Inizio formattazione Node-Aware. Risultati totali: ${risultatiFiltrati.length}`);
+export async function formatResults(richiesta, risultatiFiltrati) {
+    console.log(`[DEBUG] Formattazione Pop-Bus Aware | Risultati: ${risultatiFiltrati.length}`);
 
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") ? richiesta.localitaOrigine : getLocalitaSafeCached(richiesta.coord),
-        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") ? richiesta.localitaDestinazione : getLocalitaSafeCached(richiesta.coordDest)
+        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
+            ? richiesta.localitaOrigine 
+            : getLocalitaSafeCached(richiesta.coord),
+        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
+            ? richiesta.localitaDestinazione 
+            : getLocalitaSafeCached(richiesta.coordDest)
     ]);
-
-    const distanzaEuclideaBase = Number(richiesta.distanzaMetri || 10000);
 
     return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
-            // 1. DETERMINAZIONE DISTANZA REALE (Offset vs Euclidea)
+            // 1. LOGICA DISTANZA: Gli item POOL usano gli offset, gli altri la distanza euclidea della richiesta
             const distMetri = item.is_pool 
-                ? (Number(item.endOffset) - Number(item.startOffset)) 
-                : Number(item.distMetri || item.distanza || distanzaEuclideaBase);
+                ? Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)) 
+                : Number(richiesta.distanzaMetri || 10000);
             
             const distKmCalc = Math.max(0.1, distMetri / 1000);
-            const oraPartenza = getSafeISO(item.start_datetime || richiesta.start_datetime);
-            const oraArrivo = determinaArrivo(oraPartenza, item.arrivo_datetime, distMetri);
-            const tipoCalcolo = item.tipo === 'privata_slot' ? 'privata' : (item.tipo_corsa || item.tipo || 'standard');
+            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
+            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // 2. PRICING: Passiamo l'item completo per permettere al pricing di accedere a startOffset/endOffset
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, tipoCalcolo, distKmCalc, distKmCalc)
+            // 2. PRICING: Passaggio dell'intero oggetto item per permettere pricing basato su 'direttrice_id'
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo, distKmCalc)
                 .catch(err => { 
                     console.error(`[ERROR] Pricing fallito per ${item.id}:`, err); 
                     return distKmCalc * 0.45; 
@@ -66,32 +69,29 @@ export async function formatResults(richiesta, risultatiFiltrati, corseOriginali
             
             const prezzoVal = Number(p) || 0;
 
+            // 3. COSTRUZIONE OGGETTO RISULTATO
             return {
-                id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_privato_${item.veicolo_id}`),
+                id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
+                tipo: item.tipo, // 'pop-bus', 'condivisa', 'privata_slot'
+                direttrice_id: item.direttrice_id || null,
                 veicolo_id: Number(item.veicolo_id || 0),
-                direttrice_id: item.direttrice_id || null, // Tracciamento direttrice
-                tipo: tipoCalcolo,
-                localitaOrigine, 
+                localitaOrigine,
                 localitaDestinazione,
-                origine: item.origine || richiesta.coord,
-                destinazione: item.destinazione || richiesta.coordDest,
-                oraPartenza, 
+                oraPartenza,
                 oraArrivo,
-                marca: item.is_pool ? null : (item.marca || 'N/D'),
-                modello: item.is_pool ? null : (item.modello || 'N/D'),
-                rating: Number(item.rating || 0),
-                servizi: parseServizi(item.servizi),
                 prezzo: prezzoVal,
-                prezzo_display: prezzoVal.toFixed(0),
-                // Gestione posti dinamica in base al tipo
-                postiDisponibili: item.is_pool 
-                    ? item.posti_disponibili 
-                    : Math.max(0, Number(item.posti_totali || 0) - Number(item.posti_prenotati || 0)),
+                prezzo_display: Math.ceil(prezzoVal).toString(),
+                
+                // Gestione specifica Pop-Bus
+                postiDisponibili: item.posti_disponibili,
                 postiTotali: Number(item.posti_totali || 0),
-                is_privato: item.tipo === 'privata_slot',
                 is_pool: !!item.is_pool,
-                veicoli_pool_ids: item.veicoli_pool_ids || [],
-                messaggio: item.messaggio
+                is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
+                
+                messaggio: item.messaggio || (item.is_pool ? "Servizio condiviso" : "Corsa disponibile"),
+                marca: item.marca || null,
+                modello: item.modello || null,
+                servizi: parseServizi(item.servizi)
             };
         } catch (err) {
             console.error(`💥 Errore formattazione ID ${item.id}:`, err);

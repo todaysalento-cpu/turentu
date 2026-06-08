@@ -158,11 +158,10 @@ export async function cercaSlotUltra(richiesta) {
   if (risultatiPool.length === 0) {
       console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {
-          // CORRETTO: Utilizzo della colonna "coord" (geography) e "posti_totali" (integer)
           const { rows: veicoliPool } = await pool.query(`
               SELECT id, posti_totali FROM veicolo 
-              WHERE tipo = 'pool' AND stato = 'disponibile' 
-              AND ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 5000) LIMIT 3
+              WHERE stato = 'disponibile' 
+              AND ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 30000) LIMIT 3
           `, [lon, lat]);
           
           veicoliPool.forEach(v => risultatiPool.push({

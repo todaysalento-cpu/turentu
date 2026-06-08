@@ -19,7 +19,6 @@ import cookieParser from 'cookie-parser';
 import http from 'http';
 import { Server } from 'socket.io';
 import { createAdapter } from "@socket.io/redis-adapter";
-import cron from 'node-cron'; // <-- Import per il worker
 
 // ======================= SOCKET + REDIS =======================
 import { setupSocket } from './socket.js';
@@ -40,7 +39,7 @@ import { disponibilitaRouter } from './routes/disponibilita.routes.js';
 import { veicoloRouter } from './routes/veicolo.routes.js';
 import { corseRouter } from './routes/corse.routes.js';
 import { pendingRouter } from './routes/pending.routes.js';
-import { popbusRouter } from './routes/popbus.routes.js'; // <-- NEW
+import { popbusRouter } from './routes/popbus.routes.js'; // <-- AGGIUNTO
 import { tariffeRouter } from './routes/tariffe.routes.js';
 import distanzaRouter from './routes/distanza.route.js';
 import { notificationsRouter } from './routes/notification.routes.js';
@@ -56,7 +55,7 @@ import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
-import { processaProposteDinamiche } from './workers/popbus.worker.js'; // <-- NEW
+import { startPopbusWorker } from './workers/popbus.worker.js'; // <-- AGGIUNTO
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -64,7 +63,11 @@ const port = process.env.PORT || 3001;
 // ======================= CORS AGGIORNATO E PERMISSIVO =======================
 const isAllowedOrigin = (origin, callback) => {
   if (!origin) return callback(null, true);
-  const allowed = ['http://localhost:3000', 'https://turentumi.vercel.app', 'https://turentu.onrender.com'];
+  const allowed = [
+    'http://localhost:3000', 
+    'https://turentumi.vercel.app',
+    'https://turentu.onrender.com'
+  ];
   if (allowed.includes(origin) || origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) {
     return callback(null, true);
   }
@@ -92,7 +95,7 @@ app.use('/api/disponibilita', disponibilitaRouter);
 app.use('/api/veicolo', veicoloRouter);
 app.use('/api/corse', corseRouter);
 app.use('/api/pending', pendingRouter);
-app.use('/api/popbus', popbusRouter); // <-- NEW ROUTE
+app.use('/api/popbus', popbusRouter); // <-- AGGIUNTO
 app.use('/api/prenotazioni', prenotazioniRouter);
 app.use('/api/pagamenti', pagamentiAutistaRouter);
 app.use('/api/tariffe', tariffeRouter);
@@ -112,7 +115,10 @@ app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 const server = http.createServer(app);
 
 const io = new Server(server, { 
-  cors: { origin: isAllowedOrigin, credentials: true },
+  cors: { 
+    origin: isAllowedOrigin, 
+    credentials: true 
+  },
   pingTimeout: 60000, 
   pingInterval: 25000,
   transports: ['polling', 'websocket'],
@@ -136,15 +142,9 @@ const startServer = async () => {
     await loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore cache:', e.message));
     await pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore cleanup:', e.message));
 
-    // --- AVVIO WORKER DINAMICO POPBUS ---
-    cron.schedule('* * * * *', async () => {
-      console.log('🔄 [WORKER] Esecuzione ciclo PopBus...');
-      try {
-        await processaProposteDinamiche();
-      } catch (err) {
-        console.error('❌ [WORKER] Errore nel ciclo PopBus:', err);
-      }
-    });
+    // --- AVVIO WORKER POPBUS ---
+    startPopbusWorker();
+    console.log('⚙️ [WORKER] Scheduler PopBus avviato.');
 
     server.listen(port, '0.0.0.0', () => {
       console.log(`🚀 [SERVER] In ascolto su porta ${port}`);

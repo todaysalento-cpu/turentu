@@ -160,8 +160,7 @@ export async function cercaSlotUltra(richiesta) {
       try {
           const { rows: veicoliPool } = await pool.query(`
               SELECT id, posti_totali FROM veicolo 
-              WHERE stato = 'disponibile' 
-              AND ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 30000) LIMIT 3
+              WHERE ST_DWithin(coord, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, 30000) LIMIT 3
           `, [lon, lat]);
           
           veicoliPool.forEach(v => risultatiPool.push({

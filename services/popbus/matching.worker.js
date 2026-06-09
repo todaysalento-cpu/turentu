@@ -25,7 +25,8 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
-    // Utilizziamo RETURNING per catturare le direttrici che hanno attivato almeno un segmento
+    // Abbiamo aggiunto 'JOIN nodi_direttrice n2' alla clausola FROM principale
+    // per rendere n2 visibile nella clausola WHERE finale.
     const { rows: direttriciAttivate } = await client.query(`
       UPDATE segmenti s
       SET stato = 'attivo'
@@ -45,6 +46,7 @@ export async function processaProposteDinamiche() {
         JOIN direttrici_virtuali d ON s.direttrice_id = d.id
         WHERE s.stato = 'in_attesa'
       ) as analisi
+      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
       WHERE s.id = analisi.seg_id
       AND (analisi.locale_ok OR analisi.catena_ok)
       AND analisi.tempo_ok = TRUE
@@ -56,10 +58,8 @@ export async function processaProposteDinamiche() {
     const dirIds = [...new Set(direttriciAttivate.map(r => r.direttrice_id))];
     
     for (const dirId of dirIds) {
-      // Imposta lo stato della direttrice in "in attesa di accettazione"
       await client.query(`UPDATE direttrici_virtuali SET stato = 'in_attesa_autista' WHERE id = $1`, [dirId]);
       
-      // Seleziona i migliori autisti (es. i primi 5 per rating)
       const { rows: autisti } = await client.query(`
         SELECT id FROM utente WHERE tipo = 'autista' ORDER BY rating DESC LIMIT 5
       `);
@@ -71,7 +71,6 @@ export async function processaProposteDinamiche() {
         `, [dirId, autista.id]);
       }
 
-      // Notifica in tempo reale
       const io = getIO();
       io.emit('nuova_proposta_popbus', { direttrice_id: dirId });
     }

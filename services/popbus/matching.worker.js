@@ -25,32 +25,33 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
-    // Abbiamo aggiunto 'JOIN nodi_direttrice n2' alla clausola FROM principale
-    // per rendere n2 visibile nella clausola WHERE finale.
+    // Abbiamo rimosso 's' dalla subquery e isolato il calcolo della validità
     const { rows: direttriciAttivate } = await client.query(`
       UPDATE segmenti s
       SET stato = 'attivo'
       FROM (
         SELECT 
-            s.id as seg_id,
-            s.direttrice_id,
-            ((s.posti_occupati * 2.5 * 0.6) >= (1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as locale_ok,
-            ((SUM(s.posti_occupati) OVER(PARTITION BY s.direttrice_id) * 2.5 * 0.6) >= 
-             (SUM(1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) OVER(PARTITION BY s.direttrice_id) * d.moltiplicatore_costo)) as catena_ok,
-            SUM(s.tempo_stimato) OVER(PARTITION BY s.direttrice_id) <= d.soglia_tempo_max as tempo_ok,
-            (d.partenza_prevista + (SUM(s.tempo_stimato) OVER(PARTITION BY s.direttrice_id ORDER BY s.ordine_sequenziale) * INTERVAL '1 minute'))
-            BETWEEN n2.finestra_oraria_min AND n2.finestra_oraria_max as transito_ok
-        FROM segmenti s
-        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-        JOIN direttrici_virtuali d ON s.direttrice_id = d.id
-        WHERE s.stato = 'in_attesa'
+            seg.id as seg_id,
+            seg.direttrice_id
+        FROM segmenti seg
+        JOIN nodi_direttrice n1 ON seg.start_node_id = n1.id
+        JOIN nodi_direttrice n2 ON seg.end_node_id = n2.id
+        JOIN direttrici_virtuali d ON seg.direttrice_id = d.id
+        WHERE seg.stato = 'in_attesa'
+        AND (
+           ((seg.posti_occupati * 2.5 * 0.6) >= (1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) 
+           OR 
+           ((SUM(seg.posti_occupati) OVER(PARTITION BY seg.direttrice_id) * 2.5 * 0.6) >= 
+            (SUM(1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) OVER(PARTITION BY seg.direttrice_id) * d.moltiplicatore_costo))
+        )
+        AND SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id) <= d.soglia_tempo_max
+        AND (
+           (d.partenza_prevista + (SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id ORDER BY seg.ordine_sequenziale) * INTERVAL '1 minute'))
+           BETWEEN n2.finestra_oraria_min AND n2.finestra_oraria_max 
+           OR n2.finestra_oraria_min IS NULL
+        )
       ) as analisi
-      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
       WHERE s.id = analisi.seg_id
-      AND (analisi.locale_ok OR analisi.catena_ok)
-      AND analisi.tempo_ok = TRUE
-      AND (analisi.transito_ok OR n2.finestra_oraria_min IS NULL)
       RETURNING s.direttrice_id
     `);
 

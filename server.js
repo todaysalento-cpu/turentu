@@ -19,7 +19,6 @@ import cookieParser from 'cookie-parser';
 import http from 'http';
 import { Server } from 'socket.io';
 import { createAdapter } from "@socket.io/redis-adapter";
-import cron from 'node-cron';
 
 // ======================= SOCKET + REDIS =======================
 import { setupSocket } from './socket.js';
@@ -56,7 +55,8 @@ import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
-import { processaProposteDinamiche } from './workers/popbus.worker.js';
+// CORREZIONE: Importa la funzione di avvio, non la funzione interna al worker
+import { startPopbusWorker } from './workers/popbus.worker.js'; 
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -81,7 +81,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ======================= MIDDLEWARE & ROUTES =======================
+// ======================= ROUTES =======================
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
@@ -119,7 +119,7 @@ const io = new Server(server, {
 });
 
 const startServer = async () => {
-  // 1. APRIAMO LA PORTA SUBITO per evitare il timeout di Render
+  // Bind immediato alla porta per Render
   server.listen(port, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
   });
@@ -127,7 +127,6 @@ const startServer = async () => {
   try {
     console.log('🔄 [INIT] Inizializzazione asincrona servizi...');
 
-    // 2. Operazioni asincrone in background
     if (redisClient && !redisClient.isOpen) await redisClient.connect();
     
     const pubClient = redisClient.duplicate();
@@ -139,19 +138,13 @@ const startServer = async () => {
 
     flowRegistry.register(onboardingFlow);
     
-    // Esecuzioni pesanti che non bloccano l'avvio
+    // Operazioni background
     loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore:', e.message));
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
-    // 3. Avvio Worker PopBus
-    cron.schedule('* * * * *', async () => {
-      console.log('🔄 [WORKER] Esecuzione ciclo PopBus...');
-      try {
-        await processaProposteDinamiche();
-      } catch (err) {
-        console.error('❌ [WORKER] Errore nel ciclo PopBus:', err);
-      }
-    });
+    // AVVIO WORKER: Ora gestito internamente dal worker stesso
+    startPopbusWorker();
+    console.log('⚙️ [WORKER] Scheduler PopBus avviato.');
     
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {

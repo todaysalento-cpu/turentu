@@ -25,34 +25,34 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
-    // Utilizziamo una CTE per isolare le funzioni di finestra e rendere l'UPDATE pulito
+    // Utilizziamo un approccio a due livelli nella CTE per evitare l'errore window function in WHERE
     const { rows: direttriciAttivate } = await client.query(`
-      WITH segmenti_validi AS (
+      WITH calcolo_valori AS (
         SELECT 
-            seg.id as seg_id,
-            seg.direttrice_id
+            seg.id,
+            seg.direttrice_id,
+            ((seg.posti_occupati * 2.5 * 0.6) >= (1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as locale_ok,
+            ((SUM(seg.posti_occupati) OVER(PARTITION BY seg.direttrice_id) * 2.5 * 0.6) >= 
+             (SUM(1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) OVER(PARTITION BY seg.direttrice_id) * d.moltiplicatore_costo)) as catena_ok,
+            SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id) <= d.soglia_tempo_max as tempo_ok,
+            (d.partenza_prevista + (SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id ORDER BY seg.ordine_sequenziale) * INTERVAL '1 minute')) 
+            BETWEEN n2.finestra_oraria_min AND n2.finestra_oraria_max as transito_ok,
+            (n2.finestra_oraria_min IS NULL) as finestra_nulla
         FROM segmenti seg
         JOIN nodi_direttrice n1 ON seg.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON seg.end_node_id = n2.id
         JOIN direttrici_virtuali d ON seg.direttrice_id = d.id
         WHERE seg.stato = 'in_attesa'
-        AND (
-           ((seg.posti_occupati * 2.5 * 0.6) >= (1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) 
-           OR 
-           ((SUM(seg.posti_occupati) OVER(PARTITION BY seg.direttrice_id) * 2.5 * 0.6) >= 
-            (SUM(1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) OVER(PARTITION BY seg.direttrice_id) * d.moltiplicatore_costo))
-        )
-        AND SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id) <= d.soglia_tempo_max
-        AND (
-           (d.partenza_prevista + (SUM(seg.tempo_stimato) OVER(PARTITION BY seg.direttrice_id ORDER BY seg.ordine_sequenziale) * INTERVAL '1 minute'))
-           BETWEEN n2.finestra_oraria_min AND n2.finestra_oraria_max 
-           OR n2.finestra_oraria_min IS NULL
-        )
+      ),
+      segmenti_validi AS (
+        SELECT id, direttrice_id 
+        FROM calcolo_valori 
+        WHERE (locale_ok OR catena_ok) AND tempo_ok = TRUE AND (transito_ok OR finestra_nulla)
       )
       UPDATE segmenti s
       SET stato = 'attivo'
       FROM segmenti_validi sv
-      WHERE s.id = sv.seg_id
+      WHERE s.id = sv.id
       RETURNING s.direttrice_id
     `);
 

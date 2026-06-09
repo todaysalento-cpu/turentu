@@ -25,11 +25,9 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
-    // Abbiamo rimosso 's' dalla subquery e isolato il calcolo della validità
+    // Utilizziamo una CTE per isolare le funzioni di finestra e rendere l'UPDATE pulito
     const { rows: direttriciAttivate } = await client.query(`
-      UPDATE segmenti s
-      SET stato = 'attivo'
-      FROM (
+      WITH segmenti_validi AS (
         SELECT 
             seg.id as seg_id,
             seg.direttrice_id
@@ -50,12 +48,15 @@ export async function processaProposteDinamiche() {
            BETWEEN n2.finestra_oraria_min AND n2.finestra_oraria_max 
            OR n2.finestra_oraria_min IS NULL
         )
-      ) as analisi
-      WHERE s.id = analisi.seg_id
+      )
+      UPDATE segmenti s
+      SET stato = 'attivo'
+      FROM segmenti_validi sv
+      WHERE s.id = sv.seg_id
       RETURNING s.direttrice_id
     `);
 
-    // 3. Dispatching agli Autisti (Marketplace)
+    // 3. Dispatching agli Autisti
     const dirIds = [...new Set(direttriciAttivate.map(r => r.direttrice_id))];
     
     for (const dirId of dirIds) {

@@ -25,7 +25,6 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
-    // Utilizziamo un approccio a due livelli nella CTE per evitare l'errore window function in WHERE
     const { rows: direttriciAttivate } = await client.query(`
       WITH calcolo_valori AS (
         SELECT 

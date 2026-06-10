@@ -6,6 +6,7 @@ import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
 import { getDisponibilitaBatch } from './disponibilita/disponibilita.service.js'; 
 import { pool } from '../../db/db.js';
+import { getDurataDistanza } from '../../utils/maps.util.js'; // IMPORT AGGIUNTO
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
@@ -31,9 +32,6 @@ function getSnapResult(point, nodi, tolleranzaKm) {
     }, null);
 }
 
-/**
- * CALCOLO DINAMICO: Verifica carico su segmento specifico [startOffset, endOffset]
- */
 async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
     const { rows } = await pool.query(`
         SELECT SUM(r.posti_richiesti) as carico
@@ -80,8 +78,6 @@ export async function cercaSlotUltra(richiesta) {
   const slotCandidateIds = [...new Set(slotResults.flat())].map(Number);
   const candidatiPool = slotCandidateIds.map(id => CacheStore.veicoloToDisponibilita.get(id)).filter(Boolean);
   
-  console.log(`🔍 [DEBUG] Corse Candidate: ${corseCandidate.length} | Slot Candidati (ID): ${slotCandidateIds.length}`);
-
   // 2. FILTRO CORSE DI LINEA
   const impegniForti = corseCandidate.filter(c => c.tipo_corsa !== 'pop-bus' && c.stato === 'prenotabile');
   const prenotazioniBatch = corseCandidate.length > 0 ? await Promise.all(corseCandidate.map(c => redisClient.hVals(`corsa:prenotazioni:${c.id}`))) : [];
@@ -118,7 +114,6 @@ export async function cercaSlotUltra(richiesta) {
 
   // 4. LOGICA POP-BUS
   let risultatiPool = [];
-  // Aggiornato: rimosso d.capacita_totale, aggiunto d.veicolo_id
   const { rows: direttriciAttive } = await pool.query(`
       SELECT DISTINCT d.id, d.stato, d.veicolo_id
       FROM direttrici_virtuali d
@@ -129,8 +124,6 @@ export async function cercaSlotUltra(richiesta) {
       AND ST_DWithin(n2.posizione, ST_SetSRID(ST_MakePoint($3, $4), 4326), 2000)
   `, [lon, lat, destLon, destLat]);
 
-  console.log(`🔍 [DEBUG] Direttrici virtuali trovate nel DB: ${direttriciAttive.length}`);
-
   for (const dir of direttriciAttive) {
       const nodi = CacheStore.nodiCache.get(dir.id) || [];
       const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
@@ -139,7 +132,6 @@ export async function cercaSlotUltra(richiesta) {
 
       if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
           const caricoAttuale = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
-          // Calcolo dinamico basato sul veicolo associato (default 8)
           const capacita = veicolo?.posti_totali || 8;
           const postiDisponibili = capacita - caricoAttuale;
 
@@ -150,17 +142,12 @@ export async function cercaSlotUltra(richiesta) {
                   posti_disponibili: postiDisponibili, disponibile: true,
                   is_slot: true, is_pool: true, messaggio: `Pop Bus ${dir.stato}`
               });
-          } else {
-              console.log(`🔍 [DEBUG] Direttrice ${dir.id} piena o posti insufficienti.`);
           }
-      } else {
-          console.log(`🔍 [DEBUG] Direttrice ${dir.id} non valida (Snap fallito o ordine offset errato).`);
       }
   }
 
   // 5. FALLBACK
   if (risultatiPool.length === 0) {
-      console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {
           const { rows: checkVeicoli } = await pool.query(`
               SELECT count(*) as disponibili 
@@ -170,27 +157,29 @@ export async function cercaSlotUltra(richiesta) {
           
           if (Number(checkVeicoli[0]?.disponibili) > 0) {
               risultatiPool.push({
-                  tipo: 'pop-bus', 
-                  tipo_corsa: 'nuova_proposta', 
-                  veicolo_id: null,
-                  direttrice_id: 'proposta_dinamica',
-                  origine: richiesta.coord, 
-                  destinazione: richiesta.coordDest,
-                  posti_totali: 8, 
-                  posti_disponibili: 8,
-                  disponibile: true, 
-                  is_slot: true, 
-                  is_pool: true,
-                  messaggio: "Attiva un nuovo Pop-Bus in zona"
+                  tipo: 'pop-bus', tipo_corsa: 'nuova_proposta', veicolo_id: null,
+                  direttrice_id: 'proposta_dinamica', origine: richiesta.coord, 
+                  destinazione: richiesta.coordDest, posti_totali: 8, 
+                  posti_disponibili: 8, disponibile: true, is_slot: true, 
+                  is_pool: true, messaggio: "Attiva un nuovo Pop-Bus in zona"
               });
-              console.log(`🔍 [DEBUG] Proposta fallback generata.`);
           }
-      } catch (e) { console.error("⚠️ Fallback non disponibile (ERRORE DB):", e); }
+      } catch (e) { console.error("⚠️ Fallback non disponibile:", e); }
   }
 
-  // 6. CONCLUSIONE
+  // 6. CONCLUSIONE CON CALCOLO DISTANZA
   const risultatiFinali = [...risultatiCondivise, ...risultatiSlotPrivati, ...risultatiPool];
-  console.log(`✅ [DEBUG] Totale risultati calcolati: ${risultatiFinali.length}`);
   
-  return risultatiFinali.length > 0 ? await formatResults(richiesta, risultatiFinali) : [];
+  if (risultatiFinali.length > 0) {
+      try {
+          const infoPercorso = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
+          const richiestaConDistanza = { ...richiesta, distanzaMetri: infoPercorso.distanzaKm * 1000 };
+          return await formatResults(richiestaConDistanza, risultatiFinali);
+      } catch (err) {
+          console.error("⚠️ Errore calcolo distanza nel service, procedo senza:", err);
+          return await formatResults(richiesta, risultatiFinali);
+      }
+  }
+  
+  return [];
 }

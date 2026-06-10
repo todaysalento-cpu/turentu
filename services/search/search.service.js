@@ -5,8 +5,7 @@ import { pool } from '../../db/db.js';
 import { loadCachesUltra, CacheStore } from './search.cache.js'; 
 import { filterDisponibilita } from './engine/availability.engine.js';
 import { formatResults } from './formatter/search.formatter.js';
-import { getDisponibilitaBatch } from './disponibilita/disponibilita.service.js'; 
-import { getDurataDistanza } from '../../utils/maps.util.js'; // IMPORT AGGIUNTO
+import { getDurataDistanza } from '../../utils/maps.util.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
@@ -70,7 +69,7 @@ export async function cercaSlotUltra(richiesta) {
   // 3. LOGICA POP-BUS
   let risultatiPool = [];
   const { rows: direttriciAttive } = await pool.query(`
-      SELECT DISTINCT d.id, d.capacita_totale, d.stato
+      SELECT DISTINCT d.id, d.stato, d.veicolo_id
       FROM direttrici_virtuali d
       JOIN nodi_direttrice n1 ON d.id = n1.direttrice_id
       JOIN nodi_direttrice n2 ON d.id = n2.direttrice_id
@@ -81,11 +80,14 @@ export async function cercaSlotUltra(richiesta) {
 
   for (const dir of direttriciAttive) {
       const nodi = CacheStore.nodiCache.get(dir.id) || [];
+      const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
+      const capacita = veicolo?.posti_totali || 8; // Fallback di sicurezza
+
       const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
       const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
       if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
-          const postiDisponibili = dir.capacita_totale - await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
+          const postiDisponibili = capacita - await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
           if (postiDisponibili >= postiRichiesti) {
               risultatiPool.push({
                   id: `dir_${dir.id}`,
@@ -103,7 +105,7 @@ export async function cercaSlotUltra(richiesta) {
   // 4. FALLBACK
   if (risultatiPool.length === 0) {
       const { rows: veicoliDisponibili } = await pool.query(`
-          SELECT id, capacita_totale FROM veicoli 
+          SELECT id, posti_totali FROM veicoli 
           WHERE tipo = 'pool' AND stato = 'disponibile' 
           AND ST_DWithin(posizione_attuale, ST_SetSRID(ST_MakePoint($1, $2), 4326), 5000) LIMIT 3
       `, [lon, lat]);
@@ -113,7 +115,7 @@ export async function cercaSlotUltra(richiesta) {
           tipo: 'pop-bus', 
           tipo_corsa: 'nuova_proposta', 
           veicolo_id: v.id,
-          posti_disponibili: v.capacita_totale, 
+          posti_disponibili: v.posti_totali || 8, 
           is_pool: true, 
           messaggio: "Attiva un nuovo Pop-Bus"
       }));

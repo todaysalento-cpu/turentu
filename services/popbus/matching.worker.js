@@ -25,10 +25,11 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. Attivazione e identificazione direttrici valide
+    // Utilizziamo una CTE per calcolare i flag in modo isolato e poi filtrare
     const { rows: direttriciAttivate } = await client.query(`
-      WITH calcolo_valori AS (
+      WITH calcolo_analisi AS (
         SELECT 
-            seg.id,
+            seg.id as seg_id,
             seg.direttrice_id,
             ((seg.posti_occupati * 2.5 * 0.6) >= (1.2 * ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as locale_ok,
             ((SUM(seg.posti_occupati) OVER(PARTITION BY seg.direttrice_id) * 2.5 * 0.6) >= 
@@ -43,19 +44,21 @@ export async function processaProposteDinamiche() {
         JOIN direttrici_virtuali d ON seg.direttrice_id = d.id
         WHERE seg.stato = 'in_attesa'
       ),
-      segmenti_validi AS (
-        SELECT id, direttrice_id 
-        FROM calcolo_valori 
-        WHERE (locale_ok OR catena_ok) AND tempo_ok = TRUE AND (transito_ok OR finestra_nulla)
+      segmenti_filtrati AS (
+        SELECT seg_id, direttrice_id
+        FROM calcolo_analisi
+        WHERE (locale_ok OR catena_ok)
+        AND tempo_ok = TRUE
+        AND (transito_ok OR finestra_nulla)
       )
       UPDATE segmenti s
       SET stato = 'attivo'
-      FROM segmenti_validi sv
-      WHERE s.id = sv.id
+      FROM segmenti_filtrati sf
+      WHERE s.id = sf.seg_id
       RETURNING s.direttrice_id
     `);
 
-    // 3. Dispatching agli Autisti
+    // 3. Dispatching agli Autisti (Marketplace)
     const dirIds = [...new Set(direttriciAttivate.map(r => r.direttrice_id))];
     
     for (const dirId of dirIds) {

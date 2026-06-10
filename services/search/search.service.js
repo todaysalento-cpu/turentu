@@ -118,8 +118,9 @@ export async function cercaSlotUltra(richiesta) {
 
   // 4. LOGICA POP-BUS
   let risultatiPool = [];
+  // Aggiornato: rimosso d.capacita_totale, aggiunto d.veicolo_id
   const { rows: direttriciAttive } = await pool.query(`
-      SELECT DISTINCT d.id, d.capacita_totale, d.stato 
+      SELECT DISTINCT d.id, d.stato, d.veicolo_id
       FROM direttrici_virtuali d
       JOIN nodi_direttrice n1 ON d.id = n1.direttrice_id
       JOIN nodi_direttrice n2 ON d.id = n2.direttrice_id
@@ -132,12 +133,15 @@ export async function cercaSlotUltra(richiesta) {
 
   for (const dir of direttriciAttive) {
       const nodi = CacheStore.nodiCache.get(dir.id) || [];
+      const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
       const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
       const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
       if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
           const caricoAttuale = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
-          const postiDisponibili = dir.capacita_totale - caricoAttuale;
+          // Calcolo dinamico basato sul veicolo associato (default 8)
+          const capacita = veicolo?.posti_totali || 8;
+          const postiDisponibili = capacita - caricoAttuale;
 
           if (postiDisponibili >= postiRichiesti) {
               risultatiPool.push({
@@ -154,7 +158,7 @@ export async function cercaSlotUltra(richiesta) {
       }
   }
 
-  // 5. FALLBACK: Innesco nuova direttrice (Proposta Unica Aggregata)
+  // 5. FALLBACK
   if (risultatiPool.length === 0) {
       console.log("🔍 [DEBUG] Nessun Pop-Bus trovato, avvio fallback (nuova proposta)...");
       try {

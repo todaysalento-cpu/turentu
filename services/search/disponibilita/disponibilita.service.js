@@ -2,11 +2,6 @@ import { pool } from '../../../db/db.js';
 import { CacheManager } from '../../../utils/cacheManager.js';
 import { CacheStore } from '../search.cache.js';
 
-const safeDate = (val) => {
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? new Date(0) : d;
-};
-
 /**
  * 1. FUNZIONE SINGOLA
  */
@@ -16,12 +11,11 @@ export async function getDisponibilita(veicoloId) {
 }
 
 /**
- * 2. VERSIONE BATCH: Con Log di Debug
+ * 2. VERSIONE BATCH: Logica puramente oraria
  */
 export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
-  const targetDayOfWeek = targetDate.getDay();
+  // Calcolo target solo in minuti (0-1439)
   const targetMinutes = targetDate.getUTCHours() * 60 + targetDate.getUTCMinutes();
-  
   const results = new Map();
 
   for (const vId of veicoloIds) {
@@ -36,39 +30,24 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
 
     const driverId = Number(turno.driver_id);
     
-    // Verifica impegni "Forti"
+    // Verifica impegni "Forti" (mantieniamo il controllo data/ora per le prenotazioni reali)
     const isImpegnatoInCorsaForte = impegniForti.some(i => 
       Number(i.driver_id) === driverId && 
-      targetDate >= safeDate(i.start_datetime) && 
-      targetDate <= safeDate(i.arrivo_datetime)
+      targetDate >= new Date(i.start_datetime) && 
+      targetDate <= new Date(i.arrivo_datetime)
     );
 
-    // Valutazione disponibilità
     const stato = (() => {
-      // Log di ingresso verifica
       console.log(`🔍 [DISP-DEBUG] Valutazione V:${veicoloId} | Driver:${driverId} | Impegnato:${isImpegnatoInCorsaForte}`);
 
       if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
-        console.log(`❌ [DISP-DEBUG] V:${veicoloId} scartato: Impegno corsa forte rilevato.`);
         return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
 
-      const giorniEsclusi = new Set((Array.isArray(turno.giorni_esclusi) ? turno.giorni_esclusi : []).map(Number));
-      if (giorniEsclusi.has(targetDayOfWeek)) {
-        console.log(`❌ [DISP-DEBUG] V:${veicoloId} scartato: Giorno ${targetDayOfWeek} escluso.`);
-        return { ...turno, disponibile: false };
-      }
-
-      if (Array.isArray(turno.inattivita)) {
-        const isInactive = turno.inattivita.some(i => targetDate >= new Date(i.start) && targetDate <= new Date(i.fine));
-        if (isInactive) {
-          console.log(`❌ [DISP-DEBUG] V:${veicoloId} scartato: In periodo di inattività.`);
-          return { ...turno, disponibile: false };
-        }
-      }
-
+      // LOGICA ORARIA (Ignoriamo giorni_esclusi e date inattivita puntuali)
       const startM = toMinutes(turno.start);
       const endM = toMinutes(turno.fine);
+      
       const disponibile = (startM > endM) 
         ? (targetMinutes >= startM || targetMinutes <= endM)
         : (targetMinutes >= startM && targetMinutes <= endM);
@@ -89,6 +68,7 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
 
 function toMinutes(timeStr) {
   const d = new Date(timeStr);
+  // Forza l'uso di UTC per evitare slittamenti di fuso orario
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
@@ -99,9 +79,7 @@ export async function createDisponibilita(turno) {
   start = parseTimeString(start);
   fine = parseTimeString(fine);
 
-  if (!start || !fine || new Date(start) >= new Date(fine)) {
-    throw new Error('Orario non valido');
-  }
+  if (!start || !fine) throw new Error('Orario non valido');
 
   const res = await pool.query(
     `INSERT INTO disponibilita_veicolo (veicolo_id, start, fine, manual, giorni_esclusi, inattivita)
@@ -138,7 +116,9 @@ export async function createDisponibilita(turno) {
 
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
+  // Gestione stringhe ISO o semplici HH:mm
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   const [hh, mm] = timeStr.split(':').map(Number);
+  // Usiamo sempre il 1970-01-01 come base neutra UTC
   return new Date(Date.UTC(1970, 0, 1, hh, mm, 0)).toISOString();
 }

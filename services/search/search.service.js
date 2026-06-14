@@ -29,17 +29,34 @@ function getVirtualSnap(point, lineaGeografica) {
     };
 }
 
+/**
+ * Calcola l'occupazione totale sommando segmenti (confermati) 
+ * e richieste Pop-Bus (convertite/in attesa)
+ */
 async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
     const { rows } = await pool.query(`
-        SELECT SUM(s.posti_occupati) as carico
-        FROM segmenti s
-        JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
-        JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
-        WHERE s.direttrice_id = $1
-        AND n_start.offset_metri < $3 
-        AND n_end.offset_metri > $2
+        SELECT COALESCE(SUM(posti), 0) as totale_carico FROM (
+            -- 1. Posti già consolidati in segmenti
+            SELECT SUM(s.posti_occupati) as posti 
+            FROM segmenti s
+            JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
+            JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
+            WHERE s.direttrice_id = $1 
+            AND n_start.offset_metri < $3 
+            AND n_end.offset_metri > $2
+            
+            UNION ALL
+            
+            -- 2. Posti riservati in richieste Pop-Bus (convertite o già accettate)
+            SELECT SUM(r.posti_richiesti) as posti 
+            FROM richieste_pop_bus r
+            JOIN direttrici_richieste dr ON r.id = dr.richiesta_id
+            WHERE dr.direttrice_id = $1 
+            AND r.stato IN ('convertita', 'accettata')
+        ) as sub
     `, [direttriceId, startOffset, endOffset]);
-    return Number(rows[0]?.carico || 0);
+    
+    return Number(rows[0]?.totale_carico || 0);
 }
 
 export async function cercaSlotUltra(richiesta) {
@@ -95,7 +112,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. LOGICA POP-BUS (Ottimizzata in parallelo)
+    // 3. LOGICA POP-BUS
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
@@ -141,7 +158,7 @@ export async function cercaSlotUltra(richiesta) {
         id: 'nuova_proposta',
         tipo: 'pop-bus',
         tipo_corsa: 'nuova_proposta',
-        is_pool: true, // ESPLICITAMENTE TRUE per evitare instradamento su corsa privata
+        is_pool: true, 
         messaggio: "Non trovi il bus perfetto? Richiedi l'attivazione di una nuova direttrice.",
         is_nuova_proposta: true,
         distanza: distanzaMetri,

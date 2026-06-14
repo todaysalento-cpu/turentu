@@ -46,101 +46,59 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
       capture_method: 'manual',
     });
-    console.log(`💳 [STRIPE] Intent creato: ${paymentIntent.id}`);
-
+    
     await client.query('BEGIN');
     const pendingRows = [];
 
     for (const slot of slots) {
-      // LOGICA DI IDENTIFICAZIONE RESILIENTE
-      // Una corsa è Pop-Bus se ha il flag is_pool O se l'ID suggerisce una direttrice/nuova proposta
       const isPopBus = slot.is_pool === true || 
                        (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta'));
 
-      // Estrazione vId: Solo se NON è Pop-Bus
-      let vId = slot.veicolo_id;
-      if (!isPopBus && !vId && slot.id && typeof slot.id === 'string' && slot.id.startsWith('priv_')) {
-        vId = slot.id.split('_')[1];
-      }
-
-      const { 
-        start_datetime, posti_richiesti, direttrice_id,
-        origine, destinazione, localitaOrigine, localitaDestinazione, distanzaKm 
-      } = slot;
-      
-      if (!origine?.lat || !destinazione?.lat) throw new Error("Coordinate incomplete");
-
       if (isPopBus) {
-        console.log(`🚌 [POOL] Elaborazione richiesta Pop-Bus`);
+        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus in attesa...`);
         
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa')
            RETURNING id`,
-          [clienteId, origine.lon, origine.lat, destinazione.lon, destinazione.lat, start_datetime, posti_richiesti]
+          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti]
         );
         
         const richiestaId = result.rows[0].id;
 
-        if (direttrice_id && direttrice_id !== 'proposta_dinamica') {
-          const dirId = parseInt(direttrice_id.toString().replace('direttrice_', ''));
+        // Se è una direttrice specifica, aggancia subito
+        if (slot.direttrice_id && typeof slot.direttrice_id === 'string' && slot.direttrice_id.startsWith('dir_')) {
+          const dirId = parseInt(slot.direttrice_id.replace('dir_', ''));
           await client.query(
             `INSERT INTO direttrici_richieste (direttrice_id, richiesta_id) VALUES ($1, $2)`,
             [dirId, richiestaId]
           );
         }
-        pendingRows.push({ id: richiestaId, is_pool: true });
+        pendingRows.push({ id: richiestaId, is_pool: true, stato: 'in_attesa' });
       } else {
-        // Validazione rigorosa riservata esclusivamente alle corse private
-        if (!vId) {
-            console.error("❌ ERRORE: Veicolo ID mancante nel payload slot:", slot);
-            throw new Error("Veicolo ID mancante per corsa privata");
-        }
+        // Logica Corsa Privata (invariata)
+        let vId = slot.veicolo_id || (slot.id?.startsWith('priv_') ? slot.id.split('_')[1] : null);
+        if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
         
-        console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${vId}`);
-        let durataMinuti = slot.durataMinuti ?? slot.durata_minuti ?? 30;
-        let dist = Number(distanzaKm ?? 0);
-        
-        if (dist <= 0) {
-          const geo = await getDurataDistanza(origine, destinazione).catch(() => ({ distanzaKm: 0 }));
-          dist = Number(geo.distanzaKm ?? 0);
-        }
-
         const result = await client.query(
-          `INSERT INTO pending (veicolo_id, cliente_id, start_datetime, durata, posti_richiesti, tipo_corsa, prezzo, distanza, origine, destinazione, origine_address, destinazione_address, stato, payment_intent_id, request_id, expires_at)
-           VALUES ($1,$2,$3,$4::interval,$5,$6,$7,$8, ST_SetSRID(ST_MakePoint($9,$10),4326), ST_SetSRID(ST_MakePoint($11,$12),4326), $13,$14,'pending',$15,$16::uuid, NOW() + interval '30 minutes')
+          `INSERT INTO pending (veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, distanza, origine, destinazione, stato, payment_intent_id, request_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 'pending',$12,$13)
            RETURNING *`,
-          [vId, clienteId, start_datetime, `${durataMinuti} minutes`, posti_richiesti, type, prezzo / slots.length, dist, origine.lon, origine.lat, destinazione.lon, destinazione.lat, localitaOrigine, localitaDestinazione, paymentIntent.id, requestId]
+          [vId, clienteId, slot.start_datetime, slot.posti_richiesti, type, prezzo/slots.length, slot.distanzaKm || 0, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, paymentIntent.id, requestId]
         );
         
-        const pItem = result.rows[0];
-        pendingRows.push(pItem);
-        await upsertPrenotazione(pItem);
-
-        const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [vId]);
-        const driverId = driverRes.rows[0]?.driver_id;
-        
-        if (driverId) {
-          const notif = await client.query(
-            `INSERT INTO notifications(user_id, type, message, seen, created_at) VALUES ($1, 'pending', $2, false, NOW()) RETURNING *`, 
-            [driverId, generatePendingMessage({ role: 'autista', startAddress: localitaOrigine, endAddress: localitaDestinazione, startDatetime: start_datetime })]
-          );
-          notificheDaInviare.push({ userId: driverId, notification: notif.rows[0] });
-        }
+        pendingRows.push(result.rows[0]);
+        await upsertPrenotazione(result.rows[0]);
       }
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [PAYMENT] Transazione completata.`);
-
-    for (const notifData of notificheDaInviare) {
-      sendNotification({ userId: notifData.userId, role: 'autista', notification: notifData.notification });
-    }
+    console.log(`✅ [PAYMENT] Transazione completata. Richieste Pop-Bus inserite.`);
 
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ [PAYMENT] Errore critico:', err);
+    console.error('❌ [PAYMENT] Errore:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

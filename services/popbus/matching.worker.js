@@ -47,12 +47,25 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.tipo_raggio, c.dist_km, c.slot_orario, c.start_node_id, c.end_node_id]);
 
+      // Upsert Segmenti
       await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (direttrice_id, start_node_id, end_node_id) 
         DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
       `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
+
+      // [INTEGRAZIONE CRITICA] Link automatico richieste -> direttrice
+      await client.query(`
+        INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
+        SELECT $1, r.id
+        FROM richieste_pop_bus r
+        WHERE r.stato = 'in_attesa'
+        AND r.start_node_id = $2
+        AND r.end_node_id = $3
+        AND DATE_TRUNC('hour', r.start_datetime) = $4
+        ON CONFLICT (direttrice_id, richiesta_id) DO NOTHING
+      `, [dir[0].id, c.start_node_id, c.end_node_id, c.slot_orario]);
     }
 
     // 2. Validazione Soglia
@@ -73,15 +86,14 @@ export async function processaProposteDinamiche() {
 
     console.log(`📊 [WORKER] Analisi completata. Direttrici attivate: ${direttriciAttivate.length}`);
 
-    // 3. Conversione selettiva (solo per richieste collegate a direttrici attivate)
+    // 3. Conversione selettiva
     if (direttriciAttivate.length > 0) {
       const activeIds = direttriciAttivate.map(d => d.id);
       await client.query(`
         UPDATE richieste_pop_bus
         SET stato = 'convertita'
         WHERE id IN (
-            SELECT r.id FROM richieste_pop_bus r
-            JOIN direttrici_richieste dr ON r.id = dr.richiesta_id
+            SELECT dr.richiesta_id FROM direttrici_richieste dr
             WHERE dr.direttrice_id = ANY($1)
         )
       `, [activeIds]);

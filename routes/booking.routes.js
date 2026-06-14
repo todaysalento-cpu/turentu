@@ -55,18 +55,26 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
                        (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta'));
 
       if (isPopBus) {
-        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus in attesa...`);
+        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus con risoluzione nodi...`);
         
+        // Risoluzione automatica dei nodi più vicini per permettere il Clustering del Worker
+        const nodeRes = await client.query(`
+          SELECT 
+            (SELECT id FROM nodi_direttrice ORDER BY posizione <-> ST_SetSRID(ST_MakePoint($1, $2), 4326) ASC LIMIT 1) as start_node,
+            (SELECT id FROM nodi_direttrice ORDER BY posizione <-> ST_SetSRID(ST_MakePoint($3, $4), 4326) ASC LIMIT 1) as end_node
+        `, [slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat]);
+
+        const { start_node, end_node } = nodeRes.rows[0];
+
         const result = await client.query(
-          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
-           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa')
+          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, start_node_id, end_node_id)
+           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8, $9)
            RETURNING id`,
-          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti]
+          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti, start_node, end_node]
         );
         
         const richiestaId = result.rows[0].id;
 
-        // Se è una direttrice specifica, aggancia subito
         if (slot.direttrice_id && typeof slot.direttrice_id === 'string' && slot.direttrice_id.startsWith('dir_')) {
           const dirId = parseInt(slot.direttrice_id.replace('dir_', ''));
           await client.query(
@@ -76,7 +84,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         }
         pendingRows.push({ id: richiestaId, is_pool: true, stato: 'in_attesa' });
       } else {
-        // Logica Corsa Privata (invariata)
         let vId = slot.veicolo_id || (slot.id?.startsWith('priv_') ? slot.id.split('_')[1] : null);
         if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
         
@@ -93,7 +100,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [PAYMENT] Transazione completata. Richieste Pop-Bus inserite.`);
+    console.log(`✅ [PAYMENT] Transazione completata. Richieste Pop-Bus inserite con nodi associati.`);
 
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
   } catch (err) {

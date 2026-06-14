@@ -5,6 +5,9 @@ export async function processaProposteDinamiche() {
   const client = await pool.connect();
   console.log('🔄 [WORKER] Avvio ciclo di elaborazione...');
   
+  // Costante definita per il calcolo della soglia (costo €/km)
+  const COSTO_KM_VEICOLO = 1.20; 
+  
   try {
     await client.query('BEGIN');
 
@@ -30,7 +33,10 @@ export async function processaProposteDinamiche() {
     console.log(`🔍 [WORKER] Trovati ${clusters.length} cluster da processare.`);
 
     for (const c of clusters) {
-      console.log(`🛠 [WORKER] Upsert direttrice: ${c.start_node_id} -> ${c.end_node_id} (${c.tipo_raggio})`);
+      // Calcolo soglia: distanza tratta * costo unitario km
+      const sogliaCalcolata = c.dist_km * COSTO_KM_VEICOLO;
+      
+      console.log(`🛠 [WORKER] Upsert direttrice: ${c.start_node_id} -> ${c.end_node_id} (Soglia: ${sogliaCalcolata.toFixed(2)}€)`);
       
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (
@@ -38,14 +44,12 @@ export async function processaProposteDinamiche() {
             partenza_prevista, start_node_id, end_node_id
         )
         VALUES (
-            'in_formazione', $1, $2, 
-            (SELECT costo_km_base * $2 FROM config_soglie WHERE tipo = $1), 
-            $3, $4, $5
+            'in_formazione', $1, $2, $3, $4, $5, $6
         )
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista) 
-        DO UPDATE SET stato = 'in_formazione'
+        DO UPDATE SET stato = 'in_formazione', soglia_attivazione = $3
         RETURNING id
-      `, [c.tipo_raggio, c.dist_km, c.slot_orario, c.start_node_id, c.end_node_id]);
+      `, [c.tipo_raggio, c.dist_km, sogliaCalcolata, c.slot_orario, c.start_node_id, c.end_node_id]);
 
       // Upsert Segmenti
       await client.query(`
@@ -55,7 +59,7 @@ export async function processaProposteDinamiche() {
         DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
       `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
 
-      // [INTEGRAZIONE CRITICA] Link automatico richieste -> direttrice
+      // Link automatico richieste -> direttrice
       await client.query(`
         INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
         SELECT $1, r.id

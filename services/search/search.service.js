@@ -17,14 +17,19 @@ function getSnapResult(point, nodi, tolleranzaKm) {
     }, null);
 }
 
-async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
+/**
+ * Calcola l'occupazione basandosi sui segmenti della direttrice
+ */
+async function getOccupazioneDinamica(direttriceId, startOffsetMetri, endOffsetMetri) {
     const { rows } = await pool.query(`
         SELECT SUM(s.posti_occupati) as carico
         FROM segmenti s
+        JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
+        JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
         WHERE s.direttrice_id = $1
-        AND s.start_node_id >= $2 
-        AND s.end_node_id <= $3
-    `, [direttriceId, startOffset, endOffset]); // Adattato al nuovo schema segmenti
+        AND n_start.offset_metri < $3 
+        AND n_end.offset_metri > $2
+    `, [direttriceId, startOffsetMetri, endOffsetMetri]);
     return Number(rows[0]?.carico || 0);
 }
 
@@ -51,9 +56,8 @@ export async function cercaSlotUltra(richiesta) {
     
     const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
-    // 2. LOGICA POP-BUS (Versione ottimizzata)
-    // Cerchiamo direttrici coerenti con la posizione e vicine all'orario richiesto
-    const { rows: direttriciAttive } = await pool.query(`
+    // 2. LOGICA POP-BUS
+    const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, t.euro_km, t.prezzo_passeggero, d.partenza_prevista
         FROM direttrici_virtuali d
         JOIN tariffe t ON d.veicolo_id = t.veicolo_id
@@ -66,6 +70,7 @@ export async function cercaSlotUltra(richiesta) {
     `, [lon, lat, destLon, destLat, orarioRichiesto.toISOString()]);
 
     let risultatiPool = [];
+    
     for (const dir of direttriciAttivate) {
         const nodi = CacheStore.nodiCache.get(dir.id) || [];
         const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
@@ -74,8 +79,9 @@ export async function cercaSlotUltra(richiesta) {
         const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
         const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
+        // Verifica che i nodi esistano e che l'offset sia coerente (direzione del viaggio)
         if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
-            const occupati = await getOccupazioneDinamica(dir.id, startNode.id, endNode.id);
+            const occupati = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
             const postiDisponibili = capacita - occupati;
             
             if (postiDisponibili >= postiRichiesti) {
@@ -92,7 +98,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. FALLBACK (Richiesta attivazione nuova)
+    // 3. FALLBACK
     if (risultatiPool.length === 0) {
         risultatiPool.push({
             id: 'nuova_proposta',

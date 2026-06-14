@@ -141,6 +141,7 @@ export async function cercaSlotUltra(richiesta) {
         id: 'nuova_proposta',
         tipo: 'pop-bus',
         tipo_corsa: 'nuova_proposta',
+        is_pool: true, // ESPLICITAMENTE TRUE per evitare instradamento su corsa privata
         messaggio: "Non trovi il bus perfetto? Richiedi l'attivazione di una nuova direttrice.",
         is_nuova_proposta: true,
         distanza: distanzaMetri,

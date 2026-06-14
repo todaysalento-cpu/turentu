@@ -1,47 +1,3 @@
-import * as turf from '@turf/turf';
-import ngeohash from 'ngeohash';
-import { redisClient } from '../../redis.js';
-import { pool } from '../../db/db.js';
-import { loadCachesUltra, CacheStore } from './search.cache.js'; 
-import { filterDisponibilita } from './engine/availability.engine.js';
-import { formatResults } from './formatter/search.formatter.js';
-import { getDurataDistanza } from '../../utils/maps.util.js';
-
-const GEOHASH_PRECISION_TRATTA = 5;
-
-// Helper: Snap to node (Logica Statica)
-function getSnapResult(point, nodi, tolleranzaKm) {
-    return nodi.reduce((prev, curr) => {
-        const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
-        return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
-            ? { ...curr, dist, type: 'STATIC' } : prev;
-    }, null);
-}
-
-// Helper: Snap to line (Logica Dinamica/Virtuale)
-function getVirtualSnap(point, lineaGeografica) {
-    const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
-    return {
-        coord: snapped.geometry.coordinates,
-        offset_metri: snapped.properties.location * 1000,
-        dist: snapped.properties.dist, // Distanza dal punto originale alla linea
-        type: 'DYNAMIC'
-    };
-}
-
-async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
-    const { rows } = await pool.query(`
-        SELECT SUM(s.posti_occupati) as carico
-        FROM segmenti s
-        JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
-        JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
-        WHERE s.direttrice_id = $1
-        AND n_start.offset_metri < $3 
-        AND n_end.offset_metri > $2
-    `, [direttriceId, startOffset, endOffset]);
-    return Number(rows[0]?.carico || 0);
-}
-
 export async function cercaSlotUltra(richiesta) {
     await loadCachesUltra();
 
@@ -58,7 +14,7 @@ export async function cercaSlotUltra(richiesta) {
     const distKm = info.distanzaKm || 1;
     const distanzaMetri = distKm * 1000;
 
-    // 1. RICERCA CORSE ESISTENTI (Normalizzate)
+    // 1. RICERCA CORSE ESISTENTI
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -72,14 +28,13 @@ export async function cercaSlotUltra(richiesta) {
     const risultatiCondivise = corseEsistenti.map(c => ({ 
         ...c, 
         tipo: 'condivisa', 
-        is_slot: false,
-        distanza: c.distanza || distanzaMetri,
-        prezzo_fisso: Number(c.prezzo_fisso) || 0
+        is_pool: false,
+        distanza: c.distanza || distanzaMetri 
     }));
 
-    // 2. LOGICA POP-BUS (Direttrici attive)
+    // 2. LOGICA POP-BUS (Rimossa dipendenza da d.prezzo_base)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista, d.prezzo_base
+        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
         WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
         AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
@@ -103,15 +58,14 @@ export async function cercaSlotUltra(richiesta) {
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
             
             if ((capacita - occupati) >= postiRichiesti) {
-                // NORMALIZZAZIONE: garantiamo struttura identica alle condivise
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
+                    veicolo_id: dir.veicolo_id, // Necessario per pricing.util
                     posti_disponibili: capacita - occupati, 
                     posti_totali: capacita,
-                    prezzo_fisso: Number(dir.prezzo_base) || 0,
                     distanza: distanzaMetri,
                     is_pool: true,
                     startOffset: startPoint.offset_metri,
@@ -122,7 +76,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. FUSIONE E RISPOSTA
+    // 3. FUSIONE
     const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
 
     if (risultatiFinali.length === 0) {

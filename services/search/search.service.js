@@ -9,6 +9,7 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
+// Helper: Snap to node con tolleranza dinamica
 function getSnapResult(point, nodi, tolleranzaKm) {
     return nodi.reduce((prev, curr) => {
         const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
@@ -17,10 +18,7 @@ function getSnapResult(point, nodi, tolleranzaKm) {
     }, null);
 }
 
-/**
- * Calcola l'occupazione basandosi sui segmenti della direttrice
- */
-async function getOccupazioneDinamica(direttriceId, startOffsetMetri, endOffsetMetri) {
+async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
     const { rows } = await pool.query(`
         SELECT SUM(s.posti_occupati) as carico
         FROM segmenti s
@@ -29,7 +27,7 @@ async function getOccupazioneDinamica(direttriceId, startOffsetMetri, endOffsetM
         WHERE s.direttrice_id = $1
         AND n_start.offset_metri < $3 
         AND n_end.offset_metri > $2
-    `, [direttriceId, startOffsetMetri, endOffsetMetri]);
+    `, [direttriceId, startOffset, endOffset]);
     return Number(rows[0]?.carico || 0);
 }
 
@@ -46,17 +44,29 @@ export async function cercaSlotUltra(richiesta) {
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distKm = info.distanzaKm || 1;
 
-    // 1. RICERCA GEOSPAZIALE (Corse esistenti)
+    // 1. RICERCA CORSE ESISTENTI (Condivise/Private)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
 
-    const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
-    const { corse: corseEsistenti } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
-    
-    const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
+    const corseCandidate = [...new Set(corsaResults.flat())]
+        .map(id => CacheStore.corseCache.get(Number(id)))
+        .filter(Boolean);
 
-    // 2. LOGICA POP-BUS
+    // ESECUZIONE FILTRO
+    const { corse: corseEsistenti } = await filterDisponibilita(
+        { ...richiesta, posti_richiesti: postiRichiesti }, 
+        corseCandidate, 
+        []
+    );
+    
+    const risultatiCondivise = corseEsistenti.map(c => ({ 
+        ...c, 
+        tipo: 'condivisa', 
+        is_slot: false 
+    }));
+
+    // 2. LOGICA POP-BUS (Direttrici attive)
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, t.euro_km, t.prezzo_passeggero, d.partenza_prevista
         FROM direttrici_virtuali d
@@ -70,7 +80,6 @@ export async function cercaSlotUltra(richiesta) {
     `, [lon, lat, destLon, destLat, orarioRichiesto.toISOString()]);
 
     let risultatiPool = [];
-    
     for (const dir of direttriciAttivate) {
         const nodi = CacheStore.nodiCache.get(dir.id) || [];
         const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
@@ -79,28 +88,27 @@ export async function cercaSlotUltra(richiesta) {
         const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
         const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
-        // Verifica che i nodi esistano e che l'offset sia coerente (direzione del viaggio)
         if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
             const occupati = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
-            const postiDisponibili = capacita - occupati;
-            
-            if (postiDisponibili >= postiRichiesti) {
+            if ((capacita - occupati) >= postiRichiesti) {
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
-                    orario: dir.partenza_prevista,
-                    posti_disponibili: postiDisponibili, 
+                    posti_disponibili: capacita - occupati, 
                     is_pool: true
                 });
             }
         }
     }
 
-    // 3. FALLBACK
-    if (risultatiPool.length === 0) {
-        risultatiPool.push({
+    // 3. FUSIONE DEI RISULTATI
+    // Se non troviamo né condivise né pool, aggiungiamo la proposta come opzione di fallback
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
+
+    if (risultatiFinali.length === 0) {
+        risultatiFinali.push({
             id: 'nuova_proposta',
             tipo: 'pop-bus',
             tipo_corsa: 'nuova_proposta',
@@ -108,6 +116,5 @@ export async function cercaSlotUltra(richiesta) {
         });
     }
 
-    const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
-    return risultatiFinali.length > 0 ? await formatResults({ ...richiesta, distanzaMetri: distKm * 1000 }, risultatiFinali) : [];
+    return await formatResults({ ...richiesta, distanzaMetri: distKm * 1000 }, risultatiFinali);
 }

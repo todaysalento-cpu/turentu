@@ -2,9 +2,6 @@ import * as turf from '@turf/turf';
 
 /**
  * Cerca il nodo più vicino tra quelli definiti per la direttrice.
- * @param {object} point - Punto Turf dell'utente
- * @param {Array} nodi - Array di oggetti con {offset_metri, coord: [lon, lat]}
- * @param {number} tolleranzaKm 
  */
 function getSnapResult(point, nodi, tolleranzaKm) {
     let nearestNode = null;
@@ -22,10 +19,11 @@ function getSnapResult(point, nodi, tolleranzaKm) {
 }
 
 /**
- * Motore di validazione Node-Based.
- * Utilizza offset_metri per calcoli istantanei di distanza e saturazione.
+ * Motore di validazione Node-Based arricchito con logging per debug.
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
+    console.log(`🔍 [ENGINE] Inizio filtraggio su ${corseCandidate.length} candidate.`);
+
     if (!richiesta.coord || !richiesta.coordDest) {
         console.warn("⚠️ [ENGINE] Coordinate mancanti.");
         return { corse: [] };
@@ -37,15 +35,25 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
     const corseValide = corseCandidate.filter((c, index) => {
-        // Pop-bus gestiti esternamente: qui validiamo solo linee con nodi predefiniti
-        if (c.tipo_corsa === 'pop-bus' || !c.nodi || c.nodi.length < 2) return false;
+        // 1. Check Tipo Corsa
+        if (c.tipo_corsa === 'pop-bus') return false;
+        
+        // 2. Check Nodi
+        if (!c.nodi || c.nodi.length < 2) {
+            console.log(`❌ [CORSA ${c.id}] Scartata: Nodi insufficienti o mancanti.`);
+            return false;
+        }
 
+        // 3. Snap Geografico
         const startSnap = getSnapResult(pStart, c.nodi, TOLLERANZA_KM);
         const endSnap = getSnapResult(pEnd, c.nodi, TOLLERANZA_KM);
 
-        if (!startSnap || !endSnap) return false;
+        if (!startSnap || !endSnap) {
+            console.log(`❌ [CORSA ${c.id}] Scartata: Geofencing fallito (fuori tolleranza ${TOLLERANZA_KM}km).`);
+            return false;
+        }
 
-        // Calcolo distanza basato su differenza di offset (preciso al metro)
+        // 4. Calcolo Offset e Saturazione
         const startOffset = Number(startSnap.offset_metri);
         const endOffset = Number(endSnap.offset_metri);
         c.distanza = Math.abs(endOffset - startOffset);
@@ -56,24 +64,25 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         if (isDisponibile) {
             console.log(`✅ [CORSA ${c.id}] IDONEA | Dist: ${(c.distanza/1000).toFixed(2)}km`);
             return true;
+        } else {
+            console.log(`❌ [CORSA ${c.id}] Scartata: Saturata nel segmento.`);
+            return false;
         }
-        return false;
     });
 
+    console.log(`📡 [ENGINE] Filtro completato. Corse valide trovate: ${corseValide.length}`);
     return { corse: corseValide };
 }
 
 /**
  * Verifica saturazione basata su intervalli di offset (metri).
- * Non usa più indici di array, ma confronto numerico tra range.
  */
 function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotazioni) {
-    const postiTotali = Number(corsa.posti_totali || 0);
+    const postiTotali = Number(corsa.posti_totali || 8); // Default 8 se non definito
     const s = Math.min(startO, endO);
     const e = Math.max(startO, endO);
 
-    // Un segmento è saturo se in qualsiasi punto del tragitto 
-    // la somma dei posti prenotati eccede la capacità.
+    // Debug saturazione
     for (const p of prenotazioni) {
         const pStart = Number(p.startOffset);
         const pEnd = Number(p.endOffset);

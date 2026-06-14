@@ -46,12 +46,15 @@ export async function cercaSlotUltra(richiesta) {
   const destLon = Number(richiesta.coordDest?.lon);
   const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
+  // Calcolo distanza per soglia economica
+  const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
+  const distKm = info.distanzaKm || 1;
+
   // 1. RICERCA GEOSPAZIALE
   const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
   const hashes = [hash, ...ngeohash.neighbors(hash)];
-  const [corsaResults, slotResults] = await Promise.all([
-    Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`))),
-    Promise.all(hashes.map(h => redisClient.sMembers(`slot:in_area:${h}`)))
+  const [corsaResults] = await Promise.all([
+    Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)))
   ]);
 
   const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
@@ -66,11 +69,12 @@ export async function cercaSlotUltra(richiesta) {
       is_slot: false 
   }));
 
-  // 3. LOGICA POP-BUS
+  // 3. LOGICA POP-BUS (Gerarchica e Economica)
   let risultatiPool = [];
   const { rows: direttriciAttive } = await pool.query(`
-      SELECT DISTINCT d.id, d.stato, d.veicolo_id
+      SELECT DISTINCT d.id, d.stato, d.veicolo_id, t.euro_km, t.prezzo_passeggero
       FROM direttrici_virtuali d
+      JOIN tariffe t ON d.veicolo_id = t.veicolo_id AND t.tipo = 'standard'
       JOIN nodi_direttrice n1 ON d.id = n1.direttrice_id
       JOIN nodi_direttrice n2 ON d.id = n2.direttrice_id
       WHERE d.stato IN ('in_formazione', 'confermata')
@@ -78,17 +82,20 @@ export async function cercaSlotUltra(richiesta) {
       AND ST_DWithin(n2.posizione, ST_SetSRID(ST_MakePoint($3, $4), 4326), 2000)
   `, [lon, lat, destLon, destLat]);
 
-  for (const dir of direttriciAttive) {
+  for (const dir of direttriciAttivate) {
       const nodi = CacheStore.nodiCache.get(dir.id) || [];
       const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
-      const capacita = veicolo?.posti_totali || 8; // Fallback di sicurezza
+      const capacita = veicolo?.posti_totali || 8;
 
       const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
       const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
 
       if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
-          const postiDisponibili = capacita - await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
+          const occupati = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
+          const postiDisponibili = capacita - occupati;
+          
           if (postiDisponibili >= postiRichiesti) {
+              const sogliaRaggiunta = ((occupati + postiRichiesti) * dir.prezzo_passeggero) >= (distKm * dir.euro_km);
               risultatiPool.push({
                   id: `dir_${dir.id}`,
                   tipo: 'pop-bus', 
@@ -96,18 +103,20 @@ export async function cercaSlotUltra(richiesta) {
                   direttrice_id: dir.id,
                   posti_disponibili: postiDisponibili, 
                   is_pool: true, 
-                  messaggio: `Pop Bus ${dir.stato}`
+                  messaggio: sogliaRaggiunta ? "Pop Bus attivo" : "Pop Bus in formazione (attesa soglia)"
               });
           }
       }
   }
 
-  // 4. FALLBACK
+  // 4. FALLBACK (Solo se non ci sono direttrici)
   if (risultatiPool.length === 0) {
       const { rows: veicoliDisponibili } = await pool.query(`
-          SELECT id, posti_totali FROM veicoli 
-          WHERE tipo = 'pool' AND stato = 'disponibile' 
-          AND ST_DWithin(posizione_attuale, ST_SetSRID(ST_MakePoint($1, $2), 4326), 5000) LIMIT 3
+          SELECT v.id, v.posti_totali, t.euro_km, t.prezzo_passeggero 
+          FROM veicoli v 
+          JOIN tariffe t ON v.id = t.veicolo_id
+          WHERE v.tipo = 'pool' AND v.stato = 'disponibile' 
+          AND ST_DWithin(v.posizione_attuale, ST_SetSRID(ST_MakePoint($1, $2), 4326), 5000) LIMIT 3
       `, [lon, lat]);
       
       veicoliDisponibili.forEach(v => risultatiPool.push({
@@ -121,19 +130,13 @@ export async function cercaSlotUltra(richiesta) {
       }));
   }
 
-  // 5. CONCLUSIONE CON DISTANZA
-  const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
+  // 5. APPLICAZIONE GERARCHIA DI VISUALIZZAZIONE
+  const confermate = risultatiPool.filter(r => r.tipo_corsa === 'confermata');
+  const inFormazione = risultatiPool.filter(r => r.tipo_corsa === 'in_formazione');
   
-  if (risultatiFinali.length > 0) {
-      try {
-          const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
-          const richiestaConDistanza = { ...richiesta, distanzaMetri: info.distanzaKm * 1000 };
-          return await formatResults(richiestaConDistanza, risultatiFinali);
-      } catch (err) {
-          console.error("⚠️ Errore calcolo distanza, fallback:", err);
-          return await formatResults(richiesta, risultatiFinali);
-      }
-  }
+  // Logica: Se c'è una confermata, mostra solo quella. Altrimenti, prova in formazione, poi nuove proposte.
+  const poolFiltrato = confermate.length > 0 ? confermate : (inFormazione.length > 0 ? inFormazione : risultatiPool);
+  const risultatiFinali = [...risultatiCondivise, ...poolFiltrato];
   
-  return [];
+  return risultatiFinali.length > 0 ? await formatResults({ ...richiesta, distanzaMetri: distKm * 1000 }, risultatiFinali) : [];
 }

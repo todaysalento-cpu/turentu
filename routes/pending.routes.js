@@ -6,13 +6,11 @@ import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 import { upsertCorsa } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
-// Importiamo il servizio centralizzato per le notifiche
 import { notifyUser } from '../services/notifications/notification.service.js';
 
 const router = express.Router();
 router.use(authMiddleware);
 
-// -------------------- GET pendings per veicolo --------------------
 router.get('/autista/:veicolo_id', async (req, res) => {
     const client = await pool.connect();
     try {
@@ -30,7 +28,6 @@ router.get('/autista/:veicolo_id', async (req, res) => {
     }
 });
 
-// -------------------- POST accetta pending --------------------
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
   const notificheDaInviare = [];
@@ -39,7 +36,6 @@ router.post('/:id/accetta', async (req, res) => {
     const id = Number(req.params.id);
     await client.query('BEGIN');
 
-    // 1. Recupero e blocco del record pending
     const pendingRes = await client.query(`SELECT * FROM pending WHERE id = $1 FOR UPDATE`, [id]);
     if (!pendingRes.rows.length) {
       await client.query('ROLLBACK');
@@ -52,7 +48,6 @@ router.post('/:id/accetta', async (req, res) => {
       return res.status(400).json({ message: 'Non disponibile' });
     }
 
-    // 2. Aggiornamento stato
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
@@ -68,27 +63,37 @@ router.post('/:id/accetta', async (req, res) => {
 
       const driverId = driverRes.rows[0]?.driver_id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
+      
+      // Definiamo se è Pop-Bus
+      const isPopBus = (p.tipo_corsa === 'popbus' || p.direttrice_id != null);
 
       const segmenti = { 
           startIdx: p.start_index_polyline ?? 0, 
           endIdx: p.end_index_polyline ?? 100 
       };
 
-      // 3. LOGICA UNIFICATA: Determinazione Corsa
+      // 3. LOGICA BIVIO: Determinazione Corsa
       let corsa;
       if (!p.corsa_id) {
-        const existing = await client.query(
-          `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
-          [p.veicolo_id, p.start_datetime]
-        );
-        
-        if (existing.rows.length) {
-          corsa = existing.rows[0];
+        if (isPopBus) {
+            // --- CASO POP-BUS: Usa la nuova logica del servizio ---
+            const resCorsa = await createCorsaFromPending(p, null, client, true, driverId);
+            corsa = resCorsa.corsa;
         } else {
-          const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
-          const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client);
-          corsa = resCorsa.corsa;
-          await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
+            // --- CASO STANDARD ---
+            const existing = await client.query(
+              `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
+              [p.veicolo_id, p.start_datetime]
+            );
+            
+            if (existing.rows.length) {
+              corsa = existing.rows[0];
+            } else {
+              const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [p.veicolo_id]);
+              const resCorsa = await createCorsaFromPending(p, { id: p.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
+              corsa = resCorsa.corsa;
+              await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, p.id]);
+            }
         }
       } else {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [p.corsa_id]);
@@ -132,14 +137,10 @@ router.post('/:id/accetta', async (req, res) => {
       const { p, corsa, driverId, driverNome } = data;
       const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
       
-      // Socket: Autista
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
       io.to(`autista_${driverId}`).emit('nuova_corsa', corsaCompleta);
-      
-      // Socket: Cliente (Real-time)
       io.to(`cliente_${p.cliente_id}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa_id: corsa.id });
       
-      // Servizio Centralizzato: Cliente (Socket + Push background)
       await notifyUser(p.cliente_id, { 
         type: 'pending', 
         message: `Il tuo viaggio è stato accettato da ${driverNome}`,

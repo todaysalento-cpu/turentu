@@ -17,15 +17,19 @@ function getSnapResult(point, corsa, tolleranzaKm) {
                 nearestNode = { ...nodo, type: 'STATIC', dist };
             }
         }
-        if (nearestNode) return nearestNode;
+        if (nearestNode) {
+            console.log(`📍 [SNAP] Trovato nodo STATIC (id: ${nearestNode.id}) a ${nearestNode.dist.toFixed(2)}km`);
+            return nearestNode;
+        }
     }
 
     // 2. FALLBACK DINAMICO (Punto virtuale su Polyline)
     if (corsa.polyline) {
-        const line = turf.lineString(corsa.polyline); // Assicurati sia un formato compatibile
+        const line = turf.lineString(corsa.polyline);
         const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
         
         if (snapped.properties.dist < tolleranzaKm) {
+            console.log(`🌐 [SNAP] Creato punto DYNAMIC (offset: ${snapped.properties.location * 1000}m) a ${snapped.properties.dist.toFixed(2)}km dalla linea.`);
             return {
                 id: null,
                 offset_metri: snapped.properties.location * 1000,
@@ -35,14 +39,15 @@ function getSnapResult(point, corsa, tolleranzaKm) {
         }
     }
 
-    return null; // Fuori portata
+    console.log(`❌ [SNAP] Nessun aggancio possibile entro ${tolleranzaKm}km.`);
+    return null;
 }
 
 /**
- * Motore di validazione ibrido (Statico + Dinamico)
+ * Motore di validazione ibrido (Statico + Dinamico) con log di debug
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
-    console.log(`🔍 [ENGINE] Inizio filtraggio ibrido su ${corseCandidate.length} candidate.`);
+    console.log(`🔍 [ENGINE] Inizio filtraggio ibrido. Richiesta: [${richiesta.coord?.lat}, ${richiesta.coord?.lon}] -> [${richiesta.coordDest?.lat}, ${richiesta.coordDest?.lon}]`);
 
     if (!richiesta.coord || !richiesta.coordDest) return { corse: [] };
 
@@ -54,11 +59,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const corseValide = corseCandidate.filter((c, index) => {
         if (c.tipo_corsa === 'pop-bus') return false;
         
-        // 1. Snap ibrido (Nodo o Virtuale)
+        console.log(`⚙️ [CORSA ${c.id}] Analisi disponibilità...`);
+
+        // 1. Snap ibrido
         const startSnap = getSnapResult(pStart, c, TOLLERANZA_KM);
         const endSnap = getSnapResult(pEnd, c, TOLLERANZA_KM);
 
         if (!startSnap || !endSnap) {
+            console.log(`❌ [CORSA ${c.id}] Scartata: Geofencing fallito.`);
             return false;
         }
 
@@ -66,16 +74,27 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const startOffset = Number(startSnap.offset_metri);
         const endOffset = Number(endSnap.offset_metri);
         
-        // Direzione coerente
-        if (startOffset >= endOffset) return false;
+        console.log(`📏 [CORSA ${c.id}] Segmento calcolato: ${startOffset.toFixed(0)}m -> ${endOffset.toFixed(0)}m`);
+
+        if (startOffset >= endOffset) {
+            console.log(`❌ [CORSA ${c.id}] Scartata: Direzione non coerente.`);
+            return false;
+        }
 
         c.distanza = Math.abs(endOffset - startOffset);
         
         // 3. Verifica Saturazione
         const prenotazioni = Array.isArray(prenotazioniBatch[index]) ? prenotazioniBatch[index] : [];
-        return verificaSaturazioneOffset(c, startOffset, endOffset, postiRichiesti, prenotazioni);
+        const isDisponibile = verificaSaturazioneOffset(c, startOffset, endOffset, postiRichiesti, prenotazioni);
+        
+        if (isDisponibile) {
+            console.log(`✅ [CORSA ${c.id}] IDONEA | Posti: ${c.posti_totali}`);
+            return true;
+        }
+        return false;
     });
 
+    console.log(`📡 [ENGINE] Filtro completato. Valide: ${corseValide.length}`);
     return { corse: corseValide };
 }
 
@@ -86,9 +105,12 @@ function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotaz
         const pStart = Number(p.startOffset);
         const pEnd = Number(p.endOffset);
         
-        // Sovrapposizione segmenti
         if (startO < pEnd && endO > pStart) {
-            if ((Number(p.posti_richiesti) + postiRichiesti) > postiTotali) return false;
+            const occupazione = Number(p.posti_richiesti);
+            if ((occupazione + postiRichiesti) > postiTotali) {
+                console.log(`🔍 [DEBUG SATURAZIONE] Corsa ${corsa.id} satura: richiesta ${postiRichiesti} su ${occupazione} esistenti.`);
+                return false;
+            }
         }
     }
     return true;

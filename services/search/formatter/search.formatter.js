@@ -48,13 +48,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
-            // 1. CALCOLO DISTANZA: Rimosso il fallback 10000. 
-            // Se non c'è distanza, deve essere 0 per essere visibile nel log.
+            // LOGICA IBRIDA: Recupero distanza basato su aggancio dinamico
+            // Se is_pool è true, calcoliamo la distanza reale basata su offset (STATIC o DYNAMIC)
+            // Se non è disponibile un offset (nuova_proposta), usiamo la distanza stimata della richiesta
             const distMetri = item.is_pool 
-                ? (Number(item.endOffset || 0) - Number(item.startOffset || 0)) 
+                ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : Number(richiesta.distanzaMetri || 0);
             
-            console.log(`[DEBUG] Item ID: ${item.id} | Distanza Calcolata: ${distMetri}m`);
+            console.log(`[DEBUG] Item ID: ${item.id} | Tipo Aggancio: ${item.aggancio ? JSON.stringify(item.aggancio) : 'N/A'} | Distanza Calcolata: ${distMetri}m`);
             
             const distKmCalc = Math.max(0.1, distMetri / 1000);
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
@@ -68,12 +69,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 });
             
             const prezzoVal = Number(p) || 0;
-            console.log(`[DEBUG] Pricing Finale per ${item.id}: ${prezzoVal}€ (KM: ${distKmCalc})`);
+            console.log(`[DEBUG] Pricing Finale per ${item.id}: ${prezzoVal}€ (KM: ${distKmCalc.toFixed(2)})`);
 
             return {
                 id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
                 tipo: item.tipo,
                 direttrice_id: item.direttrice_id || null,
+                // Includiamo info sull'aggancio per il frontend (opzionale)
+                aggancio_info: item.aggancio || null, 
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza,
@@ -81,7 +84,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 prezzo: prezzoVal,
                 prezzo_display: Math.ceil(prezzoVal).toString(),
                 postiDisponibili: item.posti_disponibili,
-                postiTotali: Number(item.posti_totali || 0),
+                postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
                 is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
                 messaggio: item.messaggio,

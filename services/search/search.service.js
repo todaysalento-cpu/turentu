@@ -56,8 +56,9 @@ export async function cercaSlotUltra(richiesta) {
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distKm = info.distanzaKm || 1;
+    const distanzaMetri = distKm * 1000;
 
-    // 1. RICERCA CORSE ESISTENTI
+    // 1. RICERCA CORSE ESISTENTI (Normalizzate)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -68,11 +69,17 @@ export async function cercaSlotUltra(richiesta) {
 
     const { corse: corseEsistenti } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     
-    const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
+    const risultatiCondivise = corseEsistenti.map(c => ({ 
+        ...c, 
+        tipo: 'condivisa', 
+        is_slot: false,
+        distanza: c.distanza || distanzaMetri,
+        prezzo_fisso: Number(c.prezzo_fisso) || 0
+    }));
 
     // 2. LOGICA POP-BUS (Direttrici attive)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
+        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista, d.prezzo_base
         FROM direttrici_virtuali d
         WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
         AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
@@ -84,37 +91,38 @@ export async function cercaSlotUltra(richiesta) {
         const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
         const capacita = veicolo?.posti_totali || 8;
         
-        // Convertiamo la geometria in LineString Turf
         const line = turf.lineString(dir.linea_geo.coordinates); 
 
-        // TENTATIVO 1: Nodo Statico
         let startPoint = getSnapResult(pStart, nodi, 2.0);
         let endPoint = getSnapResult(pEnd, nodi, 2.0);
 
-        // TENTATIVO 2: Fallback su Virtual Stop se nodo non trovato
         if (!startPoint) startPoint = getVirtualSnap(pStart, line);
         if (!endPoint) endPoint = getVirtualSnap(pEnd, line);
 
-        // Verifica validità: tolleranza 3km per punti dinamici, offset logico coerente
         if (startPoint && endPoint && startPoint.dist < 3.0 && endPoint.dist < 3.0 && startPoint.offset_metri < endPoint.offset_metri) {
-            
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
             
             if ((capacita - occupati) >= postiRichiesti) {
+                // NORMALIZZAZIONE: garantiamo struttura identica alle condivise
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
                     posti_disponibili: capacita - occupati, 
+                    posti_totali: capacita,
+                    prezzo_fisso: Number(dir.prezzo_base) || 0,
+                    distanza: distanzaMetri,
                     is_pool: true,
+                    startOffset: startPoint.offset_metri,
+                    endOffset: endPoint.offset_metri,
                     aggancio: { start: startPoint.type, end: endPoint.type }
                 });
             }
         }
     }
 
-    // 3. FUSIONE DEI RISULTATI
+    // 3. FUSIONE E RISPOSTA
     const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
 
     if (risultatiFinali.length === 0) {
@@ -126,5 +134,5 @@ export async function cercaSlotUltra(richiesta) {
         });
     }
 
-    return await formatResults({ ...richiesta, distanzaMetri: distKm * 1000 }, risultatiFinali);
+    return await formatResults({ ...richiesta, distanzaMetri }, risultatiFinali);
 }

@@ -48,34 +48,39 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
-            // LOGICA IBRIDA: Recupero distanza basato su aggancio dinamico
-            // Se is_pool è true, calcoliamo la distanza reale basata su offset (STATIC o DYNAMIC)
-            // Se non è disponibile un offset (nuova_proposta), usiamo la distanza stimata della richiesta
-            const distMetri = item.is_pool 
+            // 1. Calcolo Distanza (Fallback sicuro)
+            let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : Number(richiesta.distanzaMetri || 0);
             
-            console.log(`[DEBUG] Item ID: ${item.id} | Tipo Aggancio: ${item.aggancio ? JSON.stringify(item.aggancio) : 'N/A'} | Distanza Calcolata: ${distMetri}m`);
+            if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
             
-            const distKmCalc = Math.max(0.1, distMetri / 1000);
+            const distKmCalc = distMetri / 1000;
+            const distKmTotali = item.distanzaTotaleRotte || distKmCalc; // Usa rotta totale se disponibile
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // 2. PRICING DINAMICO
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti, item.tipo, distKmCalc)
-                .catch(err => { 
-                    console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
-                    return distKmCalc * 0.50; 
-                });
+            // 2. PRICING DINAMICO (Parametri completi per pricing.util.js)
+            // Passiamo 6 parametri: (corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeri)
+            const p = await calcolaPrezzo(
+                item, 
+                richiesta.posti_richiesti || 1, 
+                item.tipo, 
+                distKmCalc, 
+                distKmTotali, 
+                0 // totPasseggeriCorrenti default
+            ).catch(err => { 
+                console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
+                return distKmCalc * 0.50; 
+            });
             
             const prezzoVal = Number(p) || 0;
-            console.log(`[DEBUG] Pricing Finale per ${item.id}: ${prezzoVal}€ (KM: ${distKmCalc.toFixed(2)})`);
+            console.log(`[DEBUG] Pricing Finale per ${item.id}: ${prezzoVal}€`);
 
             return {
                 id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
                 tipo: item.tipo,
                 direttrice_id: item.direttrice_id || null,
-                // Includiamo info sull'aggancio per il frontend (opzionale)
                 aggancio_info: item.aggancio || null, 
                 localitaOrigine,
                 localitaDestinazione,
@@ -83,11 +88,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 oraArrivo,
                 prezzo: prezzoVal,
                 prezzo_display: Math.ceil(prezzoVal).toString(),
-                postiDisponibili: item.posti_disponibili,
+                postiDisponibili: item.posti_disponibili || 0,
                 postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
                 is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
-                messaggio: item.messaggio,
+                messaggio: item.messaggio || null,
                 marca: item.marca || null,
                 modello: item.modello || null,
                 servizi: parseServizi(item.servizi)
@@ -97,4 +102,4 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             return null;
         }
     }))).filter(r => r !== null);
-}
+}}

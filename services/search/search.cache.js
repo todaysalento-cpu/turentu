@@ -8,10 +8,12 @@ const SYNC_TTL_MS = 60000;
 export const CacheStore = {
     veicoliCache: new Map(),
     disponibilitaCache: new Map(),
-    // Mappa di supporto per accedere alla disponibilità tramite veicolo_id
     veicoloToDisponibilita: new Map(), 
     corseCache: new Map(),
     prenotazioniCache: new Map(),
+    // Nuove Cache per Pop-Bus
+    direttriciCache: new Map(),
+    nodiCache: new Map(),
     lastSync: 0
 };
 
@@ -25,9 +27,7 @@ export const upsertDisponibilita = (d) => {
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
-    // Indici principali
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
-    // Indice per lookup rapido via veicolo_id (usato dalla ricerca geografica)
     CacheStore.veicoloToDisponibilita.set(Number(d.veicolo_id), normalized);
 };
 
@@ -37,7 +37,6 @@ export const removeDisponibilita = async (disponibilitaId) => {
     
     if (d && d.lat && d.lon) {
         const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
-        // Rimuoviamo usando il veicolo_id come da nuova logica
         await redisClient.sRem(`slot:in_area:${hash}`, d.veicolo_id.toString());
     }
     
@@ -90,37 +89,12 @@ export async function loadCachesUltra(force = false) {
     
     const client = await pool.connect();
     try {
-        const [vRes, dRes, cRes] = await Promise.all([
-            // Query veicoli con metadati
-            client.query(`
-                SELECT 
-                    id, 
-                    ST_Y(coord::geometry) as lat, 
-                    ST_X(coord::geometry) as lon, 
-                    posti_totali,
-                    marca,
-                    modello,
-                    rating,
-                    servizi
-                FROM veicolo
-            `),
-            // Query disponibilità con JOIN veicolo
-            client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
-                          FROM disponibilita_veicolo dv 
-                          JOIN veicolo v ON dv.veicolo_id = v.id`),
-            // AGGIORNATA: Query corse con JOIN per recuperare i dettagli del veicolo
-            client.query(`
-                SELECT 
-                    c.*, 
-                    v.marca, 
-                    v.modello, 
-                    v.rating, 
-                    v.servizi 
-                FROM corse c
-                LEFT JOIN veicolo v ON c.veicolo_id = v.id
-                WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') 
-                AND c.start_datetime > NOW() - INTERVAL '1 hour'
-            `)
+        const [vRes, dRes, cRes, dirRes, nodiRes] = await Promise.all([
+            client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
+            client.query(`SELECT dv.*, v.driver_id, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon FROM disponibilita_veicolo dv JOIN veicolo v ON dv.veicolo_id = v.id`),
+            client.query(`SELECT c.*, v.marca, v.modello, v.rating, v.servizi FROM corse c LEFT JOIN veicolo v ON c.veicolo_id = v.id WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') AND c.start_datetime > NOW() - INTERVAL '1 hour'`),
+            client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
+            client.query(`SELECT * FROM nodi_direttrice`)
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));
@@ -130,8 +104,20 @@ export async function loadCachesUltra(force = false) {
         });
         
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
+
+        // Caricamento Pop-Bus in Cache
+        CacheStore.direttriciCache.clear();
+        dirRes.rows.forEach(dir => CacheStore.direttriciCache.set(dir.id, dir));
+
+        CacheStore.nodiCache.clear();
+        nodiRes.rows.forEach(nodo => {
+            const list = CacheStore.nodiCache.get(nodo.direttrice_id) || [];
+            list.push(nodo);
+            CacheStore.nodiCache.set(nodo.direttrice_id, list);
+        });
+
         CacheStore.lastSync = Date.now();
-        console.log(`📦 [SYNC] Completata con successo.`);
+        console.log(`📦 [SYNC] Completata con successo (inclusi Pop-Bus).`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico:", err);
         throw err;

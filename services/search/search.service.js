@@ -9,7 +9,38 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// Helpers (getSnapResult, getVirtualSnap, getOccupazioneDinamica) rimangono invariati...
+// Helper: Snap to node (Logica Statica)
+function getSnapResult(point, nodi, tolleranzaKm) {
+    return nodi.reduce((prev, curr) => {
+        const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
+        return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
+            ? { ...curr, dist, type: 'STATIC' } : prev;
+    }, null);
+}
+
+// Helper: Snap to line (Logica Dinamica/Virtuale)
+function getVirtualSnap(point, lineaGeografica) {
+    const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
+    return {
+        coord: snapped.geometry.coordinates,
+        offset_metri: snapped.properties.location * 1000,
+        dist: snapped.properties.dist,
+        type: 'DYNAMIC'
+    };
+}
+
+async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
+    const { rows } = await pool.query(`
+        SELECT SUM(s.posti_occupati) as carico
+        FROM segmenti s
+        JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
+        JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
+        WHERE s.direttrice_id = $1
+        AND n_start.offset_metri < $3 
+        AND n_end.offset_metri > $2
+    `, [direttriceId, startOffset, endOffset]);
+    return Number(rows[0]?.carico || 0);
+}
 
 export async function cercaSlotUltra(richiesta) {
     await loadCachesUltra();
@@ -38,26 +69,27 @@ export async function cercaSlotUltra(richiesta) {
 
     const { corse: corseEsistenti } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     
-    const risultatiEsistenti = corseEsistenti.map(c => ({ 
+    const risultatiCondivise = corseEsistenti.map(c => ({ 
         ...c, 
-        tipo: c.tipo || 'condivisa',
+        tipo: c.tipo || 'condivisa', 
         is_pool: false,
         distanza: c.distanza || distanzaMetri,
         prezzo_fisso: Number(c.prezzo_fisso) || 0
     }));
 
-    // 1.2 RICERCA SLOT DISPONIBILI (Cache Locale - "Corse Private al volo")
+    // 2. SINTESI CORSE PRIVATE (Dagli slot liberi in CacheStore)
     const risultatiPrivati = [];
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
-        // Verifica basica di prossimità (il veicolo deve essere vicino al punto di partenza)
+        // Verifica disponibilità e prossimità geografica (es. raggio 50km)
         const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
         
-        if (disp.is_slot && distVeicolo < 50) { // Tolleranza 50km per vedere l'autista in zona
+        if (disp.is_slot && disp.disponibile !== false && distVeicolo < 50) {
             risultatiPrivati.push({
-                id: `priv_${disp.veicolo_id}`,
+                id: `priv_${veicoloId}`,
                 tipo: 'privata',
-                veicolo_id: disp.veicolo_id,
-                posti_disponibili: 8, // Da integrare con logica occupazione reale se serve
+                veicolo_id: veicoloId,
+                posti_disponibili: 8,
+                posti_totali: 8,
                 distanza: distanzaMetri,
                 is_pool: false,
                 messaggio: "Disponibile per corsa privata"
@@ -65,18 +97,62 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 2. LOGICA POP-BUS (Direttrici attive)
-    // ... (Logica direttrici rimane invariata) ...
+    // 3. LOGICA POP-BUS (Direttrici attive)
+    const { rows: direttriciAttivate } = await pool.query(`
+        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
+        FROM direttrici_virtuali d
+        WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
+        AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
+    `, [orarioRichiesto.toISOString()]);
 
-    // 3. FUSIONE
-    const risultatiFinali = [...risultatiEsistenti, ...risultatiPrivati, ...risultatiPool];
+    let risultatiPool = [];
+    for (const dir of direttriciAttivate) {
+        const nodi = CacheStore.nodiCache.get(dir.id) || [];
+        const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
+        const capacita = veicolo?.posti_totali || 8;
+        
+        const line = turf.lineString(dir.linea_geo.coordinates); 
 
-    // Nuova proposta sempre presente
+        let startPoint = getSnapResult(pStart, nodi, 2.0);
+        let endPoint = getSnapResult(pEnd, nodi, 2.0);
+
+        if (!startPoint) startPoint = getVirtualSnap(pStart, line);
+        if (!endPoint) endPoint = getVirtualSnap(pEnd, line);
+
+        if (startPoint && endPoint && startPoint.dist < 3.0 && endPoint.dist < 3.0 && startPoint.offset_metri < endPoint.offset_metri) {
+            const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
+            
+            if ((capacita - occupati) >= postiRichiesti) {
+                risultatiPool.push({
+                    id: `dir_${dir.id}`,
+                    tipo: 'pop-bus', 
+                    tipo_corsa: dir.stato, 
+                    direttrice_id: dir.id,
+                    veicolo_id: dir.veicolo_id, 
+                    posti_disponibili: capacita - occupati, 
+                    posti_totali: capacita,
+                    distanza: distanzaMetri,
+                    is_pool: true,
+                    startOffset: startPoint.offset_metri,
+                    endOffset: endPoint.offset_metri,
+                    aggancio: { start: startPoint.type, end: endPoint.type }
+                });
+            }
+        }
+    }
+
+    // 4. FUSIONE E RISPOSTA
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
+
     risultatiFinali.push({
         id: 'nuova_proposta',
         tipo: 'pop-bus',
+        tipo_corsa: 'nuova_proposta',
+        messaggio: "Non trovi il bus perfetto? Richiedi l'attivazione di una nuova direttrice.",
         is_nuova_proposta: true,
-        messaggio: "Richiedi attivazione nuova direttrice."
+        distanza: distanzaMetri,
+        posti_totali: 8,
+        posti_disponibili: 8
     });
 
     return await formatResults({ ...richiesta, distanzaMetri }, risultatiFinali);

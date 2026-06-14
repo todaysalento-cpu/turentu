@@ -48,7 +48,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     return (await Promise.all(risultatiFiltrati.map(async (item) => {
         try {
-            // 1. Calcolo Distanza (Fallback sicuro)
+            // 1. Calcolo Distanza (Fallback sicuro per pool, private e condivise)
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : Number(richiesta.distanzaMetri || 0);
@@ -61,7 +61,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
             // 2. PRICING DINAMICO
-            // Invio 6 parametri: (corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeri)
+            // Passiamo esplicitamente item.tipo ('condivisa', 'pop-bus' o 'privata')
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
@@ -75,11 +75,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             });
             
             const prezzoVal = Number(p) || 0;
-            console.log(`[DEBUG] Pricing Finale per ${item.id}: ${prezzoVal}€`);
+            console.log(`[DEBUG] Pricing Finale per ${item.id} [${item.tipo}]: ${prezzoVal}€`);
 
             return {
                 id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
-                tipo: item.tipo,
+                tipo: item.tipo, // Manteniamo il tipo originale che ora include 'privata'
                 direttrice_id: item.direttrice_id || null,
                 aggancio_info: item.aggancio || null, 
                 localitaOrigine,

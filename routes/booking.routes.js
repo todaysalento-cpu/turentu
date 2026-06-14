@@ -28,7 +28,6 @@ function generatePendingMessage({ role, startAddress, endAddress, startDatetime 
 // ======================= ROUTE =======================
 router.post('/payment-intent', authMiddleware, async (req, res) => {
   const client = await pool.connect();
-  const notificheDaInviare = [];
   console.log(`💳 [PAYMENT] Inizio flusso per user: ${req.user.id}`);
 
   try {
@@ -55,14 +54,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
                        (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta'));
 
       if (isPopBus) {
-        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus con risoluzione nodi...`);
+        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus con risoluzione dinamica nodi...`);
         
-        // Risoluzione automatica dei nodi più vicini per permettere il Clustering del Worker
+        // Risoluzione dinamica: la funzione SQL crea il nodo se non esiste entro 500m
         const nodeRes = await client.query(`
           SELECT 
-            (SELECT id FROM nodi_direttrice ORDER BY posizione <-> ST_SetSRID(ST_MakePoint($1, $2), 4326) ASC LIMIT 1) as start_node,
-            (SELECT id FROM nodi_direttrice ORDER BY posizione <-> ST_SetSRID(ST_MakePoint($3, $4), 4326) ASC LIMIT 1) as end_node
-        `, [slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat]);
+            get_or_create_node($1, $2) as start_node,
+            get_or_create_node($3, $4) as end_node
+        `, [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]);
 
         const { start_node, end_node } = nodeRes.rows[0];
 
@@ -84,6 +83,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         }
         pendingRows.push({ id: richiestaId, is_pool: true, stato: 'in_attesa' });
       } else {
+        // Logica Corsa Privata
         let vId = slot.veicolo_id || (slot.id?.startsWith('priv_') ? slot.id.split('_')[1] : null);
         if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
         
@@ -100,7 +100,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [PAYMENT] Transazione completata. Richieste Pop-Bus inserite con nodi associati.`);
+    console.log(`✅ [PAYMENT] Transazione completata. Nodi risolti dinamicamente.`);
 
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
   } catch (err) {

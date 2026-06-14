@@ -3,6 +3,7 @@ import { getIO } from '../../socket.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
+  console.log('🔄 [WORKER] Avvio ciclo di elaborazione...');
   
   try {
     await client.query('BEGIN');
@@ -26,8 +27,11 @@ export async function processaProposteDinamiche() {
       GROUP BY start_node_id, end_node_id, slot_orario, n1.posizione, n2.posizione
     `);
 
+    console.log(`🔍 [WORKER] Trovati ${clusters.length} cluster da processare.`);
+
     for (const c of clusters) {
-      // 2. UPSERT Direttrici con le colonne corrette
+      console.log(`🛠 [WORKER] Upsert direttrice: ${c.start_node_id} -> ${c.end_node_id} (${c.tipo_raggio})`);
+      
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (
             stato, tipo_raggio, distanza_totale_km, soglia_attivazione, 
@@ -43,7 +47,6 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.tipo_raggio, c.dist_km, c.slot_orario, c.start_node_id, c.end_node_id]);
 
-      // 3. UPSERT Segmenti
       await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
         VALUES ($1, $2, $3, $4)
@@ -52,10 +55,7 @@ export async function processaProposteDinamiche() {
       `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
     }
 
-    // Segna le richieste come convertite
-    await client.query(`UPDATE richieste_pop_bus SET stato = 'convertita' WHERE stato = 'in_attesa'`);
-
-    // 4. Validazione Soglia
+    // 2. Validazione Soglia
     const { rows: direttriciAttivate } = await client.query(`
       WITH analisi AS (
         SELECT d.id, SUM(s.posti_occupati * 2.5) as ricavo_stimato, d.soglia_attivazione
@@ -71,8 +71,26 @@ export async function processaProposteDinamiche() {
       RETURNING direttrici_virtuali.id
     `);
 
-    // 5. Dispatching
+    console.log(`📊 [WORKER] Analisi completata. Direttrici attivate: ${direttriciAttivate.length}`);
+
+    // 3. Conversione selettiva (solo per richieste collegate a direttrici attivate)
+    if (direttriciAttivate.length > 0) {
+      const activeIds = direttriciAttivate.map(d => d.id);
+      await client.query(`
+        UPDATE richieste_pop_bus
+        SET stato = 'convertita'
+        WHERE id IN (
+            SELECT r.id FROM richieste_pop_bus r
+            JOIN direttrici_richieste dr ON r.id = dr.richiesta_id
+            WHERE dr.direttrice_id = ANY($1)
+        )
+      `, [activeIds]);
+      console.log(`✅ [WORKER] Richieste associate marcate come 'convertita'.`);
+    }
+
+    // 4. Dispatching
     for (const r of direttriciAttivate) {
+      console.log(`🚀 [WORKER] Inviando proposte per direttrice: ${r.id}`);
       const { rows: autisti } = await client.query(`
         SELECT id FROM utente WHERE tipo = 'autista' ORDER BY rating DESC LIMIT 5
       `);
@@ -88,11 +106,11 @@ export async function processaProposteDinamiche() {
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [WORKER] Processo completato: ${direttriciAttivate.length} nuove direttrici attivate.`);
+    console.log(`✨ [WORKER] Ciclo completato con successo.`);
     
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Errore critico nel Worker Pop-Bus:', err);
+    console.error('❌ [WORKER] Errore critico nel Worker Pop-Bus:', err);
     throw err;
   } finally {
     client.release();

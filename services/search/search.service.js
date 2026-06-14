@@ -9,13 +9,24 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// Helper: Snap to node con tolleranza dinamica
+// Helper: Snap to node (Logica Statica)
 function getSnapResult(point, nodi, tolleranzaKm) {
     return nodi.reduce((prev, curr) => {
         const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
         return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
-            ? { ...curr, dist } : prev;
+            ? { ...curr, dist, type: 'STATIC' } : prev;
     }, null);
+}
+
+// Helper: Snap to line (Logica Dinamica/Virtuale)
+function getVirtualSnap(point, lineaGeografica) {
+    const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
+    return {
+        coord: snapped.geometry.coordinates,
+        offset_metri: snapped.properties.location * 1000,
+        dist: snapped.properties.dist, // Distanza dal punto originale alla linea
+        type: 'DYNAMIC'
+    };
 }
 
 async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
@@ -38,13 +49,15 @@ export async function cercaSlotUltra(richiesta) {
     const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
     const destLat = Number(richiesta.coordDest?.lat);
     const destLon = Number(richiesta.coordDest?.lon);
+    const pStart = turf.point([lon, lat]);
+    const pEnd = turf.point([destLon, destLat]);
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     const orarioRichiesto = new Date(richiesta.start_datetime || new Date());
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distKm = info.distanzaKm || 1;
 
-    // 1. RICERCA CORSE ESISTENTI (Condivise/Private)
+    // 1. RICERCA CORSE ESISTENTI
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -53,43 +66,40 @@ export async function cercaSlotUltra(richiesta) {
         .map(id => CacheStore.corseCache.get(Number(id)))
         .filter(Boolean);
 
-    // ESECUZIONE FILTRO
-    const { corse: corseEsistenti } = await filterDisponibilita(
-        { ...richiesta, posti_richiesti: postiRichiesti }, 
-        corseCandidate, 
-        []
-    );
+    const { corse: corseEsistenti } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     
-    const risultatiCondivise = corseEsistenti.map(c => ({ 
-        ...c, 
-        tipo: 'condivisa', 
-        is_slot: false 
-    }));
+    const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
 
     // 2. LOGICA POP-BUS (Direttrici attive)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT DISTINCT d.id, d.stato, d.veicolo_id, t.euro_km, t.prezzo_passeggero, d.partenza_prevista
+        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
-        JOIN tariffe t ON d.veicolo_id = t.veicolo_id
-        JOIN nodi_direttrice n1 ON d.id = n1.direttrice_id
-        JOIN nodi_direttrice n2 ON d.id = n2.direttrice_id
         WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
-        AND ST_DWithin(n1.posizione, ST_SetSRID(ST_MakePoint($1, $2), 4326), 2000)
-        AND ST_DWithin(n2.posizione, ST_SetSRID(ST_MakePoint($3, $4), 4326), 2000)
-        AND d.partenza_prevista BETWEEN $5::timestamptz - INTERVAL '1 hour' AND $5::timestamptz + INTERVAL '1 hour'
-    `, [lon, lat, destLon, destLat, orarioRichiesto.toISOString()]);
+        AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
+    `, [orarioRichiesto.toISOString()]);
 
     let risultatiPool = [];
     for (const dir of direttriciAttivate) {
         const nodi = CacheStore.nodiCache.get(dir.id) || [];
         const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
         const capacita = veicolo?.posti_totali || 8;
+        
+        // Convertiamo la geometria in LineString Turf
+        const line = turf.lineString(dir.linea_geo.coordinates); 
 
-        const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
-        const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
+        // TENTATIVO 1: Nodo Statico
+        let startPoint = getSnapResult(pStart, nodi, 2.0);
+        let endPoint = getSnapResult(pEnd, nodi, 2.0);
 
-        if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
-            const occupati = await getOccupazioneDinamica(dir.id, startNode.offset_metri, endNode.offset_metri);
+        // TENTATIVO 2: Fallback su Virtual Stop se nodo non trovato
+        if (!startPoint) startPoint = getVirtualSnap(pStart, line);
+        if (!endPoint) endPoint = getVirtualSnap(pEnd, line);
+
+        // Verifica validità: tolleranza 3km per punti dinamici, offset logico coerente
+        if (startPoint && endPoint && startPoint.dist < 3.0 && endPoint.dist < 3.0 && startPoint.offset_metri < endPoint.offset_metri) {
+            
+            const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
+            
             if ((capacita - occupati) >= postiRichiesti) {
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
@@ -97,14 +107,14 @@ export async function cercaSlotUltra(richiesta) {
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
                     posti_disponibili: capacita - occupati, 
-                    is_pool: true
+                    is_pool: true,
+                    aggancio: { start: startPoint.type, end: endPoint.type }
                 });
             }
         }
     }
 
     // 3. FUSIONE DEI RISULTATI
-    // Se non troviamo né condivise né pool, aggiungiamo la proposta come opzione di fallback
     const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
 
     if (risultatiFinali.length === 0) {

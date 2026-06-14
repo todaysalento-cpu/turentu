@@ -1,3 +1,47 @@
+import * as turf from '@turf/turf';
+import ngeohash from 'ngeohash';
+import { redisClient } from '../../redis.js';
+import { pool } from '../../db/db.js';
+import { loadCachesUltra, CacheStore } from './search.cache.js'; 
+import { filterDisponibilita } from './engine/availability.engine.js';
+import { formatResults } from './formatter/search.formatter.js';
+import { getDurataDistanza } from '../../utils/maps.util.js';
+
+const GEOHASH_PRECISION_TRATTA = 5;
+
+// Helper: Snap to node (Logica Statica)
+function getSnapResult(point, nodi, tolleranzaKm) {
+    return nodi.reduce((prev, curr) => {
+        const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
+        return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
+            ? { ...curr, dist, type: 'STATIC' } : prev;
+    }, null);
+}
+
+// Helper: Snap to line (Logica Dinamica/Virtuale)
+function getVirtualSnap(point, lineaGeografica) {
+    const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
+    return {
+        coord: snapped.geometry.coordinates,
+        offset_metri: snapped.properties.location * 1000,
+        dist: snapped.properties.dist, // Distanza dal punto originale alla linea
+        type: 'DYNAMIC'
+    };
+}
+
+async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
+    const { rows } = await pool.query(`
+        SELECT SUM(s.posti_occupati) as carico
+        FROM segmenti s
+        JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
+        JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
+        WHERE s.direttrice_id = $1
+        AND n_start.offset_metri < $3 
+        AND n_end.offset_metri > $2
+    `, [direttriceId, startOffset, endOffset]);
+    return Number(rows[0]?.carico || 0);
+}
+
 export async function cercaSlotUltra(richiesta) {
     await loadCachesUltra();
 
@@ -14,7 +58,7 @@ export async function cercaSlotUltra(richiesta) {
     const distKm = info.distanzaKm || 1;
     const distanzaMetri = distKm * 1000;
 
-    // 1. RICERCA CORSE ESISTENTI
+    // 1. RICERCA CORSE ESISTENTI (Normalizzate)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -29,10 +73,11 @@ export async function cercaSlotUltra(richiesta) {
         ...c, 
         tipo: 'condivisa', 
         is_pool: false,
-        distanza: c.distanza || distanzaMetri 
+        distanza: c.distanza || distanzaMetri,
+        prezzo_fisso: Number(c.prezzo_fisso) || 0
     }));
 
-    // 2. LOGICA POP-BUS (Rimossa dipendenza da d.prezzo_base)
+    // 2. LOGICA POP-BUS (Direttrici attive)
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
@@ -58,12 +103,13 @@ export async function cercaSlotUltra(richiesta) {
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
             
             if ((capacita - occupati) >= postiRichiesti) {
+                // NORMALIZZAZIONE: garantiamo struttura pronta per il pricing dinamico
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
-                    veicolo_id: dir.veicolo_id, // Necessario per pricing.util
+                    veicolo_id: dir.veicolo_id, // Passato per permettere il recupero tariffe
                     posti_disponibili: capacita - occupati, 
                     posti_totali: capacita,
                     distanza: distanzaMetri,
@@ -76,7 +122,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. FUSIONE
+    // 3. FUSIONE E RISPOSTA
     const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
 
     if (risultatiFinali.length === 0) {

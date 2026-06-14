@@ -1,8 +1,9 @@
 import * as turf from '@turf/turf';
+import polyline from '@mapbox/polyline'; // Assicurati di aver installato questo pacchetto
 
 /**
- * Snap Ibrido: Cerca prima nelle fermate pianificate, poi proietta sulla polyline.
- * Adattato per lo schema "public.corse" (JSONB e TEXT).
+ * Snap Ibrido: Tenta lo snap sulle fermate (STATIC), 
+ * se fallisce tenta la proiezione sulla polyline decodificata (DYNAMIC).
  */
 function getSnapResult(point, corsa, tolleranzaKm) {
     // 1. TENTATIVO STATICO: Usa le fermate pianificate (JSONB)
@@ -12,12 +13,10 @@ function getSnapResult(point, corsa, tolleranzaKm) {
         let nearest = null;
         let min = tolleranzaKm;
         for (const f of fermate) {
-            // Assicuriamo che la fermata abbia coordinate (lon, lat)
             const pFermata = turf.point([f.lon, f.lat]);
             const d = turf.distance(point, pFermata, { units: 'kilometers' });
             if (d < min) { 
                 min = d; 
-                // Recupera l'offset dalla fermata o default a 0
                 nearest = { ...f, offset_metri: f.offset_metri || 0, type: 'STATIC', dist: d }; 
             }
         }
@@ -27,11 +26,15 @@ function getSnapResult(point, corsa, tolleranzaKm) {
         }
     }
 
-    // 2. FALLBACK DINAMICO: Usa la polyline memorizzata nella corsa
-    if (corsa.percorso_polyline) {
+    // 2. FALLBACK DINAMICO: Decodifica Polyline e cerca proiezione
+    if (corsa.percorso_polyline && typeof corsa.percorso_polyline === 'string') {
         try {
-            // Assumiamo che percorso_polyline sia un formato compatibile con lineString (Array di [lon, lat])
-            const line = turf.lineString(corsa.percorso_polyline); 
+            // Decodifica la stringa Google Polyline -> [ [lat, lon], ... ]
+            const decoded = polyline.decode(corsa.percorso_polyline);
+            // Turf richiede coordinate [lon, lat]
+            const coordinates = decoded.map(c => [c[1], c[0]]);
+            
+            const line = turf.lineString(coordinates); 
             const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
             
             if (snapped.properties.dist < tolleranzaKm) {
@@ -43,7 +46,7 @@ function getSnapResult(point, corsa, tolleranzaKm) {
                 };
             }
         } catch (e) {
-            console.error(`⚠️ [SNAP] Errore polyline per corsa ${corsa.id}:`, e);
+            console.error(`⚠️ [SNAP] Errore decodifica polyline corsa ${corsa.id}:`, e);
         }
     }
 
@@ -65,7 +68,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
     const corseValide = corseCandidate.filter((c, index) => {
-        // Nota: se vuoi includere anche i pop-bus nel calcolo, rimuovi il filtro seguente
+        // Se desideri includere anche i pop-bus in questo motore, commenta la riga sotto
         if (c.tipo_corsa === 'pop-bus') return false;
         
         console.log(`⚙️ [CORSA ${c.id}] Analisi disponibilità...`);
@@ -88,7 +91,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             return false;
         }
 
-        c.startOffset = startOffset; // Salvato per il formattatore
+        c.startOffset = startOffset; 
         c.endOffset = endOffset;
         c.distanza = Math.abs(endOffset - startOffset);
         

@@ -52,8 +52,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const pendingRows = [];
 
     for (const slot of slots) {
+      // LOGICA DIFENSIVA: Estrazione veicolo_id se mancante o formattato come stringa
+      let vId = slot.veicolo_id;
+      if (!vId && slot.id && typeof slot.id === 'string' && slot.id.startsWith('priv_')) {
+        vId = slot.id.split('_')[1];
+      }
+
       const { 
-        veicolo_id, is_pool, start_datetime, posti_richiesti, direttrice_id,
+        is_pool, start_datetime, posti_richiesti, direttrice_id,
         origine, destinazione, localitaOrigine, localitaDestinazione, distanzaKm 
       } = slot;
       
@@ -62,7 +68,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       if (is_pool) {
         console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus`);
         
-        // 1. Inserimento in richieste_pop_bus (senza direttrice_id)
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa')
@@ -72,19 +77,18 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         
         const richiestaId = result.rows[0].id;
 
-        // 2. Collegamento opzionale se non è proposta dinamica
         if (direttrice_id && direttrice_id !== 'proposta_dinamica') {
           const dirId = parseInt(direttrice_id.toString().replace('direttrice_', ''));
           await client.query(
             `INSERT INTO direttrici_richieste (direttrice_id, richiesta_id) VALUES ($1, $2)`,
             [dirId, richiestaId]
           );
-          console.log(`🚌 [POOL] Richiesta ${richiestaId} collegata a direttrice ${dirId}`);
         }
-
         pendingRows.push({ id: richiestaId, is_pool: true });
       } else {
-        console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${veicolo_id}`);
+        if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
+        
+        console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${vId}`);
         let durataMinuti = slot.durataMinuti ?? slot.durata_minuti ?? 30;
         let dist = Number(distanzaKm ?? 0);
         
@@ -97,14 +101,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           `INSERT INTO pending (veicolo_id, cliente_id, start_datetime, durata, posti_richiesti, tipo_corsa, prezzo, distanza, origine, destinazione, origine_address, destinazione_address, stato, payment_intent_id, request_id, expires_at)
            VALUES ($1,$2,$3,$4::interval,$5,$6,$7,$8, ST_SetSRID(ST_MakePoint($9,$10),4326), ST_SetSRID(ST_MakePoint($11,$12),4326), $13,$14,'pending',$15,$16::uuid, NOW() + interval '30 minutes')
            RETURNING *`,
-          [veicolo_id, clienteId, start_datetime, `${durataMinuti} minutes`, posti_richiesti, type, prezzo / slots.length, dist, origine.lon, origine.lat, destinazione.lon, destinazione.lat, localitaOrigine, localitaDestinazione, paymentIntent.id, requestId]
+          [vId, clienteId, start_datetime, `${durataMinuti} minutes`, posti_richiesti, type, prezzo / slots.length, dist, origine.lon, origine.lat, destinazione.lon, destinazione.lat, localitaOrigine, localitaDestinazione, paymentIntent.id, requestId]
         );
         
         const pItem = result.rows[0];
         pendingRows.push(pItem);
         await upsertPrenotazione(pItem);
 
-        const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [veicolo_id]);
+        const driverRes = await client.query('SELECT driver_id FROM veicolo WHERE id=$1', [vId]);
         const driverId = driverRes.rows[0]?.driver_id;
         
         if (driverId) {

@@ -52,21 +52,26 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const pendingRows = [];
 
     for (const slot of slots) {
-      // LOGICA DIFENSIVA: Estrazione veicolo_id se mancante o formattato come stringa
+      // LOGICA DI IDENTIFICAZIONE RESILIENTE
+      // Una corsa è Pop-Bus se ha il flag is_pool O se l'ID suggerisce una direttrice/nuova proposta
+      const isPopBus = slot.is_pool === true || 
+                       (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta'));
+
+      // Estrazione vId: Solo se NON è Pop-Bus
       let vId = slot.veicolo_id;
-      if (!vId && slot.id && typeof slot.id === 'string' && slot.id.startsWith('priv_')) {
+      if (!isPopBus && !vId && slot.id && typeof slot.id === 'string' && slot.id.startsWith('priv_')) {
         vId = slot.id.split('_')[1];
       }
 
       const { 
-        is_pool, start_datetime, posti_richiesti, direttrice_id,
+        start_datetime, posti_richiesti, direttrice_id,
         origine, destinazione, localitaOrigine, localitaDestinazione, distanzaKm 
       } = slot;
       
       if (!origine?.lat || !destinazione?.lat) throw new Error("Coordinate incomplete");
 
-      if (is_pool) {
-        console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus`);
+      if (isPopBus) {
+        console.log(`🚌 [POOL] Elaborazione richiesta Pop-Bus`);
         
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato)
@@ -86,7 +91,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         }
         pendingRows.push({ id: richiestaId, is_pool: true });
       } else {
-        if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
+        // Validazione rigorosa riservata esclusivamente alle corse private
+        if (!vId) {
+            console.error("❌ ERRORE: Veicolo ID mancante nel payload slot:", slot);
+            throw new Error("Veicolo ID mancante per corsa privata");
+        }
         
         console.log(`🚗 [PRIVATE] Elaborazione corsa privata per veicolo: ${vId}`);
         let durataMinuti = slot.durataMinuti ?? slot.durata_minuti ?? 30;

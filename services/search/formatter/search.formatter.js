@@ -56,12 +56,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
             
             const distKmCalc = distMetri / 1000;
-            const distKmTotali = item.distanzaTotaleRotte || distKmCalc; // Usa rotta totale se disponibile
+            const distKmTotali = item.distanzaTotaleRotte || distKmCalc; 
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // 2. PRICING DINAMICO (Parametri completi per pricing.util.js)
-            // Passiamo 6 parametri: (corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeri)
+            // 2. PRICING DINAMICO
+            // Invio 6 parametri: (corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeri)
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
@@ -102,4 +102,4 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             return null;
         }
     }))).filter(r => r !== null);
-}}
+}

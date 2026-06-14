@@ -37,6 +37,20 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
 
+    // 1. ORGANIZZAZIONE BUCKET (Bilanciamento per tipo)
+    const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
+    
+    risultatiFiltrati.forEach(item => {
+        if (buckets[item.tipo]) buckets[item.tipo].push(item);
+    });
+
+    // 2. LIMITAZIONE (Max 4 per tipo, max 12 totali)
+    const risultatiLimitati = [
+        ...buckets.condivisa.slice(0, 4),
+        ...buckets.privata.slice(0, 4),
+        ...buckets['pop-bus'].slice(0, 4)
+    ].slice(0, 12);
+
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
             ? richiesta.localitaOrigine 
@@ -46,9 +60,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    return (await Promise.all(risultatiFiltrati.map(async (item) => {
+    // 3. FORMATTAZIONE E PRICING
+    return (await Promise.all(risultatiLimitati.map(async (item) => {
         try {
-            // 1. Calcolo Distanza (Fallback sicuro per pool, private e condivise)
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : Number(richiesta.distanzaMetri || 0);
@@ -60,15 +74,13 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // 2. PRICING DINAMICO
-            // Passiamo esplicitamente item.tipo ('condivisa', 'pop-bus' o 'privata')
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
                 item.tipo, 
                 distKmCalc, 
                 distKmTotali, 
-                0 // totPasseggeriCorrenti default
+                0 
             ).catch(err => { 
                 console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
                 return distKmCalc * 0.50; 
@@ -79,7 +91,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             return {
                 id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
-                tipo: item.tipo, // Manteniamo il tipo originale che ora include 'privata'
+                tipo: item.tipo,
                 direttrice_id: item.direttrice_id || null,
                 aggancio_info: item.aggancio || null, 
                 localitaOrigine,

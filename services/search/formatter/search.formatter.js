@@ -91,6 +91,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             return {
                 id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
+                // Iniezione esplicita del veicolo_id per il backend
+                veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
                 tipo: item.tipo,
                 direttrice_id: item.direttrice_id || null,
                 aggancio_info: item.aggancio || null, 

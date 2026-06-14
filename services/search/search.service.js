@@ -77,12 +77,10 @@ export async function cercaSlotUltra(richiesta) {
         prezzo_fisso: Number(c.prezzo_fisso) || 0
     }));
 
-    // 2. SINTESI CORSE PRIVATE (Dagli slot liberi in CacheStore)
+    // 2. SINTESI CORSE PRIVATE
     const risultatiPrivati = [];
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
-        // Verifica disponibilità e prossimità geografica (es. raggio 50km)
         const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
-        
         if (disp.is_slot && disp.disponibile !== false && distVeicolo < 50) {
             risultatiPrivati.push({
                 id: `priv_${veicoloId}`,
@@ -97,7 +95,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. LOGICA POP-BUS (Direttrici attive)
+    // 3. LOGICA POP-BUS (Ottimizzata in parallelo)
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
@@ -105,30 +103,24 @@ export async function cercaSlotUltra(richiesta) {
         AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
     `, [orarioRichiesto.toISOString()]);
 
-    let risultatiPool = [];
-    for (const dir of direttriciAttivate) {
+    const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
         const nodi = CacheStore.nodiCache.get(dir.id) || [];
         const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
         const capacita = veicolo?.posti_totali || 8;
-        
         const line = turf.lineString(dir.linea_geo.coordinates); 
 
-        let startPoint = getSnapResult(pStart, nodi, 2.0);
-        let endPoint = getSnapResult(pEnd, nodi, 2.0);
-
-        if (!startPoint) startPoint = getVirtualSnap(pStart, line);
-        if (!endPoint) endPoint = getVirtualSnap(pEnd, line);
+        let startPoint = getSnapResult(pStart, nodi, 2.0) || getVirtualSnap(pStart, line);
+        let endPoint = getSnapResult(pEnd, nodi, 2.0) || getVirtualSnap(pEnd, line);
 
         if (startPoint && endPoint && startPoint.dist < 3.0 && endPoint.dist < 3.0 && startPoint.offset_metri < endPoint.offset_metri) {
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
-            
             if ((capacita - occupati) >= postiRichiesti) {
-                risultatiPool.push({
+                return {
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
-                    veicolo_id: dir.veicolo_id, 
+                    veicolo_id: dir.veicolo_id || null, 
                     posti_disponibili: capacita - occupati, 
                     posti_totali: capacita,
                     distanza: distanzaMetri,
@@ -136,10 +128,11 @@ export async function cercaSlotUltra(richiesta) {
                     startOffset: startPoint.offset_metri,
                     endOffset: endPoint.offset_metri,
                     aggancio: { start: startPoint.type, end: endPoint.type }
-                });
+                };
             }
         }
-    }
+        return null;
+    }))).filter(Boolean);
 
     // 4. FUSIONE E RISPOSTA
     const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];

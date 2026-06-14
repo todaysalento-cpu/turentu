@@ -1,41 +1,49 @@
 import * as turf from '@turf/turf';
 
 /**
- * Cerca il nodo più vicino (Statico) O crea un punto sulla linea (Dinamico)
+ * Snap Ibrido: Cerca prima nelle fermate pianificate, poi proietta sulla polyline.
+ * Adattato per lo schema "public.corse" (JSONB e TEXT).
  */
 function getSnapResult(point, corsa, tolleranzaKm) {
-    // 1. TENTATIVO STATICO (Nodo nel database)
-    if (corsa.nodi && corsa.nodi.length > 0) {
-        let nearestNode = null;
-        let minDistance = tolleranzaKm;
-
-        for (const nodo of corsa.nodi) {
-            if (!nodo.coord) continue;
-            const dist = turf.distance(point, turf.point(nodo.coord), { units: 'kilometers' });
-            if (dist < minDistance) {
-                minDistance = dist;
-                nearestNode = { ...nodo, type: 'STATIC', dist };
+    // 1. TENTATIVO STATICO: Usa le fermate pianificate (JSONB)
+    const fermate = Array.isArray(corsa.fermate_pianificate) ? corsa.fermate_pianificate : [];
+    
+    if (fermate.length > 0) {
+        let nearest = null;
+        let min = tolleranzaKm;
+        for (const f of fermate) {
+            // Assicuriamo che la fermata abbia coordinate (lon, lat)
+            const pFermata = turf.point([f.lon, f.lat]);
+            const d = turf.distance(point, pFermata, { units: 'kilometers' });
+            if (d < min) { 
+                min = d; 
+                // Recupera l'offset dalla fermata o default a 0
+                nearest = { ...f, offset_metri: f.offset_metri || 0, type: 'STATIC', dist: d }; 
             }
         }
-        if (nearestNode) {
-            console.log(`📍 [SNAP] Trovato nodo STATIC (id: ${nearestNode.id}) a ${nearestNode.dist.toFixed(2)}km`);
-            return nearestNode;
+        if (nearest) {
+            console.log(`📍 [SNAP] Trovato nodo STATIC (id: ${nearest.id || 'N/A'}) a ${nearest.dist.toFixed(2)}km`);
+            return nearest;
         }
     }
 
-    // 2. FALLBACK DINAMICO (Punto virtuale su Polyline)
-    if (corsa.polyline) {
-        const line = turf.lineString(corsa.polyline);
-        const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
-        
-        if (snapped.properties.dist < tolleranzaKm) {
-            console.log(`🌐 [SNAP] Creato punto DYNAMIC (offset: ${snapped.properties.location * 1000}m) a ${snapped.properties.dist.toFixed(2)}km dalla linea.`);
-            return {
-                id: null,
-                offset_metri: snapped.properties.location * 1000,
-                type: 'DYNAMIC',
-                dist: snapped.properties.dist
-            };
+    // 2. FALLBACK DINAMICO: Usa la polyline memorizzata nella corsa
+    if (corsa.percorso_polyline) {
+        try {
+            // Assumiamo che percorso_polyline sia un formato compatibile con lineString (Array di [lon, lat])
+            const line = turf.lineString(corsa.percorso_polyline); 
+            const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
+            
+            if (snapped.properties.dist < tolleranzaKm) {
+                console.log(`🌐 [SNAP] Creato punto DYNAMIC (offset: ${snapped.properties.location * 1000}m) a ${snapped.properties.dist.toFixed(2)}km.`);
+                return {
+                    offset_metri: snapped.properties.location * 1000,
+                    type: 'DYNAMIC',
+                    dist: snapped.properties.dist
+                };
+            }
+        } catch (e) {
+            console.error(`⚠️ [SNAP] Errore polyline per corsa ${corsa.id}:`, e);
         }
     }
 
@@ -44,10 +52,10 @@ function getSnapResult(point, corsa, tolleranzaKm) {
 }
 
 /**
- * Motore di validazione ibrido (Statico + Dinamico) con log di debug
+ * Motore di validazione ibrido (Statico + Dinamico)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch) {
-    console.log(`🔍 [ENGINE] Inizio filtraggio ibrido. Richiesta: [${richiesta.coord?.lat}, ${richiesta.coord?.lon}] -> [${richiesta.coordDest?.lat}, ${richiesta.coordDest?.lon}]`);
+    console.log(`🔍 [ENGINE] Inizio filtraggio su ${corseCandidate.length} corse.`);
 
     if (!richiesta.coord || !richiesta.coordDest) return { corse: [] };
 
@@ -57,11 +65,11 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
     const corseValide = corseCandidate.filter((c, index) => {
+        // Nota: se vuoi includere anche i pop-bus nel calcolo, rimuovi il filtro seguente
         if (c.tipo_corsa === 'pop-bus') return false;
         
         console.log(`⚙️ [CORSA ${c.id}] Analisi disponibilità...`);
 
-        // 1. Snap ibrido
         const startSnap = getSnapResult(pStart, c, TOLLERANZA_KM);
         const endSnap = getSnapResult(pEnd, c, TOLLERANZA_KM);
 
@@ -70,20 +78,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             return false;
         }
 
-        // 2. Calcolo Offset
         const startOffset = Number(startSnap.offset_metri);
         const endOffset = Number(endSnap.offset_metri);
         
-        console.log(`📏 [CORSA ${c.id}] Segmento calcolato: ${startOffset.toFixed(0)}m -> ${endOffset.toFixed(0)}m`);
+        console.log(`📏 [CORSA ${c.id}] Segmento: ${startOffset.toFixed(0)}m -> ${endOffset.toFixed(0)}m`);
 
         if (startOffset >= endOffset) {
             console.log(`❌ [CORSA ${c.id}] Scartata: Direzione non coerente.`);
             return false;
         }
 
+        c.startOffset = startOffset; // Salvato per il formattatore
+        c.endOffset = endOffset;
         c.distanza = Math.abs(endOffset - startOffset);
         
-        // 3. Verifica Saturazione
         const prenotazioni = Array.isArray(prenotazioniBatch[index]) ? prenotazioniBatch[index] : [];
         const isDisponibile = verificaSaturazioneOffset(c, startOffset, endOffset, postiRichiesti, prenotazioni);
         
@@ -108,7 +116,7 @@ function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotaz
         if (startO < pEnd && endO > pStart) {
             const occupazione = Number(p.posti_richiesti);
             if ((occupazione + postiRichiesti) > postiTotali) {
-                console.log(`🔍 [DEBUG SATURAZIONE] Corsa ${corsa.id} satura: richiesta ${postiRichiesti} su ${occupazione} esistenti.`);
+                console.log(`🔍 [DEBUG SATURAZIONE] Corsa ${corsa.id} satura.`);
                 return false;
             }
         }

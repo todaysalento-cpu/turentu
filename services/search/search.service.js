@@ -103,13 +103,12 @@ export async function cercaSlotUltra(richiesta) {
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
             
             if ((capacita - occupati) >= postiRichiesti) {
-                // NORMALIZZAZIONE: garantiamo struttura pronta per il pricing dinamico
                 risultatiPool.push({
                     id: `dir_${dir.id}`,
                     tipo: 'pop-bus', 
                     tipo_corsa: dir.stato, 
                     direttrice_id: dir.id,
-                    veicolo_id: dir.veicolo_id, // Passato per permettere il recupero tariffe
+                    veicolo_id: dir.veicolo_id, 
                     posti_disponibili: capacita - occupati, 
                     posti_totali: capacita,
                     distanza: distanzaMetri,
@@ -122,17 +121,20 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. FUSIONE E RISPOSTA
+    // 3. FUSIONE E AGGIUNTA OPZIONE DI DEFAULT
     const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
 
-    if (risultatiFinali.length === 0) {
-        risultatiFinali.push({
-            id: 'nuova_proposta',
-            tipo: 'pop-bus',
-            tipo_corsa: 'nuova_proposta',
-            messaggio: "Nessun bus vicino, richiedi attivazione."
-        });
-    }
+    // Aggiungiamo sempre la "nuova proposta" come opzione per l'utente
+    risultatiFinali.push({
+        id: 'nuova_proposta',
+        tipo: 'pop-bus',
+        tipo_corsa: 'nuova_proposta',
+        messaggio: "Non trovi il bus perfetto? Richiedi l'attivazione di una nuova direttrice.",
+        is_nuova_proposta: true,
+        distanza: distanzaMetri,
+        posti_totali: 8,
+        posti_disponibili: 8
+    });
 
     return await formatResults({ ...richiesta, distanzaMetri }, risultatiFinali);
 }

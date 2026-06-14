@@ -7,8 +7,7 @@ export async function processaProposteDinamiche() {
   try {
     await client.query('BEGIN');
 
-    // 1. Clustering Dinamico: Raggruppa per percorso E slot temporale (es. ora esatta)
-    // Usiamo DATE_TRUNC per creare finestre di partenza (es. ogni ora)
+    // 1. Clustering Dinamico
     const { rows: clusters } = await client.query(`
       SELECT 
         start_node_id, end_node_id,
@@ -28,18 +27,23 @@ export async function processaProposteDinamiche() {
     `);
 
     for (const c of clusters) {
-      // 2. UPSERT Direttrici: Include partenza_prevista per permettere più corse sulla stessa tratta
+      // 2. UPSERT Direttrici con le colonne corrette
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (
-            stato, tipo_raggio, distanza_totale_km, soglia_attivazione, partenza_prevista, start_node_id, end_node_id
+            stato, tipo_raggio, distanza_totale_km, soglia_attivazione, 
+            partenza_prevista, start_node_id, end_node_id
         )
-        VALUES ('in_formazione', $1, $2, (SELECT costo_km_base * $2 FROM config_soglie WHERE tipo = $1), $3, $4, $5)
+        VALUES (
+            'in_formazione', $1, $2, 
+            (SELECT costo_km_base * $2 FROM config_soglie WHERE tipo = $1), 
+            $3, $4, $5
+        )
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista) 
         DO UPDATE SET stato = 'in_formazione'
         RETURNING id
       `, [c.tipo_raggio, c.dist_km, c.slot_orario, c.start_node_id, c.end_node_id]);
 
-      // 3. UPSERT Segmenti: Include direttrice_id per evitare conflitti tra bus diversi
+      // 3. UPSERT Segmenti
       await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
         VALUES ($1, $2, $3, $4)

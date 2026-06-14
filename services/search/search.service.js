@@ -1,94 +1,107 @@
+import * as turf from '@turf/turf';
+import ngeohash from 'ngeohash';
+import { redisClient } from '../../redis.js';
 import { pool } from '../../db/db.js';
-import { getIO } from '../../socket.js';
+import { loadCachesUltra, CacheStore } from './search.cache.js'; 
+import { filterDisponibilita } from './engine/availability.engine.js';
+import { formatResults } from './formatter/search.formatter.js';
+import { getDurataDistanza } from '../../utils/maps.util.js';
 
-export async function processaProposteDinamiche() {
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
+const GEOHASH_PRECISION_TRATTA = 5;
 
-    // 1. Clustering Dinamico: Raggruppa richieste in "Corridoi"
-    // Questo genera "virtualmente" direttrici dove c'è domanda
-    const { rows: clusters } = await client.query(`
-      SELECT 
-        start_node_id, end_node_id,
-        SUM(posti_richiesti) as posti_totali,
-        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as dist_km,
-        CASE 
-          WHEN (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) <= 20 THEN 'corto'
-          WHEN (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) <= 60 THEN 'medio'
-          ELSE 'lungo'
-        END as tipo_raggio
-      FROM richieste_pop_bus r
-      JOIN nodi n1 ON r.start_node_id = n1.id
-      JOIN nodi n2 ON r.end_node_id = n2.id
-      WHERE r.stato = 'in_attesa'
-      GROUP BY start_node_id, end_node_id, n1.posizione, n2.posizione
-    `);
+function getSnapResult(point, nodi, tolleranzaKm) {
+    return nodi.reduce((prev, curr) => {
+        const dist = turf.distance(point, turf.point(curr.coord), { units: 'kilometers' });
+        return dist < tolleranzaKm && (prev === null || dist < prev.dist) 
+            ? { ...curr, dist } : prev;
+    }, null);
+}
 
-    // 2. Generazione/Aggiornamento Direttrici Dinamiche
-    for (const c of clusters) {
-      // Upsert: Crea la direttrice se non esiste per quel raggio/corridoio
-      const { rows: dir } = await client.query(`
-        INSERT INTO direttrici_virtuali (stato, tipo_raggio, distanza_totale_km, soglia_attivazione)
-        VALUES ('in_formazione', $1, $2, (SELECT costo_km_base * $2 FROM config_soglie WHERE tipo = $1))
-        ON CONFLICT (tipo_raggio, start_node_id, end_node_id) DO UPDATE SET stato = 'in_formazione'
-        RETURNING id
-      `, [c.tipo_raggio, c.dist_km]);
+async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
+    const { rows } = await pool.query(`
+        SELECT SUM(s.posti_occupati) as carico
+        FROM segmenti s
+        WHERE s.direttrice_id = $1
+        AND s.start_node_id >= $2 
+        AND s.end_node_id <= $3
+    `, [direttriceId, startOffset, endOffset]); // Adattato al nuovo schema segmenti
+    return Number(rows[0]?.carico || 0);
+}
 
-      // Inserisci/Aggiorna segmenti
-      await client.query(`
-        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (direttrice_id, start_node_id, end_node_id) 
-        DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
-      `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
-    }
+export async function cercaSlotUltra(richiesta) {
+    await loadCachesUltra();
 
-    // Segna le richieste come convertite
-    await client.query(`UPDATE richieste_pop_bus SET stato = 'convertita' WHERE stato = 'in_attesa'`);
+    const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
+    const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
+    const destLat = Number(richiesta.coordDest?.lat);
+    const destLon = Number(richiesta.coordDest?.lon);
+    const postiRichiesti = Number(richiesta.posti_richiesti || 1);
+    const orarioRichiesto = new Date(richiesta.start_datetime || new Date());
 
-    // 3. Validazione basata sul Discriminante Economico (Soglia)
-    const { rows: direttriciAttivate } = await client.query(`
-      WITH analisi AS (
-        SELECT 
-          d.id,
-          SUM(s.posti_occupati * 2.5) as ricavo_stimato, -- 2.5 = prezzo medio ticket
-          d.soglia_attivazione
+    const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
+    const distKm = info.distanzaKm || 1;
+
+    // 1. RICERCA GEOSPAZIALE (Corse esistenti)
+    const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
+    const hashes = [hash, ...ngeohash.neighbors(hash)];
+    const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
+
+    const corseCandidate = [...new Set(corsaResults.flat())].map(id => CacheStore.corseCache.get(Number(id))).filter(Boolean);
+    const { corse: corseEsistenti } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
+    
+    const risultatiCondivise = corseEsistenti.map(c => ({ ...c, tipo: 'condivisa', is_slot: false }));
+
+    // 2. LOGICA POP-BUS (Versione ottimizzata)
+    // Cerchiamo direttrici coerenti con la posizione e vicine all'orario richiesto
+    const { rows: direttriciAttive } = await pool.query(`
+        SELECT DISTINCT d.id, d.stato, d.veicolo_id, t.euro_km, t.prezzo_passeggero, d.partenza_prevista
         FROM direttrici_virtuali d
-        JOIN segmenti s ON d.id = s.direttrice_id
-        WHERE d.stato = 'in_formazione'
-        GROUP BY d.id, d.soglia_attivazione
-      )
-      UPDATE direttrici_virtuali
-      SET stato = 'in_attesa_autista'
-      FROM analisi
-      WHERE direttrici_virtuali.id = analisi.id 
-      AND analisi.ricavo_stimato >= analisi.soglia_attivazione
-      RETURNING direttrici_virtuali.id
-    `);
+        JOIN tariffe t ON d.veicolo_id = t.veicolo_id
+        JOIN nodi_direttrice n1 ON d.id = n1.direttrice_id
+        JOIN nodi_direttrice n2 ON d.id = n2.direttrice_id
+        WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
+        AND ST_DWithin(n1.posizione, ST_SetSRID(ST_MakePoint($1, $2), 4326), 2000)
+        AND ST_DWithin(n2.posizione, ST_SetSRID(ST_MakePoint($3, $4), 4326), 2000)
+        AND d.partenza_prevista BETWEEN $5::timestamptz - INTERVAL '1 hour' AND $5::timestamptz + INTERVAL '1 hour'
+    `, [lon, lat, destLon, destLat, orarioRichiesto.toISOString()]);
 
-    // 4. Dispatching
-    for (const r of direttriciAttivate) {
-      const { rows: autisti } = await client.query(`
-        SELECT id FROM utente WHERE tipo = 'autista' ORDER BY rating DESC LIMIT 5
-      `);
+    let risultatiPool = [];
+    for (const dir of direttriciAttivate) {
+        const nodi = CacheStore.nodiCache.get(dir.id) || [];
+        const veicolo = CacheStore.veicoliCache.get(Number(dir.veicolo_id));
+        const capacita = veicolo?.posti_totali || 8;
 
-      for (const autista of autisti) {
-        await client.query(`
-          INSERT INTO offerte_autisti (direttrice_id, autista_id, stato, expires_at)
-          VALUES ($1, $2, 'inviata', NOW() + INTERVAL '15 minutes')
-        `, [r.id, autista.id]);
-      }
-      getIO().emit('nuova_proposta_popbus', { direttrice_id: r.id });
+        const startNode = getSnapResult({coord: [lon, lat]}, nodi, 2.0);
+        const endNode = getSnapResult({coord: [destLon, destLat]}, nodi, 2.0);
+
+        if (startNode && endNode && startNode.offset_metri < endNode.offset_metri) {
+            const occupati = await getOccupazioneDinamica(dir.id, startNode.id, endNode.id);
+            const postiDisponibili = capacita - occupati;
+            
+            if (postiDisponibili >= postiRichiesti) {
+                risultatiPool.push({
+                    id: `dir_${dir.id}`,
+                    tipo: 'pop-bus', 
+                    tipo_corsa: dir.stato, 
+                    direttrice_id: dir.id,
+                    orario: dir.partenza_prevista,
+                    posti_disponibili: postiDisponibili, 
+                    is_pool: true
+                });
+            }
+        }
     }
 
-    await client.query('COMMIT');
-    console.log(`✅ [WORKER] Attivate ${direttriciAttivate.length} nuove direttrici.`);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    // 3. FALLBACK (Richiesta attivazione nuova)
+    if (risultatiPool.length === 0) {
+        risultatiPool.push({
+            id: 'nuova_proposta',
+            tipo: 'pop-bus',
+            tipo_corsa: 'nuova_proposta',
+            messaggio: "Nessun bus vicino, richiedi attivazione."
+        });
+    }
+
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPool];
+    return risultatiFinali.length > 0 ? await formatResults({ ...richiesta, distanzaMetri: distKm * 1000 }, risultatiFinali) : [];
 }

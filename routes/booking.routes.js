@@ -86,12 +86,15 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         let vId = slot.veicolo_id || (slot.id?.startsWith('priv_') ? slot.id.split('_')[1] : null);
         if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
         
+        // Calcolo scadenza: 30 minuti da ora
+        const expiresAt = new Date(Date.now() + 30 * 60000).toISOString();
+        
         const result = await client.query(
           `INSERT INTO pending (
              veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, 
-             prezzo, distanza, durata, origine, destinazione, stato, payment_intent_id, request_id
+             prezzo, distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id
            )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9,$10),4326), ST_SetSRID(ST_MakePoint($11,$12),4326), 'pending', $13, $14)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ST_SetSRID(ST_MakePoint($10,$11),4326), ST_SetSRID(ST_MakePoint($12,$13),4326), 'pending', $14, $15)
            RETURNING *`,
           [
             vId, 
@@ -101,7 +104,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
             type, 
             prezzo / slots.length, 
             slot.distanzaKm || 0, 
-            slot.durata_minuti || 0, 
+            slot.durata_minuti || 0,
+            expiresAt,
             slot.origine.lon, 
             slot.origine.lat, 
             slot.destinazione.lon, 

@@ -21,7 +21,6 @@ function getSnapResult(point, nodi, tolleranzaKm) {
 function getVirtualSnap(point, lineaGeografica) {
     try {
         const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
-        // Utilizziamo la lunghezza totale per calcolare i metri reali
         const totalLen = turf.length(lineaGeografica, { units: 'meters' });
         return {
             coord: snapped.geometry.coordinates,
@@ -67,12 +66,18 @@ export async function cercaSlotUltra(richiesta) {
 
     await loadCachesUltra();
 
+    // ESTRAZIONE DIFENSIVA: normalizziamo sia lon che lng per evitare NaN/undefined
     const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
-    const lon = Number(richiesta.coord?.lon ?? richiesta.lon);
+    const lon = Number(richiesta.coord?.lon ?? richiesta.coord?.lng ?? richiesta.lon);
     const destLat = Number(richiesta.coordDest?.lat);
-    const destLon = Number(richiesta.coordDest?.lon);
+    const destLon = Number(richiesta.coordDest?.lon ?? richiesta.coordDest?.lng);
     
-    if (!lat || !lon || !destLat || !destLon) return formatResults(richiesta, []);
+    console.log("DEBUG [1/3] Coordinate normalizzate:", { lat, lon, destLat, destLon });
+
+    if (!lat || !lon || !destLat || !destLon) {
+        console.error("DEBUG [1/3] Coordinate invalide, ritorno lista vuota.");
+        return formatResults(richiesta, []);
+    }
 
     const pStart = turf.point([lon, lat]);
     const pEnd = turf.point([destLon, destLat]);
@@ -107,6 +112,7 @@ export async function cercaSlotUltra(richiesta) {
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
         if (!disp.lat || !disp.lon) continue;
         const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
+        // Se arriviamo qui con coordinate valide, le private torneranno a funzionare
         if (disp.is_slot && disp.disponibile !== false && distVeicolo < 50) {
             risultatiPrivati.push({
                 id: `priv_${veicoloId}`,

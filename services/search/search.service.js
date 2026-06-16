@@ -9,7 +9,6 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 
-// Helper: Snap to node (Logica Statica)
 function getSnapResult(point, nodi, tolleranzaKm) {
     if (!nodi || nodi.length === 0) return null;
     return nodi.reduce((prev, curr) => {
@@ -19,13 +18,14 @@ function getSnapResult(point, nodi, tolleranzaKm) {
     }, null);
 }
 
-// Helper: Snap to line (Logica Dinamica/Virtuale)
 function getVirtualSnap(point, lineaGeografica) {
     try {
         const snapped = turf.nearestPointOnLine(lineaGeografica, point, { units: 'kilometers' });
+        // Utilizziamo la lunghezza totale per calcolare i metri reali
+        const totalLen = turf.length(lineaGeografica, { units: 'meters' });
         return {
             coord: snapped.geometry.coordinates,
-            offset_metri: snapped.properties.location * 1000,
+            offset_metri: snapped.properties.location * totalLen,
             dist: snapped.properties.dist,
             type: 'DYNAMIC'
         };
@@ -59,6 +59,12 @@ async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
 }
 
 export async function cercaSlotUltra(richiesta) {
+    console.log("DEBUG [1/3] Input ricevuto in cercaSlotUltra:", {
+        coord: richiesta.coord,
+        coordDest: richiesta.coordDest,
+        orario: richiesta.start_datetime
+    });
+
     await loadCachesUltra();
 
     const lat = Number(richiesta.coord?.lat ?? richiesta.lat);
@@ -66,7 +72,6 @@ export async function cercaSlotUltra(richiesta) {
     const destLat = Number(richiesta.coordDest?.lat);
     const destLon = Number(richiesta.coordDest?.lon);
     
-    // Validazione input base
     if (!lat || !lon || !destLat || !destLon) return formatResults(richiesta, []);
 
     const pStart = turf.point([lon, lat]);
@@ -116,7 +121,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. LOGICA POP-BUS (Con controlli di sicurezza)
+    // 3. LOGICA POP-BUS
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo, d.partenza_prevista
         FROM direttrici_virtuali d
@@ -125,7 +130,6 @@ export async function cercaSlotUltra(richiesta) {
     `, [orarioRichiesto.toISOString()]);
 
     const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
-        // Controllo esistenza geometria
         if (!dir.linea_geo?.coordinates) return null;
 
         const nodi = CacheStore.nodiCache.get(dir.id) || [];
@@ -133,45 +137,37 @@ export async function cercaSlotUltra(richiesta) {
         const capacita = veicolo?.posti_totali || 8;
         const line = turf.lineString(dir.linea_geo.coordinates); 
 
-        let startPoint = getSnapResult(pStart, nodi, 2.0) || getVirtualSnap(pStart, line);
-        let endPoint = getSnapResult(pEnd, nodi, 2.0) || getVirtualSnap(pEnd, line);
+        let startPoint = getSnapResult(pStart, nodi, 3.0) || getVirtualSnap(pStart, line);
+        let endPoint = getSnapResult(pEnd, nodi, 3.0) || getVirtualSnap(pEnd, line);
 
-        // Controllo validità snap e logica offset
-        if (startPoint && endPoint && startPoint.dist < 3.0 && endPoint.dist < 3.0 && startPoint.offset_metri < endPoint.offset_metri) {
+        console.log(`DEBUG [2/3] SNAP Dir ${dir.id}:`, {
+            startFound: !!startPoint, endFound: !!endPoint,
+            sOff: startPoint?.offset_metri, eOff: endPoint?.offset_metri
+        });
+
+        if (startPoint && endPoint && startPoint.offset_metri < endPoint.offset_metri) {
+            console.log(`DEBUG [3/3] OCCUPAZIONE Dir ${dir.id}: Querying ${startPoint.offset_metri} to ${endPoint.offset_metri}`);
             const occupati = await getOccupazioneDinamica(dir.id, startPoint.offset_metri, endPoint.offset_metri);
+            console.log(`DEBUG [3/3] OCCUPAZIONE Risultato: ${occupati} occupati / Capacità: ${capacita}`);
+            
             if ((capacita - occupati) >= postiRichiesti) {
                 return {
-                    id: `dir_${dir.id}`,
-                    tipo: 'pop-bus', 
-                    tipo_corsa: dir.stato, 
-                    direttrice_id: dir.id,
-                    veicolo_id: dir.veicolo_id || null, 
-                    posti_disponibili: capacita - occupati, 
-                    posti_totali: capacita,
-                    distanza: distanzaMetri,
-                    is_pool: true,
-                    startOffset: startPoint.offset_metri,
-                    endOffset: endPoint.offset_metri,
-                    aggancio: { start: startPoint.type, end: endPoint.type }
+                    id: `dir_${dir.id}`, tipo: 'pop-bus', tipo_corsa: dir.stato, 
+                    direttrice_id: dir.id, veicolo_id: dir.veicolo_id || null, 
+                    posti_disponibili: capacita - occupati, posti_totali: capacita,
+                    distanza: distanzaMetri, is_pool: true,
+                    startOffset: startPoint.offset_metri, endOffset: endPoint.offset_metri
                 };
             }
         }
         return null;
     }))).filter(Boolean);
 
-    // 4. FUSIONE E RISPOSTA
     const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
-
     risultatiFinali.push({
-        id: 'nuova_proposta',
-        tipo: 'pop-bus',
-        tipo_corsa: 'nuova_proposta',
-        is_pool: true, 
-        messaggio: "Non trovi il bus perfetto? Richiedi l'attivazione di una nuova direttrice.",
-        is_nuova_proposta: true,
-        distanza: distanzaMetri,
-        posti_totali: 8,
-        posti_disponibili: 8
+        id: 'nuova_proposta', tipo: 'pop-bus', tipo_corsa: 'nuova_proposta',
+        is_pool: true, messaggio: "Richiedi nuova direttrice.", is_nuova_proposta: true,
+        distanza: distanzaMetri, posti_totali: 8, posti_disponibili: 8
     });
 
     return await formatResults({ ...richiesta, distanzaMetri }, risultatiFinali);

@@ -56,7 +56,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       if (isPopBus) {
         console.log(`🚌 [POOL] Inserimento richiesta Pop-Bus con risoluzione dinamica nodi...`);
         
-        // Risoluzione dinamica: la funzione SQL crea il nodo se non esiste entro 500m
         const nodeRes = await client.query(`
           SELECT 
             get_or_create_node($1, $2) as start_node,
@@ -88,10 +87,28 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         if (!vId) throw new Error("Veicolo ID mancante per corsa privata");
         
         const result = await client.query(
-          `INSERT INTO pending (veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, distanza, origine, destinazione, stato, payment_intent_id, request_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 'pending',$12,$13)
+          `INSERT INTO pending (
+             veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, 
+             prezzo, distanza, durata, origine, destinazione, stato, payment_intent_id, request_id
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9,$10),4326), ST_SetSRID(ST_MakePoint($11,$12),4326), 'pending', $13, $14)
            RETURNING *`,
-          [vId, clienteId, slot.start_datetime, slot.posti_richiesti, type, prezzo/slots.length, slot.distanzaKm || 0, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, paymentIntent.id, requestId]
+          [
+            vId, 
+            clienteId, 
+            slot.start_datetime, 
+            slot.posti_richiesti, 
+            type, 
+            prezzo / slots.length, 
+            slot.distanzaKm || 0, 
+            slot.durata_minuti || 0, 
+            slot.origine.lon, 
+            slot.origine.lat, 
+            slot.destinazione.lon, 
+            slot.destinazione.lat, 
+            paymentIntent.id, 
+            requestId
+          ]
         );
         
         pendingRows.push(result.rows[0]);

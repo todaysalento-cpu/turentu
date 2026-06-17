@@ -55,7 +55,6 @@ import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
-// CORREZIONE: Importa la funzione di avvio, non la funzione interna al worker
 import { startPopbusWorker } from './workers/popbus.worker.js'; 
 
 const app = express();
@@ -105,7 +104,13 @@ app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
 
+// Endpoint base e controllo versione
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
+
+// Controllo versione per forzare aggiornamenti app
+app.get('/api/config/version', (req, res) => {
+  res.json({ minVersion: "1.0.0" }); // Cambia questo valore quando vuoi forzare l'update
+});
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);
@@ -119,7 +124,6 @@ const io = new Server(server, {
 });
 
 const startServer = async () => {
-  // Bind immediato alla porta per Render
   server.listen(port, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
   });
@@ -138,11 +142,9 @@ const startServer = async () => {
 
     flowRegistry.register(onboardingFlow);
     
-    // Operazioni background
     loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore:', e.message));
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
-    // AVVIO WORKER: Ora gestito internamente dal worker stesso
     startPopbusWorker();
     console.log('⚙️ [WORKER] Scheduler PopBus avviato.');
     

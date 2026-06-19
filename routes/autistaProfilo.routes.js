@@ -7,6 +7,18 @@ import { uploadFile } from '../helpers/cloudinary.js';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Mappa costante per il mapping DB -> Frontend
+const TIPO_DOCUMENTO_MAP = {
+  foto_profilo: 'foto_profilo',
+  carta_identita: 'carta_identita',
+  patente: 'patente_foto',
+  certificato_abilitazione: 'certificato_abilitazione',
+  iscrizione_ruolo: 'iscrizione_ruolo',
+  licenza_ncc: 'licenza_ncc',
+  assicurazione: 'assicurazione',
+  libretto: 'libretto',
+};
+
 // ===================== POST PROFILO =====================
 router.post(
   '/',
@@ -17,6 +29,7 @@ router.post(
       const utente_id = req.user.id;
       const { nome, cognome, telefono, iban, nome_titolare_conto, nome_banca } = req.body;
 
+      // Validazione basica
       if (!nome || !cognome || !telefono || !iban || !nome_titolare_conto || !nome_banca) {
         return res.status(400).json({ success: false, message: 'Campi obbligatori mancanti' });
       }
@@ -26,33 +39,23 @@ router.post(
         foto_profilo_url = await uploadFile(req.file.buffer, req.file.originalname);
       }
 
+      // Query di upsert
       const result = await pool.query(
-        `
-        INSERT INTO autista_profilo
+        `INSERT INTO autista_profilo 
           (utente_id, nome, cognome, telefono, iban, nome_titolare_conto, nome_banca, foto_profilo, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8, NOW(), NOW())
-        ON CONFLICT (utente_id)
-        DO UPDATE SET
-          nome = $2,
-          cognome = $3,
-          telefono = $4,
-          iban = $5,
-          nome_titolare_conto = $6,
-          nome_banca = $7,
-          foto_profilo = COALESCE($8, autista_profilo.foto_profilo),
-          updated_at = NOW()
-        RETURNING *;
-        `,
-        [
-          utente_id,
-          nome,
-          cognome,
-          telefono,
-          iban,
-          nome_titolare_conto,
-          nome_banca,
-          foto_profilo_url,
-        ]
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+         ON CONFLICT (utente_id)
+         DO UPDATE SET
+           nome = EXCLUDED.nome,
+           cognome = EXCLUDED.cognome,
+           telefono = EXCLUDED.telefono,
+           iban = EXCLUDED.iban,
+           nome_titolare_conto = EXCLUDED.nome_titolare_conto,
+           nome_banca = EXCLUDED.nome_banca,
+           foto_profilo = COALESCE(EXCLUDED.foto_profilo, autista_profilo.foto_profilo),
+           updated_at = NOW()
+         RETURNING *;`,
+        [utente_id, nome, cognome, telefono, iban, nome_titolare_conto, nome_banca, foto_profilo_url]
       );
 
       res.json({ success: true, data: result.rows[0] });
@@ -63,53 +66,34 @@ router.post(
   }
 );
 
-// ===================== GET PROFILO LOGGATO CON DOCUMENTI =====================
+// ===================== GET PROFILO LOGGATO =====================
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const utente_id = req.user.id;
 
-    // 1️⃣ Recupera dati profilo
-    const profiloResult = await pool.query(
-      'SELECT * FROM autista_profilo WHERE utente_id = $1',
-      [utente_id]
-    );
-    const profilo = profiloResult.rows[0] || null;
+    // 1️⃣ Recupero parallelo per performance
+    const [profiloRes, docRes] = await Promise.all([
+      pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1', [utente_id]),
+      pool.query('SELECT tipo, url FROM documenti_autista WHERE autista_id = $1', [utente_id])
+    ]);
 
+    const profilo = profiloRes.rows[0];
     if (!profilo) {
       return res.json({ success: true, data: null });
     }
 
-    // 2️⃣ Recupera documenti
-    const docResult = await pool.query(
-      'SELECT tipo, url FROM documenti_autista WHERE autista_id = $1',
-      [utente_id]
-    );
-
-    // Mappa DB -> frontend (JS puro, niente TypeScript)
-    const tipoMap = {
-      foto_profilo: 'foto_profilo',
-      carta_identita: 'carta_identita',
-      patente: 'patente_foto',               // ← mappatura corretta
-      certificato_abilitazione: 'certificato_abilitazione',
-      iscrizione_ruolo: 'iscrizione_ruolo',
-      licenza_ncc: 'licenza_ncc',
-      assicurazione: 'assicurazione',
-      libretto: 'libretto',
-    };
-
+    // 2️⃣ Trasformazione sicura dei documenti
     const documenti = {};
-    docResult.rows.forEach(doc => {
-      const key = tipoMap[doc.tipo];
-      if (key && doc.url) documenti[key] = doc.url;
+    docRes.rows.forEach(({ tipo, url }) => {
+      // Usa il mapping se esiste, altrimenti usa il nome originale del tipo dal DB
+      const key = TIPO_DOCUMENTO_MAP[tipo] || tipo;
+      documenti[key] = url;
     });
 
-    // 3️⃣ Componi risposta finale
-    const responseData = {
-      ...profilo,
-      documenti,
-    };
-
-    res.json({ success: true, data: responseData });
+    res.json({ 
+      success: true, 
+      data: { ...profilo, documenti } 
+    });
 
   } catch (err) {
     console.error('❌ Errore GET /autista/profilo/me:', err);

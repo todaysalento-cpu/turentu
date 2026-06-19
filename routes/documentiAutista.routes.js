@@ -7,7 +7,6 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Mappa per il DB
 const tipoMap = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
@@ -16,21 +15,31 @@ const tipoMap = {
   iscrizione_ruolo: 'iscrizione_ruolo',
 };
 
-// ===================== ROUTE =====================
 router.post(
   '/',
   authMiddleware,
-  // USIAMO .any() per accettare ogni tipo di campo inviato dal FormData.
-  // Questo risolve l'errore "Unexpected field" una volta per tutte.
   upload.any(), 
   async (req, res) => {
+    // 1. LOG INIZIALE: Controlliamo cosa arriva dalla richiesta
+    console.log('📡 [DEBUG] Nuova richiesta POST /api/autista/profilo');
+    console.log('👤 Utente ID:', req.user?.id);
+    console.log('📦 Body ricevuto (dati testuali):', JSON.stringify(req.body, null, 2));
+    console.log('📂 Numero file ricevuti:', req.files ? req.files.length : 0);
+
     try {
       const utente_id = req.user.id;
       
-      // 1. ESTRAZIONE DATI TESTUALI (dal body)
+      // LOG dei file trovati
+      if (req.files) {
+        req.files.forEach((f, i) => {
+          console.log(`   File ${i}: fieldname=${f.fieldname}, mimetype=${f.mimetype}, size=${f.size}`);
+        });
+      }
+
       const { nome, cognome, iban, telefono, nome_titolare_conto, nome_banca } = req.body;
       
       // 2. AGGIORNAMENTO DATI TESTUALI
+      console.log('💾 Inizio salvataggio dati testuali...');
       await pool.query(
         `INSERT INTO autista_profilo (utente_id, nome, cognome, iban, telefono, nome_titolare_conto, nome_banca, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
@@ -45,24 +54,24 @@ router.post(
             updated_at = NOW()`,
         [utente_id, nome, cognome, iban, telefono, nome_titolare_conto, nome_banca]
       );
+      console.log('✅ Dati testuali salvati con successo.');
 
-      // 3. GESTIONE FILE (estratta da req.files che ora è un array)
+      // 3. GESTIONE FILE
       const fileUrls = {};
       if (req.files && req.files.length > 0) {
         for (const file of req.files) {
+          console.log(`🚀 Caricamento file su Cloudinary: ${file.fieldname}`);
+          
           const url = await uploadFile(file.buffer, file.originalname);
-          if (!url) continue;
+          if (!url) {
+            console.error(`❌ Fallito caricamento per: ${file.fieldname}`);
+            continue;
+          }
 
-          // Se è la foto profilo
           if (file.fieldname === 'foto_profilo') {
             fileUrls.foto_profilo = url;
-            await pool.query(
-              `UPDATE autista_profilo SET foto_profilo = $1 WHERE utente_id = $2`,
-              [url, utente_id]
-            );
-          } 
-          // Se è un documento
-          else if (tipoMap[file.fieldname]) {
+            await pool.query(`UPDATE autista_profilo SET foto_profilo = $1 WHERE utente_id = $2`, [url, utente_id]);
+          } else if (tipoMap[file.fieldname]) {
             const tipoDb = tipoMap[file.fieldname];
             fileUrls[file.fieldname] = url;
             await pool.query(
@@ -73,6 +82,7 @@ router.post(
               [utente_id, tipoDb, url]
             );
           }
+          console.log(`✅ File ${file.fieldname} salvato su DB.`);
         }
       }
 
@@ -83,7 +93,10 @@ router.post(
       });
 
     } catch (err) {
-      console.error('❌ Errore critico:', err);
+      // 4. LOG ERRORE CRITICO
+      console.error('❌ ERRORE CRITICO nel processamento:', err.message);
+      console.error('Stack trace:', err.stack);
+      
       return res.status(500).json({
         success: false,
         message: 'Errore interno server',

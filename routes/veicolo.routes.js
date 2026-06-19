@@ -65,15 +65,35 @@ async function buildCoord(lat, lon, localita) {
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
         const localFile = path.join(process.cwd(), 'data', 'marche_modelli.json');
-        log(`Tentativo lettura file: ${localFile} | Esiste: ${fs.existsSync(localFile)}`);
+        log(`Tentativo lettura file: ${localFile}`, 'MARCHE-MODELLI');
         
-        if (!fs.existsSync(localFile)) return res.status(404).json({ error: 'File non trovato', path: localFile });
+        if (!fs.existsSync(localFile)) {
+            log(`ERRORE: File non trovato in ${localFile}`, 'MARCHE-MODELLI');
+            return res.status(404).json({ error: 'File non trovato', path: localFile });
+        }
 
-        const raw = await fs.promises.readFile(localFile, 'utf-8');
-        const jsonData = JSON.parse(raw);
+        // Lettura robusta
+        const raw = fs.readFileSync(localFile, 'utf-8');
+        log(`File letto. Dimensione: ${raw.length} caratteri.`, 'MARCHE-MODELLI');
+
+        // Parsing con controllo errori
+        let jsonData;
+        try {
+            jsonData = JSON.parse(raw);
+        } catch (parseErr) {
+            log(`ERRORE di Parsing JSON: ${parseErr.message}`, 'MARCHE-MODELLI');
+            return res.status(500).json({ error: 'JSON malformato', details: parseErr.message });
+        }
+
+        // Verifica struttura
+        if (!Array.isArray(jsonData)) {
+            log(`ERRORE: Il file non è un array.`, 'MARCHE-MODELLI');
+            return res.status(500).json({ error: 'Il file JSON non è un array valido' });
+        }
+
         res.json(jsonData);
     } catch (err) { 
-        log(`ERRORE critico in /marche-modelli: ${err.message}`);
+        log(`ERRORE critico in /marche-modelli: ${err.message}`, 'MARCHE-MODELLI');
         res.status(500).json({ error: err.message }); 
     }
 });

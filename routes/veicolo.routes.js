@@ -19,11 +19,8 @@ veicoloRouter.use((req, res, next) => {
 // ---------------------------------------------------
 // CONFIGURAZIONI
 // ---------------------------------------------------
-const CACHE_TTL = 1000 * 60 * 60; 
-const cache = { marcheModelli: { data: [], lastFetch: 0 } };
-export const TIPI_VEICOLO = ['citycar', 'berlina', 'station_wagon', 'suv', 'minivan', 'van', 'luxury', 'electric'];
+const TIPI_VEICOLO = ['citycar', 'berlina', 'station_wagon', 'suv', 'minivan', 'van', 'luxury', 'electric'];
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-const TARGA_REGEX = /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/;
 
 const log = (msg, id = 'SYSTEM') => console.log(`[VeicoloRouter] [${id}] ${new Date().toISOString()} - ${msg}`);
 
@@ -65,40 +62,33 @@ async function buildCoord(lat, lon, localita) {
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
         const localFile = path.join(process.cwd(), 'data', 'marche_modelli.json');
-        log(`Tentativo lettura file: ${localFile}`, 'MARCHE-MODELLI');
-        
-        if (!fs.existsSync(localFile)) {
-            log(`ERRORE: File non trovato in ${localFile}`, 'MARCHE-MODELLI');
-            return res.status(404).json({ error: 'File non trovato', path: localFile });
-        }
-
-        // Lettura robusta
+        if (!fs.existsSync(localFile)) return res.status(404).json({ error: 'File non trovato' });
         const raw = fs.readFileSync(localFile, 'utf-8');
-        log(`File letto. Dimensione: ${raw.length} caratteri.`, 'MARCHE-MODELLI');
-
-        // Parsing con controllo errori
-        let jsonData;
-        try {
-            jsonData = JSON.parse(raw);
-        } catch (parseErr) {
-            log(`ERRORE di Parsing JSON: ${parseErr.message}`, 'MARCHE-MODELLI');
-            return res.status(500).json({ error: 'JSON malformato', details: parseErr.message });
-        }
-
-        // Verifica struttura
-        if (!Array.isArray(jsonData)) {
-            log(`ERRORE: Il file non è un array.`, 'MARCHE-MODELLI');
-            return res.status(500).json({ error: 'Il file JSON non è un array valido' });
-        }
-
-        res.json(jsonData);
-    } catch (err) { 
-        log(`ERRORE critico in /marche-modelli: ${err.message}`, 'MARCHE-MODELLI');
-        res.status(500).json({ error: err.message }); 
-    }
+        res.json(JSON.parse(raw));
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
+
+// NUOVA ROTTA: Verifica Targa
+veicoloRouter.get('/check-targa', async (req, res) => {
+    try {
+        const { targa, id } = req.query;
+        if (!targa) return res.status(400).json({ error: 'Targa mancante' });
+
+        const query = id 
+            ? 'SELECT COUNT(*) as count FROM veicolo WHERE targa = $1 AND id != $2'
+            : 'SELECT COUNT(*) as count FROM veicolo WHERE targa = $1';
+            
+        const params = id ? [targa.toUpperCase(), id] : [targa.toUpperCase()];
+        const result = await pool.query(query, params);
+        
+        res.json({ inUse: parseInt(result.rows[0].count) > 0 });
+    } catch (err) {
+        log(`Errore in /check-targa: ${err.message}`);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // ---------------------------------------------------
 // MIDDLEWARE PROTEZIONE
@@ -112,7 +102,7 @@ veicoloRouter.get('/', async (req, res) => {
     try {
         const veicoli = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE driver_id=$1 ORDER BY id DESC`, [req.user.id]);
         res.json(veicoli.rows);
-    } catch (err) { log(`Errore GET /: ${err.message}`); res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.post('/', async (req, res) => {
@@ -126,7 +116,7 @@ veicoloRouter.post('/', async (req, res) => {
             [req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, coord.ewkt, data.localita, data.image_url]
         );
         res.json(result.rows[0]);
-    } catch (err) { log(`Errore POST /: ${err.message}`); res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.put('/:id', async (req, res) => {
@@ -141,14 +131,14 @@ veicoloRouter.put('/:id', async (req, res) => {
             [data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, coord.ewkt, data.localita, data.image_url, req.params.id, req.user.id]
         );
         res.json(result.rows[0]);
-    } catch (err) { log(`Errore PUT /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.delete('/:id', async (req, res) => {
     try {
-        const result = await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2 RETURNING *`, [req.params.id, req.user.id]);
+        await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
         res.json({ success: true });
-    } catch (err) { log(`Errore DELETE /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 export default veicoloRouter;

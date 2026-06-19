@@ -2,12 +2,14 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CacheManager } from '../utils/cacheManager.js';
-// 🔥 Import per la sincronizzazione del motore di ricerca
 import { upsertVeicolo, removeVeicolo } from '../services/search/search.cache.js'; 
 import fs from 'fs';
 import path from 'path';
 
 export const veicoloRouter = express.Router();
+
+// Utility per log coerenti
+const log = (msg, id = 'SYSTEM') => console.log(`[VeicoloRouter] [${id}] ${new Date().toISOString()} - ${msg}`);
 
 // ---------------------------------------------------
 // CACHE (Locale per Marche/Modelli)
@@ -15,7 +17,7 @@ export const veicoloRouter = express.Router();
 const cache = {
   marcheModelli: { data: [], lastFetch: 0 }
 };
-const CACHE_TTL = 1000 * 60 * 60;
+const CACHE_TTL = 1000 * 60 * 60; // 1 ora
 
 // ---------------------------------------------------
 // CONFIGURAZIONI E HELPER
@@ -73,33 +75,44 @@ async function buildCoord(lat, lon, localita) {
 // ---------------------------------------------------
 veicoloRouter.use(authMiddleware);
 
+// API MARCHE/MODELLI CON LOGGING DI DIAGNOSTICA
 veicoloRouter.get('/marche-modelli', async (req, res) => {
   try {
     const now = Date.now();
     if (cache.marcheModelli.data.length && now - cache.marcheModelli.lastFetch < CACHE_TTL) {
+      log('Cache hit - restituzione dati in memoria');
       return res.json(cache.marcheModelli.data);
     }
-    const localFile = path.resolve('data/marche_modelli.json');
-    if (!fs.existsSync(localFile)) return res.status(500).json({ error: 'Dati veicoli non disponibili' });
+
+    // Risoluzione percorso assoluto (process.cwd() è la root del progetto)
+    const localFile = path.join(process.cwd(), 'data', 'marche_modelli.json');
+    log(`Lettura file da: ${localFile}`);
+
+    if (!fs.existsSync(localFile)) {
+      log('ERRORE: Il file marche_modelli.json non esiste nel path specificato!');
+      return res.status(500).json({ error: 'File dati non trovato sul server' });
+    }
+
     const raw = await fs.promises.readFile(localFile, 'utf-8');
     const jsonData = JSON.parse(raw);
+    
+    log(`Lettura riuscita. Elementi trovati: ${jsonData.length}`);
     cache.marcheModelli = { data: jsonData, lastFetch: now };
     res.json(jsonData);
-  } catch (err) { res.status(500).json({ error: 'Errore caricamento marche-modelli' }); }
+  } catch (err) { 
+    log(`Errore nel caricamento del catalogo: ${err.message}`);
+    res.status(500).json({ error: 'Errore caricamento marche-modelli' }); 
+  }
 });
 
 veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
 
-// ROTTA VALIDAZIONE TARGA CORRETTA
 veicoloRouter.get('/check-targa', async (req, res) => {
   try {
     let { targa, id } = req.query;
     if (!targa) return res.status(400).json({ error: 'Targa mancante' });
-
-    // Pulizia ID: gestisce 'undefined' o stringhe vuote
+    
     const parsedId = (id === 'undefined' || id === '' || !id) ? null : Number(id);
-
-    // Query dinamica: costruiamo array parametri in base alla presenza di ID
     let query = 'SELECT 1 FROM veicolo WHERE targa = $1';
     let params = [targa.toString().toUpperCase()];
 
@@ -111,7 +124,7 @@ veicoloRouter.get('/check-targa', async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ inUse: result.rowCount > 0 });
   } catch (err) { 
-    console.error('[Router] Errore in /check-targa:', err);
+    log(`Errore in /check-targa: ${err.message}`);
     res.status(500).json({ error: 'Errore interno nel controllo targa' }); 
   }
 });
@@ -133,9 +146,7 @@ veicoloRouter.get('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ---------------------------------------------------
 // CREATE / UPDATE / DELETE CON SINCRONIZZAZIONE CACHE
-// ---------------------------------------------------
 veicoloRouter.post('/', async (req, res) => {
   try {
     const data = normalizeInput(req.body);
@@ -152,7 +163,6 @@ veicoloRouter.post('/', async (req, res) => {
     
     await CacheManager.veicolo.update(result.rows[0]);
     upsertVeicolo(result.rows[0]);
-    
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -197,7 +207,6 @@ veicoloRouter.delete('/:id', async (req, res) => {
     
     await CacheManager.veicolo.delete(Number(req.params.id));
     removeVeicolo(Number(req.params.id));
-    
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

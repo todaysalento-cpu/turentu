@@ -5,9 +5,9 @@ import { uploadFile } from '../helpers/cloudinary.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+// Configurazione memoryStorage per buffer
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ===================== DOCUMENTI =====================
 const documentFields = [
   { name: 'carta_identita', maxCount: 1 },
   { name: 'patente_foto', maxCount: 1 },
@@ -15,11 +15,10 @@ const documentFields = [
   { name: 'iscrizione_ruolo', maxCount: 1 },
 ];
 
-// ===================== MAPPING FRONTEND -> DB =====================
 const tipoMap = {
   foto_profilo: 'foto_profilo',
   carta_identita: 'carta_identita',
-  patente_foto: 'patente', // <-- mapping corretto per il DB
+  patente_foto: 'patente',
   certificato_abilitazione: 'certificato_abilitazione',
   iscrizione_ruolo: 'iscrizione_ruolo',
 };
@@ -28,23 +27,24 @@ const tipoMap = {
 router.post(
   '/',
   authMiddleware,
+  // Usiamo .fields per i file. Multer ignorerà i campi di testo (che finiranno in req.body)
   upload.fields([{ name: 'foto_profilo', maxCount: 1 }, ...documentFields]),
   async (req, res) => {
     try {
       const utente_id = req.user.id;
       const fileUrls = {};
 
+      // LOG PER DEBUG: controlla cosa ricevi
       console.log('✅ User ID:', utente_id);
-      console.log('📂 Files ricevuti:', req.files);
+      console.log('📝 Campi di testo ricevuti (body):', req.body);
+      console.log('📂 Files ricevuti:', req.files ? Object.keys(req.files) : 'Nessuno');
 
-      // ===================== FOTO PROFILO =====================
+      // 1. GESTIONE FOTO PROFILO
       const fotoFile = req.files?.foto_profilo?.[0];
       if (fotoFile) {
-        console.log('📌 Foto profilo:', fotoFile.originalname);
         const url = await uploadFile(fotoFile.buffer, fotoFile.originalname);
         if (url) {
           fileUrls.foto_profilo = url;
-
           await pool.query(
             `INSERT INTO autista_profilo (utente_id, foto_profilo, updated_at)
              VALUES ($1, $2, NOW())
@@ -55,23 +55,15 @@ router.post(
         }
       }
 
-      // ===================== DOCUMENTI =====================
+      // 2. GESTIONE DOCUMENTI
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
 
-        if (!file) {
-          console.log(`⚠️ Nessun file per ${field.name}`);
-          continue;
-        }
+        if (!file) continue;
 
-        console.log(`📂 Upload ${field.name}:`, file.originalname);
         const url = await uploadFile(file.buffer, file.originalname);
-        if (!url) {
-          console.log(`❌ Upload fallito: ${field.name}`);
-          continue;
-        }
+        if (!url) continue;
 
-        // Usa mapping per il DB, ma mantiene chiave frontend per il client
         const tipoDb = tipoMap[field.name];
         fileUrls[field.name] = url;
 
@@ -85,23 +77,29 @@ router.post(
              note_admin = NULL`,
           [utente_id, tipoDb, url]
         );
-
-        console.log(`✅ Salvato DB: ${tipoDb}`);
       }
 
-      console.log('📤 RESPONSE:', fileUrls);
+      // 3. (OPZIONALE) GESTIONE DATI TESTUALI
+      // Se devi salvare anche nome/cognome/iban che arrivano dal form:
+      if (req.body.nome || req.body.cognome) {
+          await pool.query(
+              `UPDATE autista_profilo SET nome = $1, cognome = $2, iban = $3 WHERE utente_id = $4`,
+              [req.body.nome, req.body.cognome, req.body.iban, utente_id]
+          );
+      }
 
       return res.json({
         success: true,
-        message: 'Documenti e foto_profilo salvati correttamente',
+        message: 'Dati, documenti e foto salvati correttamente',
         fileUrls,
       });
 
     } catch (err) {
-      console.error('❌ Errore /autista/documenti POST:', err);
+      console.error('❌ Errore critico nel salvataggio profilo:', err);
       return res.status(500).json({
         success: false,
         message: 'Errore interno server',
+        error: err.message 
       });
     }
   }

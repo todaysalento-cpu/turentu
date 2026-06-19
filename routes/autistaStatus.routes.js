@@ -10,72 +10,92 @@ router.get('/status', authMiddleware, async (req, res) => {
     if (!req.user || !req.user.id) {
       return res.status(401).json({
         error: 'Utente non autenticato',
-        profilo: null,
-        veicolo: null,
-        disponibilita: null,
-        tariffe: []
+        profilo: false,
+        veicolo: false,
+        disponibilita: false,
+        tariffe: false
       });
     }
 
     const userId = req.user.id;
 
+    console.log('👤 USER ID:', userId); // 🔥 DEBUG
+    console.log('👤 USER OBJ:', req.user);
+
     // 🔹 PROFILO AUTISTA
-    let profilo = null;
+    let profilo = false;
     try {
-      const resP = await pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1', [userId]);
-      profilo = resP.rowCount > 0 ? resP.rows[0] : null;
+      const profiloResult = await pool.query(
+        'SELECT * FROM autista_profilo WHERE utente_id = $1',
+        [userId]
+      );
+
+      console.log('📄 PROFILO RESULT:', profiloResult.rows); // 🔥 DEBUG
+
+      profilo = profiloResult.rowCount > 0;
     } catch (err) {
       console.error('Errore query profilo:', err.message);
     }
 
     // 🔹 VEICOLO
-    let veicolo = null;
+    let veicolo = false;
     try {
-      const resV = await pool.query('SELECT * FROM veicolo WHERE driver_id = $1 LIMIT 1', [userId]);
-      veicolo = resV.rowCount > 0 ? resV.rows[0] : null;
+      const veicoloResult = await pool.query(
+        'SELECT * FROM veicolo WHERE driver_id = $1',
+        [userId]
+      );
+
+      console.log('🚗 VEICOLO RESULT:', veicoloResult.rows);
+
+      veicolo = veicoloResult.rowCount > 0;
     } catch (err) {
       console.error('Errore query veicolo:', err.message);
     }
 
     // 🔹 DISPONIBILITÀ
-    let disponibilita = null;
+    let disponibilita = false;
     try {
-      const resD = await pool.query(
+      const dispResult = await pool.query(
         `SELECT d.* FROM disponibilita_veicolo d
          JOIN veicolo v ON d.veicolo_id = v.id
-         WHERE v.driver_id = $1 LIMIT 1`,
+         WHERE v.driver_id = $1`,
         [userId]
       );
-      disponibilita = resD.rowCount > 0 ? resD.rows[0] : null;
+
+      console.log('📅 DISP RESULT:', dispResult.rows);
+
+      disponibilita = dispResult.rowCount > 0;
     } catch (err) {
       console.error('Errore query disponibilita:', err.message);
     }
 
     // 🔹 TARIFFE
-    let tariffe = [];
+    let tariffe = false;
     try {
-      const resT = await pool.query(
+      const tariffeResult = await pool.query(
         `SELECT t.* FROM tariffe t
          JOIN veicolo v ON t.veicolo_id = v.id
          WHERE v.driver_id = $1`,
         [userId]
       );
-      tariffe = resT.rows; // Array di tariffe
+
+      console.log('💰 TARIFFE RESULT:', tariffeResult.rows);
+
+      tariffe = tariffeResult.rowCount > 0;
     } catch (err) {
       console.error('Errore query tariffe:', err.message);
     }
 
-    // Risposta con dati strutturati (se mancano, i campi saranno null/[])
     return res.json({ profilo, veicolo, disponibilita, tariffe });
 
   } catch (err) {
-    console.error('Errore onboarding status:', err.message);
+    console.error('Errore onboarding status:', err.message, err.stack);
     res.status(500).json({
       error: 'Errore server',
-      profilo: null,
-      veicolo: null,
-      disponibilita: null,
-      tariffe: []
+      profilo: false,
+      veicolo: false,
+      disponibilita: false,
+      tariffe: false
     });
   }
 });

@@ -2,10 +2,9 @@ import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
 import { CacheStore, upsertVeicolo } from '../search/search.cache.js'; 
 
-// Utility per log coerenti
 const logger = {
-  info: (msg, id) => console.log(`[VeicoloService] INFO [ID:${id}] ${msg}`),
-  error: (msg, id, err) => console.error(`[VeicoloService] ERROR [ID:${id}] ${msg}`, err?.message || err)
+  info: (msg, id) => console.log(`[VeicoloService] INFO [ID:${id || 'SYSTEM'}] ${msg}`),
+  error: (msg, id, err) => console.error(`[VeicoloService] ERROR [ID:${id || 'SYSTEM'}] ${msg}`, err?.message || err)
 };
 
 const getVeicoliMap = () => CacheStore.veicoliCache;
@@ -31,7 +30,7 @@ export async function aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, cli
     logger.info(`Posizione corrente salvata su DB`, veicoloId);
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');
-    logger.error(`Errore persistenza posizione corrente`, veicoloId, err);
+    logger.error(`Fallimento persistenza posizione corrente`, veicoloId, err);
     throw err;
   } finally {
     if (localClient) client.release();
@@ -55,8 +54,8 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
       `INSERT INTO posizione_veicolo (veicolo_id, coord, timestamp, valid_until, tipo)
        SELECT $1, ST_SetSRID(ST_MakePoint($2,$3),4326), $4, $5, 'PREDITTIVA'
        WHERE NOT EXISTS (
-          SELECT 1 FROM posizione_veicolo
-          WHERE veicolo_id = $1
+           SELECT 1 FROM posizione_veicolo
+           WHERE veicolo_id = $1
             AND tipo='PREDITTIVA'
             AND timestamp <= $5
             AND (valid_until IS NULL OR valid_until >= $4)
@@ -68,7 +67,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
     if (res.rowCount > 0) logger.info(`Posizione predittiva salvata su DB`, veicoloId);
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');
-    logger.error(`Errore persistenza posizione predittiva`, veicoloId, err);
+    logger.error(`Fallimento persistenza posizione predittiva`, veicoloId, err);
     throw err;
   } finally {
     if (localClient) client.release();
@@ -78,6 +77,7 @@ export async function aggiornaPosizionePredittiva(veicoloId, coord, fromTime, te
 // =========================
 // Aggiorna posizione CORRENTE + Cache
 export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil, client) {
+  logger.info(`Inizio aggiornamento CORRENTE`, veicoloId);
   await aggiornaPosizioneVeicolo(veicoloId, coord, validUntil, client);
 
   const v = getVeicoliMap().get(Number(veicoloId));
@@ -89,17 +89,22 @@ export async function aggiornaPosizioneVeicoloCache(veicoloId, coord, validUntil
       coordCorrente: { lat: coord.lat, lon: coord.lon, tipo: 'CORRENTE', timestamp: new Date() }
     };
 
-    CacheManager.veicolo.update(updatedVeicolo);
-    upsertVeicolo(updatedVeicolo);
-    logger.info(`Cache aggiornata (CORRENTE)`, veicoloId);
+    try {
+      await CacheManager.veicolo.update(updatedVeicolo);
+      upsertVeicolo(updatedVeicolo);
+      logger.info(`Cache aggiornata correttamente`, veicoloId);
+    } catch (cacheErr) {
+      logger.error(`Errore durante aggiornamento cache`, veicoloId, cacheErr);
+    }
   } else {
-    logger.info(`Veicolo non presente in cache, skip cache update`, veicoloId);
+    logger.info(`Veicolo ID ${veicoloId} non trovato in memoria, skipping cache sync`, veicoloId);
   }
 }
 
 // =========================
 // Aggiorna posizione PREDITTIVA + Cache
 export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTime, tempoX, client) {
+  logger.info(`Inizio aggiornamento PREDITTIVO`, veicoloId);
   await aggiornaPosizionePredittiva(veicoloId, coord, fromTime, tempoX, client);
 
   const v = getVeicoliMap().get(Number(veicoloId));
@@ -117,9 +122,13 @@ export async function aggiornaPosizionePredittivaCache(veicoloId, coord, fromTim
       }
     };
 
-    CacheManager.veicolo.update(updatedVeicolo);
-    upsertVeicolo(updatedVeicolo);
-    logger.info(`Cache aggiornata (PREDITTIVA)`, veicoloId);
+    try {
+      await CacheManager.veicolo.update(updatedVeicolo);
+      upsertVeicolo(updatedVeicolo);
+      logger.info(`Cache predittiva aggiornata`, veicoloId);
+    } catch (cacheErr) {
+      logger.error(`Errore durante aggiornamento cache predittiva`, veicoloId, cacheErr);
+    }
   }
 }
 
@@ -129,7 +138,7 @@ export function getVeicoloCoordCache(veicoloId, atTime = new Date()) {
   const v = getVeicoliMap().get(Number(veicoloId));
   
   if (!v) {
-      logger.info(`Veicolo non trovato, return FALLBACK`, veicoloId);
+      logger.info(`Veicolo non in cache, fallback posizione`, veicoloId);
       return { lat: 41.8902, lon: 12.4922, tipo: 'FALLBACK' };
   }
 
@@ -147,10 +156,13 @@ export function getVeicoliCoordBatchCache(richieste) {
   const map = {};
   const now = new Date();
   
-  for (const r of richieste) {
-    map[r.veicolo_id] = getVeicoloCoordCache(r.veicolo_id, r.atTime || now);
+  try {
+    for (const r of richieste) {
+      map[r.veicolo_id] = getVeicoloCoordCache(r.veicolo_id, r.atTime || now);
+    }
+    logger.info(`Batch coordinata elaborato: ${richieste.length} richieste`, 'BATCH');
+  } catch (err) {
+    logger.error(`Errore critico durante elaborazione batch`, 'BATCH', err);
   }
-  
-  logger.info(`Batch coordinata elaborato: ${richieste.length} richieste`, 'BATCH');
   return map;
 }

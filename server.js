@@ -75,10 +75,17 @@ app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
 
+// --- LOG GLOBALE ---
 app.use((req, res, next) => {
   console.log(`📡 [REQ] ${req.method} ${req.url} - Origin: ${req.headers.origin}`);
   next();
 });
+
+// --- DEBUG MIDDLEWARE: Intercetta richieste veicolo ---
+app.use('/api/veicolo', (req, res, next) => {
+    console.log(`🔍 [DEBUG_VEICOLO] Accesso al router veicolo: ${req.method} ${req.url}`);
+    next();
+}, veicoloRouter);
 
 // ======================= ROUTES =======================
 app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
@@ -87,7 +94,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/booking', bookingClienteRouter);
 app.use('/api/disponibilita', disponibilitaRouter);
-app.use('/api/veicolo', veicoloRouter);
+// veicoloRouter è già montato sopra con debug
 app.use('/api/corse', corseRouter);
 app.use('/api/pending', pendingRouter);
 app.use('/api/popbus', popbusRouter);
@@ -104,13 +111,8 @@ app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
 
-// Endpoint base e controllo versione
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
-
-// Controllo versione per forzare aggiornamenti app
-app.get('/api/config/version', (req, res) => {
-  res.json({ minVersion: "1.0.0" }); // Cambia questo valore quando vuoi forzare l'update
-});
+app.get('/api/config/version', (req, res) => { res.json({ minVersion: "1.0.0" }); });
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);
@@ -142,7 +144,11 @@ const startServer = async () => {
 
     flowRegistry.register(onboardingFlow);
     
-    loadCachesUltra().catch(e => console.error('⚠️ [CACHE] Errore:', e.message));
+    // --- CARICAMENTO CACHE CRITICO ---
+    console.log('🔄 [INIT] Caricamento Cache Ultra in corso...');
+    await loadCachesUltra(); 
+    console.log('✅ [INIT] Cache Ultra caricata.');
+    
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
     startPopbusWorker();
@@ -151,6 +157,7 @@ const startServer = async () => {
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {
     console.error('💥 [CRITICAL] Errore durante l\'inizializzazione:', err);
+    process.exit(1); // Esce in caso di errore critico per forzare il riavvio di Render
   }
 };
 

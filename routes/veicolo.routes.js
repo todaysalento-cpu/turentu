@@ -9,9 +9,17 @@ import path from 'path';
 export const veicoloRouter = express.Router();
 
 // ---------------------------------------------------
-// CONFIGURAZIONI E VARIABILI GLOBALI
+// MIDDLEWARE DI DEBUG (PERIMETRALE)
 // ---------------------------------------------------
-const CACHE_TTL = 1000 * 60 * 60; // 1 ora
+veicoloRouter.use((req, res, next) => {
+    console.log(`[DEBUG_ROUTER] Ricevuta richiesta: ${req.method} ${req.originalUrl}`);
+    next();
+});
+
+// ---------------------------------------------------
+// CONFIGURAZIONI
+// ---------------------------------------------------
+const CACHE_TTL = 1000 * 60 * 60; 
 const cache = { marcheModelli: { data: [], lastFetch: 0 } };
 export const TIPI_VEICOLO = ['citycar', 'berlina', 'station_wagon', 'suv', 'minivan', 'van', 'luxury', 'electric'];
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
@@ -39,18 +47,14 @@ function normalizeInput(body) {
     };
 }
 
-function validateVeicolo(data) {
-    if (data.tipo && !TIPI_VEICOLO.includes(data.tipo)) return 'Tipo veicolo non valido';
-    if (data.targa && !TARGA_REGEX.test(data.targa)) return 'Formato targa non valido';
-    return null;
-}
-
 async function buildCoord(lat, lon, localita) {
     if ((lat == null || lon == null) && localita) {
         const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(localita)}&key=${GOOGLE_MAPS_API_KEY}&region=it`;
-        const response = await fetch(url);
-        const data = await response.json();
-        if (data.results?.length) return { lat: data.results[0].geometry.location.lat, lon: data.results[0].geometry.location.lng, ewkt: `SRID=4326;POINT(${data.results[0].geometry.location.lng} ${data.results[0].geometry.location.lat})` };
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.results?.length) return { lat: data.results[0].geometry.location.lat, lon: data.results[0].geometry.location.lng, ewkt: `SRID=4326;POINT(${data.results[0].geometry.location.lng} ${data.results[0].geometry.location.lat})` };
+        } catch (e) { log(`Errore Geocoding: ${e.message}`); }
     }
     return { lat, lon, ewkt: lat && lon ? `SRID=4326;POINT(${lon} ${lat})` : null };
 }
@@ -59,31 +63,18 @@ async function buildCoord(lat, lon, localita) {
 // ROTTE PUBBLICHE
 // ---------------------------------------------------
 veicoloRouter.get('/marche-modelli', async (req, res) => {
-    log('Richiesta ricevuta per: /marche-modelli');
     try {
-        const now = Date.now();
-        if (cache.marcheModelli.data.length && now - cache.marcheModelli.lastFetch < CACHE_TTL) {
-            log('Servito da cache in memoria');
-            return res.json(cache.marcheModelli.data);
-        }
-        
         const localFile = path.join(process.cwd(), 'data', 'marche_modelli.json');
-        log(`Tentativo lettura file: ${localFile}`);
+        log(`Tentativo lettura file: ${localFile} | Esiste: ${fs.existsSync(localFile)}`);
         
-        if (!fs.existsSync(localFile)) {
-            log(`ERRORE: File non trovato in ${localFile}`);
-            return res.status(404).json({ error: 'File dati non esistente sul server' });
-        }
+        if (!fs.existsSync(localFile)) return res.status(404).json({ error: 'File non trovato', path: localFile });
 
         const raw = await fs.promises.readFile(localFile, 'utf-8');
         const jsonData = JSON.parse(raw);
-        log(`File letto correttamente. Record trovati: ${jsonData.length}`);
-        
-        cache.marcheModelli = { data: jsonData, lastFetch: now };
         res.json(jsonData);
     } catch (err) { 
         log(`ERRORE critico in /marche-modelli: ${err.message}`);
-        res.status(500).json({ error: 'Errore caricamento catalogo', details: err.message }); 
+        res.status(500).json({ error: err.message }); 
     }
 });
 
@@ -107,18 +98,13 @@ veicoloRouter.get('/', async (req, res) => {
 veicoloRouter.post('/', async (req, res) => {
     try {
         const data = normalizeInput(req.body);
-        const error = validateVeicolo(data);
-        if (error) return res.status(400).json({ error });
         const coord = await buildCoord(data.lat, data.lon, data.localita);
-        
         const result = await pool.query(`
             INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url)
             VALUES ($1,$2,$3,$4,$5,$6, $7::jsonb, $8,$9, ST_GeomFromEWKT($10), $11, $12)
             RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat`,
             [req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, coord.ewkt, data.localita, data.image_url]
         );
-        await CacheManager.veicolo.update(result.rows[0]);
-        upsertVeicolo(result.rows[0]);
         res.json(result.rows[0]);
     } catch (err) { log(`Errore POST /: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
@@ -134,10 +120,6 @@ veicoloRouter.put('/:id', async (req, res) => {
             RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat`,
             [data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, coord.ewkt, data.localita, data.image_url, req.params.id, req.user.id]
         );
-        if (!result.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
-        await CacheManager.veicolo.delete(Number(req.params.id));
-        await CacheManager.veicolo.update(result.rows[0]);
-        upsertVeicolo(result.rows[0]);
         res.json(result.rows[0]);
     } catch (err) { log(`Errore PUT /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
@@ -145,9 +127,6 @@ veicoloRouter.put('/:id', async (req, res) => {
 veicoloRouter.delete('/:id', async (req, res) => {
     try {
         const result = await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2 RETURNING *`, [req.params.id, req.user.id]);
-        if (!result.rowCount) return res.status(404).json({ error: 'Veicolo non trovato' });
-        await CacheManager.veicolo.delete(Number(req.params.id));
-        removeVeicolo(Number(req.params.id));
         res.json({ success: true });
     } catch (err) { log(`Errore DELETE /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
 });

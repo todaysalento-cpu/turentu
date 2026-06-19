@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CacheManager } from '../utils/cacheManager.js';
+// 🔥 Import per la sincronizzazione del motore di ricerca
 import { upsertVeicolo, removeVeicolo } from '../services/search/search.cache.js'; 
 import fs from 'fs';
 import path from 'path';
@@ -89,21 +90,29 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 
 veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
 
-// ROTTA AGGIUNTA: Validazione Targa
+// ROTTA VALIDAZIONE TARGA CORRETTA
 veicoloRouter.get('/check-targa', async (req, res) => {
   try {
-    const { targa, id } = req.query;
+    let { targa, id } = req.query;
     if (!targa) return res.status(400).json({ error: 'Targa mancante' });
+
+    // Pulizia ID: gestisce 'undefined' o stringhe vuote
+    const parsedId = (id === 'undefined' || id === '' || !id) ? null : Number(id);
+
+    // Query dinamica: costruiamo array parametri in base alla presenza di ID
+    let query = 'SELECT 1 FROM veicolo WHERE targa = $1';
+    let params = [targa.toString().toUpperCase()];
+
+    if (parsedId) {
+      query += ' AND id != $2';
+      params.push(parsedId);
+    }
     
-    const query = id 
-      ? `SELECT 1 FROM veicolo WHERE targa = $1 AND id != $2` 
-      : `SELECT 1 FROM veicolo WHERE targa = $1`;
-    
-    const result = await pool.query(query, [targa.toString().toUpperCase(), id]);
+    const result = await pool.query(query, params);
     res.json({ inUse: result.rowCount > 0 });
   } catch (err) { 
-    console.error('Errore in /check-targa:', err);
-    res.status(500).json({ error: 'Errore interno' }); 
+    console.error('[Router] Errore in /check-targa:', err);
+    res.status(500).json({ error: 'Errore interno nel controllo targa' }); 
   }
 });
 

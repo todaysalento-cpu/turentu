@@ -59,16 +59,32 @@ async function buildCoord(lat, lon, localita) {
 // ROTTE PUBBLICHE
 // ---------------------------------------------------
 veicoloRouter.get('/marche-modelli', async (req, res) => {
+    log('Richiesta ricevuta per: /marche-modelli');
     try {
         const now = Date.now();
-        if (cache.marcheModelli.data.length && now - cache.marcheModelli.lastFetch < CACHE_TTL) return res.json(cache.marcheModelli.data);
+        if (cache.marcheModelli.data.length && now - cache.marcheModelli.lastFetch < CACHE_TTL) {
+            log('Servito da cache in memoria');
+            return res.json(cache.marcheModelli.data);
+        }
         
         const localFile = path.join(process.cwd(), 'data', 'marche_modelli.json');
+        log(`Tentativo lettura file: ${localFile}`);
+        
+        if (!fs.existsSync(localFile)) {
+            log(`ERRORE: File non trovato in ${localFile}`);
+            return res.status(404).json({ error: 'File dati non esistente sul server' });
+        }
+
         const raw = await fs.promises.readFile(localFile, 'utf-8');
         const jsonData = JSON.parse(raw);
+        log(`File letto correttamente. Record trovati: ${jsonData.length}`);
+        
         cache.marcheModelli = { data: jsonData, lastFetch: now };
         res.json(jsonData);
-    } catch (err) { res.status(500).json({ error: 'Errore caricamento catalogo' }); }
+    } catch (err) { 
+        log(`ERRORE critico in /marche-modelli: ${err.message}`);
+        res.status(500).json({ error: 'Errore caricamento catalogo', details: err.message }); 
+    }
 });
 
 veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
@@ -85,7 +101,7 @@ veicoloRouter.get('/', async (req, res) => {
     try {
         const veicoli = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE driver_id=$1 ORDER BY id DESC`, [req.user.id]);
         res.json(veicoli.rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { log(`Errore GET /: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.post('/', async (req, res) => {
@@ -104,7 +120,7 @@ veicoloRouter.post('/', async (req, res) => {
         await CacheManager.veicolo.update(result.rows[0]);
         upsertVeicolo(result.rows[0]);
         res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { log(`Errore POST /: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.put('/:id', async (req, res) => {
@@ -123,7 +139,7 @@ veicoloRouter.put('/:id', async (req, res) => {
         await CacheManager.veicolo.update(result.rows[0]);
         upsertVeicolo(result.rows[0]);
         res.json(result.rows[0]);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { log(`Errore PUT /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
 
 veicoloRouter.delete('/:id', async (req, res) => {
@@ -133,7 +149,7 @@ veicoloRouter.delete('/:id', async (req, res) => {
         await CacheManager.veicolo.delete(Number(req.params.id));
         removeVeicolo(Number(req.params.id));
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { log(`Errore DELETE /${req.params.id}: ${err.message}`); res.status(500).json({ error: err.message }); }
 });
 
 export default veicoloRouter;

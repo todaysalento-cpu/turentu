@@ -39,16 +39,38 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta'));
 
       let savedRow;
+
       if (isPopBus) {
-        const nodeRes = await client.query(`SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-          [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]);
+        const nodeRes = await client.query(
+          `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
+          [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
+        );
 
         const result = await client.query(
-          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, start_node_id, end_node_id, expires_at)
-           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8, $9, $10) RETURNING *`,
-          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti, nodeRes.rows[0].start, nodeRes.rows[0].end, expiresAt]
+          `INSERT INTO richieste_pop_bus (
+            cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
+            start_node_id, end_node_id, expires_at
+          )
+           VALUES (
+            $1,
+            ST_SetSRID(ST_MakePoint($2,$3),4326),
+            ST_SetSRID(ST_MakePoint($4,$5),4326),
+            $6, $7, 'in_attesa', $8, $9, $10
+          ) RETURNING *`,
+          [
+            clienteId,
+            slot.origine.lon, slot.origine.lat,
+            slot.destinazione.lon, slot.destinazione.lat,
+            slot.start_datetime,
+            slot.posti_richiesti,
+            nodeRes.rows[0].start,
+            nodeRes.rows[0].end,
+            expiresAt
+          ]
         );
+
         savedRow = result.rows[0];
+
       } else {
         const distanza = slot.distanzaKm || 0;
         const durata = slot.durata_minuti || 0;
@@ -58,15 +80,31 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
             veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
             distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id
           )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ST_SetSRID(ST_MakePoint($10,$11),4326), ST_SetSRID(ST_MakePoint($12,$13),4326), 'pending', $14, $15) 
-           RETURNING *`,
+           VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            ST_SetSRID(ST_MakePoint($10,$11),4326),
+            ST_SetSRID(ST_MakePoint($12,$13),4326),
+            'pending', $14, $15
+          ) RETURNING *`,
           [
-            slot.veicolo_id, clienteId, slot.start_datetime, slot.posti_richiesti, type, (prezzo / slots.length), 
-            distanza, durata, expiresAt, 
-            slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, 
-            paymentIntent.id, requestId
+            slot.veicolo_id,
+            clienteId,
+            slot.start_datetime,
+            slot.posti_richiesti,
+            type,
+            (prezzo / slots.length),
+            distanza,
+            durata,
+            expiresAt,
+            slot.origine.lon,
+            slot.origine.lat,
+            slot.destinazione.lon,
+            slot.destinazione.lat,
+            paymentIntent.id,
+            requestId
           ]
         );
+
         savedRow = result.rows[0];
         await upsertPrenotazione(savedRow);
       }
@@ -74,33 +112,45 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       pendingRows.push(savedRow);
       console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
-      // --- 1. NOTIFICA AUTISTA O ADMIN ---
+      // ================= NOTIFICA DRIVER / ADMIN =================
       try {
-        const targetId = savedRow.autista_id || 'ADMIN_ID'; 
+        const adminId = Number(process.env.ADMIN_ID);
+        const targetId = savedRow.autista_id || adminId;
+
+        if (!targetId || Number.isNaN(Number(targetId))) {
+          throw new Error(`targetId non valido: ${targetId}`);
+        }
+
         const role = savedRow.autista_id ? 'driver' : 'admin';
         
         console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
-        await notifyUser(targetId, {
+
+        await notifyUser(Number(targetId), {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
-          role: role,
-          data: { requestId, rowId: savedRow.id, type: type }
+          role,
+          data: { requestId, rowId: savedRow.id, type }
         });
+
         console.log(`✅ [NOTIFY_ADMIN] Notifica inviata con successo.`);
+
       } catch (notifyErr) {
         console.error(`⚠️ [NOTIFY_ADMIN] Errore:`, notifyErr);
       }
 
-      // --- 2. NOTIFICA CLIENTE ---
+      // ================= NOTIFICA CLIENTE =================
       try {
         console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
-        await notifyUser(clienteId, {
+
+        await notifyUser(Number(clienteId), {
           type: 'REQUEST_CREATED',
           message: `La tua richiesta è stata inviata correttamente`,
           role: 'cliente',
-          data: { requestId, rowId: savedRow.id, type: type }
+          data: { requestId, rowId: savedRow.id, type }
         });
+
         console.log(`✅ [NOTIFY_CLIENT] Notifica inviata con successo.`);
+
       } catch (notifyErr) {
         console.error(`⚠️ [NOTIFY_CLIENT] Errore:`, notifyErr);
       }
@@ -109,7 +159,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     await client.query('COMMIT');
     console.log(`✅ [PAYMENT:${requestId}] Transazione completata.`);
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
-    
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [PAYMENT:${requestId}] Errore critico:`, err);

@@ -2,16 +2,7 @@
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
-/**
- * Invia una push notification tramite Expo Push API
- *
- * @param {string} token - Expo Push Token (ExponentPushToken[...])
- * @param {string} title - Titolo notifica
- * @param {string} body - Corpo messaggio
- * @param {object} data - Dati extra (deep link, id, ecc.)
- */
 export async function sendPush(token, title, body, data = {}) {
-  // 1. Validazione del token
   if (!token) {
     console.warn('⚠️ [PUSH] sendPush abortito: token mancante');
     return;
@@ -33,29 +24,33 @@ export async function sendPush(token, title, body, data = {}) {
         title: title,
         body: body,
         data: data,
-        // Aggiunta priorità per massimizzare la consegna
         priority: 'high', 
+        channelId: 'default', // FONDAMENTALE: collega la notifica al canale Android
       }),
     });
 
     const result = await response.json();
     
-    /**
-     * Log di diagnostica dettagliata
-     * Expo restituisce un oggetto che contiene informazioni sull'invio
-     */
-    if (result?.data?.status === 'error') {
-      console.error('❌ [PUSH] Errore da Expo API:', JSON.stringify(result, null, 2));
-    } else if (result?.data?.status === 'ok') {
-      console.log(`✅ [PUSH] Inviato con successo! TicketID: ${result.data.id}`);
+    // CORREZIONE: Expo restituisce result.data come ARRAY di ticket
+    const ticket = result.data ? result.data[0] : null;
+    
+    if (ticket && ticket.status === 'error') {
+      console.error('❌ [PUSH] Errore da Expo API:', ticket.message);
+      
+      // Gestione automatica token non più validi
+      if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
+        console.warn('🗑️ [PUSH] Token non più valido, necessario rimuoverlo dal DB');
+        // Qui dovresti chiamare una funzione per eliminare il token dal DB
+      }
+    } else if (ticket && ticket.status === 'ok') {
+      console.log(`✅ [PUSH] Inviato con successo! TicketID: ${ticket.id}`);
     } else {
-      console.log('📡 [PUSH] Risposta inattesa da Expo:', result);
+      console.log('📡 [PUSH] Risposta inattesa da Expo:', JSON.stringify(result));
     }
 
     return result;
   } catch (err) {
-    // Log in caso di errori di rete o DNS
     console.error('❌ [PUSH] Errore critico nel servizio sendPush:', err.message);
-    throw err; // Rilanciamo l'errore per gestirlo nel chiamante (notification.service.js)
+    throw err;
   }
 }

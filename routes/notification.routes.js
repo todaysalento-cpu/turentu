@@ -62,7 +62,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 2. Registrazione Push Token (AGGIONATO PER SCHEMA REALE)
+// 2. Registrazione Push Token (AGGIONATO: DELETE + INSERT per compatibilità totale)
 router.post('/register-token', authMiddleware, async (req, res) => {
   try {
     const { pushToken } = req.body;
@@ -74,12 +74,13 @@ router.post('/register-token', authMiddleware, async (req, res) => {
 
     console.log(`📥 [NOTIF_DB] Registrazione token per utente ${userId}`);
 
-    // Utilizziamo solo le colonne esistenti: user_id, push_token, created_at
+    // Pulizia: rimuoviamo il vecchio token per evitare duplicati
+    await pool.query(`DELETE FROM utente_push_tokens WHERE user_id = $1`, [userId]);
+
+    // Inserimento pulito
     await pool.query(
       `INSERT INTO utente_push_tokens (user_id, push_token, created_at) 
-       VALUES ($1, $2, NOW()) 
-       ON CONFLICT (user_id) 
-       DO UPDATE SET push_token = $2`,
+       VALUES ($1, $2, NOW())`,
       [userId, pushToken]
     );
 

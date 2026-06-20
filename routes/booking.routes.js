@@ -5,7 +5,7 @@ import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
 // Importa il servizio centralizzato
-import { notifyUser } from '../services/notification.service.js'; 
+import { notifyUser } from '../services/notifications/notification.service.js'; 
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });

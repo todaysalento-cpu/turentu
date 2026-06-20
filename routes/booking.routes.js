@@ -72,30 +72,35 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       }
       
       pendingRows.push(savedRow);
+      console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
       // --- 1. NOTIFICA AUTISTA O ADMIN ---
       try {
         const targetId = savedRow.autista_id || 'ADMIN_ID'; 
         const role = savedRow.autista_id ? 'driver' : 'admin';
         
+        console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
         await notifyUser(targetId, {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
           role: role,
           data: { requestId, rowId: savedRow.id, type: type }
         });
+        console.log(`✅ [NOTIFY_ADMIN] Notifica inviata con successo.`);
       } catch (notifyErr) {
         console.error(`⚠️ [NOTIFY_ADMIN] Errore:`, notifyErr);
       }
 
       // --- 2. NOTIFICA CLIENTE ---
       try {
+        console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
         await notifyUser(clienteId, {
           type: 'REQUEST_CREATED',
           message: `La tua richiesta è stata inviata correttamente`,
           role: 'cliente',
           data: { requestId, rowId: savedRow.id, type: type }
         });
+        console.log(`✅ [NOTIFY_CLIENT] Notifica inviata con successo.`);
       } catch (notifyErr) {
         console.error(`⚠️ [NOTIFY_CLIENT] Errore:`, notifyErr);
       }

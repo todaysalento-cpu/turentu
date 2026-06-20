@@ -4,7 +4,6 @@ import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
-// Importa il servizio centralizzato
 import { notifyUser } from '../services/notifications/notification.service.js'; 
 
 const router = express.Router();
@@ -49,10 +48,23 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         );
         savedRow = result.rows[0];
       } else {
+        // Normalizzazione dati per evitare errori di vincolo NOT NULL
+        const distanza = slot.distanzaKm || 0;
+        const durata = slot.durata_minuti || 0;
+
         const result = await client.query(
-          `INSERT INTO pending (veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, origine, destinazione, stato, payment_intent_id, request_id)
-           VALUES ($1, $2, $3, $4, $5, $6, ST_SetSRID(ST_MakePoint($7,$8),4326), ST_SetSRID(ST_MakePoint($9,$10),4326), 'pending', $11, $12) RETURNING *`,
-          [slot.veicolo_id, clienteId, slot.start_datetime, slot.posti_richiesti, type, prezzo/slots.length, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, paymentIntent.id, requestId]
+          `INSERT INTO pending (
+            veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
+            distanza, durata, origine, destinazione, stato, payment_intent_id, request_id
+          )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, ST_SetSRID(ST_MakePoint($9,$10),4326), ST_SetSRID(ST_MakePoint($11,$12),4326), 'pending', $13, $14) 
+           RETURNING *`,
+          [
+            slot.veicolo_id, clienteId, slot.start_datetime, slot.posti_richiesti, type, (prezzo / slots.length), 
+            distanza, durata, 
+            slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, 
+            paymentIntent.id, requestId
+          ]
         );
         savedRow = result.rows[0];
         await upsertPrenotazione(savedRow);
@@ -65,7 +77,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         const targetId = savedRow.autista_id || 'ADMIN_ID'; 
         const role = savedRow.autista_id ? 'driver' : 'admin';
         
-        // Chiamata al servizio centralizzato
         await notifyUser(targetId, {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
@@ -74,7 +85,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         });
         console.log(`🔔 [NOTIFY:${requestId}] Notifica inviata con successo a ${role}:${targetId}`);
       } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico:`, notifyErr);
+        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico durante notifica:`, notifyErr);
       }
     }
 

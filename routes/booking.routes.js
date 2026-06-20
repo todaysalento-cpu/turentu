@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
-// Importiamo il servizio centralizzato
+// Importa il servizio centralizzato
 import { notifyUser } from '../services/notification.service.js'; 
 
 const router = express.Router();
@@ -18,6 +18,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
   try {
     const { type, prezzo, slots } = req.body;
+
     if (!prezzo || prezzo <= 0) return res.status(400).json({ error: 'Prezzo non valido' });
     if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
 
@@ -59,28 +60,31 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       
       pendingRows.push(savedRow);
 
-      // --- INVIO NOTIFICA USANDO IL SERVIZIO CENTRALIZZATO ---
+      // --- INVIO NOTIFICA (NON BLOCCANTE) ---
       try {
         const targetId = savedRow.autista_id || 'ADMIN_ID'; 
         const role = savedRow.autista_id ? 'driver' : 'admin';
         
+        // Chiamata al servizio centralizzato
         await notifyUser(targetId, {
           type: 'NEW_REQUEST',
-          message: `Nuova richiesta di viaggio per ${savedRow.start_datetime}`,
+          message: `Nuova richiesta di prenotazione ricevuta`,
           role: role,
-          data: { requestId, rowId: savedRow.id }
+          data: { requestId, rowId: savedRow.id, type: type }
         });
-        console.log(`🔔 [NOTIFY:${requestId}] Notifica inviata con successo`);
+        console.log(`🔔 [NOTIFY:${requestId}] Notifica inviata con successo a ${role}:${targetId}`);
       } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY:${requestId}] Errore non bloccante notifica:`, notifyErr);
+        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico:`, notifyErr);
       }
     }
 
     await client.query('COMMIT');
+    console.log(`✅ [PAYMENT:${requestId}] Transazione completata con successo.`);
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
+    
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(`❌ [PAYMENT:${requestId}] Errore:`, err);
+    console.error(`❌ [PAYMENT:${requestId}] Errore critico, operazione annullata:`, err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

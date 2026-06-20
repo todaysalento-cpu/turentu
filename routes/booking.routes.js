@@ -114,7 +114,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
       // ================= NOTIFICA DRIVER / ADMIN =================
       try {
-        const adminId = Number(process.env.ADMIN_ID);
+        // 🔥 FIX: prendo un admin reale dal DB (NON ENV)
+        const adminRes = await pool.query(
+          "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
+        );
+
+        const adminId = adminRes.rows[0]?.id;
+
         const targetId = savedRow.autista_id || adminId;
 
         if (!targetId || Number.isNaN(Number(targetId))) {

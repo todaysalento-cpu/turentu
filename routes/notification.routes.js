@@ -62,7 +62,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 2. Registrazione Push Token (SOLUZIONE ERRORE 404)
+// 2. Registrazione Push Token (AGGIONATO PER SCHEMA REALE)
 router.post('/register-token', authMiddleware, async (req, res) => {
   try {
     const { pushToken } = req.body;
@@ -74,11 +74,12 @@ router.post('/register-token', authMiddleware, async (req, res) => {
 
     console.log(`📥 [NOTIF_DB] Registrazione token per utente ${userId}`);
 
+    // Utilizziamo solo le colonne esistenti: user_id, push_token, created_at
     await pool.query(
-      `INSERT INTO utente_push_tokens (user_id, push_token, updated_at) 
+      `INSERT INTO utente_push_tokens (user_id, push_token, created_at) 
        VALUES ($1, $2, NOW()) 
        ON CONFLICT (user_id) 
-       DO UPDATE SET push_token = $2, updated_at = NOW()`,
+       DO UPDATE SET push_token = $2`,
       [userId, pushToken]
     );
 

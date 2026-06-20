@@ -9,20 +9,20 @@ import { notifyUser } from '../services/notifications/notification.service.js';
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 
-// ======================= ROUTE =======================
 router.post('/payment-intent', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   const requestId = uuidv4();
+  // Scadenza calcolata una sola volta per tutto il batch
+  const expiresAt = new Date(Date.now() + 30 * 60000).toISOString();
+
   console.log(`💳 [PAYMENT:${requestId}] Inizio flusso per user: ${req.user.id}`);
 
   try {
     const { type, prezzo, slots } = req.body;
-
     if (!prezzo || prezzo <= 0) return res.status(400).json({ error: 'Prezzo non valido' });
     if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
 
     const clienteId = req.user.id;
-
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(prezzo * 100),
       currency: 'eur',
@@ -41,17 +41,16 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         const nodeRes = await client.query(`SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
           [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]);
 
+        // AGGIUNTO expires_at anche qui se richiesto dal DB
         const result = await client.query(
-          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, start_node_id, end_node_id)
-           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8, $9) RETURNING *`,
-          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti, nodeRes.rows[0].start, nodeRes.rows[0].end]
+          `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, start_node_id, end_node_id, expires_at)
+           VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8, $9, $10) RETURNING *`,
+          [clienteId, slot.origine.lon, slot.origine.lat, slot.destinazione.lon, slot.destinazione.lat, slot.start_datetime, slot.posti_richiesti, nodeRes.rows[0].start, nodeRes.rows[0].end, expiresAt]
         );
         savedRow = result.rows[0];
       } else {
-        // Normalizzazione dati e calcolo scadenza
         const distanza = slot.distanzaKm || 0;
         const durata = slot.durata_minuti || 0;
-        const expiresAt = new Date(Date.now() + 30 * 60000).toISOString(); // 30 min da ora
 
         const result = await client.query(
           `INSERT INTO pending (
@@ -73,30 +72,25 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       
       pendingRows.push(savedRow);
 
-      // --- INVIO NOTIFICA (NON BLOCCANTE) ---
       try {
         const targetId = savedRow.autista_id || 'ADMIN_ID'; 
         const role = savedRow.autista_id ? 'driver' : 'admin';
-        
         await notifyUser(targetId, {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
           role: role,
           data: { requestId, rowId: savedRow.id, type: type }
         });
-        console.log(`🔔 [NOTIFY:${requestId}] Notifica inviata con successo a ${role}:${targetId}`);
       } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico durante notifica:`, notifyErr);
+        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico:`, notifyErr);
       }
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [PAYMENT:${requestId}] Transazione completata con successo.`);
     res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
-    
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(`❌ [PAYMENT:${requestId}] Errore critico, operazione annullata:`, err);
+    console.error(`❌ [PAYMENT:${requestId}] Errore critico:`, err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

@@ -13,7 +13,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-
 router.post('/payment-intent', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   const requestId = uuidv4();
-  // Calcolo scadenza univoco per il transazione
   const expiresAt = new Date(Date.now() + 30 * 60000).toISOString(); 
 
   console.log(`💳 [PAYMENT:${requestId}] Inizio flusso per user: ${req.user.id}`);
@@ -44,7 +43,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         const nodeRes = await client.query(`SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
           [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]);
 
-        // Aggiunto expires_at anche qui per evitare violazioni di vincolo
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato, start_node_id, end_node_id, expires_at)
            VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326), $6, $7, 'in_attesa', $8, $9, $10) RETURNING *`,
@@ -75,6 +73,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       
       pendingRows.push(savedRow);
 
+      // --- 1. NOTIFICA AUTISTA O ADMIN ---
       try {
         const targetId = savedRow.autista_id || 'ADMIN_ID'; 
         const role = savedRow.autista_id ? 'driver' : 'admin';
@@ -85,9 +84,20 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           role: role,
           data: { requestId, rowId: savedRow.id, type: type }
         });
-        console.log(`🔔 [NOTIFY:${requestId}] Notifica inviata correttamente.`);
       } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY:${requestId}] Errore non critico:`, notifyErr);
+        console.error(`⚠️ [NOTIFY_ADMIN] Errore:`, notifyErr);
+      }
+
+      // --- 2. NOTIFICA CLIENTE ---
+      try {
+        await notifyUser(clienteId, {
+          type: 'REQUEST_CREATED',
+          message: `La tua richiesta è stata inviata correttamente`,
+          role: 'cliente',
+          data: { requestId, rowId: savedRow.id, type: type }
+        });
+      } catch (notifyErr) {
+        console.error(`⚠️ [NOTIFY_CLIENT] Errore:`, notifyErr);
       }
     }
 

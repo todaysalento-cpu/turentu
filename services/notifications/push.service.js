@@ -1,56 +1,109 @@
 // ======================= PUSH SERVICE (EXPO) =======================
 
-const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 export async function sendPush(token, title, body, data = {}) {
   if (!token) {
-    console.warn('⚠️ [PUSH] sendPush abortito: token mancante');
-    return;
+    console.warn("⚠️ [PUSH] sendPush abortito: token mancante");
+    return null;
   }
 
-  console.log(`🔍 [PUSH] Tentativo invio a: ${token.substring(0, 20)}...`);
+  console.log("=================================");
+  console.log("🚀 [PUSH] INVIO PUSH");
+  console.log("📱 Token:", token);
+  console.log("📌 Title:", title);
+  console.log("📌 Body:", body);
+  console.log("📦 Data:", JSON.stringify(data, null, 2));
+  console.log("=================================");
 
   try {
+    const payload = {
+      to: token,
+      sound: "default",
+      title,
+      body,
+      data,
+      priority: "high",
+      channelId: "default",
+    };
+
+    console.log(
+      "📤 [PUSH] Payload Expo:",
+      JSON.stringify(payload, null, 2)
+    );
+
     const response = await fetch(EXPO_PUSH_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        to: token,
-        sound: 'default',
-        title: title,
-        body: body,
-        data: data,
-        priority: 'high', 
-        channelId: 'default', // FONDAMENTALE: collega la notifica al canale Android
-      }),
+      body: JSON.stringify(payload),
     });
 
+    console.log("📡 [PUSH] HTTP STATUS:", response.status);
+
     const result = await response.json();
-    
-    // CORREZIONE: Expo restituisce result.data come ARRAY di ticket
-    const ticket = result.data ? result.data[0] : null;
-    
-    if (ticket && ticket.status === 'error') {
-      console.error('❌ [PUSH] Errore da Expo API:', ticket.message);
-      
-      // Gestione automatica token non più validi
-      if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
-        console.warn('🗑️ [PUSH] Token non più valido, necessario rimuoverlo dal DB');
-        // Qui dovresti chiamare una funzione per eliminare il token dal DB
+
+    console.log(
+      "📥 [PUSH] RAW RESPONSE:",
+      JSON.stringify(result, null, 2)
+    );
+
+    // Compatibilità Expo vecchia e nuova
+    let ticket = null;
+
+    if (Array.isArray(result?.data)) {
+      ticket = result.data[0];
+    } else if (result?.data) {
+      ticket = result.data;
+    }
+
+    console.log(
+      "🎫 [PUSH] Ticket:",
+      JSON.stringify(ticket, null, 2)
+    );
+
+    if (!ticket) {
+      console.warn("⚠️ [PUSH] Nessun ticket restituito da Expo");
+      return result;
+    }
+
+    if (ticket.status === "ok") {
+      console.log("✅ [PUSH] INVIATA CORRETTAMENTE");
+      console.log("🆔 Ticket ID:", ticket.id);
+    } else if (ticket.status === "error") {
+      console.error("❌ [PUSH] ERRORE EXPO");
+      console.error("📌 Message:", ticket.message);
+      console.error(
+        "📌 Details:",
+        JSON.stringify(ticket.details, null, 2)
+      );
+
+      if (ticket.details?.error === "DeviceNotRegistered") {
+        console.warn(
+          "🗑️ [PUSH] Token non registrato sul device"
+        );
       }
-    } else if (ticket && ticket.status === 'ok') {
-      console.log(`✅ [PUSH] Inviato con successo! TicketID: ${ticket.id}`);
-    } else {
-      console.log('📡 [PUSH] Risposta inattesa da Expo:', JSON.stringify(result));
+
+      if (ticket.details?.error === "MessageTooBig") {
+        console.warn(
+          "⚠️ [PUSH] Payload troppo grande"
+        );
+      }
+
+      if (ticket.details?.error === "InvalidCredentials") {
+        console.warn(
+          "⚠️ [PUSH] Credenziali FCM/APNS non valide"
+        );
+      }
     }
 
     return result;
   } catch (err) {
-    console.error('❌ [PUSH] Errore critico nel servizio sendPush:', err.message);
+    console.error("❌ [PUSH] ERRORE CRITICO");
+    console.error(err);
     throw err;
   }
 }

@@ -6,7 +6,7 @@ import { notifyUser } from '../services/notifications/notification.service.js';
 
 const router = express.Router();
 
-// --- Funzioni di utilità (Mantenute per coerenza) ---
+// --- Funzioni di utilità ---
 function generateNotificationMessage({ type, corsaId, startAddress, endAddress, userRole }) {
   if (type === 'pending') {
     return userRole === 'autista'
@@ -37,6 +37,7 @@ function formatNotificationDate(dateStr) {
 
 // --- Rotte ---
 
+// 1. Recupero notifiche
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -61,6 +62,34 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+// 2. Registrazione Push Token (SOLUZIONE ERRORE 404)
+router.post('/register-token', authMiddleware, async (req, res) => {
+  try {
+    const { pushToken } = req.body;
+    const userId = req.user.id;
+
+    if (!pushToken) {
+      return res.status(400).json({ message: 'Push token mancante' });
+    }
+
+    console.log(`📥 [NOTIF_DB] Registrazione token per utente ${userId}`);
+
+    await pool.query(
+      `INSERT INTO utente_push_tokens (user_id, push_token, updated_at) 
+       VALUES ($1, $2, NOW()) 
+       ON CONFLICT (user_id) 
+       DO UPDATE SET push_token = $2, updated_at = NOW()`,
+      [userId, pushToken]
+    );
+
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('❌ [NOTIF_DB] Errore salvataggio token:', err);
+    res.status(500).json({ message: 'Errore server' });
+  }
+});
+
+// 3. Segna come letto
 router.post('/mark-seen', authMiddleware, async (req, res) => {
   try {
     const { id } = req.body;
@@ -75,23 +104,19 @@ router.post('/mark-seen', authMiddleware, async (req, res) => {
   }
 });
 
-// POST crea notifica - ORA USA IL SERVICE
+// 4. Crea notifica
 router.post('/create', authMiddleware, async (req, res) => {
   try {
     const { type, targetUserId, corsaId, startAddress, endAddress } = req.body;
     const userId = targetUserId || req.user.id;
 
-    // 1. Verifica utente
     const roleRes = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
     const userRole = roleRes.rows[0]?.role;
     
     if (!userRole) return res.status(400).json({ message: 'Utente non trovato' });
 
-    // 2. Genera messaggio
     const message = generateNotificationMessage({ type, corsaId, startAddress, endAddress, userRole });
 
-    // 3. Invio centralizzato (Socket + Push + DB salvataggio)
-    // Nota: notifyUser gestisce internamente il salvataggio nel DB e l'invio
     const notification = await notifyUser(userId, { 
       type, 
       message, 
@@ -101,7 +126,6 @@ router.post('/create', authMiddleware, async (req, res) => {
 
     console.log(`✅ [NOTIF] Notifica inviata e salvata ID: ${notification.id}`);
     
-    // Formattiamo per il client
     notification.displayDate = formatNotificationDate(notification.created_at);
     res.json(notification);
 

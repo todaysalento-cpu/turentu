@@ -18,6 +18,22 @@ const CLASSI_CONFIG = {
 
 const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);
 
+/**
+ * Recupera le tariffe dal DB per un veicolo specifico
+ */
+export async function getTariffe(veicolo_id) {
+  try {
+    const { rows } = await pool.query(
+      'SELECT "prezzoKm", "prezzoPasseggero" FROM tariffe WHERE veicolo_id = $1',
+      [veicolo_id]
+    );
+    return rows[0] || TARIFF_DEFAULT;
+  } catch (err) {
+    console.error(`⚠️ [PRICING] Errore recupero tariffe per ${veicolo_id}:`, err);
+    return TARIFF_DEFAULT;
+  }
+}
+
 async function getDettaglioPool(veicoli_ids) {
   const res = await pool.query(
     `SELECT veicolo_id, euro_km, posti FROM tariffe WHERE veicolo_id = ANY($1)`,
@@ -33,14 +49,11 @@ async function getDettaglioPool(veicoli_ids) {
 
 /**
  * Calcolo prezzo finale
- * @param {Object} corsa - Dati della corsa (inclusa la classe)
- * @param {string} classe - (SAVER, STANDARD, EXPRESS)
  */
 export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0, classe = 'STANDARD') {
   const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
   const richiesti = Math.max(1, Number(postiRichiesti));
   
-  // Applichiamo il moltiplicatore in base alla classe
   const multiplier = CLASSE_MULTIPLIER[classe.toUpperCase()] || 1.0;
 
   console.log(`💰 [PRICING] Classe: ${classe} | Multiplier: ${multiplier} | KM: ${kmUtente.toFixed(2)}`);

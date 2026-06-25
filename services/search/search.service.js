@@ -37,8 +37,7 @@ async function getOccupazioneSegmenti(direttriceId, seqStart, seqEnd) {
         SELECT COALESCE(SUM(posti_occupati), 0) as occupati
         FROM segmenti
         WHERE direttrice_id = $1 
-        AND ordine_sequenziale >= $2 
-        AND ordine_sequenziale <= $3
+        AND ordine_sequenziale BETWEEN $2 AND $3
     `, [direttriceId, seqStart, seqEnd]);
 
     return Number(rows[0]?.occupati || 0);
@@ -70,6 +69,7 @@ export async function cercaSlotUltra(richiesta) {
     // 1. CORSE DA CACHE
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
+
     const corsaResults = await Promise.all(
         hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`))
     );
@@ -80,7 +80,6 @@ export async function cercaSlotUltra(richiesta) {
             if (!c) return null;
 
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
-
             return c;
         })
         .filter(Boolean);
@@ -126,7 +125,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. POP-BUS (CAPACITÀ = SOMMA VEICOLI)
+    // 3. POP-BUS
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT d.id, d.stato, d.partenza_prevista,
                MIN(s1.ordine_sequenziale) as min_seq,
@@ -168,11 +167,14 @@ export async function cercaSlotUltra(richiesta) {
         })
     )).filter(Boolean);
 
-    // 4. MISSIONI RITORNO
+    // 4. MISSIONI RITORNO (🔥 FIX QUI)
     const { rows: missioniRitorno } = await pool.query(`
         SELECT mr.id, mr.direttrice_id, mr.orario_previsto,
                mr.segmento_id,
-               n.lat, n.lon,
+
+               ST_Y(n.posizione::geometry) as lat,
+               ST_X(n.posizione::geometry) as lon,
+
                s.ordine_sequenziale as seq_start
         FROM missioni_ritorno mr
         JOIN nodi_direttrice n ON mr.nodo_origine = n.id
@@ -220,25 +222,12 @@ export async function cercaSlotUltra(richiesta) {
         })
     )).filter(Boolean);
 
-    // 5. OUTPUT
     const risultatiFinali = [
         ...risultatiCondivise,
         ...risultatiPrivati,
         ...risultatiPool,
         ...risultatiRitorno
     ];
-
-    risultatiFinali.push({
-        id: 'nuova_proposta',
-        tipo: 'pop-bus',
-        tipo_corsa: 'nuova_proposta',
-        is_pool: true,
-        messaggio: "Richiedi nuova direttrice.",
-        is_nuova_proposta: true,
-        distanza: distanzaMetri,
-        posti_totali: 8,
-        posti_disponibili: 8
-    });
 
     return await formatResults(
         { ...richiesta, distanzaMetri },

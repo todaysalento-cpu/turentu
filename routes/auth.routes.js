@@ -75,28 +75,103 @@ router.get('/me', (req, res) => {
 // ===================== ELIMINAZIONE ACCOUNT =====================
 router.delete('/me/delete', authenticate, async (req, res) => {
   const client = await pool.connect();
+
   try {
-    await client.query('BEGIN'); // Inizia transazione per sicurezza
+    await client.query('BEGIN');
 
-    // 1. Elimina i dati associati all'utente (es. token push)
-    await client.query('DELETE FROM utente_push_tokens WHERE user_id = $1', [req.user.id]);
+    const userId = req.user.id;
 
-    // 2. Elimina l'utente
-    await client.query('DELETE FROM utente WHERE id = $1', [req.user.id]);
+    // 1. Push tokens
+    await client.query(
+      'DELETE FROM utente_push_tokens WHERE user_id = $1',
+      [userId]
+    );
 
-    await client.query('COMMIT'); // Conferma le modifiche
-    
-    res.clearCookie('token', { ...cookieOptions, maxAge: 0 });
-    res.json({ message: 'Account eliminato con successo' });
+    // 2. Message receipts
+    await client.query(
+      'DELETE FROM message_receipts WHERE user_id = $1',
+      [userId]
+    );
+
+    // 3. Recensioni
+    await client.query(
+      'DELETE FROM recensioni WHERE utente_id = $1',
+      [userId]
+    );
+
+    // 4. Pending (QUI era il tuo errore)
+    await client.query(
+      'DELETE FROM pending WHERE cliente_id = $1',
+      [userId]
+    );
+
+    // 5. Prenotazioni
+    await client.query(
+      'DELETE FROM prenotazioni WHERE cliente_id = $1',
+      [userId]
+    );
+
+    // 6. Richieste Pop Bus
+    await client.query(
+      'DELETE FROM richieste_pop_bus WHERE cliente_id = $1',
+      [userId]
+    );
+
+    // 7. Offerte autisti
+    await client.query(
+      'DELETE FROM offerte_autisti WHERE autista_id = $1',
+      [userId]
+    );
+
+    // 8. Documenti autista
+    await client.query(
+      'DELETE FROM documenti_autista WHERE autista_id = $1',
+      [userId]
+    );
+
+    // 9. Messaggi (mittente o cliente)
+    await client.query(
+      'DELETE FROM messaggi WHERE cliente_id = $1 OR sender_id = $1',
+      [userId]
+    );
+
+    // 10. Utente finale
+    await client.query(
+      'DELETE FROM utente WHERE id = $1',
+      [userId]
+    );
+
+    await client.query('COMMIT');
+
+    res.clearCookie('token', {
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
+
+    return res.json({
+      success: true,
+      message: 'Account eliminato con successo'
+    });
+
   } catch (err) {
-    await client.query('ROLLBACK'); // Annulla tutto in caso di errore
-    console.error('❌ Errore eliminazione account:', err);
-    res.status(500).json({ message: 'Errore durante l\'eliminazione' });
+    await client.query('ROLLBACK');
+
+    console.error('❌ Errore eliminazione account:', err.message);
+    console.error('DETAIL:', err.detail);
+    console.error('CONSTRAINT:', err.constraint);
+
+    return res.status(500).json({
+      message: err.message,
+      detail: err.detail,
+      constraint: err.constraint
+    });
+
   } finally {
     client.release();
   }
 });
-
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;

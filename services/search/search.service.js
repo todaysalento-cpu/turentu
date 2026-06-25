@@ -10,28 +10,25 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 const GEOHASH_PRECISION_TRATTA = 5;
 
 /**
- * Funzione per il calcolo dell'occupazione dinamica (Mantenuta)
+ * Helper: Determina la classe di servizio in base all'indice di efficienza
  */
-async function getOccupazioneDinamica(direttriceId, startOffset, endOffset) {
+function determinaClasse(indice) {
+    if (indice <= 0.3) return 'SAVER';
+    if (indice <= 1.5) return 'STANDARD';
+    return 'EXPRESS';
+}
+
+/**
+ * Calcolo occupazione dinamico basato su capacità reale del mezzo
+ */
+async function getOccupazioneSegmenti(direttriceId, seqStart, seqEnd) {
     const { rows } = await pool.query(`
-        SELECT COALESCE(SUM(posti), 0) as totale_carico FROM (
-            SELECT SUM(s.posti_occupati) as posti 
-            FROM segmenti s
-            JOIN nodi_direttrice n_start ON s.start_node_id = n_start.id
-            JOIN nodi_direttrice n_end ON s.end_node_id = n_end.id
-            WHERE s.direttrice_id = $1 
-            AND n_start.offset_metri < $3 
-            AND n_end.offset_metri > $2
-            
-            UNION ALL
-            
-            SELECT SUM(r.posti_richiesti) as posti 
-            FROM richieste_pop_bus r
-            JOIN direttrici_richieste dr ON r.id = dr.richiesta_id
-            WHERE dr.direttrice_id = $1 
-            AND r.stato IN ('convertita', 'accettata')
-        ) as sub
-    `, [direttriceId, startOffset, endOffset]);
+        SELECT COALESCE(SUM(posti_occupati), 0) as totale_carico
+        FROM segmenti
+        WHERE direttrice_id = $1 
+        AND ordine_sequenziale >= $2 
+        AND ordine_sequenziale <= $3
+    `, [direttriceId, seqStart, seqEnd]);
     
     return Number(rows[0]?.totale_carico || 0);
 }
@@ -47,27 +44,32 @@ export async function cercaSlotUltra(richiesta) {
     if (!lat || !lon || !destLat || !destLon) return formatResults(richiesta, []);
 
     const pStart = turf.point([lon, lat]);
-    const pEnd = turf.point([destLon, destLat]);
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     const orarioRichiesto = new Date(richiesta.start_datetime || new Date());
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distanzaMetri = (info.distanzaKm || 1) * 1000;
 
-    // 1. RICERCA CORSE (Redis + Motore di Filtraggio Unificato)
+    // 1. RICERCA CORSE (Arricchite con Classe ed Indice)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
 
     const corseCandidate = [...new Set(corsaResults.flat())]
-        .map(id => CacheStore.corseCache.get(Number(id)))
+        .map(id => {
+            const c = CacheStore.corseCache.get(Number(id));
+            if (!c) return null;
+            // Arricchimento dati
+            c.classe = determinaClasse(Number(c.indice_efficienza || 0));
+            c.posti_totali = Number(c.posti_totali || 16); 
+            return c;
+        })
         .filter(Boolean);
 
-    // Il filtro ora gestisce internamente la distinzione tra 'condivisa' (Anchor) e 'riempimento' (Pop-Bus)
     const { corse: corseValide } = await filterDisponibilita(
         { ...richiesta, posti_richiesti: postiRichiesti }, 
         corseCandidate, 
-        [] // Qui potresti passare un batch di prenotazioni pre-caricate
+        []
     );
     
     const risultatiCondivise = corseValide.map(c => ({ 
@@ -78,7 +80,7 @@ export async function cercaSlotUltra(richiesta) {
         prezzo_fisso: Number(c.prezzo_fisso) || 0
     }));
 
-    // 2. SINTESI CORSE PRIVATE
+    // 2. SINTESI CORSE PRIVATE (Logica invariata)
     const risultatiPrivati = [];
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
         if (!disp.lat || !disp.lon) continue;
@@ -92,21 +94,61 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. LOGICA POP-BUS (Direttrici Virtuali)
+    // 3. LOGICA POP-BUS (Dinamica su Capacità Totale)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT DISTINCT d.id, d.stato, d.veicolo_id, d.linea_geografica::jsonb as linea_geo
+        SELECT d.id, d.stato, d.capacita_totale, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
+        JOIN segmenti s1 ON d.id = s1.direttrice_id
+        JOIN segmenti s2 ON d.id = s2.direttrice_id
         WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
         AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
+        GROUP BY d.id
     `, [orarioRichiesto.toISOString()]);
 
     const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
-        // ... (Logica di validazione Pop-Bus originale mantenuta)
-        // ... (Usa getOccupazioneDinamica per verificare saturazione)
-        // ... restituisci oggetto strutturato come 'pop-bus'
+        const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
+        const postiDisponibili = dir.capacita_totale - occupati;
+
+        if (postiDisponibili >= postiRichiesti) {
+            return {
+                id: `pop_${dir.id}`, tipo: 'pop-bus', direttrice_id: dir.id,
+                posti_disponibili: postiDisponibili, posti_totali: dir.capacita_totale,
+                distanza: distanzaMetri, is_pool: true
+            };
+        }
+        return null;
     }))).filter(Boolean);
 
-    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
+    // 4. LOGICA MISSIONI RITORNO
+    const { rows: missioniRitorno } = await pool.query(`
+        SELECT mr.id, mr.direttrice_id, mr.orario_previsto, mr.segmento_id, d.capacita_totale,
+               n.lat, n.lon, s.ordine_sequenziale as seq_start
+        FROM missioni_ritorno mr
+        JOIN direttrici_virtuali d ON mr.direttrice_id = d.id
+        JOIN nodi_direttrice n ON mr.nodo_origine = n.id
+        JOIN segmenti s ON mr.segmento_id = s.id
+        WHERE mr.stato = 'in_attesa'
+        AND mr.orario_previsto BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
+    `, [orarioRichiesto.toISOString()]);
+
+    const risultatiRitorno = (await Promise.all(missioniRitorno.map(async (mr) => {
+        if (turf.distance(pStart, turf.point([mr.lon, mr.lat]), { units: 'kilometers' }) > 2.0) return null;
+        
+        const occupati = await getOccupazioneSegmenti(mr.direttrice_id, mr.seq_start, 999);
+        const postiDisponibili = mr.capacita_totale - occupati;
+
+        if (postiDisponibili >= postiRichiesti) {
+            return {
+                id: `ret_${mr.id}`, tipo: 'ritorno', missione_id: mr.id,
+                direttrice_id: mr.direttrice_id, orario: mr.orario_previsto,
+                posti_disponibili: postiDisponibili, posti_totali: mr.capacita_totale,
+                distanza: distanzaMetri, is_pool: true, messaggio: "Corsa di ritorno disponibile"
+            };
+        }
+        return null;
+    }))).filter(Boolean);
+
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool, ...risultatiRitorno];
     
     // Proposta per nuova direttrice
     risultatiFinali.push({

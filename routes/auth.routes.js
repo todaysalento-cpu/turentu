@@ -7,11 +7,19 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import twilio from 'twilio';
+import AppleAuth from 'apple-auth'; // Aggiunto per il supporto Apple
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+
+// Configurazione Apple Auth
+const apple = new AppleAuth({
+  client_id: process.env.APPLE_CLIENT_ID,
+  team_id: process.env.APPLE_TEAM_ID,
+  key_id: process.env.APPLE_KEY_ID,
+}, process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, '\n'));
 
 // -------------------- Nodemailer --------------------
 const transporter = nodemailer.createTransport({
@@ -23,6 +31,21 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS,
   },
 });
+
+// ===================== MIDDLEWARE AUTH =====================
+const authenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
+
+  if (!token) return res.status(401).json({ message: 'Non autenticato' });
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Token non valido' });
+  }
+};
 
 // ===================== COOKIE CONFIG =====================
 const cookieOptions = {
@@ -46,6 +69,31 @@ router.get('/me', (req, res) => {
   } catch (err) {
     console.error('❌ Token non valido:', err.message);
     return res.status(401).json({ message: 'Token non valido' });
+  }
+});
+
+// ===================== ELIMINAZIONE ACCOUNT =====================
+router.delete('/me/delete', authenticate, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN'); // Inizia transazione per sicurezza
+
+    // 1. Elimina i dati associati all'utente (es. token push)
+    await client.query('DELETE FROM utente_push_tokens WHERE user_id = $1', [req.user.id]);
+
+    // 2. Elimina l'utente
+    await client.query('DELETE FROM utente WHERE id = $1', [req.user.id]);
+
+    await client.query('COMMIT'); // Conferma le modifiche
+    
+    res.clearCookie('token', { ...cookieOptions, maxAge: 0 });
+    res.json({ message: 'Account eliminato con successo' });
+  } catch (err) {
+    await client.query('ROLLBACK'); // Annulla tutto in caso di errore
+    console.error('❌ Errore eliminazione account:', err);
+    res.status(500).json({ message: 'Errore durante l\'eliminazione' });
+  } finally {
+    client.release();
   }
 });
 
@@ -149,6 +197,47 @@ router.post('/google', async (req, res) => {
   } catch (err) {
     console.error('❌ Google login error:', err);
     res.status(500).json({ message: 'Login Google fallito' });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== LOGIN APPLE =====================
+router.post('/apple', async (req, res) => {
+  const { identityToken, fullName } = req.body;
+  if (!identityToken) return res.status(400).json({ message: 'Token Apple richiesto' });
+
+  const client = await pool.connect();
+  try {
+    const payload = await apple.verifyIdToken(identityToken);
+    const appleId = payload.sub;
+    const email = payload.email;
+
+    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE apple_id=$1 OR ($2 IS NOT NULL AND email=$2)', [appleId, email]);
+    let user;
+
+    if (userRes.rows.length > 0) {
+      user = userRes.rows[0];
+      if (!user.apple_id) {
+        await client.query('UPDATE utente SET apple_id=$1 WHERE id=$2', [appleId, user.id]);
+      }
+    } else {
+      const nome = fullName ? `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim() : 'Utente Apple';
+      const hashed = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
+      const insert = await client.query(
+        `INSERT INTO utente (nome, email, apple_id, password, tipo)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, tipo, email, nome`,
+        [nome, email, appleId, hashed, 'cliente']
+      );
+      user = insert.rows[0];
+    }
+
+    const jwtToken = jwt.sign({ id: user.id, role: user.tipo, email: user.email, nome: user.nome }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', jwtToken, cookieOptions);
+    res.json({ ...user, token: jwtToken });
+  } catch (err) {
+    console.error('❌ Errore login Apple:', err);
+    res.status(500).json({ message: 'Login Apple fallito' });
   } finally {
     client.release();
   }

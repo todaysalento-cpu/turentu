@@ -37,14 +37,14 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
 
-    // 1. ORGANIZZAZIONE BUCKET (Bilanciamento per tipo)
+    // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
     risultatiFiltrati.forEach(item => {
         if (buckets[item.tipo]) buckets[item.tipo].push(item);
     });
 
-    // 2. LIMITAZIONE (Max 4 per tipo, max 12 totali)
+    // 2. LIMITAZIONE
     const risultatiLimitati = [
         ...buckets.condivisa.slice(0, 4),
         ...buckets.privata.slice(0, 4),
@@ -74,27 +74,31 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
+            // --- AGGIORNAMENTO: Passaggio parametro 'classe' al pricing ---
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
                 item.tipo, 
                 distKmCalc, 
                 distKmTotali, 
-                0 
+                0,
+                item.classe // Parametro aggiunto per calcolo dinamico
             ).catch(err => { 
                 console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
                 return distKmCalc * 0.50; 
             });
             
             const prezzoVal = Number(p) || 0;
-            console.log(`[DEBUG] Pricing Finale per ${item.id} [${item.tipo}]: ${prezzoVal}€`);
 
             return {
-                id: item.is_pool ? `dir_${item.direttrice_id}` : (item.id || `slot_${item.veicolo_id}`),
-                // Iniezione esplicita del veicolo_id per il backend
+                id: item.is_pool 
+                    ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
+                    : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
                 tipo: item.tipo,
+                classe: item.classe || 'STANDARD', // Esposta per il Frontend
                 direttrice_id: item.direttrice_id || null,
+                missione_id: item.missione_id || null,
                 aggancio_info: item.aggancio || null, 
                 localitaOrigine,
                 localitaDestinazione,

@@ -1,0 +1,56 @@
+{
+  "veicoli_trasporto_persone": {
+    "produttori": [
+      {
+        "marca": "Mercedes-Benz",
+        "tipologia": ["Urbano", "Granturismo", "Minibus"],
+        "modelli": ["Citaro", "Tourismo", "Intouro", "Sprinter"]
+      },
+      {
+        "marca": "Iveco Bus",
+        "tipologia": ["Urbano", "Interurbano", "Minibus"],
+        "modelli": ["Daily", "Crossway", "Evadys", "Urbanway"]
+      },
+      {
+        "marca": "MAN",
+        "tipologia": ["Urbano", "Granturismo", "Minibus"],
+        "modelli": ["Lion's City", "Lion's Coach", "TGE"]
+      },
+      {
+        "marca": "Setra",
+        "tipologia": ["Granturismo"],
+        "modelli": ["S 515 HD", "S 516 HD", "S 531 DT"]
+      },
+      {
+        "marca": "Irizar",
+        "tipologia": ["Granturismo", "Urbano"],
+        "modelli": ["i4", "i6", "i6s", "ie tram"]
+      },
+      {
+        "marca": "Otokar",
+        "tipologia": ["Urbano", "Interurbano", "Minibus"],
+        "modelli": ["Navigo", "Territo", "Vectio", "Kent"]
+      },
+      {
+        "marca": "Solaris",
+        "tipologia": ["Urbano", "Interurbano"],
+        "modelli": ["Urbino", "InterUrbino"]
+      },
+      {
+        "marca": "VDL",
+        "tipologia": ["Urbano", "Granturismo"],
+        "modelli": ["Citea", "Futura"]
+      },
+      {
+        "marca": "Fiat Professional (Base Minibus)",
+        "tipologia": ["Minibus"],
+        "modelli": ["Ducato"]
+      },
+      {
+        "marca": "Ford (Base Minibus)",
+        "tipologia": ["Minibus"],
+        "modelli": ["Transit"]
+      }
+    ]
+  }
+}

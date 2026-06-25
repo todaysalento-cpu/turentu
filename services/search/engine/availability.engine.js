@@ -1,6 +1,6 @@
 import * as turf from '@turf/turf';
 import polyline from '@mapbox/polyline';
-import { pool } from '../../../../db/db.js';
+import { pool } from '../../../db/db.js';
 
 /**
  * Helper per determinare la classe in base all'indice (pre-calcolato nel DB)

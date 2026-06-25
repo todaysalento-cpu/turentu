@@ -28,7 +28,9 @@ function getSnapResult(point, corsa, tolleranzaKm) {
 
                 if (snapped.properties.dist < tolleranzaKm) {
                     return {
-                        offset_metri: snapped.properties.location * turf.length(line, { units: 'meters' }),
+                        offset_metri:
+                            snapped.properties.location *
+                            turf.length(line, { units: 'meters' }),
                         type: 'DYNAMIC',
                         dist: snapped.properties.dist
                     };
@@ -63,8 +65,12 @@ function getSnapResult(point, corsa, tolleranzaKm) {
 /**
  * MAIN ENGINE
  */
-export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
-
+export async function filterDisponibilita(
+    richiesta,
+    corseCandidate,
+    prenotazioniBatch,
+    capacitaMap = new Map()
+) {
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     const TOLLERANZA_KM = 2.0;
@@ -83,7 +89,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
                     /**
                      * =========================
-                     * CONDIVISA (polilinea)
+                     * CONDIVISA
                      * =========================
                      */
                     if (c.tipo_corsa === 'condivisa') {
@@ -91,12 +97,17 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                         const startOffset = Number(startSnap.offset_metri);
                         const endOffset = Number(endSnap.offset_metri);
 
-                        if (startOffset >= endOffset || (endOffset - startOffset) < 2000) return null;
+                        if (startOffset >= endOffset || (endOffset - startOffset) < 2000)
+                            return null;
 
                         const prenotazioni =
                             Array.isArray(prenotazioniBatch?.[index])
                                 ? prenotazioniBatch[index]
                                 : [];
+
+                        const capacitaTotale =
+                            capacitaMap.get(c.id) ??
+                            Number(c.posti_totali || 0);
 
                         return verificaSaturazioneOffset(
                             c,
@@ -104,7 +115,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                             endOffset,
                             Number(richiesta.posti_richiesti),
                             prenotazioni,
-                            capacitaMap.get(c.id)
+                            capacitaTotale
                         )
                             ? c
                             : null;
@@ -115,13 +126,19 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                      * POP-BUS / RITORNO
                      * =========================
                      */
-                    if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
+                    if (
+                        startSnap.ordine_sequenziale >=
+                        endSnap.ordine_sequenziale
+                    )
+                        return null;
+
+                    const id = c.direttrice_id || c.id;
 
                     const capacitaTotale =
-                        capacitaMap.get(c.direttrice_id || c.id) ?? 0;
+                        capacitaMap.get(id) ?? Number(c.posti_totali || 0);
 
                     const isSaturato = await verificaSaturazioneSegmenti(
-                        c.direttrice_id || c.id,
+                        id,
                         startSnap.ordine_sequenziale,
                         endSnap.ordine_sequenziale,
                         Number(richiesta.posti_richiesti),
@@ -136,9 +153,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * =========================
- * SATURAZIONE SEGMENTI
- * =========================
+ * SATURAZIONE SEGMENTI (POOL OK)
  */
 async function verificaSaturazioneSegmenti(
     direttrice_id,
@@ -147,22 +162,23 @@ async function verificaSaturazioneSegmenti(
     postiRichiesti,
     capacitaTotale
 ) {
-    const { rows } = await pool.query(`
+    const { rows } = await pool.query(
+        `
         SELECT COALESCE(SUM(posti_occupati), 0) as occupati
         FROM segmenti
         WHERE direttrice_id = $1
         AND ordine_sequenziale BETWEEN $2 AND $3
-    `, [direttrice_id, seqStart, seqEnd]);
+    `,
+        [direttrice_id, seqStart, seqEnd]
+    );
 
     const occupati = Number(rows[0]?.occupati || 0);
 
-    return (occupati + postiRichiesti) > capacitaTotale;
+    return occupati + postiRichiesti > capacitaTotale;
 }
 
 /**
- * =========================
  * SATURAZIONE OFFSET
- * =========================
  */
 function verificaSaturazioneOffset(
     corsa,
@@ -172,16 +188,21 @@ function verificaSaturazioneOffset(
     prenotazioni,
     capacitaTotale
 ) {
-    const postiTotali = capacitaTotale ?? Number(corsa.posti_totali || 0);
+    const postiTotali =
+        capacitaTotale ?? Number(corsa.posti_totali || 0);
+
     const postiGiaPrenotati = Number(corsa.posti_prenotati || 0);
 
     for (const p of prenotazioni) {
-        if (startO < Number(p.endOffset) && endO > Number(p.startOffset)) {
-
+        if (
+            startO < Number(p.endOffset) &&
+            endO > Number(p.startOffset)
+        ) {
             if (
-                (Number(p.posti_richiesti) +
+                Number(p.posti_richiesti) +
                     postiRichiesti +
-                    postiGiaPrenotati) > postiTotali
+                    postiGiaPrenotati >
+                postiTotali
             ) {
                 return false;
             }

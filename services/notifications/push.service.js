@@ -1,23 +1,23 @@
-import admin from "firebase-admin";
+import * as admin from "firebase-admin";
 
 // ===============================
-// SAFE INIT (Render + ESM safe)
+// SAFE INIT (Render + ESM SAFE)
 // ===============================
 function getServiceAccount() {
-  try {
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT missing");
-    }
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT missing");
+  }
 
+  try {
     return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   } catch (err) {
-    console.error("❌ Firebase service account error:", err.message);
+    console.error("❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON");
     throw err;
   }
 }
 
-// init only once
-if (!admin.apps.length) {
+// init only once (FIX IMPORTANTISSIMO)
+if (!admin.apps || admin.apps.length === 0) {
   const serviceAccount = getServiceAccount();
 
   admin.initializeApp({

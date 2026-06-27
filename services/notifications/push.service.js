@@ -1,4 +1,7 @@
-import admin from "firebase-admin";
+import * as firebaseAdmin from "firebase-admin";
+
+// Forza il caricamento corretto del modulo
+const admin = firebaseAdmin.default || firebaseAdmin;
 
 let initialized = false;
 
@@ -10,26 +13,23 @@ function initFirebase() {
   console.log("🔍 [INIT] Verifico variabile d'ambiente FIREBASE_SERVICE_ACCOUNT...");
 
   if (!raw) {
-    console.warn("⚠️ [INIT] FIREBASE_SERVICE_ACCOUNT mancante! Controlla le impostazioni di Render.");
+    console.warn("⚠️ [INIT] FIREBASE_SERVICE_ACCOUNT mancante!");
     return;
   }
 
   let serviceAccount;
-
   try {
     serviceAccount = JSON.parse(raw);
-    console.log("✅ [INIT] JSON parsato correttamente.");
-    console.log("🆔 [INIT] Project ID:", serviceAccount.project_id);
+    console.log("✅ [INIT] JSON parsato. Project ID:", serviceAccount.project_id);
   } catch (e) {
-    console.error("❌ [INIT] Errore critico: JSON non valido o malformato.");
-    console.error("DEBUG - Valore ricevuto (primi 50 caratteri):", raw.substring(0, 50));
+    console.error("❌ [INIT] Errore critico: JSON non valido.");
     throw e;
   }
 
   try {
-    // Verifica se admin è importato correttamente
-    if (!admin) {
-      throw new Error("Il modulo firebase-admin è undefined.");
+    // Controllo specifico per l'esistenza di credential
+    if (!admin.credential) {
+      throw new Error("admin.credential è undefined. Il modulo non è caricato correttamente.");
     }
 
     if (!admin.apps || admin.apps.length === 0) {
@@ -51,11 +51,11 @@ function initFirebase() {
   initialized = true;
 }
 
-// Inizializzazione al caricamento del modulo
+// Inizializzazione
 try {
   initFirebase();
 } catch (err) {
-  console.error("❌ [INIT] Errore fatale durante l'avvio del modulo:", err);
+  console.error("❌ [INIT] Errore fatale:", err);
 }
 
 // =========================
@@ -63,14 +63,14 @@ try {
 // =========================
 export async function sendPush(token, title, body, data = {}) {
   if (!token) {
-    console.warn("⚠️ [FCM] Token mancante, invio abortito.");
+    console.warn("⚠️ [FCM] Token mancante.");
     return null;
   }
 
   try {
-    // Verifica che admin sia pronto
+    // Verifica stato inizializzazione
     if (!admin.apps || admin.apps.length === 0) {
-      throw new Error("Firebase Admin non è inizializzato.");
+      throw new Error("Firebase non è pronto.");
     }
 
     const message = {
@@ -83,14 +83,11 @@ export async function sendPush(token, title, body, data = {}) {
       apns: { payload: { aps: { sound: "default" } } },
     };
 
-    console.log(`📨 [FCM] Invio notifica a token: ${token.substring(0, 10)}...`);
-
     const response = await admin.messaging().send(message);
-
-    console.log("✅ [FCM] Notifica inviata con ID:", response);
     return { success: true, id: response };
+    
   } catch (err) {
-    console.error("❌ [FCM] Errore nell'invio:", err.message);
+    console.error("❌ [FCM] Errore invio:", err.message);
     return { success: false, error: err.message };
   }
 }

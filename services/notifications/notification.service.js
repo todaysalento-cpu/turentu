@@ -79,9 +79,11 @@ export const notifyUser = async (
     }
 
     // =========================
-    // 4. RESPONSE VALIDATION
+    // 4. FIXED EXPO RESPONSE HANDLING
     // =========================
-    const ticket = pushResult?.data?.[0];
+
+    // ✅ FIX: Expo NON ritorna array, ma oggetto diretto
+    const ticket = pushResult?.data;
 
     if (!ticket) {
       console.error("❌ [PUSH] Invalid Expo response (no ticket)");

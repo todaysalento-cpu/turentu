@@ -1,9 +1,9 @@
 import { pool } from '../../db/db.js';
-import { sendPush } from './push.service.js'; 
+import { sendPush } from './push.service.js';
 import { getIO } from '../../socket.js';
 
 /**
- * Servizio centralizzato per l'invio di notifiche
+ * Servizio centralizzato per notifiche (FCM)
  */
 export const notifyUser = async (
   userId,
@@ -41,72 +41,62 @@ export const notifyUser = async (
     }
 
     // =========================
-    // 3. PUSH NOTIFICATION
+    // 3. GET FCM TOKEN (NOT EXPO)
     // =========================
     const tokenRes = await pool.query(
-      'SELECT push_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1',
+      `SELECT fcm_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1`,
       [userId]
     );
 
     if (tokenRes.rows.length === 0) {
-      console.log(`ℹ️ [PUSH] No token for user ${userId}`);
+      console.log(`ℹ️ [FCM] No token for user ${userId}`);
       return notification;
     }
 
-    const token = tokenRes.rows[0].push_token;
+    const fcmToken = tokenRes.rows[0].fcm_token;
 
-    console.log("📨 [PUSH] Sending to token:", token);
-    console.log("📨 [PUSH] Title:", title);
-    console.log("📨 [PUSH] Message:", message);
+    console.log("📨 [FCM] Sending to token:", fcmToken);
 
     // =========================
-    // SEND PUSH
+    // 4. SEND PUSH VIA FCM
     // =========================
     let pushResult;
 
     try {
       pushResult = await sendPush(
-        token,
+        fcmToken,
         title,
         message,
-        { ...data, notificationId: notification.id }
+        {
+          ...data,
+          notificationId: notification.id,
+          type,
+        }
       );
 
-      console.log("📤 [PUSH RESULT RAW]:", JSON.stringify(pushResult, null, 2));
+      console.log("📤 [FCM RESULT RAW]:", JSON.stringify(pushResult, null, 2));
     } catch (pushErr) {
-      console.error("❌ [PUSH SEND ERROR]", pushErr);
+      console.error("❌ [FCM SEND ERROR]", pushErr);
       return notification;
     }
 
     // =========================
-    // 4. FIXED EXPO RESPONSE HANDLING
+    // 5. RESPONSE HANDLING (FCM)
     // =========================
+    const response = pushResult;
 
-    // ✅ FIX: Expo NON ritorna array, ma oggetto diretto
-    const ticket = pushResult?.data;
-
-    if (!ticket) {
-      console.error("❌ [PUSH] Invalid Expo response (no ticket)");
+    if (!response) {
+      console.error("❌ [FCM] Empty response");
       return notification;
     }
 
-    console.log("📦 [PUSH TICKET]:", ticket);
+    console.log("📦 [FCM RESPONSE]:", response);
 
-    if (ticket.status === 'error') {
-      console.error("❌ [PUSH ERROR]", ticket);
-
-      if (ticket?.details?.error === 'DeviceNotRegistered') {
-        console.warn("🗑️ [PUSH] Removing invalid token for user:", userId);
-
-        await pool.query(
-          'DELETE FROM utente_push_tokens WHERE push_token = $1',
-          [token]
-        );
-      }
-    }
-
-    if (ticket.status === 'ok') {
-      console.log("✅ [PUSH] Sent successfully. ID:", ticket.id);
+    // Firebase success format: { name: "projects/.../messages/..." }
+    if (response.name) {
+      console.log("✅ [FCM] Sent successfully:", response.name);
+    } else {
+      console.warn("⚠️ [FCM] Unexpected response format:", response);
     }
 
     // =========================

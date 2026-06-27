@@ -20,7 +20,6 @@ export const notifyUser = async (
     );
 
     const notification = result.rows[0];
-
     console.log("📝 [NOTIFY] Saved notification:", notification.id);
 
     // =========================
@@ -41,10 +40,11 @@ export const notifyUser = async (
     }
 
     // =========================
-    // 3. GET FCM TOKEN (NOT EXPO)
+    // 3. GET PUSH TOKEN
     // =========================
+    // CORRETTO: nome colonna da 'fcm_token' a 'push_token'
     const tokenRes = await pool.query(
-      `SELECT fcm_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1`,
+      `SELECT push_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1`,
       [userId]
     );
 
@@ -53,55 +53,33 @@ export const notifyUser = async (
       return notification;
     }
 
-    const fcmToken = tokenRes.rows[0].fcm_token;
+    // CORRETTO: accesso alla proprietà corretta
+    const fcmToken = tokenRes.rows[0].push_token;
+    console.log("📨 [FCM] Sending to token:", fcmToken ? "Presente" : "Vuoto");
 
-    console.log("📨 [FCM] Sending to token:", fcmToken);
+    if (!fcmToken) return notification;
 
     // =========================
     // 4. SEND PUSH VIA FCM
     // =========================
-    let pushResult;
-
     try {
-      pushResult = await sendPush(
+      const pushResult = await sendPush(
         fcmToken,
         title,
         message,
         {
           ...data,
-          notificationId: notification.id,
+          notificationId: notification.id.toString(),
           type,
         }
       );
 
-      console.log("📤 [FCM RESULT RAW]:", JSON.stringify(pushResult, null, 2));
+      console.log("📤 [FCM RESULT]:", pushResult?.success ? "Success" : "Failed");
     } catch (pushErr) {
-      console.error("❌ [FCM SEND ERROR]", pushErr);
-      return notification;
+      console.error("❌ [FCM SEND ERROR]", pushErr.message);
+      // Non blocchiamo la notifica se fallisce solo il push
     }
 
-    // =========================
-    // 5. RESPONSE HANDLING (FCM)
-    // =========================
-    const response = pushResult;
-
-    if (!response) {
-      console.error("❌ [FCM] Empty response");
-      return notification;
-    }
-
-    console.log("📦 [FCM RESPONSE]:", response);
-
-    // Firebase success format: { name: "projects/.../messages/..." }
-    if (response.name) {
-      console.log("✅ [FCM] Sent successfully:", response.name);
-    } else {
-      console.warn("⚠️ [FCM] Unexpected response format:", response);
-    }
-
-    // =========================
-    // RETURN
-    // =========================
     return notification;
 
   } catch (err) {

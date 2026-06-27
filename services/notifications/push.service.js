@@ -1,84 +1,67 @@
-import * as admin from "firebase-admin";
+import admin from "firebase-admin";
 
-// ===============================
-// SAFE INIT (Render + ESM SAFE)
-// ===============================
-function getServiceAccount() {
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT missing");
+let initialized = false;
+
+function initFirebase() {
+  if (initialized) return;
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+  if (!raw) {
+    console.warn("⚠️ FIREBASE_SERVICE_ACCOUNT mancante");
+    return;
   }
+
+  let serviceAccount;
 
   try {
-    return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } catch (err) {
-    console.error("❌ Invalid FIREBASE_SERVICE_ACCOUNT JSON");
-    throw err;
+    serviceAccount = JSON.parse(raw);
+  } catch (e) {
+    console.error("❌ JSON FIREBASE non valido");
+    throw e;
   }
+
+  if (!admin.apps || admin.apps.length === 0) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+
+    console.log("🔥 Firebase inizializzato OK");
+  }
+
+  initialized = true;
 }
 
-// init only once (FIX IMPORTANTISSIMO)
-if (!admin.apps || admin.apps.length === 0) {
-  const serviceAccount = getServiceAccount();
+initFirebase();
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-
-  console.log("🔥 [FCM] Firebase Admin initialized");
-}
-
-// ===============================
+// =========================
 // SEND PUSH
-// ===============================
+// =========================
 export async function sendPush(token, title, body, data = {}) {
   if (!token) {
-    console.warn("⚠️ [FCM] token mancante");
+    console.warn("⚠️ token mancante");
     return null;
   }
-
-  console.log("=================================");
-  console.log("🚀 [FCM] INVIO PUSH");
-  console.log("📱 Token:", token);
-  console.log("📌 Title:", title);
-  console.log("📌 Body:", body);
-  console.log("📦 Data:", JSON.stringify(data, null, 2));
-  console.log("=================================");
 
   try {
     const message = {
       token,
-      notification: {
-        title,
-        body,
-      },
+      notification: { title, body },
       data: Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, String(v)])
       ),
-      android: {
-        priority: "high",
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: "default",
-          },
-        },
-      },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } },
     };
 
     const response = await admin.messaging().send(message);
-
-    console.log("✅ [FCM] PUSH INVIATA");
-    console.log("🆔 Message ID:", response);
 
     return {
       success: true,
       id: response,
     };
-
   } catch (err) {
-    console.error("❌ [FCM] ERRORE INVIO PUSH");
-    console.error("📌 Message:", err.message);
+    console.error("❌ FCM ERROR:", err.message);
 
     return {
       success: false,

@@ -1,14 +1,35 @@
 import admin from "firebase-admin";
 
-// inizializza Firebase Admin UNA SOLA VOLTA nel progetto
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    ),
-  });
+// ===============================
+// SAFE INIT (Render + ESM safe)
+// ===============================
+function getServiceAccount() {
+  try {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT missing");
+    }
+
+    return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } catch (err) {
+    console.error("❌ Firebase service account error:", err.message);
+    throw err;
+  }
 }
 
+// init only once
+if (!admin.apps.length) {
+  const serviceAccount = getServiceAccount();
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+
+  console.log("🔥 [FCM] Firebase Admin initialized");
+}
+
+// ===============================
+// SEND PUSH
+// ===============================
 export async function sendPush(token, title, body, data = {}) {
   if (!token) {
     console.warn("⚠️ [FCM] token mancante");
@@ -20,7 +41,7 @@ export async function sendPush(token, title, body, data = {}) {
   console.log("📱 Token:", token);
   console.log("📌 Title:", title);
   console.log("📌 Body:", body);
-  console.log("📦 Data:", data);
+  console.log("📦 Data:", JSON.stringify(data, null, 2));
   console.log("=================================");
 
   try {
@@ -54,9 +75,10 @@ export async function sendPush(token, title, body, data = {}) {
       success: true,
       id: response,
     };
+
   } catch (err) {
     console.error("❌ [FCM] ERRORE INVIO PUSH");
-    console.error(err);
+    console.error("📌 Message:", err.message);
 
     return {
       success: false,

@@ -1,143 +1,126 @@
-import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getLocalitaSafe } from '../../../utils/maps.util.js';
+import { pool } from '../db/db.js';
 
-const localitaCache = new Map();
-const VELOCITA_MEDIA_KM_MIN = 1.0; 
+// Default coerente con le colonne reali del DB
+const TARIFF_DEFAULT = { euro_km: 0.50, prezzo_passeggero: 1.00 };
+const PREZZO_MINIMO = 0.50;
 
-const safeDate = (dateInput) => {
-    const d = new Date(dateInput);
-    return !isNaN(d.getTime()) ? d : new Date();
+// Moltiplicatori basati sulla classe di servizio
+const CLASSE_MULTIPLIER = {
+    EXPRESS: 1.4,
+    STANDARD: 1.0,
+    SAVER: 0.75
 };
 
-const getSafeISO = (dateInput) => safeDate(dateInput).toISOString();
-
-const parseServizi = (servizi) => {
-    if (!servizi) return {};
-    if (typeof servizi === 'object') return servizi;
-    try { return JSON.parse(servizi); } catch (e) { return {}; }
+const CLASSI_CONFIG = {
+    EXPRESS:  { soglia: 0.5, minIndice: 1.5, maxIndice: 99.0 }, 
+    STANDARD: { soglia: 0.6, minIndice: 0.3, maxIndice: 1.5 },
+    SAVER:    { soglia: 0.9, minIndice: 0.0, maxIndice: 0.3 }
 };
 
-const determinaArrivo = (partenzaISO, distanzaMetri) => {
-    const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
-    const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
-    const d = new Date(partenzaISO);
-    d.setMinutes(d.getMinutes() + durataMinuti);
-    return d.toISOString();
-};
+const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);
 
-async function getLocalitaSafeCached(coord) {
-    if (!coord || typeof coord.lat === 'undefined') return "N/D";
-    const key = `${coord.lat.toFixed(3)}_${coord.lon.toFixed(3)}`;
-    if (localitaCache.has(key)) return localitaCache.get(key);
-    const loc = await getLocalitaSafe(coord);
-    localitaCache.set(key, loc);
-    return loc;
+export async function getTariffe(veicolo_id) {
+    try {
+        const { rows } = await pool.query(
+            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 LIMIT 1',
+            [veicolo_id]
+        );
+        
+        if (rows[0]) {
+            return { 
+                euro_km: Number(rows[0].euro_km), 
+                prezzo_passeggero: Number(rows[0].prezzo_passeggero) 
+            };
+        }
+        return TARIFF_DEFAULT;
+    } catch (err) {
+        console.error(`⚠️ [PRICING] Errore recupero tariffe per veicolo ${veicolo_id}:`, err);
+        return TARIFF_DEFAULT;
+    }
 }
 
-export async function formatResults(richiesta, risultatiFiltrati) {
-    console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
-
-    // 1. ORGANIZZAZIONE BUCKET
-    const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
+async function getDettaglioPool(veicoli_ids) {
+    if (!veicoli_ids || veicoli_ids.length === 0) return [];
     
-    risultatiFiltrati.forEach(item => {
-        if (buckets[item.tipo]) buckets[item.tipo].push(item);
-    });
+    const res = await pool.query(
+        `SELECT t.veicolo_id, t.euro_km, v.posti_totali as posti 
+         FROM tariffe t
+         JOIN veicolo v ON t.veicolo_id = v.id 
+         WHERE t.veicolo_id = ANY($1)`,
+        [veicoli_ids]
+    );
+    
+    return res.rows.map(r => ({
+        id: r.veicolo_id,
+        euro_km: Number(r.euro_km),
+        posti: Number(r.posti),
+        indice: CALCOLA_INDICE(Number(r.euro_km), Number(r.posti))
+    }));
+}
 
-    // 2. LIMITAZIONE
-    const risultatiLimitati = [
-        ...buckets.condivisa.slice(0, 4),
-        ...buckets.privata.slice(0, 4),
-        ...buckets['pop-bus'].slice(0, 4)
-    ].slice(0, 12);
+/**
+ * Calcolo prezzo finale con integrazione per direttrici virtuali/proattive
+ */
+export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0, classe = 'STANDARD') {
+    const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
+    const richiesti = Math.max(1, Number(postiRichiesti));
+    const multiplier = CLASSE_MULTIPLIER[classe?.toUpperCase()] || 1.0;
 
-    const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
-            ? richiesta.localitaOrigine 
-            : getLocalitaSafeCached(richiesta.coord),
-        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
-            ? richiesta.localitaDestinazione 
-            : getLocalitaSafeCached(richiesta.coordDest)
-    ]);
+    console.log(`💰 [PRICING] Tipo: ${tipoValido} | Classe: ${classe} | KM Utente: ${kmUtente.toFixed(2)}`);
 
-    // 3. FORMATTAZIONE E PRICING
-    return (await Promise.all(risultatiLimitati.map(async (item) => {
-        try {
-            // --- LOGICA PROATTIVA: Gestione stato "In attesa" ---
-            if (item.id === 'virtual_pop_pending') {
-                return {
-                    id: item.id,
-                    tipo: item.tipo,
-                    classe: 'STANDARD',
-                    localitaOrigine,
-                    localitaDestinazione,
-                    oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
-                    oraArrivo: 'N/D',
-                    prezzo: 0,
-                    prezzo_display: 'In attesa',
-                    postiDisponibili: 0,
-                    postiTotali: 0,
-                    is_pool: true,
-                    messaggio: item.messaggio,
-                    servizi: {}
-                };
-            }
+    let prezzoCalcolato = 0;
 
-            // --- LOGICA RISULTATI REALI ---
-            let distMetri = item.is_pool 
-                ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
-                : Number(richiesta.distanzaMetri || 0);
-            
-            if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
-            
-            const distKmCalc = distMetri / 1000;
-            const distKmTotali = item.distanzaTotaleRotte || distKmCalc; 
-            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
-            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
-            
-            const p = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti || 1, 
-                item.tipo, 
-                distKmCalc, 
-                distKmTotali, 
-                0,
-                item.classe 
-            ).catch(err => { 
-                console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
-                return distKmCalc * 0.50; 
-            });
-            
-            const prezzoVal = Number(p) || 0;
+    try {
+        switch (tipoValido) {
+            case 'privata':
+            case 'standard':
+                const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
+                prezzoCalcolato = (info.euro_km * kmUtente) * multiplier;
+                break;
 
-            return {
-                id: item.is_pool 
-                    ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
-                    : (item.id || `slot_${item.veicolo_id}`),
-                veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
-                tipo: item.tipo,
-                classe: item.classe || 'STANDARD',
-                direttrice_id: item.direttrice_id || null,
-                missione_id: item.missione_id || null,
-                aggancio_info: item.aggancio || null, 
-                localitaOrigine,
-                localitaDestinazione,
-                oraPartenza,
-                oraArrivo,
-                prezzo: prezzoVal,
-                prezzo_display: Math.ceil(prezzoVal).toString(),
-                postiDisponibili: item.posti_disponibili || 0,
-                postiTotali: Number(item.posti_totali || 8),
-                is_pool: !!item.is_pool,
-                is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
-                messaggio: item.messaggio || null,
-                marca: item.marca || null,
-                modello: item.modello || null,
-                servizi: parseServizi(item.servizi)
-            };
-        } catch (err) {
-            console.error(`💥 Errore critico formattazione ID ${item.id}:`, err);
-            return null;
+            case 'condivisa':
+                const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
+                const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
+                const costoBase = (infoCond.euro_km * kmTotali) + ((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero);
+                prezzoCalcolato = ((costoBase / totPasseggeriFinale) * (kmUtente / kmTotali)) * multiplier;
+                break;
+
+            case 'popbus':
+            case 'pop-bus':
+                // FIX: Recupero dinamico dei veicoli pool se non presenti in memoria (direttrici virtuali)
+                let poolIds = corsa.veicoli_pool_ids;
+                if ((!poolIds || poolIds.length === 0) && corsa.direttrice_id) {
+                    const { rows } = await pool.query('SELECT veicolo_id FROM direttrici_virtuali WHERE id = $1', [corsa.direttrice_id]);
+                    if (rows.length > 0 && rows[0].veicolo_id) poolIds = [rows[0].veicolo_id];
+                }
+
+                const poolData = await getDettaglioPool(poolIds || []);
+                
+                // Se non troviamo dati di pool, usiamo un default prudenziale
+                if (poolData.length === 0) {
+                    prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmUtente) * multiplier;
+                } else {
+                    const config = CLASSI_CONFIG[classe?.toUpperCase()] || CLASSI_CONFIG.STANDARD;
+                    const poolFiltrato = poolData.filter(v => v.indice >= config.minIndice && v.indice <= config.maxIndice);
+                    
+                    const mezzo = poolFiltrato.length > 0 
+                        ? poolFiltrato.reduce((prev, curr) => prev.euro_km > curr.euro_km ? prev : curr)
+                        : poolData.reduce((prev, curr) => prev.euro_km > curr.euro_km ? prev : curr);
+
+                    const breakEvenTotale = mezzo.euro_km * kmTotali;
+                    const targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
+                    
+                    prezzoCalcolato = ((breakEvenTotale / targetPasseggeri) * (kmUtente / kmTotali)) * multiplier;
+                }
+                break;
+
+            default:
+                prezzoCalcolato = (0.50 * kmUtente) * multiplier;
         }
-    }))).filter(r => r !== null);
+    } catch (err) {
+        console.error("❌ [PRICING] Errore critico nel calcolo prezzo:", err);
+        prezzoCalcolato = (0.50 * kmUtente) * multiplier;
+    }
+
+    return Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);
 }

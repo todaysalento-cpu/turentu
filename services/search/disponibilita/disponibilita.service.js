@@ -11,10 +11,9 @@ export async function getDisponibilita(veicoloId) {
 }
 
 /**
- * 2. VERSIONE BATCH: Logica puramente oraria
+ * 2. VERSIONE BATCH: Logica oraria con eccezione Pop-Bus
  */
 export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
-  // Calcolo target solo in minuti (0-1439)
   const targetMinutes = targetDate.getUTCHours() * 60 + targetDate.getUTCMinutes();
   const results = new Map();
 
@@ -23,14 +22,17 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
     const turno = CacheStore.veicoloToDisponibilita.get(veicoloId);
     
     if (!turno) {
-      console.log(`🔍 [DISP-DEBUG] Veicolo ${veicoloId}: Turno NON trovato nel CacheStore.`);
+      console.log(`🔍 [DISP-DEBUG] Veicolo ${veicoloId}: NON trovato in CacheStore.`);
       results.set(veicoloId, []); 
       continue;
     }
 
+    // LOG DI ISPEZIONE TIPO
+    // Verifica se il tipo è stato corrotto da 'disponibilita'
+    const isPopBus = String(turno.tipo).toLowerCase().includes('pop-bus');
+    console.log(`🔍 [DISP-DEBUG] Valutazione V:${veicoloId} | Tipo rilevato: '${turno.tipo}' | IsPopBus: ${isPopBus}`);
+
     const driverId = Number(turno.driver_id);
-    
-    // Verifica impegni "Forti" (mantieniamo il controllo data/ora per le prenotazioni reali)
     const isImpegnatoInCorsaForte = impegniForti.some(i => 
       Number(i.driver_id) === driverId && 
       targetDate >= new Date(i.start_datetime) && 
@@ -38,24 +40,24 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
     );
 
     const stato = (() => {
-      console.log(`🔍 [DISP-DEBUG] Valutazione V:${veicoloId} | Driver:${driverId} | Impegnato:${isImpegnatoInCorsaForte}`);
-
-      if (isImpegnatoInCorsaForte && turno.tipo_corsa !== 'pop-bus') {
+      if (isImpegnatoInCorsaForte && !isPopBus) {
         return { ...turno, disponibile: false, motivo: 'impegnato_corsa_forte' };
       }
 
-      // LOGICA ORARIA (Ignoriamo giorni_esclusi e date inattivita puntuali)
+      // LOGICA ORARIA (Eccezione: I Pop-Bus sono sempre disponibili per il motore di ricerca)
       const startM = toMinutes(turno.start);
       const endM = toMinutes(turno.fine);
       
-      const disponibile = (startM > endM) 
-        ? (targetMinutes >= startM || targetMinutes <= endM)
-        : (targetMinutes >= startM && targetMinutes <= endM);
+      const disponibile = isPopBus ? true : (
+        (startM > endM) 
+          ? (targetMinutes >= startM || targetMinutes <= endM)
+          : (targetMinutes >= startM && targetMinutes <= endM)
+      );
 
       if (!disponibile) {
-        console.log(`❌ [DISP-DEBUG] V:${veicoloId} scartato: Fuori orario (Target:${targetMinutes} vs Turno:${startM}-${endM}).`);
+        console.log(`❌ [DISP-DEBUG] V:${veicoloId} SCARTATO: Fuori orario (Target:${targetMinutes} vs Turno:${startM}-${endM}).`);
       } else {
-        console.log(`✅ [DISP-DEBUG] V:${veicoloId} RISULTATO: Disponibile.`);
+        console.log(`✅ [DISP-DEBUG] V:${veicoloId} PASSATO: Disponibile.`);
       }
 
       return { ...turno, disponibile };
@@ -68,7 +70,6 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
 
 function toMinutes(timeStr) {
   const d = new Date(timeStr);
-  // Forza l'uso di UTC per evitare slittamenti di fuso orario
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
@@ -96,13 +97,15 @@ export async function createDisponibilita(turno) {
   );
 
   const nuovoTurno = res.rows[0];
-  const driverRes = await pool.query('SELECT driver_id FROM veicolo WHERE id = $1', [veicolo_id]);
+  // RECUPERO TIPO ORIGINALE PER NON SOVRASCRIVERLO
+  const veicoloRes = await pool.query('SELECT driver_id, servizi FROM veicolo WHERE id = $1', [veicolo_id]);
+  const veicoloInfo = veicoloRes.rows[0];
   
   const finalTurno = {
     ...nuovoTurno,
-    driver_id: driverRes.rows[0]?.driver_id,
-    is_slot: true,
-    tipo: 'disponibilita'
+    driver_id: veicoloInfo?.driver_id,
+    tipo: veicoloInfo?.servizi || 'privata', // MANTENIAMO IL TIPO CORRETTO
+    is_slot: true
   };
 
   CacheManager.disponibilita.update({
@@ -116,9 +119,7 @@ export async function createDisponibilita(turno) {
 
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
-  // Gestione stringhe ISO o semplici HH:mm
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   const [hh, mm] = timeStr.split(':').map(Number);
-  // Usiamo sempre il 1970-01-01 come base neutra UTC
   return new Date(Date.UTC(1970, 0, 1, hh, mm, 0)).toISOString();
 }

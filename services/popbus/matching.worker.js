@@ -8,7 +8,7 @@ export async function processaProposteDinamiche() {
   try {
     await client.query('BEGIN');
 
-    // 1. CLUSTERING: Raggruppiamo prima, calcoliamo la distanza dopo o tramite aggregazione
+    // 1. CLUSTERING
     const { rows: clusters } = await client.query(`
       SELECT 
         r.start_node_id,
@@ -16,7 +16,6 @@ export async function processaProposteDinamiche() {
         r.classe,
         TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) as slot_orario,
         SUM(r.posti_richiesti) as posti_totali,
-        -- Usiamo MAX per estrarre la geometria univoca del nodo in un contesto aggregato
         MAX(ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as dist_km
       FROM richieste_pop_bus r
       JOIN nodi_direttrice n1 ON r.start_node_id = n1.id
@@ -26,13 +25,14 @@ export async function processaProposteDinamiche() {
     `);
 
     for (const c of clusters) {
+      // Inserimento con mapping di c.classe su tipo_servizio
       const { rows: dir } = await client.query(`
-        INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id)
-        VALUES ('in_formazione', $1, $2, $3)
+        INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
+        VALUES ('in_formazione', $1, $2, $3, $4)
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
         DO UPDATE SET stato = 'in_formazione'
         RETURNING id
-      `, [c.slot_orario, c.start_node_id, c.end_node_id]);
+      `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
 
       const { rows: seg } = await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, distanza_km)
@@ -67,10 +67,10 @@ export async function processaProposteDinamiche() {
       RETURNING s.direttrice_id, s.stato
     `);
 
-    // 3. AUTO-UPGRADE
+    // 3. AUTO-UPGRADE (Rimosso riferimento a d_target.classe)
     await client.query(`
       UPDATE richieste_pop_bus r
-      SET target_missione_id = d_target.id, classe = d_target.classe
+      SET target_missione_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
        AND d_source.end_node_id = d_target.end_node_id
@@ -79,12 +79,19 @@ export async function processaProposteDinamiche() {
         AND d_target.stato = 'attivo'
     `);
 
-    // 4. DISPATCH
+    // 4. DISPATCH (Uso di tipo_servizio presente nello schema)
     const activeDirIds = [...new Map(tratteAttivate.map(t => [t.direttrice_id, t])).values()];
 
     for (const t of activeDirIds) {
       await client.query(`UPDATE direttrici_virtuali SET stato = 'in_attesa_autista' WHERE id = $1`, [t.direttrice_id]);
-      getIO().emit('nuova_proposta_popbus', { direttrice_id: t.direttrice_id, classe: t.classe_assegnata || null });
+      
+      // Recupero il tipo_servizio per emettere l'evento
+      const { rows: meta } = await client.query(`SELECT tipo_servizio FROM direttrici_virtuali WHERE id = $1`, [t.direttrice_id]);
+      
+      getIO().emit('nuova_proposta_popbus', { 
+        direttrice_id: t.direttrice_id, 
+        classe: meta[0]?.tipo_servizio || 'urbano' 
+      });
     }
 
     await client.query('COMMIT');

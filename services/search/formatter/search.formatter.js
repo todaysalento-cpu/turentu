@@ -4,6 +4,14 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 const localitaCache = new Map();
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
+// Configurazione UI centralizzata
+const UI_CONFIG = {
+    'pop-bus': { colore: '#FF9800' },
+    'popbus': { colore: '#FF9800' },
+    'privata': { colore: '#4A90E2' },
+    'condivisa': { colore: '#673AB7' }
+};
+
 const safeDate = (dateInput) => {
     const d = new Date(dateInput);
     return !isNaN(d.getTime()) ? d : new Date();
@@ -35,6 +43,8 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati) {
+    console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
+
     // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
@@ -66,10 +76,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 return {
                     id: item.id,
                     tipo: item.tipo,
+                    colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
                     classe: 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
-                    oraPartenza: getSafeISO(richiesta.start_datetime),
+                    oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
                     oraArrivo: 'N/D',
                     prezzo: 0,
                     prezzo_display: 'In attesa',
@@ -114,9 +125,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
                 tipo: item.tipo,
+                colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
                 direttrice_id: item.direttrice_id || null,
                 missione_id: item.missione_id || null,
+                aggancio_info: item.aggancio || null,
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza,

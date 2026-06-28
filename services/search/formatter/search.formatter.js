@@ -79,9 +79,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
 
             if (item.id === 'virtual_pop_pending') {
-                console.log(`🚌 [FORMAT] Calcolo speciale per virtual_pop_pending.`);
+                console.log(`🚌 [FORMAT] Calcolo speciale per virtual_pop_pending. Pool IDs:`, item.veicoli_pool_ids);
+                
+                // PASSAGGIO CORRETTO: item contiene veicoli_pool_ids
                 const p = await calcolaPrezzo(
-                    { tipo: 'pop-bus' },
+                    item, 
                     richiesta.posti_richiesti || 1,
                     'pop-bus',
                     distKmRichiesta,
@@ -105,6 +107,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
+                    veicoli_pool_ids: item.veicoli_pool_ids, // Mantenuto per riferimento
                     messaggio: item.messaggio || "Prezzo stimato. Ottimizzazione in corso...",
                     servizi: {}
                 };

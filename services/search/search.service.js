@@ -133,6 +133,10 @@ export async function cercaSlotUltra(richiesta) {
                 tipo: 'pop-bus',
                 is_pool: true,
                 stato: 'in_attesa',
+                // Iniezione dati per permettere il calcolo corretto nel Pricing
+                classe: richiesta.classe || 'STANDARD',
+                distanza: distanzaMetri,
+                distanzaTotaleRotte: distanzaMetri,
                 messaggio: "Richiesta registrata. Stiamo ottimizzando il percorso per te."
             });
         } catch (err) {

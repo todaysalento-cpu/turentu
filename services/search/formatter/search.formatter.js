@@ -68,26 +68,41 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
+    const distMetriRichiesta = Number(richiesta.distanzaMetri || 1000);
+    const distKmRichiesta = distMetriRichiesta / 1000;
+
     // 3. FORMATTAZIONE E PRICING
     return (await Promise.all(risultatiLimitati.map(async (item) => {
         try {
             // GESTIONE PROPOSTA VIRTUALE (Innesco Proattivo)
             if (item.id === 'virtual_pop_pending') {
+                // Utilizziamo calcolaPrezzo anche per la proposta virtuale per coerenza
+                const p = await calcolaPrezzo(
+                    { tipo: 'pop-bus' },
+                    richiesta.posti_richiesti || 1,
+                    'pop-bus',
+                    distKmRichiesta,
+                    distKmRichiesta,
+                    0,
+                    richiesta.classe || 'STANDARD'
+                );
+                const prezzoVal = Number(p) || 0;
+
                 return {
                     id: item.id,
                     tipo: item.tipo,
                     colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
-                    classe: 'STANDARD',
+                    classe: richiesta.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
                     oraArrivo: 'N/D',
-                    prezzo: 0,
-                    prezzo_display: 'In attesa',
+                    prezzo: prezzoVal,
+                    prezzo_display: `~ ${Math.ceil(prezzoVal)}€`,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
-                    messaggio: item.messaggio,
+                    messaggio: item.messaggio || "Prezzo stimato. Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
@@ -95,7 +110,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             // GESTIONE RISULTATI REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
-                : Number(richiesta.distanzaMetri || 0);
+                : distMetriRichiesta;
             
             if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
             

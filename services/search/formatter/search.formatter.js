@@ -4,7 +4,6 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 const localitaCache = new Map();
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
-// Configurazione UI aggiornata
 const UI_CONFIG = {
     'pop-bus': { colore: '#FF9800' }, 
     'popbus': { colore: '#FF9800' },  
@@ -75,34 +74,27 @@ export async function formatResults(richiesta, risultatiFiltrati) {
         try {
             console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
 
-            if (item.id === 'virtual_pop_pending') {
-                // LOGICA DI FALLBACK LOCALE: se mancano gli ID, tentiamo di recuperarli dall'item stesso o forziamo una inizializzazione sicura
-                const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) 
-                    ? item.veicoli_pool_ids 
-                    : [];
+            // LOGICA DINAMICA PER PROPOSTE VIRTUALI (SAVER, STANDARD, EXPRESS)
+            if (item.id && item.id.startsWith('virtual_pop_')) {
+                const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 
-                console.log(`🚌 [FORMAT] Calcolo speciale. Pool IDs trovati:`, poolSicuro.length);
-                
-                // Aggiorniamo l'item con il pool validato prima di passarlo
-                const itemAggiornato = { ...item, veicoli_pool_ids: poolSicuro };
-
                 const p = await calcolaPrezzo(
-                    itemAggiornato, 
+                    { ...item, veicoli_pool_ids: poolSicuro }, 
                     richiesta.posti_richiesti || 1,
                     'pop-bus',
                     distKmRichiesta,
                     distKmRichiesta,
                     0,
-                    richiesta.classe || 'STANDARD'
+                    item.classe || 'STANDARD'
                 );
                 
                 const prezzoVal = Number(p) || 0;
 
                 return {
-                    id: item.id,
+                    id: item.id, // ID Univoco (es: virtual_pop_saver)
                     tipo: item.tipo,
                     colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
-                    classe: richiesta.classe || 'STANDARD',
+                    classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
@@ -113,11 +105,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     postiTotali: 0,
                     is_pool: true,
                     veicoli_pool_ids: poolSicuro,
-                    messaggio: item.messaggio || "Prezzo stimato. Ottimizzazione in corso...",
+                    messaggio: item.messaggio || "Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
 
+            // LOGICA STANDARD PER CORSE REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : distMetriRichiesta;
@@ -129,8 +122,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            console.log(`📏 [FORMAT] ID ${item.id} | Distanza Calcolata: ${distKmCalc}km`);
-
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
@@ -139,18 +130,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmTotali, 
                 0,
                 item.classe 
-            ).catch((err) => {
-                console.error(`❌ [FORMAT] Errore calcolaPrezzo per ID ${item.id}:`, err);
-                return distKmCalc * 0.50;
-            });
+            ).catch(() => distKmCalc * 0.50);
             
             const prezzoVal = Number(p) || 0;
-            console.log(`✅ [FORMAT] ID ${item.id} terminato. Prezzo finale: ${prezzoVal}€`);
 
             return {
-                id: item.is_pool 
-                    ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
-                    : (item.id || `slot_${item.veicolo_id}`),
+                id: item.is_pool ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`) : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || null,
                 tipo: item.tipo,
                 colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',

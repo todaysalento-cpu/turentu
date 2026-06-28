@@ -54,7 +54,7 @@ function getSnapResult(point, corsa, tolleranzaKm) {
 }
 
 /**
- * MAIN ENGINE - FULLY INTEGRATED
+ * MAIN ENGINE - FULLY INTEGRATED (UNIVERSAL MODE)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
@@ -65,9 +65,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            // Logica Pop-Bus "Virtuale" (Proattiva)
-            // Se la corsa non ha startSnap/endSnap ma è di tipo pop-bus, la lasciamo passare per il pricing
-            const isProattivo = c.tipo === 'pop-bus' && !c.direttrice_id;
+            // Logica "Proattiva": se è un oggetto virtuale, bypassiamo lo snap
+            const isProattivo = c.id === 'virtual_pop_pending';
             
             const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };
             const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM) : { ordine_sequenziale: 999 };
@@ -86,21 +85,18 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return verificaSaturazioneOffset(c, startOffset, endOffset, Number(richiesta.posti_richiesti), prenotazioni, capacitaTotale) ? c : null;
             }
 
-            // --- LOGICA POP-BUS (Reale e Proattiva) ---
-            if (c.tipo === 'pop-bus' || c.tipo_corsa === 'pop-bus') {
-                // Ritorna il pool arricchito per il Pricing
-                const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
+            // --- LOGICA POP-BUS (Universale) ---
+            // Trattiamo qualsiasi corsa o risorsa proattiva come candidata Pop-Bus
+            const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
 
-                if (c.direttrice_id) {
-                    if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
-                    const isSaturato = await verificaSaturazioneSegmenti(c.direttrice_id, startSnap.ordine_sequenziale, endSnap.ordine_sequenziale, Number(richiesta.posti_richiesti), capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0));
-                    return isSaturato ? null : baseResult;
-                }
-
-                return { ...baseResult, is_proattivo: true };
+            if (c.direttrice_id) {
+                if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
+                const isSaturato = await verificaSaturazioneSegmenti(c.direttrice_id, startSnap.ordine_sequenziale, endSnap.ordine_sequenziale, Number(richiesta.posti_richiesti), capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0));
+                return isSaturato ? null : baseResult;
             }
 
-            return null;
+            // Se arriviamo qui, è una risorsa proattiva valida per il Pricing
+            return { ...baseResult, is_proattivo: true };
         }))).filter(Boolean)
     };
 }

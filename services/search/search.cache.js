@@ -16,17 +16,17 @@ export const CacheStore = {
     lastSync: 0
 };
 
-// --- GESTIONE DISPONIBILITÀ ---
+// --- GESTIONE DISPONIBILITÀ (UNIVERSALE) ---
 export const upsertDisponibilita = (d) => {
-    const rawTipo = d.servizi || d.tipo_veicolo || 'privata';
-    const normalizedTipo = String(rawTipo).toLowerCase().trim();
-
+    // Non filtriamo più per tipo in fase di caricamento.
+    // Ogni veicolo disponibile è una risorsa potenziale per il motore dinamico.
     const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
         driver_id: Number(d.driver_id), 
         is_slot: true,
-        tipo: normalizedTipo,
+        // Il tipo viene mantenuto dal database, ma non condiziona più l'idoneità al pool
+        tipo: String(d.servizi || d.tipo_veicolo || 'privata').toLowerCase().trim(),
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
@@ -111,10 +111,7 @@ export async function loadCachesUltra(force = false) {
         });
 
         const sampleSize = Math.min(dRes.rows.length, 3);
-        console.log(`🔍 [CACHE DEBUG] Ispezione primi ${sampleSize} record di disponibilità:`);
-        dRes.rows.slice(0, sampleSize).forEach(d => {
-            console.log(`-> Veicolo ${d.veicolo_id} | Servizi DB: ${d.servizi}`);
-        });
+        console.log(`🔍 [CACHE DEBUG] Ispezione primi ${sampleSize} record di disponibilità.`);
         
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
 

@@ -6,10 +6,10 @@ const VELOCITA_MEDIA_KM_MIN = 1.0;
 
 // Configurazione UI aggiornata
 const UI_CONFIG = {
-    'pop-bus': { colore: '#FF9800' }, // Arancio
-    'popbus': { colore: '#FF9800' },  // Arancio
-    'privata': { colore: '#000000' },  // Nero
-    'condivisa': { colore: '#4A90E2' } // Blu
+    'pop-bus': { colore: '#FF9800' }, 
+    'popbus': { colore: '#FF9800' },  
+    'privata': { colore: '#000000' },  
+    'condivisa': { colore: '#4A90E2' } 
 };
 
 const safeDate = (dateInput) => {
@@ -43,6 +43,8 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati) {
+    console.log(`🚀 [FORMAT] Inizio elaborazione di ${risultatiFiltrati?.length || 0} risultati.`);
+
     // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
@@ -57,6 +59,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
         ...buckets['pop-bus'].slice(0, 4)
     ].slice(0, 12);
 
+    console.log(`📦 [FORMAT] Elementi dopo bucket e slice: ${risultatiLimitati.length}`);
+
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
             ? richiesta.localitaOrigine 
@@ -70,9 +74,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     const distKmRichiesta = distMetriRichiesta / 1000;
 
     // 3. FORMATTAZIONE E PRICING
-    return (await Promise.all(risultatiLimitati.map(async (item) => {
+    const results = await Promise.all(risultatiLimitati.map(async (item) => {
         try {
+            console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
+
             if (item.id === 'virtual_pop_pending') {
+                console.log(`🚌 [FORMAT] Calcolo speciale per virtual_pop_pending.`);
                 const p = await calcolaPrezzo(
                     { tipo: 'pop-bus' },
                     richiesta.posti_richiesti || 1,
@@ -114,6 +121,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
+            console.log(`📏 [FORMAT] ID ${item.id} | Distanza Calcolata: ${distKmCalc}km`);
+
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
@@ -122,9 +131,13 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmTotali, 
                 0,
                 item.classe 
-            ).catch(() => distKmCalc * 0.50);
+            ).catch((err) => {
+                console.error(`❌ [FORMAT] Errore calcolaPrezzo per ID ${item.id}:`, err);
+                return distKmCalc * 0.50;
+            });
             
             const prezzoVal = Number(p) || 0;
+            console.log(`✅ [FORMAT] ID ${item.id} terminato. Prezzo finale: ${prezzoVal}€`);
 
             return {
                 id: item.is_pool 
@@ -147,8 +160,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 Errore formattazione ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore critico durante formattazione ID ${item.id}:`, err);
             return null;
         }
-    }))).filter(r => r !== null);
+    }));
+
+    const output = results.filter(r => r !== null);
+    console.log(`🏁 [FORMAT] Operazione conclusa. Elementi validi restituiti: ${output.length}`);
+    return output;
 }

@@ -74,14 +74,11 @@ export async function cercaSlotUltra(richiesta) {
         return c;
     }).filter(Boolean);
 
-    console.log(`📡 [SearchEngine] Corse candidate trovate in area: ${corseCandidate.length}`);
-
     const { corse: corseValide } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     const risultatiCondivise = corseValide.map(c => ({ ...c, tipo: 'condivisa', is_pool: false, distanza: c.distanza || distanzaMetri }));
 
     // 2. CORSE PRIVATE
     const risultatiPrivati = [];
-    console.log(`🚗 [SearchEngine] Verifica ${CacheStore.veicoloToDisponibilita.size} veicoli nel CacheStore`);
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
         if (!disp.lat || !disp.lon) continue;
         const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
@@ -93,14 +90,11 @@ export async function cercaSlotUltra(richiesta) {
                     id: `priv_${veicoloId}`, tipo: 'privata', veicolo_id: veicoloId, posti_disponibili: cap,
                     posti_totali: cap, distanza: distanzaMetri, is_pool: false
                 });
-            } else {
-                console.log(`⚠️ [SearchEngine] Veicolo ${veicoloId} scartato: is_slot=${disp.is_slot}, disponibile=${disp.disponibile}`);
             }
         }
     }
 
     // 3. POP-BUS (Reali)
-    console.log(`🚌 [SearchEngine] Ricerca direttrici attive in DB...`);
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT d.id, d.stato, d.partenza_prevista, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
@@ -119,21 +113,21 @@ export async function cercaSlotUltra(richiesta) {
         if (disponibili >= postiRichiesti) {
             return { id: `pop_${dir.id}`, tipo: 'pop-bus', direttrice_id: dir.id, posti_disponibili: disponibili, posti_totali: capacita, distanza: distanzaMetri, is_pool: true };
         }
-        console.log(`🚌 [SearchEngine] Direttrice ${dir.id} piena: disp=${disponibili} < req=${postiRichiesti}`);
         return null;
     }))).filter(Boolean);
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
 
-    // --- LOGICA PROATTIVA ---
+    // --- LOGICA PROATTIVA (UNIVERSALE) ---
     if (risultatiPool.length === 0) {
-        console.log("🚀 [SearchEngine] Nessun PopBus trovato. Innesco logica virtual_pop...");
+        console.log("🚀 [SearchEngine] Nessun PopBus trovato. Innesco logica virtual_pop universale...");
         
+        // Filtro universale: tutti i veicoli disponibili sono idonei per una richiesta virtuale
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
-            .filter(([_, disp]) => disp.disponibile && disp.tipo === 'pop-bus')
+            .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);
         
-        console.log(`🚀 [SearchEngine] Veicoli pop-bus idonei nel CacheStore: ${veicoliDisponibili.length}`);
+        console.log(`🚀 [SearchEngine] Veicoli idonei per virtual_pop: ${veicoliDisponibili.length}`);
 
         try {
             const startNode = await getNearestNode(lat, lon);

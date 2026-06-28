@@ -8,7 +8,7 @@ export async function processaProposteDinamiche() {
   try {
     await client.query('BEGIN');
 
-    // 1. CLUSTERING
+    // 1. CLUSTERING (FIX: Aggregazione posizioni per GROUP BY)
     const { rows: clusters } = await client.query(`
       SELECT 
         r.start_node_id,
@@ -16,7 +16,7 @@ export async function processaProposteDinamiche() {
         r.classe,
         TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) as slot_orario,
         SUM(r.posti_richiesti) as posti_totali,
-        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as dist_km
+        (ST_Distance(MIN(n1.posizione)::geography, MIN(n2.posizione)::geography)/1000) as dist_km
       FROM richieste_pop_bus r
       JOIN nodi_direttrice n1 ON r.start_node_id = n1.id
       JOIN nodi_direttrice n2 ON r.end_node_id = n2.id
@@ -25,8 +25,6 @@ export async function processaProposteDinamiche() {
     `);
 
     for (const c of clusters) {
-
-      // ⚠️ NON USARE capacita_totale
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (
           stato,
@@ -92,7 +90,7 @@ export async function processaProposteDinamiche() {
       RETURNING s.direttrice_id, s.stato
     `);
 
-    // 3. AUTO-UPGRADE (FIXATO: niente colonne inesistenti)
+    // 3. AUTO-UPGRADE
     await client.query(`
       UPDATE richieste_pop_bus r
       SET 
@@ -126,7 +124,6 @@ export async function processaProposteDinamiche() {
     }
 
     await client.query('COMMIT');
-
     console.log(`✨ [WORKER] OK. Direttrici attive: ${activeDirIds.length}`);
 
   } catch (err) {

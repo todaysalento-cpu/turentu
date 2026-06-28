@@ -1,10 +1,10 @@
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getLocalitaSafe } from '../../../utils/maps.util.js';
+import { CacheStore } from './search.cache.js'; // IMPORT AGGIUNTO
 
 const localitaCache = new Map();
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
-// Configurazione UI aggiornata
 const UI_CONFIG = {
     'pop-bus': { colore: '#FF9800' }, 
     'popbus': { colore: '#FF9800' },  
@@ -45,43 +45,38 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`🚀 [FORMAT] Inizio elaborazione di ${risultatiFiltrati?.length || 0} risultati.`);
 
-    // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
-    
     risultatiFiltrati.forEach(item => {
         if (buckets[item.tipo]) buckets[item.tipo].push(item);
     });
 
-    // 2. LIMITAZIONE
     const risultatiLimitati = [
         ...buckets.condivisa.slice(0, 4),
         ...buckets.privata.slice(0, 4),
         ...buckets['pop-bus'].slice(0, 4)
     ].slice(0, 12);
 
-    console.log(`📦 [FORMAT] Elementi dopo bucket e slice: ${risultatiLimitati.length}`);
-
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
-            ? richiesta.localitaOrigine 
-            : getLocalitaSafeCached(richiesta.coord),
+            ? richiesta.localitaOrigine : getLocalitaSafeCached(richiesta.coord),
         (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
-            ? richiesta.localitaDestinazione 
-            : getLocalitaSafeCached(richiesta.coordDest)
+            ? richiesta.localitaDestinazione : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
     const distMetriRichiesta = Number(richiesta.distanzaMetri || 1000);
     const distKmRichiesta = distMetriRichiesta / 1000;
 
-    // 3. FORMATTAZIONE E PRICING
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
         try {
             console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
 
             if (item.id === 'virtual_pop_pending') {
-                console.log(`🚌 [FORMAT] Calcolo speciale per virtual_pop_pending. Pool IDs:`, item.veicoli_pool_ids);
+                // PATCH: Garantiamo il popolamento del pool
+                if (!item.veicoli_pool_ids || item.veicoli_pool_ids.length === 0) {
+                    item.veicoli_pool_ids = Array.from(CacheStore.veicoloToDisponibilita.keys());
+                    console.log(`🚌 [FORMAT] Pool iniettato da CacheStore. Totale: ${item.veicoli_pool_ids.length}`);
+                }
                 
-                // PASSAGGIO CORRETTO: item contiene veicoli_pool_ids
                 const p = await calcolaPrezzo(
                     item, 
                     richiesta.posti_richiesti || 1,
@@ -91,8 +86,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     0,
                     richiesta.classe || 'STANDARD'
                 );
-                const prezzoVal = Number(p) || 0;
-
+                
                 return {
                     id: item.id,
                     tipo: item.tipo,
@@ -102,58 +96,37 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     localitaDestinazione,
                     oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
                     oraArrivo: 'N/D',
-                    prezzo: prezzoVal,
-                    prezzo_display: `~ ${Math.ceil(prezzoVal)}€`,
+                    prezzo: Number(p) || 0,
+                    prezzo_display: `~ ${Math.ceil(Number(p) || 0)}€`,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
-                    veicoli_pool_ids: item.veicoli_pool_ids, // Mantenuto per riferimento
-                    messaggio: item.messaggio || "Prezzo stimato. Ottimizzazione in corso...",
+                    veicoli_pool_ids: item.veicoli_pool_ids,
+                    messaggio: item.messaggio || "Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
 
-            let distMetri = item.is_pool 
-                ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
-                : distMetriRichiesta;
-            
-            if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
-            
+            // --- FLUSSO STANDARD ---
+            let distMetri = item.is_pool ? (item.distanza || 1000) : distMetriRichiesta;
             const distKmCalc = distMetri / 1000;
             const distKmTotali = item.distanzaTotaleRotte || distKmCalc; 
-            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
-            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            console.log(`📏 [FORMAT] ID ${item.id} | Distanza Calcolata: ${distKmCalc}km`);
-
-            const p = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti || 1, 
-                item.tipo, 
-                distKmCalc, 
-                distKmTotali, 
-                0,
-                item.classe 
-            ).catch((err) => {
-                console.error(`❌ [FORMAT] Errore calcolaPrezzo per ID ${item.id}:`, err);
-                return distKmCalc * 0.50;
-            });
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, item.tipo, distKmCalc, distKmTotali, 0, item.classe)
+                .catch(err => { console.error(`❌ [FORMAT] Errore calcolaPrezzo ${item.id}:`, err); return distKmCalc * 0.5; });
             
             const prezzoVal = Number(p) || 0;
-            console.log(`✅ [FORMAT] ID ${item.id} terminato. Prezzo finale: ${prezzoVal}€`);
 
             return {
-                id: item.is_pool 
-                    ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
-                    : (item.id || `slot_${item.veicolo_id}`),
+                id: item.id || `slot_${item.veicolo_id}`,
                 veicolo_id: item.veicolo_id || null,
                 tipo: item.tipo,
                 colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza,
-                oraArrivo,
+                oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
+                oraArrivo: determinaArrivo(getSafeISO(richiesta.start_datetime || Date.now()), distMetri),
                 prezzo: prezzoVal,
                 prezzo_display: Math.ceil(prezzoVal).toString(),
                 postiDisponibili: item.posti_disponibili || 0,
@@ -163,7 +136,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore critico durante formattazione ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore critico ID ${item.id}:`, err);
             return null;
         }
     }));

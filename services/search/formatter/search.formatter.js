@@ -91,9 +91,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 const prezzoVal = Number(p) || 0;
 
                 return {
-                    id: item.id, // ID Univoco (es: virtual_pop_saver)
-                    tipo: item.tipo,
-                    colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
+                    id: item.id, // ID Univoco garantito
+                    tipo: 'pop-bus', // Forza tipo standard per frontend
+                    colore_ui: '#FF9800', // Forza colore arancione
                     classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,

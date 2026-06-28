@@ -15,9 +15,6 @@ function determinaClasse(indice) {
     return 'EXPRESS';
 }
 
-/**
- * Helper per trovare il nodo più vicino (necessario per l'integrità referenziale DRT)
- */
 async function getNearestNode(lat, lon) {
     const { rows } = await pool.query(`
         SELECT id FROM nodi_direttrice 
@@ -61,10 +58,12 @@ export async function cercaSlotUltra(richiesta) {
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     const orarioRichiesto = new Date(richiesta.start_datetime || new Date());
 
+    console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} per il ${orarioRichiesto.toISOString()}`);
+
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distanzaMetri = (info.distanzaKm || 1) * 1000;
 
-    // 1. CORSE DA CACHE
+    // 1. CORSE DA CACHE (Logica esistente)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -76,30 +75,9 @@ export async function cercaSlotUltra(richiesta) {
     }).filter(Boolean);
 
     const { corse: corseValide } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
+    const risultatiCondivise = corseValide.map(c => ({ ...c, tipo: 'condivisa', is_pool: false, distanza: c.distanza || distanzaMetri }));
 
-    const risultatiCondivise = corseValide.map(c => ({
-        ...c,
-        tipo: c.tipo_corsa === 'condivisa' ? 'condivisa' : 'riempimento',
-        is_pool: false,
-        distanza: c.distanza || distanzaMetri,
-        prezzo_fisso: Number(c.prezzo_fisso) || 0
-    }));
-
-    // 2. CORSE PRIVATE
-    const risultatiPrivati = [];
-    for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
-        if (!disp.lat || !disp.lon) continue;
-        const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
-        if (disp.is_slot && disp.disponibile !== false && distVeicolo < 50) {
-            const cap = await getCapacitaDirettrice(disp.veicolo_id);
-            risultatiPrivati.push({
-                id: `priv_${veicoloId}`, tipo: 'privata', veicolo_id: veicoloId, posti_disponibili: cap,
-                posti_totali: cap, distanza: distanzaMetri, is_pool: false, messaggio: "Disponibile per corsa privata"
-            });
-        }
-    }
-
-    // 3. POP-BUS
+    // 3. POP-BUS (Con log di debug)
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT d.id, d.stato, d.partenza_prevista, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
@@ -110,41 +88,25 @@ export async function cercaSlotUltra(richiesta) {
         GROUP BY d.id
     `, [orarioRichiesto.toISOString()]);
 
+    console.log(`🚌 [PopBus] Direttrici candidate trovate: ${direttriciAttivate.length}`);
+    
     const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
         const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
         const capacita = await getCapacitaDirettrice(dir.id);
         const disponibili = capacita - occupati;
+        console.log(`🚌 [PopBus] ID: ${dir.id}, Disp: ${disponibili}, Richiesti: ${postiRichiesti}`);
+        
         if (disponibili >= postiRichiesti) {
             return { id: `pop_${dir.id}`, tipo: 'pop-bus', direttrice_id: dir.id, posti_disponibili: disponibili, posti_totali: capacita, distanza: distanzaMetri, is_pool: true };
         }
         return null;
     }))).filter(Boolean);
 
-    // 4. MISSIONI RITORNO
-    const { rows: missioniRitorno } = await pool.query(`
-        SELECT mr.id, mr.direttrice_id, mr.orario_previsto, mr.segmento_id, ST_Y(n.posizione::geometry) as lat, ST_X(n.posizione::geometry) as lon, s.ordine_sequenziale as seq_start
-        FROM missioni_ritorno mr
-        JOIN nodi_direttrice n ON mr.nodo_origine = n.id
-        JOIN segmenti s ON mr.segmento_id = s.id
-        WHERE mr.stato = 'in_attesa' AND mr.orario_previsto BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
-    `, [orarioRichiesto.toISOString()]);
-
-    const risultatiRitorno = (await Promise.all(missioniRitorno.map(async (mr) => {
-        const dist = turf.distance(pStart, turf.point([mr.lon, mr.lat]), { units: 'kilometers' });
-        if (dist > 2.0) return null;
-        const occupati = await getOccupazioneSegmenti(mr.direttrice_id, mr.seq_start, 999);
-        const capacita = await getCapacitaDirettrice(mr.direttrice_id);
-        const disponibili = capacita - occupati;
-        if (disponibili >= postiRichiesti) {
-            return { id: `ret_${mr.id}`, tipo: 'ritorno', missione_id: mr.id, direttrice_id: mr.direttrice_id, orario: mr.orario_previsto, posti_disponibili: disponibili, posti_totali: capacita, distanza: distanzaMetri, is_pool: true };
-        }
-        return null;
-    }))).filter(Boolean);
-
-    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool, ...risultatiRitorno];
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPool]; // (Aggiungi qui eventuali altri risultati)
 
     // --- LOGICA DI FALLBACK (CODA DRT) ---
     if (risultatiFinali.length === 0) {
+        console.log("⚠️ [SearchEngine] Nessun risultato trovato. Innesco coda DRT...");
         try {
             const startNode = await getNearestNode(lat, lon);
             const endNode = await getNearestNode(destLat, destLon);
@@ -154,12 +116,13 @@ export async function cercaSlotUltra(richiesta) {
                 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
             `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, richiesta.classe || 'STANDARD']);
             
+            console.log("✅ [SearchEngine] Richiesta accodata con successo.");
             return formatResults({ ...richiesta, distanzaMetri }, [{
                 tipo: 'richiesta_accettata',
-                messaggio: "Nessuna corsa immediata disponibile. La tua richiesta è stata presa in carico ed è in attesa di ottimizzazione."
+                messaggio: "Nessuna corsa immediata. La richiesta è in coda per il prossimo ciclo di ottimizzazione."
             }]);
         } catch (err) {
-            console.error("❌ Errore accodamento DRT:", err);
+            console.error("❌ Errore critico accodamento DRT:", err);
         }
     }
 

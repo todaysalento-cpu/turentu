@@ -18,8 +18,8 @@ export const CacheStore = {
 
 // --- GESTIONE DISPONIBILITÀ ---
 export const upsertDisponibilita = (d) => {
-    // Normalizzazione critica per il matching nel SearchEngine
-    const rawTipo = d.servizi || d.tipo_veicolo || '';
+    // Normalizzazione critica: forziamo la lettura del tipo/servizio
+    const rawTipo = d.servizi || d.tipo_veicolo || 'privata';
     const normalizedTipo = String(rawTipo).toLowerCase().trim();
 
     const normalized = {
@@ -27,7 +27,7 @@ export const upsertDisponibilita = (d) => {
         veicolo_id: Number(d.veicolo_id),
         driver_id: Number(d.driver_id), 
         is_slot: true,
-        tipo: normalizedTipo, // Normalizzato a minuscolo per confronto sicuro
+        tipo: normalizedTipo, // Importante: ora è normalizzato a minuscolo
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
@@ -50,15 +50,10 @@ export const removeDisponibilita = async (disponibilitaId) => {
 };
 
 // --- GESTIONE ALTRE ENTITÀ ---
-export const upsertPrenotazione = async (prenotazione) => {
-    CacheStore.prenotazioniCache.set(Number(prenotazione.id), prenotazione);
-};
-
 export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), v);
 };
 
-// --- GESTIONE CORSE ---
 export const upsertCorsa = async (c, indicizzare = false) => {
     if (c.percorso_polyline) {
         c.decodedCoords = polyline.decode(c.percorso_polyline);
@@ -70,16 +65,18 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     }
 };
 
-// --- SYNC ENGINE CON LOG DIAGNOSTICI ---
+// --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
     
     const client = await pool.connect();
     try {
         console.log(`⏳ [SYNC] Inizio caricamento cache...`);
+        
         const [vRes, dRes, cRes, dirRes, nodiRes] = await Promise.all([
             client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
-            client.query(`SELECT dv.*, v.driver_id, v.servizi, v.tipo_veicolo, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon FROM disponibilita_veicolo dv JOIN veicolo v ON dv.veicolo_id = v.id`),
+            // Aggiunto alias tipo_veicolo per sicurezza nel caso fosse presente nel DB
+            client.query(`SELECT dv.*, v.driver_id, v.servizi, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon FROM disponibilita_veicolo dv JOIN veicolo v ON dv.veicolo_id = v.id`),
             client.query(`SELECT c.*, v.marca, v.modello, v.rating, v.servizi FROM corse c LEFT JOIN veicolo v ON c.veicolo_id = v.id WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') AND c.start_datetime > NOW() - INTERVAL '1 hour'`),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
             client.query(`SELECT * FROM nodi_direttrice`)
@@ -92,6 +89,13 @@ export async function loadCachesUltra(force = false) {
         dRes.rows.forEach(d => {
             upsertDisponibilita(d);
             aggiornaIndiciDisponibilita(d); 
+        });
+
+        // DEBUG: Campionamento dati per verificare il campo 'tipo'
+        const sampleSize = Math.min(dRes.rows.length, 3);
+        console.log(`🔍 [CACHE DEBUG] Ispezione primi ${sampleSize} record di disponibilità:`);
+        dRes.rows.slice(0, sampleSize).forEach(d => {
+            console.log(`-> Veicolo ${d.veicolo_id} | Servizi DB: ${d.servizi}`);
         });
         
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
@@ -106,15 +110,8 @@ export async function loadCachesUltra(force = false) {
             CacheStore.nodiCache.set(nodo.direttrice_id, list);
         });
 
-        // LOG DI VERIFICA FINALE
-        console.log(`📦 [CACHE DEBUG] Totale veicoli in cache: ${CacheStore.veicoliCache.size}`);
-        console.log(`📦 [CACHE DEBUG] Totale disponibilità in cache: ${CacheStore.veicoloToDisponibilita.size}`);
-        
-        // Verifica campionata (se ne hai, stampa il primo)
-        const samples = Array.from(CacheStore.veicoloToDisponibilita.values()).slice(0, 2);
-        samples.forEach(s => console.log(`🔍 [CACHE SAMPLE] Veicolo ID ${s.veicolo_id} | Tipo normalizzato: '${s.tipo}'`));
-
         CacheStore.lastSync = Date.now();
+        console.log(`📦 [CACHE DEBUG] Totale elementi in veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
         console.log(`✅ [SYNC] Completata con successo.`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico:", err);

@@ -18,7 +18,6 @@ export const CacheStore = {
 
 // --- GESTIONE DISPONIBILITÀ ---
 export const upsertDisponibilita = (d) => {
-    // Normalizzazione critica: forziamo la lettura del tipo/servizio
     const rawTipo = d.servizi || d.tipo_veicolo || 'privata';
     const normalizedTipo = String(rawTipo).toLowerCase().trim();
 
@@ -27,7 +26,7 @@ export const upsertDisponibilita = (d) => {
         veicolo_id: Number(d.veicolo_id),
         driver_id: Number(d.driver_id), 
         is_slot: true,
-        tipo: normalizedTipo, // Importante: ora è normalizzato a minuscolo
+        tipo: normalizedTipo,
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
@@ -50,8 +49,16 @@ export const removeDisponibilita = async (disponibilitaId) => {
 };
 
 // --- GESTIONE ALTRE ENTITÀ ---
+export const upsertPrenotazione = async (prenotazione) => {
+    CacheStore.prenotazioniCache.set(Number(prenotazione.id), prenotazione);
+};
+
 export const upsertVeicolo = (v) => {
     CacheStore.veicoliCache.set(Number(v.id), v);
+};
+
+export const removeVeicolo = async (veicoloId) => {
+    CacheStore.veicoliCache.delete(Number(veicoloId));
 };
 
 export const upsertCorsa = async (c, indicizzare = false) => {
@@ -65,6 +72,19 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     }
 };
 
+export const removeCorsa = async (corsaId) => {
+    const id = Number(corsaId);
+    CacheStore.corseCache.delete(id);
+    const hashes = await redisClient.get(`corsa:hashes:${id}`);
+    if (hashes) {
+        const hashList = JSON.parse(hashes);
+        const pipeline = redisClient.multi();
+        hashList.forEach(h => pipeline.sRem(`corsa:in_area:${h}`, id.toString()));
+        pipeline.del(`corsa:hashes:${id}`);
+        await pipeline.exec();
+    }
+};
+
 // --- SYNC ENGINE ---
 export async function loadCachesUltra(force = false) {
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
@@ -75,7 +95,6 @@ export async function loadCachesUltra(force = false) {
         
         const [vRes, dRes, cRes, dirRes, nodiRes] = await Promise.all([
             client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
-            // Aggiunto alias tipo_veicolo per sicurezza nel caso fosse presente nel DB
             client.query(`SELECT dv.*, v.driver_id, v.servizi, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon FROM disponibilita_veicolo dv JOIN veicolo v ON dv.veicolo_id = v.id`),
             client.query(`SELECT c.*, v.marca, v.modello, v.rating, v.servizi FROM corse c LEFT JOIN veicolo v ON c.veicolo_id = v.id WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') AND c.start_datetime > NOW() - INTERVAL '1 hour'`),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
@@ -91,7 +110,6 @@ export async function loadCachesUltra(force = false) {
             aggiornaIndiciDisponibilita(d); 
         });
 
-        // DEBUG: Campionamento dati per verificare il campo 'tipo'
         const sampleSize = Math.min(dRes.rows.length, 3);
         console.log(`🔍 [CACHE DEBUG] Ispezione primi ${sampleSize} record di disponibilità:`);
         dRes.rows.slice(0, sampleSize).forEach(d => {

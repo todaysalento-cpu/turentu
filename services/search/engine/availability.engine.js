@@ -54,7 +54,7 @@ function getSnapResult(point, corsa, tolleranzaKm) {
 }
 
 /**
- * MAIN ENGINE - AGGIORNATO PER POP-BUS PROATTIVO
+ * MAIN ENGINE - FULLY INTEGRATED
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
@@ -65,16 +65,19 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            const startSnap = getSnapResult(pStart, c, TOLLERANZA_KM);
-            const endSnap = getSnapResult(pEnd, c, TOLLERANZA_KM);
+            // Logica Pop-Bus "Virtuale" (Proattiva)
+            // Se la corsa non ha startSnap/endSnap ma è di tipo pop-bus, la lasciamo passare per il pricing
+            const isProattivo = c.tipo === 'pop-bus' && !c.direttrice_id;
+            
+            const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };
+            const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM) : { ordine_sequenziale: 999 };
 
-            if (!startSnap || !endSnap) return null;
+            if (!isProattivo && (!startSnap || !endSnap)) return null;
 
             // --- LOGICA CONDIVISA ---
             if (c.tipo_corsa === 'condivisa') {
                 const startOffset = Number(startSnap.offset_metri);
                 const endOffset = Number(endSnap.offset_metri);
-
                 if (startOffset >= endOffset || (endOffset - startOffset) < 2000) return null;
 
                 const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
@@ -83,26 +86,18 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return verificaSaturazioneOffset(c, startOffset, endOffset, Number(richiesta.posti_richiesti), prenotazioni, capacitaTotale) ? c : null;
             }
 
-            // --- LOGICA POP-BUS (Ritorno e Proattivo) ---
+            // --- LOGICA POP-BUS (Reale e Proattiva) ---
             if (c.tipo === 'pop-bus' || c.tipo_corsa === 'pop-bus') {
-                // Se ha una direttrice_id definita, effettuiamo il controllo di saturazione reale
+                // Ritorna il pool arricchito per il Pricing
+                const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
+
                 if (c.direttrice_id) {
                     if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
-
-                    const id = c.direttrice_id;
-                    const capacitaTotale = capacitaMap.get(id) ?? Number(c.posti_totali || 0);
-                    const isSaturato = await verificaSaturazioneSegmenti(id, startSnap.ordine_sequenziale, endSnap.ordine_sequenziale, Number(richiesta.posti_richiesti), capacitaTotale);
-                    
-                    return isSaturato ? null : { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
+                    const isSaturato = await verificaSaturazioneSegmenti(c.direttrice_id, startSnap.ordine_sequenziale, endSnap.ordine_sequenziale, Number(richiesta.posti_richiesti), capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0));
+                    return isSaturato ? null : baseResult;
                 }
 
-                // BYPASS PER POP-BUS PROATTIVO (Virtual)
-                // Restituiamo l'oggetto arricchito per permettere al Pricing di calcolare lo stimato
-                return {
-                    ...c,
-                    is_proattivo: true,
-                    veicoli_pool_ids: c.veicoli_pool_ids || []
-                };
+                return { ...baseResult, is_proattivo: true };
             }
 
             return null;
@@ -111,7 +106,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * SATURAZIONE SEGMENTI (POOL OK)
+ * SATURAZIONE SEGMENTI
  */
 async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, postiRichiesti, capacitaTotale) {
     const { rows } = await pool.query(
@@ -121,8 +116,7 @@ async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, post
          AND ordine_sequenziale BETWEEN $2 AND $3`,
         [direttrice_id, seqStart, seqEnd]
     );
-    const occupati = Number(rows[0]?.occupati || 0);
-    return occupati + postiRichiesti > capacitaTotale;
+    return Number(rows[0]?.occupati || 0) + postiRichiesti > capacitaTotale;
 }
 
 /**
@@ -131,12 +125,9 @@ async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, post
 function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotazioni, capacitaTotale) {
     const postiTotali = capacitaTotale ?? Number(corsa.posti_totali || 0);
     const postiGiaPrenotati = Number(corsa.posti_prenotati || 0);
-
     for (const p of prenotazioni) {
         if (startO < Number(p.endOffset) && endO > Number(p.startOffset)) {
-            if (Number(p.posti_richiesti) + postiRichiesti + postiGiaPrenotati > postiTotali) {
-                return false;
-            }
+            if (Number(p.posti_richiesti) + postiRichiesti + postiGiaPrenotati > postiTotali) return false;
         }
     }
     return true;

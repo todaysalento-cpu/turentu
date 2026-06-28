@@ -35,8 +35,6 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati) {
-    console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
-
     // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
@@ -63,6 +61,27 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     // 3. FORMATTAZIONE E PRICING
     return (await Promise.all(risultatiLimitati.map(async (item) => {
         try {
+            // GESTIONE PROPOSTA VIRTUALE (Innesco Proattivo)
+            if (item.id === 'virtual_pop_pending') {
+                return {
+                    id: item.id,
+                    tipo: item.tipo,
+                    classe: 'STANDARD',
+                    localitaOrigine,
+                    localitaDestinazione,
+                    oraPartenza: getSafeISO(richiesta.start_datetime),
+                    oraArrivo: 'N/D',
+                    prezzo: 0,
+                    prezzo_display: 'In attesa',
+                    postiDisponibili: 0,
+                    postiTotali: 0,
+                    is_pool: true,
+                    messaggio: item.messaggio,
+                    servizi: {}
+                };
+            }
+
+            // GESTIONE RISULTATI REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : Number(richiesta.distanzaMetri || 0);
@@ -74,7 +93,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
             const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            // --- AGGIORNAMENTO: Passaggio parametro 'classe' al pricing ---
             const p = await calcolaPrezzo(
                 item, 
                 richiesta.posti_richiesti || 1, 
@@ -82,7 +100,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmCalc, 
                 distKmTotali, 
                 0,
-                item.classe // Parametro aggiunto per calcolo dinamico
+                item.classe 
             ).catch(err => { 
                 console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
                 return distKmCalc * 0.50; 
@@ -96,10 +114,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
                 tipo: item.tipo,
-                classe: item.classe || 'STANDARD', // Esposta per il Frontend
+                classe: item.classe || 'STANDARD',
                 direttrice_id: item.direttrice_id || null,
                 missione_id: item.missione_id || null,
-                aggancio_info: item.aggancio || null, 
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza,

@@ -77,7 +77,7 @@ export async function cercaSlotUltra(richiesta) {
     const { corse: corseValide } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     const risultatiCondivise = corseValide.map(c => ({ ...c, tipo: 'condivisa', is_pool: false, distanza: c.distanza || distanzaMetri }));
 
-    // 2. CORSE PRIVATE (REINTEGRATA)
+    // 2. CORSE PRIVATE
     const risultatiPrivati = [];
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
         if (!disp.lat || !disp.lon) continue;
@@ -92,7 +92,7 @@ export async function cercaSlotUltra(richiesta) {
         }
     }
 
-    // 3. POP-BUS
+    // 3. POP-BUS (Reali)
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT d.id, d.stato, d.partenza_prevista, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
@@ -114,11 +114,11 @@ export async function cercaSlotUltra(richiesta) {
         return null;
     }))).filter(Boolean);
 
-    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
+    let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
 
-    // --- LOGICA DI FALLBACK (CODA DRT) ---
-    if (risultatiFinali.length === 0) {
-        console.log("⚠️ [SearchEngine] Nessun risultato trovato. Innesco coda DRT...");
+    // --- LOGICA PROATTIVA: Innesco PopBus se non ci sono direttrici attive ---
+    if (risultatiPool.length === 0) {
+        console.log("🚀 [SearchEngine] Innesco proattivo matching PopBus...");
         try {
             const startNode = await getNearestNode(lat, lon);
             const endNode = await getNearestNode(destLat, destLon);
@@ -128,13 +128,15 @@ export async function cercaSlotUltra(richiesta) {
                 VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
             `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, richiesta.classe || 'STANDARD']);
             
-            console.log("✅ [SearchEngine] Richiesta accodata con successo.");
-            return formatResults({ ...richiesta, distanzaMetri }, [{
-                tipo: 'richiesta_accettata',
-                messaggio: "Nessuna corsa immediata. La richiesta è in coda per il prossimo ciclo di ottimizzazione."
-            }]);
+            risultatiFinali.push({
+                id: 'virtual_pop_pending',
+                tipo: 'pop-bus',
+                is_pool: true,
+                stato: 'in_attesa',
+                messaggio: "Richiesta registrata. Stiamo ottimizzando il percorso per te."
+            });
         } catch (err) {
-            console.error("❌ Errore critico accodamento DRT:", err);
+            console.error("❌ Errore innesco proattivo:", err);
         }
     }
 

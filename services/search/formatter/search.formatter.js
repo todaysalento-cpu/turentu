@@ -4,12 +4,12 @@ import { getLocalitaSafe } from '../../../utils/maps.util.js';
 const localitaCache = new Map();
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
-// Configurazione UI centralizzata
+// Configurazione UI aggiornata
 const UI_CONFIG = {
-    'pop-bus': { colore: '#FF9800' },
-    'popbus': { colore: '#FF9800' },
-    'privata': { colore: '#4A90E2' },
-    'condivisa': { colore: '#673AB7' }
+    'pop-bus': { colore: '#FF9800' }, // Arancio
+    'popbus': { colore: '#FF9800' },  // Arancio
+    'privata': { colore: '#000000' },  // Nero
+    'condivisa': { colore: '#4A90E2' } // Blu
 };
 
 const safeDate = (dateInput) => {
@@ -43,8 +43,6 @@ async function getLocalitaSafeCached(coord) {
 }
 
 export async function formatResults(richiesta, risultatiFiltrati) {
-    console.log(`[DEBUG] Formattazione | Richiesta Distanza (raw): ${richiesta.distanzaMetri}m`);
-
     // 1. ORGANIZZAZIONE BUCKET
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
@@ -74,9 +72,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     // 3. FORMATTAZIONE E PRICING
     return (await Promise.all(risultatiLimitati.map(async (item) => {
         try {
-            // GESTIONE PROPOSTA VIRTUALE (Innesco Proattivo)
             if (item.id === 'virtual_pop_pending') {
-                // Utilizziamo calcolaPrezzo anche per la proposta virtuale per coerenza
                 const p = await calcolaPrezzo(
                     { tipo: 'pop-bus' },
                     richiesta.posti_richiesti || 1,
@@ -107,7 +103,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 };
             }
 
-            // GESTIONE RISULTATI REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : distMetriRichiesta;
@@ -127,10 +122,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmTotali, 
                 0,
                 item.classe 
-            ).catch(err => { 
-                console.error(`[ERROR] Pricing fallito per ID ${item.id}:`, err); 
-                return distKmCalc * 0.50; 
-            });
+            ).catch(() => distKmCalc * 0.50);
             
             const prezzoVal = Number(p) || 0;
 
@@ -138,13 +130,10 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 id: item.is_pool 
                     ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
                     : (item.id || `slot_${item.veicolo_id}`),
-                veicolo_id: item.veicolo_id || (item.id && typeof item.id === 'string' && item.id.startsWith('priv_') ? item.id.split('_')[1] : null),
+                veicolo_id: item.veicolo_id || null,
                 tipo: item.tipo,
                 colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
-                direttrice_id: item.direttrice_id || null,
-                missione_id: item.missione_id || null,
-                aggancio_info: item.aggancio || null,
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza,
@@ -154,14 +143,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 postiDisponibili: item.posti_disponibili || 0,
                 postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
-                is_nuova_proposta: item.tipo_corsa === 'nuova_proposta',
                 messaggio: item.messaggio || null,
-                marca: item.marca || null,
-                modello: item.modello || null,
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 Errore critico formattazione ID ${item.id}:`, err);
+            console.error(`💥 Errore formattazione ID ${item.id}:`, err);
             return null;
         }
     }))).filter(r => r !== null);

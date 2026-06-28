@@ -25,7 +25,7 @@ export async function processaProposteDinamiche() {
     `);
 
     for (const c of clusters) {
-      // Inserimento con mapping di c.classe su tipo_servizio
+      // Inserimento direttrice
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
@@ -34,13 +34,14 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
 
+      // Inserimento segmento (Corretto: rimossa colonna distanza_km mancante)
       const { rows: seg } = await client.query(`
-        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, distanza_km)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (direttrice_id, start_node_id, end_node_id)
         DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
         RETURNING id
-      `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali, c.dist_km]);
+      `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
 
       await client.query(`
         INSERT INTO missioni_ritorno (segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato)
@@ -67,7 +68,7 @@ export async function processaProposteDinamiche() {
       RETURNING s.direttrice_id, s.stato
     `);
 
-    // 3. AUTO-UPGRADE (Rimosso riferimento a d_target.classe)
+    // 3. AUTO-UPGRADE
     await client.query(`
       UPDATE richieste_pop_bus r
       SET target_missione_id = d_target.id
@@ -79,13 +80,12 @@ export async function processaProposteDinamiche() {
         AND d_target.stato = 'attivo'
     `);
 
-    // 4. DISPATCH (Uso di tipo_servizio presente nello schema)
+    // 4. DISPATCH
     const activeDirIds = [...new Map(tratteAttivate.map(t => [t.direttrice_id, t])).values()];
 
     for (const t of activeDirIds) {
       await client.query(`UPDATE direttrici_virtuali SET stato = 'in_attesa_autista' WHERE id = $1`, [t.direttrice_id]);
       
-      // Recupero il tipo_servizio per emettere l'evento
       const { rows: meta } = await client.query(`SELECT tipo_servizio FROM direttrici_virtuali WHERE id = $1`, [t.direttrice_id]);
       
       getIO().emit('nuova_proposta_popbus', { 

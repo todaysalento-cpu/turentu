@@ -118,39 +118,41 @@ export async function cercaSlotUltra(richiesta) {
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
 
-    // --- LOGICA PROATTIVA (UNIVERSALE) ---
+    // --- LOGICA PROATTIVA (MULTI-CLASSE) ---
     if (risultatiPool.length === 0) {
-        console.log("🚀 [SearchEngine] Nessun PopBus trovato. Innesco logica virtual_pop universale...");
+        console.log("🚀 [SearchEngine] Nessun PopBus trovato. Innesco logica virtual_pop multi-classe...");
         
-        // Filtro universale: tutti i veicoli disponibili sono idonei per una richiesta virtuale
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);
         
-        console.log(`🚀 [SearchEngine] Veicoli idonei per virtual_pop: ${veicoliDisponibili.length}`);
-
+        const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
+        
         try {
             const startNode = await getNearestNode(lat, lon);
             const endNode = await getNearestNode(destLat, destLon);
 
-            await pool.query(`
-                INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
-            `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, richiesta.classe || 'STANDARD']);
-            
-            risultatiFinali.push({
-                id: 'virtual_pop_pending',
-                tipo: 'pop-bus',
-                is_pool: true,
-                veicoli_pool_ids: veicoliDisponibili,
-                stato: 'in_attesa',
-                classe: richiesta.classe || 'STANDARD',
-                distanza: distanzaMetri,
-                distanzaTotaleRotte: distanzaMetri,
-                messaggio: "Richiesta registrata. Stiamo ottimizzando il percorso per te."
-            });
+            for (const classe of classiDisponibili) {
+                await pool.query(`
+                    INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
+                    VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
+                `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, classe]);
+                
+                risultatiFinali.push({
+                    id: `virtual_pop_${classe.toLowerCase()}`,
+                    tipo: 'pop-bus',
+                    is_pool: true,
+                    veicoli_pool_ids: veicoliDisponibili,
+                    stato: 'in_attesa',
+                    classe: classe,
+                    distanza: distanzaMetri,
+                    distanzaTotaleRotte: distanzaMetri,
+                    messaggio: `Richiesta ${classe} registrata. Ottimizzazione in corso...`
+                });
+            }
+            console.log(`🚀 [SearchEngine] Generate 3 proposte virtual_pop.`);
         } catch (err) {
-            console.error("❌ Errore innesco proattivo:", err);
+            console.error("❌ Errore innesco proattivo multi-classe:", err);
         }
     }
 

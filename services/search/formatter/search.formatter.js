@@ -1,10 +1,10 @@
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
 import { getLocalitaSafe } from '../../../utils/maps.util.js';
-import { CacheStore } from './search.cache.js'; // IMPORT AGGIUNTO
 
 const localitaCache = new Map();
 const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
+// Configurazione UI aggiornata
 const UI_CONFIG = {
     'pop-bus': { colore: '#FF9800' }, 
     'popbus': { colore: '#FF9800' },  
@@ -46,6 +46,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`🚀 [FORMAT] Inizio elaborazione di ${risultatiFiltrati?.length || 0} risultati.`);
 
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
+    
     risultatiFiltrati.forEach(item => {
         if (buckets[item.tipo]) buckets[item.tipo].push(item);
     });
@@ -56,11 +57,15 @@ export async function formatResults(richiesta, risultatiFiltrati) {
         ...buckets['pop-bus'].slice(0, 4)
     ].slice(0, 12);
 
+    console.log(`📦 [FORMAT] Elementi dopo bucket e slice: ${risultatiLimitati.length}`);
+
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
-            ? richiesta.localitaOrigine : getLocalitaSafeCached(richiesta.coord),
+            ? richiesta.localitaOrigine 
+            : getLocalitaSafeCached(richiesta.coord),
         (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
-            ? richiesta.localitaDestinazione : getLocalitaSafeCached(richiesta.coordDest)
+            ? richiesta.localitaDestinazione 
+            : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
     const distMetriRichiesta = Number(richiesta.distanzaMetri || 1000);
@@ -71,14 +76,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
 
             if (item.id === 'virtual_pop_pending') {
-                // PATCH: Garantiamo il popolamento del pool
-                if (!item.veicoli_pool_ids || item.veicoli_pool_ids.length === 0) {
-                    item.veicoli_pool_ids = Array.from(CacheStore.veicoloToDisponibilita.keys());
-                    console.log(`🚌 [FORMAT] Pool iniettato da CacheStore. Totale: ${item.veicoli_pool_ids.length}`);
-                }
+                // LOGICA DI FALLBACK LOCALE: se mancano gli ID, tentiamo di recuperarli dall'item stesso o forziamo una inizializzazione sicura
+                const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) 
+                    ? item.veicoli_pool_ids 
+                    : [];
                 
+                console.log(`🚌 [FORMAT] Calcolo speciale. Pool IDs trovati:`, poolSicuro.length);
+                
+                // Aggiorniamo l'item con il pool validato prima di passarlo
+                const itemAggiornato = { ...item, veicoli_pool_ids: poolSicuro };
+
                 const p = await calcolaPrezzo(
-                    item, 
+                    itemAggiornato, 
                     richiesta.posti_richiesti || 1,
                     'pop-bus',
                     distKmRichiesta,
@@ -87,6 +96,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     richiesta.classe || 'STANDARD'
                 );
                 
+                const prezzoVal = Number(p) || 0;
+
                 return {
                     id: item.id,
                     tipo: item.tipo,
@@ -96,37 +107,58 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     localitaDestinazione,
                     oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
                     oraArrivo: 'N/D',
-                    prezzo: Number(p) || 0,
-                    prezzo_display: `~ ${Math.ceil(Number(p) || 0)}€`,
+                    prezzo: prezzoVal,
+                    prezzo_display: `~ ${Math.ceil(prezzoVal)}€`,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
-                    veicoli_pool_ids: item.veicoli_pool_ids,
-                    messaggio: item.messaggio || "Ottimizzazione in corso...",
+                    veicoli_pool_ids: poolSicuro,
+                    messaggio: item.messaggio || "Prezzo stimato. Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
 
-            // --- FLUSSO STANDARD ---
-            let distMetri = item.is_pool ? (item.distanza || 1000) : distMetriRichiesta;
+            let distMetri = item.is_pool 
+                ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
+                : distMetriRichiesta;
+            
+            if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
+            
             const distKmCalc = distMetri / 1000;
             const distKmTotali = item.distanzaTotaleRotte || distKmCalc; 
+            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
+            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
             
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, item.tipo, distKmCalc, distKmTotali, 0, item.classe)
-                .catch(err => { console.error(`❌ [FORMAT] Errore calcolaPrezzo ${item.id}:`, err); return distKmCalc * 0.5; });
+            console.log(`📏 [FORMAT] ID ${item.id} | Distanza Calcolata: ${distKmCalc}km`);
+
+            const p = await calcolaPrezzo(
+                item, 
+                richiesta.posti_richiesti || 1, 
+                item.tipo, 
+                distKmCalc, 
+                distKmTotali, 
+                0,
+                item.classe 
+            ).catch((err) => {
+                console.error(`❌ [FORMAT] Errore calcolaPrezzo per ID ${item.id}:`, err);
+                return distKmCalc * 0.50;
+            });
             
             const prezzoVal = Number(p) || 0;
+            console.log(`✅ [FORMAT] ID ${item.id} terminato. Prezzo finale: ${prezzoVal}€`);
 
             return {
-                id: item.id || `slot_${item.veicolo_id}`,
+                id: item.is_pool 
+                    ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`)
+                    : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || null,
                 tipo: item.tipo,
                 colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
-                oraArrivo: determinaArrivo(getSafeISO(richiesta.start_datetime || Date.now()), distMetri),
+                oraPartenza,
+                oraArrivo,
                 prezzo: prezzoVal,
                 prezzo_display: Math.ceil(prezzoVal).toString(),
                 postiDisponibili: item.posti_disponibili || 0,
@@ -136,7 +168,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore critico ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore critico durante formattazione ID ${item.id}:`, err);
             return null;
         }
     }));

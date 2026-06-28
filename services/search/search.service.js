@@ -63,7 +63,7 @@ export async function cercaSlotUltra(richiesta) {
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distanzaMetri = (info.distanzaKm || 1) * 1000;
 
-    // 1. CORSE DA CACHE (Logica esistente)
+    // 1. CORSE DA CACHE (Condivise)
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
@@ -77,7 +77,22 @@ export async function cercaSlotUltra(richiesta) {
     const { corse: corseValide } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
     const risultatiCondivise = corseValide.map(c => ({ ...c, tipo: 'condivisa', is_pool: false, distanza: c.distanza || distanzaMetri }));
 
-    // 3. POP-BUS (Con log di debug)
+    // 2. CORSE PRIVATE (REINTEGRATA)
+    const risultatiPrivati = [];
+    for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
+        if (!disp.lat || !disp.lon) continue;
+        const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
+        
+        if (disp.is_slot && disp.disponibile !== false && distVeicolo < 50) {
+            const cap = await getCapacitaDirettrice(disp.veicolo_id);
+            risultatiPrivati.push({
+                id: `priv_${veicoloId}`, tipo: 'privata', veicolo_id: veicoloId, posti_disponibili: cap,
+                posti_totali: cap, distanza: distanzaMetri, is_pool: false
+            });
+        }
+    }
+
+    // 3. POP-BUS
     const { rows: direttriciAttivate } = await pool.query(`
         SELECT d.id, d.stato, d.partenza_prevista, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
@@ -88,13 +103,10 @@ export async function cercaSlotUltra(richiesta) {
         GROUP BY d.id
     `, [orarioRichiesto.toISOString()]);
 
-    console.log(`🚌 [PopBus] Direttrici candidate trovate: ${direttriciAttivate.length}`);
-    
     const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
         const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
         const capacita = await getCapacitaDirettrice(dir.id);
         const disponibili = capacita - occupati;
-        console.log(`🚌 [PopBus] ID: ${dir.id}, Disp: ${disponibili}, Richiesti: ${postiRichiesti}`);
         
         if (disponibili >= postiRichiesti) {
             return { id: `pop_${dir.id}`, tipo: 'pop-bus', direttrice_id: dir.id, posti_disponibili: disponibili, posti_totali: capacita, distanza: distanzaMetri, is_pool: true };
@@ -102,7 +114,7 @@ export async function cercaSlotUltra(richiesta) {
         return null;
     }))).filter(Boolean);
 
-    const risultatiFinali = [...risultatiCondivise, ...risultatiPool]; // (Aggiungi qui eventuali altri risultati)
+    const risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
 
     // --- LOGICA DI FALLBACK (CODA DRT) ---
     if (risultatiFinali.length === 0) {

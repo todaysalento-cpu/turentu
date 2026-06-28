@@ -18,14 +18,13 @@ export const CacheStore = {
 
 // --- GESTIONE DISPONIBILITÀ (UNIVERSALE) ---
 export const upsertDisponibilita = (d) => {
-    // Non filtriamo più per tipo in fase di caricamento.
-    // Ogni veicolo disponibile è una risorsa potenziale per il motore dinamico.
     const normalized = {
         ...d,
         veicolo_id: Number(d.veicolo_id),
         driver_id: Number(d.driver_id), 
         is_slot: true,
-        // Il tipo viene mantenuto dal database, ma non condiziona più l'idoneità al pool
+        // Assicuriamo che il flag disponibile sia sempre booleano e valorizzato
+        disponibile: d.disponibile !== undefined ? d.disponibile : true,
         tipo: String(d.servizi || d.tipo_veicolo || 'privata').toLowerCase().trim(),
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
@@ -54,7 +53,7 @@ export const upsertPrenotazione = async (prenotazione) => {
 };
 
 export const upsertVeicolo = (v) => {
-    CacheStore.veicoliCache.set(Number(v.id), v);
+    CacheStore.veicoloCache.set(Number(v.id), v);
 };
 
 export const removeVeicolo = async (veicoloId) => {
@@ -91,28 +90,35 @@ export async function loadCachesUltra(force = false) {
     
     const client = await pool.connect();
     try {
-        console.log(`⏳ [SYNC] Inizio caricamento cache...`);
+        console.log(`⏳ [SYNC] Inizio caricamento cache con validazione temporale...`);
         
+        // CORREZIONE: Query filtrata per orario attuale (NOW)
+        const dQuery = `
+            SELECT dv.*, v.driver_id, v.servizi, v.tipo, 
+                   ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
+            FROM disponibilita_veicolo dv 
+            JOIN veicolo v ON dv.veicolo_id = v.id 
+            WHERE NOW() BETWEEN dv.start AND dv.fine
+        `;
+
         const [vRes, dRes, cRes, dirRes, nodiRes] = await Promise.all([
             client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
-            client.query(`SELECT dv.*, v.driver_id, v.servizi, ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon FROM disponibilita_veicolo dv JOIN veicolo v ON dv.veicolo_id = v.id`),
+            client.query(dQuery),
             client.query(`SELECT c.*, v.marca, v.modello, v.rating, v.servizi FROM corse c LEFT JOIN veicolo v ON c.veicolo_id = v.id WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare') AND c.start_datetime > NOW() - INTERVAL '1 hour'`),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
             client.query(`SELECT * FROM nodi_direttrice`)
         ]);
         
-        console.log(`🔍 [CACHE DEBUG] Query DB - Veicoli: ${vRes.rows.length}, Disp: ${dRes.rows.length}`);
+        console.log(`🔍 [CACHE DEBUG] Query DB - Veicoli: ${vRes.rows.length}, Disp. Temporali valide: ${dRes.rows.length}`);
 
         vRes.rows.forEach(v => upsertVeicolo(v));
         
         dRes.rows.forEach(d => {
-            upsertDisponibilita(d);
+            // Iniettiamo esplicitamente disponibile: true poiché il record esiste nella JOIN temporale
+            upsertDisponibilita({ ...d, disponibile: true });
             aggiornaIndiciDisponibilita(d); 
         });
 
-        const sampleSize = Math.min(dRes.rows.length, 3);
-        console.log(`🔍 [CACHE DEBUG] Ispezione primi ${sampleSize} record di disponibilità.`);
-        
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
 
         CacheStore.direttriciCache.clear();
@@ -136,7 +142,6 @@ export async function loadCachesUltra(force = false) {
     }
 }
 
-// --- UTILS REDIS ---
 async function aggiornaIndiciRedis(corsaId, coords) {
     if (!redisClient || !coords || coords.length === 0) return;
     const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[0], p[1], 5)))];

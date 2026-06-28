@@ -34,7 +34,7 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
 
-      // Inserimento segmento (Corretto: rimossa colonna distanza_km mancante)
+      // Inserimento segmento (rimossa colonna distanza_km mancante)
       const { rows: seg } = await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
         VALUES ($1, $2, $3, $4)
@@ -43,9 +43,10 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
 
+      // Inserimento missioni_ritorno con cast corretto per evitare errori di tipo
       await client.query(`
         INSERT INTO missioni_ritorno (segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato)
-        VALUES ($1, $2, $3, $4, $5 + INTERVAL '1 hour', 'in_attesa')
+        VALUES ($1, $2, $3, $4, ($5::timestamptz + INTERVAL '1 hour'), 'in_attesa')
         ON CONFLICT (segmento_id, capolinea_finale_id) DO NOTHING
       `, [seg[0].id, dir[0].id, c.end_node_id, c.end_node_id, c.slot_orario]);
     }

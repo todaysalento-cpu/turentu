@@ -119,6 +119,12 @@ export async function cercaSlotUltra(richiesta) {
     // --- LOGICA PROATTIVA: Innesco PopBus se non ci sono direttrici attive ---
     if (risultatiPool.length === 0) {
         console.log("🚀 [SearchEngine] Innesco proattivo matching PopBus...");
+        
+        // Identificazione veicoli idonei per formare il pool virtuale
+        const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
+            .filter(([_, disp]) => disp.disponibile && disp.tipo === 'pop-bus')
+            .map(([id, _]) => id);
+
         try {
             const startNode = await getNearestNode(lat, lon);
             const endNode = await getNearestNode(destLat, destLon);
@@ -132,12 +138,12 @@ export async function cercaSlotUltra(richiesta) {
                 id: 'virtual_pop_pending',
                 tipo: 'pop-bus',
                 is_pool: true,
+                veicoli_pool_ids: veicoliDisponibili, // INIETTATO: i dati per il pricing
                 stato: 'in_attesa',
-                // Iniezione dati per permettere il calcolo corretto nel Pricing
                 classe: richiesta.classe || 'STANDARD',
                 distanza: distanzaMetri,
                 distanzaTotaleRotte: distanzaMetri,
-                messaggio: "Richiesta registrata. Stiamo ottimizzando il percorso per te."
+                messaggio: "Stiamo ottimizzando il percorso per te."
             });
         } catch (err) {
             console.error("❌ Errore innesco proattivo:", err);

@@ -58,7 +58,7 @@ export async function cercaSlotUltra(richiesta) {
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
     const orarioRichiesto = new Date(richiesta.start_datetime || new Date());
 
-    console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} per il ${orarioRichiesto.toISOString()}`);
+    console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon}`);
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distanzaMetri = (info.distanzaKm || 1) * 1000;
@@ -75,7 +75,14 @@ export async function cercaSlotUltra(richiesta) {
     }).filter(Boolean);
 
     const { corse: corseValide } = await filterDisponibilita({ ...richiesta, posti_richiesti: postiRichiesti }, corseCandidate, []);
-    const risultatiCondivise = corseValide.map(c => ({ ...c, tipo: 'condivisa', is_pool: false, distanza: c.distanza || distanzaMetri }));
+    
+    // NORMALIZZAZIONE: Tipo sempre minuscolo per compatibilità con i bucket del formatter
+    const risultatiCondivise = corseValide.map(c => ({ 
+        ...c, 
+        tipo: 'condivisa', 
+        is_pool: false, 
+        distanza: c.distanza || distanzaMetri 
+    }));
 
     // 2. CORSE PRIVATE
     const risultatiPrivati = [];
@@ -87,8 +94,13 @@ export async function cercaSlotUltra(richiesta) {
             if (disp.is_slot && disp.disponibile !== false) {
                 const cap = await getCapacitaDirettrice(disp.veicolo_id);
                 risultatiPrivati.push({
-                    id: `priv_${veicoloId}`, tipo: 'privata', veicolo_id: veicoloId, posti_disponibili: cap,
-                    posti_totali: cap, distanza: distanzaMetri, is_pool: false
+                    id: `priv_${veicoloId}`, 
+                    tipo: 'privata', 
+                    veicolo_id: veicoloId, 
+                    posti_disponibili: cap,
+                    posti_totali: cap, 
+                    distanza: distanzaMetri, 
+                    is_pool: false
                 });
             }
         }
@@ -117,11 +129,10 @@ export async function cercaSlotUltra(richiesta) {
     }))).filter(Boolean);
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
+    console.log(`📊 [SearchEngine] Risultati trovati: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
     // --- LOGICA PROATTIVA (MULTI-CLASSE) ---
     if (risultatiPool.length === 0) {
-        console.log("🚀 [SearchEngine] Nessun PopBus trovato. Innesco logica virtual_pop multi-classe...");
-        
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);
@@ -147,12 +158,11 @@ export async function cercaSlotUltra(richiesta) {
                     classe: classe,
                     distanza: distanzaMetri,
                     distanzaTotaleRotte: distanzaMetri,
-                    messaggio: `Richiesta ${classe} registrata. Ottimizzazione in corso...`
+                    messaggio: `Richiesta ${classe} registrata.`
                 });
             }
-            console.log(`🚀 [SearchEngine] Generate 3 proposte virtual_pop.`);
         } catch (err) {
-            console.error("❌ Errore innesco proattivo multi-classe:", err);
+            console.error("❌ Errore innesco proattivo:", err);
         }
     }
 

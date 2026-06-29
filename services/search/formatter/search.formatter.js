@@ -6,7 +6,6 @@ const VELOCITA_MEDIA_KM_MIN = 1.0;
 
 const UI_CONFIG = {
     'pop-bus': { colore: '#FF9800' }, 
-    'popbus': { colore: '#FF9800' },  
     'privata': { colore: '#000000' },  
     'condivisa': { colore: '#4A90E2' } 
 };
@@ -46,8 +45,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
+    // Normalizzazione robusta per mappare correttamente tutti i tipi
     risultatiFiltrati.forEach(item => {
-        if (buckets[item.tipo]) buckets[item.tipo].push(item);
+        const t = String(item.tipo || "").toLowerCase().trim();
+        if (t === 'condivisa') {
+            buckets.condivisa.push(item);
+        } else if (t === 'privata' || t === 'privato') {
+            buckets.privata.push(item);
+        } else if (t.includes('pop')) {
+            buckets['pop-bus'].push(item);
+        } else {
+            console.warn(`⚠️ [FORMAT] Tipo sconosciuto non categorizzato: "${item.tipo}"`);
+        }
     });
 
     const risultatiLimitati = [
@@ -70,27 +79,20 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
         try {
-            // 1. LOGICA DINAMICA PER PROPOSTE VIRTUALI (POP-BUS)
+            // Normalizzazione tipo per coerenza oggetto finale
+            const t = String(item.tipo || "").toLowerCase().trim();
+            const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
+
+            // 1. LOGICA VIRTUAL (POP-BUS)
             if (item.id && item.id.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
-                
-                const p = await calcolaPrezzo(
-                    { ...item, veicoli_pool_ids: poolSicuro }, 
-                    richiesta.posti_richiesti || 1,
-                    'pop-bus',
-                    distKmRichiesta,
-                    distKmRichiesta,
-                    0,
-                    item.classe || 'STANDARD'
-                );
-                
+                const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, item.classe || 'STANDARD');
                 const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
-                const targetPasseggeri = p.targetPasseggeri || 1;
 
                 return {
                     id: item.id,
                     tipo: 'pop-bus',
-                    colore_ui: '#FF9800',
+                    colore_ui: UI_CONFIG['pop-bus'].colore,
                     classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
@@ -98,8 +100,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     oraArrivo: 'N/D',
                     prezzo: prezzoVal,
                     prezzo_display: `~ ${prezzoVal}€`,
-                    posti_necessari_break_even: targetPasseggeri,
-                    messaggio: item.messaggio || `Servizio garantito con ${targetPasseggeri} passeggeri.`,
+                    posti_necessari_break_even: p.targetPasseggeri || 1,
+                    messaggio: item.messaggio || null,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
@@ -108,42 +110,22 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 };
             }
 
-            // 2. LOGICA STANDARD PER CORSE REALI
-            let distMetri = item.is_pool 
-                ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
-                : distMetriRichiesta;
-            
+            // 2. LOGICA STANDARD
+            let distMetri = item.is_pool ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0))) : distMetriRichiesta;
             if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
             
-            const distKmCalc = distMetri / 1000;
-            const distKmTotali = item.distanzaTotaleRotte || distKmCalc; 
-            const oraPartenza = getSafeISO(richiesta.start_datetime || Date.now());
-            const oraArrivo = determinaArrivo(oraPartenza, distMetri);
-            
-            const p = await calcolaPrezzo(
-                item, 
-                richiesta.posti_richiesti || 1, 
-                item.tipo, 
-                distKmCalc, 
-                distKmTotali, 
-                0,
-                item.classe 
-            ).catch(() => ({ prezzo: distKmCalc * 0.50, targetPasseggeri: 1 }));
-            
-            // Logica di validazione prezzo: minimo 1€ se il calcolo torna 0 o NaN
-            const rawPrezzo = Number(p.prezzo);
-            const prezzoVal = (!isNaN(rawPrezzo) && rawPrezzo > 0) ? Math.ceil(rawPrezzo) : 1;
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distMetri/1000, item.distanzaTotaleRotte || (distMetri/1000), 0, item.classe).catch(() => ({ prezzo: (distMetri/1000) * 0.50 }));
+            const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
             return {
-                id: item.is_pool ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`) : (item.id || `slot_${item.veicolo_id}`),
-                veicolo_id: item.veicolo_id || null,
-                tipo: item.tipo,
-                colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
+                id: item.id || `slot_${item.veicolo_id}`,
+                tipo: tipoCoerente,
+                colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza,
-                oraArrivo,
+                oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
+                oraArrivo: determinaArrivo(getSafeISO(richiesta.start_datetime), distMetri),
                 prezzo: prezzoVal,
                 prezzo_display: prezzoVal.toString(),
                 postiDisponibili: item.posti_disponibili || 0,
@@ -153,7 +135,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore critico durante formattazione ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore ID ${item.id}:`, err);
             return null;
         }
     }));

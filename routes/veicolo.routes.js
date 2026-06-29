@@ -3,10 +3,10 @@ import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import fs from 'fs';
 import path from 'path';
-import multer from 'multer'; // 1. Importa multer
+import multer from 'multer';
 
 export const veicoloRouter = express.Router();
-const upload = multer(); // 2. Inizializza multer (gestione in memoria)
+const upload = multer(); // Gestione in memoria
 
 // ---------------------------------------------------
 // DEBUG MIDDLEWARE
@@ -61,21 +61,13 @@ async function buildCoord(lat, lon, localita) {
 
             if (data.results?.length) {
                 const g = data.results[0].geometry.location;
-                return {
-                    lat: g.lat,
-                    lon: g.lng,
-                    ewkt: `SRID=4326;POINT(${g.lng} ${g.lat})`
-                };
+                return { lat: g.lat, lon: g.lng, ewkt: `SRID=4326;POINT(${g.lng} ${g.lat})` };
             }
         } catch (e) {
             log(`Geocoding error: ${e.message}`);
         }
     }
-    return {
-        lat,
-        lon,
-        ewkt: lat && lon ? `SRID=4326;POINT(${lon} ${lat})` : null
-    };
+    return { lat, lon, ewkt: lat && lon ? `SRID=4326;POINT(${lon} ${lat})` : null };
 }
 
 // ---------------------------------------------------
@@ -117,26 +109,24 @@ veicoloRouter.use(authMiddleware);
 veicoloRouter.get('/', async (req, res) => {
     try {
         const veicoli = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE driver_id=$1 ORDER BY id DESC`, [req.user.id]);
-        const mapped = veicoli.rows.map(v => ({
-            ...v,
-            documenti: { libretto: v.libretto ?? null, assicurazione: v.assicurazione ?? null, licenza_ncc: v.numero_licenza_ncc ?? null }
-        }));
-        res.json(mapped);
+        res.json(veicoli.rows.map(v => ({ ...v, documenti: { libretto: v.libretto ?? null, assicurazione: v.assicurazione ?? null, licenza_ncc: v.numero_licenza_ncc ?? null } })));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 // ---------------------------------------------------
-// CREATE VEICOLO (CON MULTER)
+// CREATE VEICOLO (CON LOG DI DEBUG)
 // ---------------------------------------------------
 veicoloRouter.post('/', upload.fields([
     { name: 'libretto', maxCount: 1 },
     { name: 'assicurazione', maxCount: 1 },
     { name: 'licenza_ncc', maxCount: 1 }
 ]), async (req, res) => {
+    console.log("DEBUG [POST] Body:", req.body);
+    console.log("DEBUG [POST] Files:", req.files);
+
     try {
-        // Ora req.body è popolato grazie a multer
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);
 
@@ -157,13 +147,15 @@ veicoloRouter.post('/', upload.fields([
 });
 
 // ---------------------------------------------------
-// UPDATE VEICOLO (CON MULTER)
+// UPDATE VEICOLO (CON LOG DI DEBUG)
 // ---------------------------------------------------
 veicoloRouter.put('/:id', upload.fields([
     { name: 'libretto', maxCount: 1 },
     { name: 'assicurazione', maxCount: 1 },
     { name: 'licenza_ncc', maxCount: 1 }
 ]), async (req, res) => {
+    console.log("DEBUG [PUT] Body:", req.body);
+    
     try {
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);

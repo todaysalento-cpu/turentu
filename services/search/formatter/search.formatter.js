@@ -56,8 +56,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
         ...buckets['pop-bus'].slice(0, 4)
     ].slice(0, 12);
 
-    console.log(`📦 [FORMAT] Elementi dopo bucket e slice: ${risultatiLimitati.length}`);
-
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
             ? richiesta.localitaOrigine 
@@ -72,9 +70,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
         try {
-            console.log(`🔎 [FORMAT] Elaborando ID: ${item.id} | Tipo: ${item.tipo}`);
-
-            // LOGICA DINAMICA PER PROPOSTE VIRTUALI (SAVER, STANDARD, EXPRESS)
+            // 1. LOGICA DINAMICA PER PROPOSTE VIRTUALI (POP-BUS)
             if (item.id && item.id.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 
@@ -88,12 +84,13 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     item.classe || 'STANDARD'
                 );
                 
-                const prezzoVal = Number(p) || 0;
+                const prezzoVal = Number(p.prezzo) || 0;
+                const targetPasseggeri = p.targetPasseggeri || 1;
 
                 return {
-                    id: item.id, // ID Univoco garantito
-                    tipo: 'pop-bus', // Forza tipo standard per frontend
-                    colore_ui: '#FF9800', // Forza colore arancione
+                    id: item.id,
+                    tipo: 'pop-bus',
+                    colore_ui: '#FF9800',
                     classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
@@ -101,16 +98,17 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     oraArrivo: 'N/D',
                     prezzo: prezzoVal,
                     prezzo_display: `~ ${Math.ceil(prezzoVal)}€`,
+                    posti_necessari_break_even: targetPasseggeri,
+                    messaggio: item.messaggio || `Servizio garantito con ${targetPasseggeri} passeggeri.`,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
                     veicoli_pool_ids: poolSicuro,
-                    messaggio: item.messaggio || "Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
 
-            // LOGICA STANDARD PER CORSE REALI
+            // 2. LOGICA STANDARD PER CORSE REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : distMetriRichiesta;
@@ -130,9 +128,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmTotali, 
                 0,
                 item.classe 
-            ).catch(() => distKmCalc * 0.50);
+            ).catch(() => ({ prezzo: distKmCalc * 0.50, targetPasseggeri: 1 }));
             
-            const prezzoVal = Number(p) || 0;
+            const prezzoVal = Number(p.prezzo) || 0;
 
             return {
                 id: item.is_pool ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`) : (item.id || `slot_${item.veicolo_id}`),
@@ -159,6 +157,5 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     }));
 
     const output = results.filter(r => r !== null);
-    console.log(`🏁 [FORMAT] Operazione conclusa. Elementi validi restituiti: ${output.length}`);
     return output;
 }

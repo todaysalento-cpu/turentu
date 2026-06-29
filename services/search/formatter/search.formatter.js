@@ -23,10 +23,6 @@ const parseServizi = (servizi) => {
     try { return JSON.parse(servizi); } catch (e) { return {}; }
 };
 
-/**
- * Funzione protetta per determinare l'arrivo
- * Restituisce null se la data di partenza non è valida
- */
 const determinaArrivo = (partenzaISO, distanzaMetri) => {
     try {
         const d = new Date(partenzaISO);
@@ -101,13 +97,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
                 return {
                     id: itemId,
+                    veicolo_id: null, // Esplicito per logica virtuale
                     tipo: 'pop-bus',
                     colore_ui: UI_CONFIG['pop-bus'].colore,
                     classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: oraPartenzaISO,
-                    oraArrivo: determinaArrivo(oraPartenzaISO, distMetriRichiesta), // Stima calcolata
+                    oraArrivo: determinaArrivo(oraPartenzaISO, distMetriRichiesta),
                     prezzo: prezzoVal,
                     prezzo_display: `~ ${prezzoVal}€`,
                     posti_necessari_break_even: p.targetPasseggeri || 1,
@@ -129,6 +126,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             return {
                 id: itemId || `slot_${item.veicolo_id}`,
+                veicolo_id: item.veicolo_id, // ✅ AGGIUNTO: Necessario per il backend (pending)
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',

@@ -16,6 +16,14 @@ veicoloRouter.use((req, res, next) => {
     next();
 });
 
+// Helper per parsare il body se multer lo ha lasciato come stringa
+const parseBody = (body) => {
+    if (typeof body === 'string') {
+        try { return JSON.parse(body); } catch (e) { return body; }
+    }
+    return body;
+};
+
 // ---------------------------------------------------
 // CONFIG
 // ---------------------------------------------------
@@ -33,19 +41,21 @@ const log = (msg, id = 'SYSTEM') =>
 // NORMALIZE INPUT
 // ---------------------------------------------------
 function normalizeInput(body) {
+    // Assicurati che body sia un oggetto
+    const b = parseBody(body);
     return {
-        marca: body.marca?.trim() || null,
-        modello: body.modello?.trim() || null,
-        posti_totali: Number(body.posti_totali || 1),
-        raggio_km: Number(body.raggio_km || 50),
-        targa: body.targa?.trim().toUpperCase() || null,
-        servizi: body.servizi ? (typeof body.servizi === 'string' ? JSON.parse(body.servizi) : body.servizi) : [],
-        tipo: body.tipo || null,
-        anno: body.anno ? Number(body.anno) : null,
-        lat: body.lat != null ? Number(body.lat) : null,
-        lon: body.lon != null ? Number(body.lon) : null,
-        localita: body.localita || null,
-        image_url: body.image_url || null
+        marca: b.marca?.trim() || null,
+        modello: b.modello?.trim() || null,
+        posti_totali: Number(b.posti_totali || 1),
+        raggio_km: Number(b.raggio_km || 50),
+        targa: b.targa?.trim().toUpperCase() || null,
+        servizi: b.servizi ? (typeof b.servizi === 'string' ? JSON.parse(b.servizi) : b.servizi) : [],
+        tipo: b.tipo || null,
+        anno: b.anno ? Number(b.anno) : null,
+        lat: b.lat != null ? Number(b.lat) : null,
+        lon: b.lon != null ? Number(b.lon) : null,
+        localita: b.localita || null,
+        image_url: b.image_url || null
     };
 }
 
@@ -78,6 +88,7 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
         const file = path.join(process.cwd(), 'data', 'marche_modelli.json');
         if (!fs.existsSync(file)) return res.status(404).json({ error: 'File non trovato' });
         const raw = fs.readFileSync(file, 'utf-8');
+        // Usiamo un parse sicuro
         res.json(JSON.parse(raw));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -116,16 +127,13 @@ veicoloRouter.get('/', async (req, res) => {
 });
 
 // ---------------------------------------------------
-// CREATE VEICOLO (CON LOG DI DEBUG)
+// CREATE VEICOLO
 // ---------------------------------------------------
 veicoloRouter.post('/', upload.fields([
     { name: 'libretto', maxCount: 1 },
     { name: 'assicurazione', maxCount: 1 },
     { name: 'licenza_ncc', maxCount: 1 }
 ]), async (req, res) => {
-    console.log("DEBUG [POST] Body:", req.body);
-    console.log("DEBUG [POST] Files:", req.files);
-
     try {
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);
@@ -147,15 +155,13 @@ veicoloRouter.post('/', upload.fields([
 });
 
 // ---------------------------------------------------
-// UPDATE VEICOLO (CON LOG DI DEBUG)
+// UPDATE VEICOLO
 // ---------------------------------------------------
 veicoloRouter.put('/:id', upload.fields([
     { name: 'libretto', maxCount: 1 },
     { name: 'assicurazione', maxCount: 1 },
     { name: 'licenza_ncc', maxCount: 1 }
 ]), async (req, res) => {
-    console.log("DEBUG [PUT] Body:", req.body);
-    
     try {
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);

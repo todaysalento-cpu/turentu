@@ -75,27 +75,14 @@ app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 
 // ======================= MIDDLEWARE PARSING JSON =======================
-app.use(express.json());
-
-// --- MIDDLEWARE DI SANIFICAZIONE GLOBALE ---
-app.use((req, res, next) => {
-  if (req.body && typeof req.body === 'string') {
-    try {
-      // Pulisce stringhe JSON doppie (es: ""{"key":"val"}"" -> {"key":"val"})
-      let sanitized = req.body.replace(/^"|"$/g, '').replace(/\\"/g, '"');
-      req.body = JSON.parse(sanitized);
-    } catch (e) {
-      // Se non è parsabile, lasciamo che i router gestiscano l'eventuale errore
-    }
-  }
-  next();
-});
+// Rimosso il middleware di sanificazione manuale perché corrompe il payload
+app.use(express.json({ limit: '50mb' }));
 
 // GESTIONE ERRORI PARSING JSON: Previene il crash e risponde con JSON
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     console.error('❌ Errore parsing JSON:', err.message);
-    return res.status(400).json({ error: 'JSON malformato o inviato in formato errato' });
+    return res.status(400).json({ error: 'JSON malformato' });
   }
   next();
 });
@@ -168,7 +155,6 @@ const startServer = async () => {
 
     flowRegistry.register(onboardingFlow);
     
-    // --- CARICAMENTO CACHE CRITICO ---
     console.log('🔄 [INIT] Caricamento Cache Ultra in corso...');
     await loadCachesUltra(); 
     console.log('✅ [INIT] Cache Ultra caricata.');

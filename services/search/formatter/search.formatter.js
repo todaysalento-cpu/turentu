@@ -78,19 +78,23 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     const distKmRichiesta = distMetriRichiesta / 1000;
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
+        if (!item) return null;
         try {
             // Normalizzazione tipo per coerenza oggetto finale
             const t = String(item.tipo || "").toLowerCase().trim();
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
+            
+            // Normalizzazione ID sicura per evitare errori di tipo
+            const itemId = String(item.id || "");
 
             // 1. LOGICA VIRTUAL (POP-BUS)
-            if (item.id && item.id.startsWith('virtual_pop_')) {
+            if (itemId.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, item.classe || 'STANDARD');
                 const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
 
                 return {
-                    id: item.id,
+                    id: itemId,
                     tipo: 'pop-bus',
                     colore_ui: UI_CONFIG['pop-bus'].colore,
                     classe: item.classe || 'STANDARD',
@@ -118,7 +122,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
             return {
-                id: item.id || `slot_${item.veicolo_id}`,
+                id: itemId || `slot_${item.veicolo_id}`,
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
@@ -135,7 +139,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore critico su ID ${item?.id}:`, err);
             return null;
         }
     }));

@@ -3,8 +3,10 @@ import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import fs from 'fs';
 import path from 'path';
+import multer from 'multer'; // 1. Importa multer
 
 export const veicoloRouter = express.Router();
+const upload = multer(); // 2. Inizializza multer (gestione in memoria)
 
 // ---------------------------------------------------
 // DEBUG MIDDLEWARE
@@ -37,7 +39,7 @@ function normalizeInput(body) {
         posti_totali: Number(body.posti_totali || 1),
         raggio_km: Number(body.raggio_km || 50),
         targa: body.targa?.trim().toUpperCase() || null,
-        servizi: Array.isArray(body.servizi) ? body.servizi : [],
+        servizi: body.servizi ? (typeof body.servizi === 'string' ? JSON.parse(body.servizi) : body.servizi) : [],
         tipo: body.tipo || null,
         anno: body.anno ? Number(body.anno) : null,
         lat: body.lat != null ? Number(body.lat) : null,
@@ -59,7 +61,6 @@ async function buildCoord(lat, lon, localita) {
 
             if (data.results?.length) {
                 const g = data.results[0].geometry.location;
-
                 return {
                     lat: g.lat,
                     lon: g.lng,
@@ -70,7 +71,6 @@ async function buildCoord(lat, lon, localita) {
             log(`Geocoding error: ${e.message}`);
         }
     }
-
     return {
         lat,
         lon,
@@ -84,58 +84,24 @@ async function buildCoord(lat, lon, localita) {
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
         const file = path.join(process.cwd(), 'data', 'marche_modelli.json');
-
-        log(`READ FILE: ${file}`, 'MARCHE-MODELLI');
-
-        if (!fs.existsSync(file)) {
-            return res.status(404).json({ error: 'File non trovato' });
-        }
-
+        if (!fs.existsSync(file)) return res.status(404).json({ error: 'File non trovato' });
         const raw = fs.readFileSync(file, 'utf-8');
-        const json = JSON.parse(raw);
-
-        if (!Array.isArray(json)) {
-            return res.status(500).json({ error: 'JSON non valido (array richiesto)' });
-        }
-
-        res.json(json);
+        res.json(JSON.parse(raw));
     } catch (err) {
-        log(err.message, 'MARCHE-MODELLI');
         res.status(500).json({ error: err.message });
     }
 });
 
-veicoloRouter.get('/tipi', (req, res) => {
-    res.json(TIPI_VEICOLO);
-});
+veicoloRouter.get('/tipi', (req, res) => res.json(TIPI_VEICOLO));
 
-// ---------------------------------------------------
-// CHECK TARGA
-// ---------------------------------------------------
 veicoloRouter.get('/check-targa', async (req, res) => {
     try {
         const { targa, id } = req.query;
-
-        if (!targa) {
-            return res.status(400).json({ error: 'Targa mancante' });
-        }
-
-        const query = id
-            ? 'SELECT COUNT(*) FROM veicolo WHERE targa=$1 AND id!=$2'
-            : 'SELECT COUNT(*) FROM veicolo WHERE targa=$1';
-
-        const params = id
-            ? [targa.toUpperCase(), id]
-            : [targa.toUpperCase()];
-
+        const query = id ? 'SELECT COUNT(*) FROM veicolo WHERE targa=$1 AND id!=$2' : 'SELECT COUNT(*) FROM veicolo WHERE targa=$1';
+        const params = id ? [targa.toUpperCase(), id] : [targa.toUpperCase()];
         const result = await pool.query(query, params);
-
-        res.json({
-            inUse: parseInt(result.rows[0].count) > 0
-        });
-
+        res.json({ inUse: parseInt(result.rows[0].count) > 0 });
     } catch (err) {
-        log(err.message, 'CHECK-TARGA');
         res.status(500).json({ error: err.message });
     }
 });
@@ -150,71 +116,40 @@ veicoloRouter.use(authMiddleware);
 // ---------------------------------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
-        const veicoli = await pool.query(`
-            SELECT *,
-            ST_X(coord::geometry) AS lon,
-            ST_Y(coord::geometry) AS lat
-            FROM veicolo
-            WHERE driver_id=$1
-            ORDER BY id DESC
-        `, [req.user.id]);
-
-        // 🔥 FIX IMPORTANTISSIMO: aggiungo documenti stub coerente frontend
+        const veicoli = await pool.query(`SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat FROM veicolo WHERE driver_id=$1 ORDER BY id DESC`, [req.user.id]);
         const mapped = veicoli.rows.map(v => ({
             ...v,
-            documenti: {
-                libretto: v.libretto ?? null,
-                assicurazione: v.assicurazione ?? null,
-                licenza_ncc: v.numero_licenza_ncc ?? null
-            }
+            documenti: { libretto: v.libretto ?? null, assicurazione: v.assicurazione ?? null, licenza_ncc: v.numero_licenza_ncc ?? null }
         }));
-
         res.json(mapped);
-
     } catch (err) {
-        log(err.message, 'GET');
         res.status(500).json({ error: err.message });
     }
 });
 
 // ---------------------------------------------------
-// CREATE VEICOLO
+// CREATE VEICOLO (CON MULTER)
 // ---------------------------------------------------
-veicoloRouter.post('/', async (req, res) => {
+veicoloRouter.post('/', upload.fields([
+    { name: 'libretto', maxCount: 1 },
+    { name: 'assicurazione', maxCount: 1 },
+    { name: 'licenza_ncc', maxCount: 1 }
+]), async (req, res) => {
     try {
+        // Ora req.body è popolato grazie a multer
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);
 
         const result = await pool.query(`
-            INSERT INTO veicolo (
-                driver_id, marca, modello, posti_totali,
-                raggio_km, targa, servizi, tipo,
-                anno, coord, localita, image_url
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,
-                ST_GeomFromEWKT($10),$11,$12
-            )
-            RETURNING *,
-            ST_X(coord::geometry) AS lon,
-            ST_Y(coord::geometry) AS lat
+            INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url)
+            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,ST_GeomFromEWKT($10),$11,$12)
+            RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
         `, [
-            req.user.id,
-            data.marca,
-            data.modello,
-            data.posti_totali,
-            data.raggio_km,
-            data.targa,
-            JSON.stringify(data.servizi),
-            data.tipo,
-            data.anno,
-            coord.ewkt,
-            data.localita,
-            data.image_url
+            req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, 
+            JSON.stringify(data.servizi), data.tipo, data.anno, coord.ewkt, data.localita, data.image_url
         ]);
 
         res.json(result.rows[0]);
-
     } catch (err) {
         log(err.message, 'POST');
         res.status(500).json({ error: err.message });
@@ -222,50 +157,25 @@ veicoloRouter.post('/', async (req, res) => {
 });
 
 // ---------------------------------------------------
-// UPDATE VEICOLO
+// UPDATE VEICOLO (CON MULTER)
 // ---------------------------------------------------
-veicoloRouter.put('/:id', async (req, res) => {
+veicoloRouter.put('/:id', upload.fields([
+    { name: 'libretto', maxCount: 1 },
+    { name: 'assicurazione', maxCount: 1 },
+    { name: 'licenza_ncc', maxCount: 1 }
+]), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
         const coord = await buildCoord(data.lat, data.lon, data.localita);
-
         const result = await pool.query(`
-            UPDATE veicolo SET
-                marca=$1,
-                modello=$2,
-                posti_totali=$3,
-                raggio_km=$4,
-                targa=$5,
-                servizi=$6::jsonb,
-                tipo=$7,
-                anno=$8,
-                coord = COALESCE(ST_GeomFromEWKT($9), coord),
-                localita=$10,
-                image_url=$11
-            WHERE id=$12 AND driver_id=$13
-            RETURNING *,
-            ST_X(coord::geometry) AS lon,
-            ST_Y(coord::geometry) AS lat
+            UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8, coord=COALESCE(ST_GeomFromEWKT($9), coord), localita=$10, image_url=$11
+            WHERE id=$12 AND driver_id=$13 RETURNING *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
         `, [
-            data.marca,
-            data.modello,
-            data.posti_totali,
-            data.raggio_km,
-            data.targa,
-            JSON.stringify(data.servizi),
-            data.tipo,
-            data.anno,
-            coord.ewkt,
-            data.localita,
-            data.image_url,
-            req.params.id,
-            req.user.id
+            data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), 
+            data.tipo, data.anno, coord.ewkt, data.localita, data.image_url, req.params.id, req.user.id
         ]);
-
         res.json(result.rows[0]);
-
     } catch (err) {
-        log(err.message, 'PUT');
         res.status(500).json({ error: err.message });
     }
 });
@@ -275,15 +185,9 @@ veicoloRouter.put('/:id', async (req, res) => {
 // ---------------------------------------------------
 veicoloRouter.delete('/:id', async (req, res) => {
     try {
-        await pool.query(
-            `DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`,
-            [req.params.id, req.user.id]
-        );
-
+        await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
         res.json({ success: true });
-
     } catch (err) {
-        log(err.message, 'DELETE');
         res.status(500).json({ error: err.message });
     }
 });

@@ -46,13 +46,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
-    // Logica bucket tollerante
     risultatiFiltrati.forEach(item => {
-        const tipoKey = String(item.tipo || 'condivisa').toLowerCase().trim();
-        if (tipoKey === 'condivisa') buckets.condivisa.push(item);
-        else if (tipoKey === 'privata') buckets.privata.push(item);
-        else if (tipoKey === 'pop-bus' || tipoKey === 'popbus') buckets['pop-bus'].push(item);
-        else buckets.condivisa.push(item); // Default fallback
+        if (buckets[item.tipo]) buckets[item.tipo].push(item);
     });
 
     const risultatiLimitati = [
@@ -60,8 +55,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
         ...buckets.privata.slice(0, 4),
         ...buckets['pop-bus'].slice(0, 4)
     ].slice(0, 12);
-
-    console.log(`📦 [FORMAT] Elementi dopo bucket e slice: ${risultatiLimitati.length}`);
 
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
         (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
@@ -77,12 +70,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
         try {
-            // Protezione ID e log
-            const itemId = String(item.id ?? '');
-            console.log(`🔎 [FORMAT] Elaborando ID: ${itemId} | Tipo: ${item.tipo}`);
-
-            // 1. PROPOSTE VIRTUALI
-            if (itemId.startsWith('virtual_pop_')) {
+            // 1. LOGICA DINAMICA PER PROPOSTE VIRTUALI (POP-BUS)
+            if (item.id && item.id.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 
                 const p = await calcolaPrezzo(
@@ -95,10 +84,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     item.classe || 'STANDARD'
                 );
                 
-                const prezzoVal = Number(p) || 0;
+                const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
+                const targetPasseggeri = p.targetPasseggeri || 1;
 
                 return {
-                    id: itemId,
+                    id: item.id,
                     tipo: 'pop-bus',
                     colore_ui: '#FF9800',
                     classe: item.classe || 'STANDARD',
@@ -107,17 +97,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
                     oraArrivo: 'N/D',
                     prezzo: prezzoVal,
-                    prezzo_display: `~ ${Math.ceil(prezzoVal)}€`,
+                    prezzo_display: `~ ${prezzoVal}€`,
+                    posti_necessari_break_even: targetPasseggeri,
+                    messaggio: item.messaggio || `Servizio garantito con ${targetPasseggeri} passeggeri.`,
                     postiDisponibili: 0,
                     postiTotali: 0,
                     is_pool: true,
                     veicoli_pool_ids: poolSicuro,
-                    messaggio: item.messaggio || "Ottimizzazione in corso...",
                     servizi: {}
                 };
             }
 
-            // 2. CORSE REALI
+            // 2. LOGICA STANDARD PER CORSE REALI
             let distMetri = item.is_pool 
                 ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)))
                 : distMetriRichiesta;
@@ -137,12 +128,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmTotali, 
                 0,
                 item.classe 
-            ).catch(() => distKmCalc * 0.50);
+            ).catch(() => ({ prezzo: distKmCalc * 0.50, targetPasseggeri: 1 }));
             
-            const prezzoVal = Number(p) || 0;
+            // Logica di validazione prezzo: minimo 1€ se il calcolo torna 0 o NaN
+            const rawPrezzo = Number(p.prezzo);
+            const prezzoVal = (!isNaN(rawPrezzo) && rawPrezzo > 0) ? Math.ceil(rawPrezzo) : 1;
 
             return {
-                id: item.is_pool ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`) : (itemId || `slot_${item.veicolo_id}`),
+                id: item.is_pool ? (item.missione_id ? `ret_${item.missione_id}` : `dir_${item.direttrice_id}`) : (item.id || `slot_${item.veicolo_id}`),
                 veicolo_id: item.veicolo_id || null,
                 tipo: item.tipo,
                 colore_ui: UI_CONFIG[item.tipo]?.colore || '#9E9E9E',
@@ -152,7 +145,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 oraPartenza,
                 oraArrivo,
                 prezzo: prezzoVal,
-                prezzo_display: Math.ceil(prezzoVal).toString(),
+                prezzo_display: prezzoVal.toString(),
                 postiDisponibili: item.posti_disponibili || 0,
                 postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
@@ -160,12 +153,10 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore critico ID ${item.id}:`, err);
+            console.error(`💥 [FORMAT] Errore critico durante formattazione ID ${item.id}:`, err);
             return null;
         }
     }));
 
-    const output = results.filter(r => r !== null);
-    console.log(`🏁 [FORMAT] Operazione conclusa. Elementi validi: ${output.length}`);
-    return output;
+    return results.filter(r => r !== null);
 }

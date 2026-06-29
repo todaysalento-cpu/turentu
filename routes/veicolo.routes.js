@@ -1,8 +1,12 @@
 import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 
 export const veicoloRouter = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 // -------------------------
 // DEBUG
@@ -50,7 +54,16 @@ function normalizeInput(body) {
         lat: b.lat != null ? Number(b.lat) : null,
         lon: b.lon != null ? Number(b.lon) : null,
         localita: b.localita || null,
-        image_url: b.image_url || null
+        image_url: b.image_url || null,
+
+        // 🔥 FIX: documenti JSON
+        documenti: b.documenti
+            ? (typeof b.documenti === 'string' ? JSON.parse(b.documenti) : b.documenti)
+            : {
+                libretto: null,
+                assicurazione: null,
+                licenza_ncc: null
+            }
     };
 }
 
@@ -60,44 +73,39 @@ function normalizeInput(body) {
 veicoloRouter.use(authMiddleware);
 
 // -------------------------
-// GET VEICOLI (🔥 FIX DOCUMENTI REALI)
+// GET VEICOLI (FIX DOCUMENTI)
 // -------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT 
-                v.*,
-                ST_X(v.coord::geometry) AS lon,
-                ST_Y(v.coord::geometry) AS lat,
-
-                -- 🔥 JOIN DOCUMENTI REALI
-                COALESCE(
-                    jsonb_object_agg(d.tipo, d.url)
-                    FILTER (WHERE d.tipo IS NOT NULL),
-                    '{}'::jsonb
-                ) AS documenti
-
-            FROM veicolo v
-            LEFT JOIN documenti_autista d
-                ON d.veicolo_id = v.id
-
-            WHERE v.driver_id = $1
-            GROUP BY v.id
-            ORDER BY v.id DESC
+            SELECT *,
+                   ST_X(coord::geometry) AS lon,
+                   ST_Y(coord::geometry) AS lat
+            FROM veicolo
+            WHERE driver_id=$1
+            ORDER BY id DESC
         `, [req.user.id]);
 
-        res.json(result.rows);
+        const rows = result.rows.map(v => ({
+            ...v,
+            documenti: v.documenti || {
+                libretto: null,
+                assicurazione: null,
+                licenza_ncc: null
+            }
+        }));
+
+        res.json(rows);
 
     } catch (err) {
-        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // -------------------------
-// CREATE (NO documenti qui)
+// CREATE
 // -------------------------
-veicoloRouter.post('/', async (req, res) => {
+veicoloRouter.post('/', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
 
@@ -115,9 +123,10 @@ veicoloRouter.post('/', async (req, res) => {
                 lat,
                 lon,
                 localita,
-                image_url
+                image_url,
+                documenti
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)
+            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14::jsonb)
             RETURNING *
         `, [
             req.user.id,
@@ -132,7 +141,8 @@ veicoloRouter.post('/', async (req, res) => {
             data.lat,
             data.lon,
             data.localita,
-            data.image_url
+            data.image_url,
+            JSON.stringify(data.documenti)
         ]);
 
         res.json(result.rows[0]);
@@ -144,9 +154,9 @@ veicoloRouter.post('/', async (req, res) => {
 });
 
 // -------------------------
-// UPDATE (NO documenti qui)
+// UPDATE
 // -------------------------
-veicoloRouter.put('/:id', async (req, res) => {
+veicoloRouter.put('/:id', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
 
@@ -164,8 +174,9 @@ veicoloRouter.put('/:id', async (req, res) => {
                 lat=$9,
                 lon=$10,
                 localita=$11,
-                image_url=$12
-            WHERE id=$13 AND driver_id=$14
+                image_url=$12,
+                documenti=$13::jsonb
+            WHERE id=$14 AND driver_id=$15
             RETURNING *
         `, [
             data.marca,
@@ -180,6 +191,7 @@ veicoloRouter.put('/:id', async (req, res) => {
             data.lon,
             data.localita,
             data.image_url,
+            JSON.stringify(data.documenti),
             req.params.id,
             req.user.id
         ]);
@@ -187,7 +199,6 @@ veicoloRouter.put('/:id', async (req, res) => {
         res.json(result.rows[0]);
 
     } catch (err) {
-        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -203,10 +214,7 @@ veicoloRouter.delete('/:id', async (req, res) => {
         );
 
         res.json({ success: true });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
-
-export default veicoloRouter;

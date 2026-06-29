@@ -20,97 +20,139 @@ const tipoMapping = {
   libretto: 'libretto',
 };
 
-router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
-  const driver_id = req.user.id;
-  const veicolo_id = parseInt(req.body.veicolo_id);
+router.post(
+  '/',
+  authMiddleware,
+  upload.fields(documentFields),
+  async (req, res) => {
+    const driver_id = req.user.id;
+    const veicolo_id = Number(req.body.veicolo_id);
 
-  console.log(`📥 [UPLOAD DOCUMENTI] Inizio richiesta per driver_id: ${driver_id}, veicolo_id: ${veicolo_id}`);
+    console.log(`📥 UPLOAD DOC driver=${driver_id} veicolo=${veicolo_id}`);
 
-  try {
-    if (!veicolo_id) {
-      console.warn('⚠️ [UPLOAD DOCUMENTI] Errore: veicolo_id mancante nel body.');
-      return res.status(400).json({ success: false, message: 'ID veicolo mancante' });
-    }
-
-    // 1. Controllo validità veicolo
-    const veicoloRes = await pool.query(
-      'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
-      [veicolo_id, driver_id]
-    );
-
-    if (veicoloRes.rowCount === 0) {
-      console.error(`❌ [UPLOAD DOCUMENTI] Veicolo ${veicolo_id} non trovato o non autorizzato per driver ${driver_id}`);
-      return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
-    }
-
-    if (!req.files || Object.keys(req.files).length === 0) {
-      console.warn('⚠️ [UPLOAD DOCUMENTI] Nessun file inviato nella richiesta.');
-      return res.status(400).json({ success: false, message: 'Nessun documento caricato' });
-    }
-
-    // 2. Upload file su Cloudinary
-    const fileUrls = {};
-    for (const field of documentFields) {
-      const file = req.files?.[field.name]?.[0];
-      if (file) {
-        console.log(`📤 [CLOUDINARY] Uploading: ${field.name} (${file.originalname}, ${file.size} bytes)`);
-        try {
-          const url = await uploadFile(file.buffer, file.originalname);
-          if (url) {
-            fileUrls[field.name] = url;
-            console.log(`✅ [CLOUDINARY] Successo ${field.name}: ${url}`);
-          } else {
-            console.error(`❌ [CLOUDINARY] Upload fallito per ${field.name}: URL non restituito`);
-          }
-        } catch (uploadErr) {
-          console.error(`💥 [CLOUDINARY] Errore durante upload di ${field.name}:`, uploadErr);
-        }
+    try {
+      if (!veicolo_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'veicolo_id mancante'
+        });
       }
-    }
 
-    // 3. Salvataggio documenti nel DB
-    const salvati = [];
-    for (const [field, url] of Object.entries(fileUrls)) {
-      const tipo = tipoMapping[field];
-      console.log(`💾 [DATABASE] Tentativo salvataggio: tipo=${tipo}, url=${url}`);
-      
-      const dbRes = await pool.query(
-        `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url, stato, created_at)
-         VALUES ($1, $2, $3, $4, 'pending', CURRENT_TIMESTAMP)
-         ON CONFLICT (autista_id, veicolo_id, tipo)
-         DO UPDATE SET
-           url = EXCLUDED.url,
-           stato = 'pending',
-           note_admin = NULL,
-           created_at = CURRENT_TIMESTAMP
-         RETURNING *`,
-        [driver_id, veicolo_id, tipo, url]
+      // ========================
+      // CHECK VEICOLO
+      // ========================
+      const veicoloRes = await pool.query(
+        'SELECT id, documenti FROM veicolo WHERE id=$1 AND driver_id=$2',
+        [veicolo_id, driver_id]
       );
 
-      if (dbRes.rows[0]) {
-        salvati.push(tipo);
-        console.log(`✅ [DATABASE] Salvato con successo:`, dbRes.rows[0].id);
+      if (veicoloRes.rowCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Veicolo non trovato'
+        });
       }
+
+      if (!req.files || Object.keys(req.files).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Nessun file caricato'
+        });
+      }
+
+      // ========================
+      // UPLOAD CLOUDINARY
+      // ========================
+      const fileUrls = {};
+
+      for (const field of documentFields) {
+        const file = req.files?.[field.name]?.[0];
+
+        if (!file) continue;
+
+        try {
+          const url = await uploadFile(file.buffer, file.originalname);
+
+          if (url) {
+            fileUrls[field.name] = url;
+            console.log(`✅ ${field.name} -> ${url}`);
+          }
+        } catch (err) {
+          console.error(`❌ Upload fail ${field.name}`, err);
+        }
+      }
+
+      // ========================
+      // DB TRANSACTION
+      // ========================
+      await pool.query('BEGIN');
+
+      const salvati = [];
+
+      for (const [field, url] of Object.entries(fileUrls)) {
+        const tipo = tipoMapping[field];
+
+        const dbRes = await pool.query(
+          `
+          INSERT INTO documenti_autista 
+            (autista_id, veicolo_id, tipo, url, stato, created_at)
+          VALUES ($1, $2, $3, $4, 'pending', NOW())
+          ON CONFLICT (autista_id, veicolo_id, tipo)
+          DO UPDATE SET
+            url = EXCLUDED.url,
+            stato = 'pending',
+            note_admin = NULL,
+            created_at = NOW()
+          RETURNING *
+          `,
+          [driver_id, veicolo_id, tipo, url]
+        );
+
+        if (dbRes.rows[0]) salvati.push(tipo);
+      }
+
+      // ========================
+      // 🔥 UPDATE VEICOLO (FIX UI)
+      // ========================
+      const existingDocs = veicoloRes.rows[0]?.documenti || {};
+
+      const updatedDocs = {
+        ...existingDocs,
+        ...fileUrls,
+      };
+
+      await pool.query(
+        `UPDATE veicolo SET documenti=$1 WHERE id=$2`,
+        [JSON.stringify(updatedDocs), veicolo_id]
+      );
+
+      await pool.query('COMMIT');
+
+      // ========================
+      // CACHE INVALIDATION
+      // ========================
+      await CacheManager.veicolo?.delete?.(veicolo_id);
+
+      console.log(`🎉 UPLOAD COMPLETATO:`, salvati);
+
+      return res.json({
+        success: true,
+        message: 'Documenti aggiornati',
+        salvati,
+        documenti: updatedDocs,
+      });
+
+    } catch (err) {
+      await pool.query('ROLLBACK');
+
+      console.error('💥 ERRORE UPLOAD DOC:', err);
+
+      return res.status(500).json({
+        success: false,
+        message: 'Errore server upload documenti'
+      });
     }
-
-    // 4. Invalidazione cache dopo l'aggiornamento riuscito
-    if (salvati.length > 0) {
-      console.log(`🧹 [CACHE] Invalidazione cache per veicolo_id: ${veicolo_id}`);
-      await CacheManager.veicolo.delete(veicolo_id);
-    }
-
-    console.log(`🎉 [UPLOAD DOCUMENTI] Elaborazione completata. Documenti aggiornati: ${salvati.join(', ')}`);
-    return res.json({ 
-      success: true, 
-      message: 'Documenti elaborati', 
-      salvati,
-      urls: fileUrls 
-    });
-
-  } catch (err) {
-    console.error('💥 [UPLOAD DOCUMENTI] Errore critico nel server:', err);
-    return res.status(500).json({ success: false, message: 'Errore interno server durante il salvataggio dei documenti' });
   }
-});
+);
 
 export default router;

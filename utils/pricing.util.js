@@ -29,11 +29,7 @@ export async function getTariffe(veicolo_id) {
 }
 
 async function getDettaglioPool(veicoli_ids) {
-    if (!veicoli_ids || veicoli_ids.length === 0) {
-        console.log(`🚌 [POOL] Nessun ID veicolo fornito per il calcolo.`);
-        return [];
-    }
-
+    if (!veicoli_ids || veicoli_ids.length === 0) return [];
     try {
         const res = await pool.query(
             `SELECT t.veicolo_id, t.euro_km, v.posti_totali as posti 
@@ -42,16 +38,12 @@ async function getDettaglioPool(veicoli_ids) {
              WHERE t.veicolo_id = ANY($1)`,
             [veicoli_ids]
         );
-        
-        const data = res.rows.map(r => ({
+        return res.rows.map(r => ({
             id: r.veicolo_id,
             euro_km: Number(r.euro_km),
             posti: Number(r.posti),
             indice: CALCOLA_INDICE(Number(r.euro_km), Number(r.posti))
         }));
-        
-        console.log(`🚌 [POOL] Trovati ${data.length} veicoli nel DB:`, JSON.stringify(data));
-        return data;
     } catch (err) {
         console.error(`❌ [POOL] Errore query pool:`, err);
         return [];
@@ -64,11 +56,8 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
     const classeKey = classe?.toUpperCase() || 'STANDARD';
     const multiplier = CLASSE_MULTIPLIER[classeKey] || 1.0;
 
-    console.log(`🔍 [PRICING LOG] --- Inizio Calcolo ---`);
-    console.log(`Tipo: ${tipoValido} | Classe: ${classeKey} (Mult: ${multiplier}) | Richiesti: ${richiesti}`);
-    console.log(`Distanze: Utente ${kmUtente}km | Totale ${kmTotali}km`);
-
     let prezzoCalcolato = 0;
+    let targetPasseggeri = 1;
 
     try {
         switch (tipoValido) {
@@ -76,7 +65,6 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
             case 'standard':
                 const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 prezzoCalcolato = (info.euro_km * kmUtente) * multiplier;
-                console.log(`💰 [STANDARD] Base: ${info.euro_km}€/km. Calcolo: (${info.euro_km} * ${kmUtente}) * ${multiplier} = ${prezzoCalcolato.toFixed(2)}€`);
                 break;
 
             case 'condivisa':
@@ -84,14 +72,12 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                 const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
                 const costoBase = (infoCond.euro_km * kmTotali) + ((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero);
                 prezzoCalcolato = ((costoBase / totPasseggeriFinale) * (kmUtente / kmTotali)) * multiplier;
-                console.log(`🤝 [CONDIVISA] Passeggeri: ${totPasseggeriFinale}, Base: ${costoBase.toFixed(2)}€. Risultato: ${prezzoCalcolato.toFixed(2)}€`);
                 break;
 
             case 'popbus':
             case 'pop-bus':
                 let poolIds = corsa.veicoli_pool_ids;
                 if ((!poolIds || poolIds.length === 0) && corsa.direttrice_id) {
-                    console.log(`🚌 [POPBUS] ID pool non presenti, query su direttrice: ${corsa.direttrice_id}`);
                     const { rows } = await pool.query('SELECT veicolo_id FROM direttrici_virtuali WHERE id = $1', [corsa.direttrice_id]);
                     if (rows.length > 0) poolIds = [rows[0].veicolo_id];
                 }
@@ -100,36 +86,37 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                 
                 if (poolData.length === 0) {
                     prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmUtente) * multiplier;
-                    console.log(`⚠️ [POPBUS] Pool vuoto o nessun mezzo trovato. Default: ${prezzoCalcolato.toFixed(2)}€`);
                 } else {
                     const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
-                    console.log(`🚌 [POPBUS] Configurazione applicata:`, config);
+                    // Filtra veicoli validi ed economici
+                    const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
-                    const poolFiltrato = poolData.filter(v => v.indice >= config.minIndice && v.indice <= config.maxIndice);
-                    console.log(`🚌 [POPBUS] Veicoli dopo filtro indici [${config.minIndice}-${config.maxIndice}]: ${poolFiltrato.length}`);
-
+                    // SELEZIONE OTTIMIZZATA: Sceglie il veicolo con euro_km MINORE
                     const mezzo = poolFiltrato.length > 0 
-                        ? poolFiltrato.reduce((prev, curr) => prev.euro_km > curr.euro_km ? prev : curr) 
-                        : poolData.reduce((prev, curr) => prev.euro_km > curr.euro_km ? prev : curr);
+                        ? poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr) 
+                        : poolData.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
 
                     const breakEvenTotale = mezzo.euro_km * kmTotali;
-                    const targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
+                    targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
                     prezzoCalcolato = ((breakEvenTotale / targetPasseggeri) * (kmUtente / kmTotali)) * multiplier;
                     
-                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id} (Indice:${mezzo.indice.toFixed(2)}). BreakEven:${breakEvenTotale.toFixed(2)}€, Target:${targetPasseggeri}. Prezzo: ${prezzoCalcolato.toFixed(2)}€`);
+                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id}. Target:${targetPasseggeri} persone per break-even.`);
                 }
                 break;
 
             default:
                 prezzoCalcolato = (0.50 * kmUtente) * multiplier;
-                console.log(`⚠️ [FALLBACK] Tipo non gestito: ${tipoValido}. Default: ${prezzoCalcolato.toFixed(2)}€`);
         }
     } catch (err) {
-        console.error("❌ [PRICING] Errore critico nel calcolo:", err);
+        console.error("❌ [PRICING] Errore:", err);
         prezzoCalcolato = (0.50 * kmUtente) * multiplier;
     }
 
     const finale = Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);
-    console.log(`✅ [PRICING] Prezzo finale: ${finale}€`);
-    return finale;
+    
+    // Ritorna l'oggetto completo
+    return {
+        prezzo: finale,
+        targetPasseggeri: targetPasseggeri
+    };
 }

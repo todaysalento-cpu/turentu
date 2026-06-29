@@ -16,7 +16,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   const expiresAt = new Date(Date.now() + 30 * 60000).toISOString(); 
 
   console.log(`💳 [PAYMENT:${requestId}] Inizio flusso per user: ${req.user.id}`);
-  // LOG DI DIAGNOSTICA: analizza cosa arriva dal frontend
   console.log(`📥 [PAYMENT:${requestId}] Payload ricevuto:`, JSON.stringify(req.body, null, 2));
 
   try {
@@ -38,7 +37,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const pendingRows = [];
 
     for (const slot of slots) {
-      // LOG DI DIAGNOSTICA PER OGNI SLOT
       console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
       const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
@@ -54,13 +52,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (
             cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-            start_node_id, end_node_id, expires_at
+            start_node_id, end_node_id
           )
             VALUES (
             $1,
             ST_SetSRID(ST_MakePoint($2,$3),4326),
             ST_SetSRID(ST_MakePoint($4,$5),4326),
-            $6, $7, 'in_attesa', $8, $9, $10
+            $6, $7, 'in_attesa', $8, $9
           ) RETURNING *`,
           [
             clienteId,
@@ -69,8 +67,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
             slot.start_datetime,
             slot.posti_richiesti,
             nodeRes.rows[0].start,
-            nodeRes.rows[0].end,
-            expiresAt
+            nodeRes.rows[0].end
           ]
         );
 

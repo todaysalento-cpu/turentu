@@ -77,7 +77,21 @@ app.use(cookieParser());
 // ======================= MIDDLEWARE PARSING JSON =======================
 app.use(express.json());
 
-// GESTIONE ERRORI PARSING JSON: Previene il crash e risponde con JSON invece di HTML
+// --- MIDDLEWARE DI SANIFICAZIONE GLOBALE ---
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'string') {
+    try {
+      // Pulisce stringhe JSON doppie (es: ""{"key":"val"}"" -> {"key":"val"})
+      let sanitized = req.body.replace(/^"|"$/g, '').replace(/\\"/g, '"');
+      req.body = JSON.parse(sanitized);
+    } catch (e) {
+      // Se non è parsabile, lasciamo che i router gestiscano l'eventuale errore
+    }
+  }
+  next();
+});
+
+// GESTIONE ERRORI PARSING JSON: Previene il crash e risponde con JSON
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     console.error('❌ Errore parsing JSON:', err.message);

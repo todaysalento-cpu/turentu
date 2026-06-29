@@ -73,7 +73,18 @@ const isAllowedOrigin = (origin, callback) => {
 
 app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
+
+// ======================= MIDDLEWARE PARSING JSON =======================
 app.use(express.json());
+
+// GESTIONE ERRORI PARSING JSON: Previene il crash e risponde con JSON invece di HTML
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('❌ Errore parsing JSON:', err.message);
+    return res.status(400).json({ error: 'JSON malformato o inviato in formato errato' });
+  }
+  next();
+});
 
 // --- LOG GLOBALE ---
 app.use((req, res, next) => {
@@ -94,7 +105,6 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/booking', bookingClienteRouter);
 app.use('/api/disponibilita', disponibilitaRouter);
-// veicoloRouter è già montato sopra con debug
 app.use('/api/corse', corseRouter);
 app.use('/api/pending', pendingRouter);
 app.use('/api/popbus', popbusRouter);
@@ -157,7 +167,7 @@ const startServer = async () => {
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {
     console.error('💥 [CRITICAL] Errore durante l\'inizializzazione:', err);
-    process.exit(1); // Esce in caso di errore critico per forzare il riavvio di Render
+    process.exit(1);
   }
 };
 

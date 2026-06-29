@@ -23,12 +23,23 @@ const parseServizi = (servizi) => {
     try { return JSON.parse(servizi); } catch (e) { return {}; }
 };
 
+/**
+ * Funzione protetta per determinare l'arrivo
+ * Restituisce null se la data di partenza non è valida
+ */
 const determinaArrivo = (partenzaISO, distanzaMetri) => {
-    const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
-    const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
-    const d = new Date(partenzaISO);
-    d.setMinutes(d.getMinutes() + durataMinuti);
-    return d.toISOString();
+    try {
+        const d = new Date(partenzaISO);
+        if (isNaN(d.getTime())) return null;
+
+        const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
+        const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
+        
+        d.setMinutes(d.getMinutes() + durataMinuti);
+        return d.toISOString();
+    } catch (e) {
+        return null;
+    }
 };
 
 async function getLocalitaSafeCached(coord) {
@@ -45,7 +56,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
-    // Normalizzazione robusta per mappare correttamente tutti i tipi
     risultatiFiltrati.forEach(item => {
         const t = String(item.tipo || "").toLowerCase().trim();
         if (t === 'condivisa') {
@@ -54,8 +64,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             buckets.privata.push(item);
         } else if (t.includes('pop')) {
             buckets['pop-bus'].push(item);
-        } else {
-            console.warn(`⚠️ [FORMAT] Tipo sconosciuto non categorizzato: "${item.tipo}"`);
         }
     });
 
@@ -76,15 +84,13 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const distMetriRichiesta = Number(richiesta.distanzaMetri || 1000);
     const distKmRichiesta = distMetriRichiesta / 1000;
+    const oraPartenzaISO = getSafeISO(richiesta.start_datetime || Date.now());
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
         if (!item) return null;
         try {
-            // Normalizzazione tipo per coerenza oggetto finale
             const t = String(item.tipo || "").toLowerCase().trim();
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
-            
-            // Normalizzazione ID sicura per evitare errori di tipo
             const itemId = String(item.id || "");
 
             // 1. LOGICA VIRTUAL (POP-BUS)
@@ -100,8 +106,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     classe: item.classe || 'STANDARD',
                     localitaOrigine,
                     localitaDestinazione,
-                    oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
-                    oraArrivo: 'N/D',
+                    oraPartenza: oraPartenzaISO,
+                    oraArrivo: determinaArrivo(oraPartenzaISO, distMetriRichiesta), // Stima calcolata
                     prezzo: prezzoVal,
                     prezzo_display: `~ ${prezzoVal}€`,
                     posti_necessari_break_even: p.targetPasseggeri || 1,
@@ -128,8 +134,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 classe: item.classe || 'STANDARD',
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza: getSafeISO(richiesta.start_datetime || Date.now()),
-                oraArrivo: determinaArrivo(getSafeISO(richiesta.start_datetime), distMetri),
+                oraPartenza: oraPartenzaISO,
+                oraArrivo: determinaArrivo(oraPartenzaISO, distMetri),
                 prezzo: prezzoVal,
                 prezzo_display: prezzoVal.toString(),
                 postiDisponibili: item.posti_disponibili || 0,
@@ -139,7 +145,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 servizi: parseServizi(item.servizi)
             };
         } catch (err) {
-            console.error(`💥 [FORMAT] Errore critico su ID ${item?.id}:`, err);
+            console.error(`💥 [FORMAT] Errore su ID ${item?.id}:`, err);
             return null;
         }
     }));

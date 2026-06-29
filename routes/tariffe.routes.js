@@ -40,7 +40,16 @@ router.get('/veicolo/:id', async (req, res) => {
 // -------------------- POST nuova tariffa o update se esiste --------------------
 router.post('/', async (req, res) => {
   try {
-    const body = req.body;
+    // --- SANIFICAZIONE: Gestisce il caso di stringa doppia ---
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        // Rimuove virgolette esterne e backslash, poi parsa
+        body = JSON.parse(body.replace(/^"|"$/g, '').replace(/\\"/g, '"'));
+      } catch (e) {
+        console.error('❌ Errore parsing manuale body:', e);
+      }
+    }
 
     // Accetta sia un singolo oggetto che un array di tariffe
     const tariffeArray = Array.isArray(body) ? body : [body];
@@ -62,7 +71,7 @@ router.post('/', async (req, res) => {
         ora_fine
       } = t;
 
-      console.log('💾 Inserendo/aggiornando tariffa:', t);
+      console.log('💾 Inserendo/aggiornando tariffa:', { veicolo_id, tipo });
 
       const result = await pool.query(
         `INSERT INTO tariffe
@@ -76,17 +85,12 @@ router.post('/', async (req, res) => {
            ora_fine = EXCLUDED.ora_fine,
            updated_at = NOW()
          RETURNING 
-           id,
-           veicolo_id,
-           tipo,
-           euro_km::float AS euro_km,
+           id, veicolo_id, tipo, 
+           euro_km::float AS euro_km, 
            prezzo_passeggero::float AS prezzo_passeggero,
-           giorno_settimana,
-           ora_inizio,
-           ora_fine,
-           created_at,
-           updated_at`,
-        [veicolo_id, tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine]
+           giorno_settimana, ora_inizio, ora_fine, 
+           created_at, updated_at`,
+        [veicolo_id, tipo, parseFloat(euro_km), parseFloat(prezzo_passeggero), giorno_settimana, ora_inizio, ora_fine]
       );
 
       results.push(result.rows[0]);
@@ -103,14 +107,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const tariffaId = Number(req.params.id);
-    const {
-      tipo,
-      euro_km,
-      prezzo_passeggero,
-      giorno_settimana,
-      ora_inizio,
-      ora_fine
-    } = req.body;
+    const { tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine } = req.body;
 
     const result = await pool.query(
       `UPDATE tariffe SET
@@ -123,17 +120,9 @@ router.put('/:id', async (req, res) => {
         updated_at=NOW()
        WHERE id=$7
        RETURNING 
-         id,
-         veicolo_id,
-         tipo,
-         euro_km::float AS euro_km,
-         prezzo_passeggero::float AS prezzo_passeggero,
-         giorno_settimana,
-         ora_inizio,
-         ora_fine,
-         created_at,
-         updated_at`,
-      [tipo, euro_km, prezzo_passeggero, giorno_settimana, ora_inizio, ora_fine, tariffaId]
+         id, veicolo_id, tipo, euro_km::float AS euro_km, prezzo_passeggero::float AS prezzo_passeggero,
+         giorno_settimana, ora_inizio, ora_fine, created_at, updated_at`,
+      [tipo, parseFloat(euro_km), parseFloat(prezzo_passeggero), giorno_settimana, ora_inizio, ora_fine, tariffaId]
     );
 
     if (result.rows.length === 0) {

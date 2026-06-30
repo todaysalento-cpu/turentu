@@ -2,17 +2,11 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
+import fs from 'fs/promises'; // Importa le promesse per file system
+import path from 'path';
 
 export const veicoloRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
-
-// -------------------------
-// DEBUG
-// -------------------------
-veicoloRouter.use((req, res, next) => {
-    console.log(`[DEBUG_ROUTER] ${req.method} ${req.originalUrl}`);
-    next();
-});
 
 // -------------------------
 // UTILS
@@ -51,17 +45,21 @@ function normalizeInput(body) {
 veicoloRouter.use(authMiddleware);
 
 // -------------------------
-// NEW: GET MARCHE E MODELLI
+// GET MARCHE E MODELLI (LETTURA DA FILE JSON)
 // -------------------------
-// Risolve l'errore 404 visto nei tuoi log
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
-        // Supponendo che tu abbia una tabella 'catalogo_veicoli'
-        const result = await pool.query('SELECT id, nome, modelli FROM catalogo_veicoli ORDER BY nome ASC');
-        res.json(result.rows);
+        // Percorso al file nella cartella /data alla radice del progetto
+        const filePath = path.join(process.cwd(), 'data', 'marche_modelli.json');
+        
+        // Legge il file e lo invia come JSON
+        const fileContent = await fs.readFile(filePath, 'utf-8');
+        const data = JSON.parse(fileContent);
+        
+        res.json(data);
     } catch (err) {
-        console.error("Errore fetch marche-modelli:", err);
-        res.status(500).json({ error: "Impossibile recuperare il catalogo" });
+        console.error("Errore lettura file marche_modelli.json:", err);
+        res.status(500).json({ error: "Impossibile recuperare il catalogo marche" });
     }
 });
 

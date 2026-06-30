@@ -9,6 +9,10 @@ const upload = multer({
     storage: multer.memoryStorage()
 });
 
+/* =======================================================
+   NORMALIZE INPUT
+======================================================= */
+
 function normalizeInput(b = {}) {
     return {
         marca: b.marca?.trim() || null,
@@ -28,10 +32,14 @@ function normalizeInput(b = {}) {
     };
 }
 
+/* =======================================================
+   AUTH
+======================================================= */
+
 veicoloRouter.use(authMiddleware);
 
 /* =======================================================
-   DEBUG
+   DEBUG MIDDLEWARE
 ======================================================= */
 
 veicoloRouter.use((req, res, next) => {
@@ -46,12 +54,34 @@ veicoloRouter.use((req, res, next) => {
 });
 
 /* =======================================================
-   GET VEICOLO (🔥 FIX DOCUMENTI QUI)
+   🔥 NEW: MARCHE + MODELLI CATALOG (MANCAVA QUESTA ROUTE)
+======================================================= */
+
+veicoloRouter.get('/marche-modelli', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT id, nome, modelli
+            FROM marche_modelli
+            ORDER BY nome ASC
+        `);
+
+        return res.json(result.rows);
+    } catch (err) {
+        console.error("❌ ERROR [GET /api/veicolo/marche-modelli]");
+        console.error(err);
+
+        return res.status(500).json({
+            error: err.message
+        });
+    }
+});
+
+/* =======================================================
+   GET VEICOLO
 ======================================================= */
 
 veicoloRouter.get('/', async (req, res) => {
     try {
-
         const result = await pool.query(
             `
             SELECT *
@@ -70,7 +100,6 @@ veicoloRouter.get('/', async (req, res) => {
 
         const veicolo = result.rows[0];
 
-        // 🔥 FETCH DOCUMENTI REALI
         const docsRes = await pool.query(
             `
             SELECT tipo, url
@@ -97,7 +126,6 @@ veicoloRouter.get('/', async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("❌ ERROR [GET /api/veicolo]");
         console.error(err);
 
@@ -112,13 +140,9 @@ veicoloRouter.get('/', async (req, res) => {
 ======================================================= */
 
 veicoloRouter.post('/', async (req, res) => {
-
     try {
-
         if (!req.body) {
-            return res.status(400).json({
-                error: "Body mancante"
-            });
+            return res.status(400).json({ error: "Body mancante" });
         }
 
         const data = normalizeInput(req.body);
@@ -175,15 +199,11 @@ veicoloRouter.post('/', async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("❌ ERROR [POST /api/veicolo]");
         console.error(err);
 
-        return res.status(400).json({
-            error: err.message
-        });
+        return res.status(400).json({ error: err.message });
     }
-
 });
 
 /* =======================================================
@@ -191,13 +211,9 @@ veicoloRouter.post('/', async (req, res) => {
 ======================================================= */
 
 veicoloRouter.put('/:id', async (req, res) => {
-
     try {
-
         if (!req.body) {
-            return res.status(400).json({
-                error: "Body mancante"
-            });
+            return res.status(400).json({ error: "Body mancante" });
         }
 
         const data = normalizeInput(req.body);
@@ -244,9 +260,7 @@ veicoloRouter.put('/:id', async (req, res) => {
         );
 
         if (result.rowCount === 0) {
-            return res.status(404).json({
-                error: "Veicolo non trovato"
-            });
+            return res.status(404).json({ error: "Veicolo non trovato" });
         }
 
         return res.json({
@@ -255,27 +269,20 @@ veicoloRouter.put('/:id', async (req, res) => {
         });
 
     } catch (err) {
-
         console.error(`❌ ERROR [PUT /api/veicolo/${req.params.id}]`);
         console.error(err);
 
-        return res.status(400).json({
-            error: err.message
-        });
+        return res.status(400).json({ error: err.message });
     }
-
 });
 
 /* =======================================================
-   DOCUMENTI (UPLOAD DEBUG BASE)
+   DOCUMENTI UPLOAD
 ======================================================= */
 
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
-
     console.log("📄 File ricevuti:");
     console.log(req.files);
 
-    return res.json({
-        success: true
-    });
+    return res.json({ success: true });
 });

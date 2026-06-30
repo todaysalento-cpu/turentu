@@ -9,14 +9,6 @@ export const veicoloRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // -------------------------
-// DEBUG GLOBALE
-// -------------------------
-veicoloRouter.use((req, res, next) => {
-    console.log(`[DEBUG_ROUTER] ${req.method} ${req.originalUrl}`);
-    next();
-});
-
-// -------------------------
 // UTILS
 // -------------------------
 const parseBody = (body) => {
@@ -41,41 +33,24 @@ function normalizeInput(body) {
         lon: b.lon != null ? Number(b.lon) : null,
         localita: b.localita || null,
         image_url: b.image_url || null,
-        documenti: b.documenti ? (typeof b.documenti === 'string' ? JSON.parse(b.documenti) : b.documenti) : {
-            libretto: null, assicurazione: null, licenza_ncc: null
-        }
+        // Gestione documenti mappata su colonne esistenti
+        doc_licenza: b.documenti?.licenza_ncc || null,
+        doc_comune: b.documenti?.comune || null
     };
 }
 
-// -------------------------
-// AUTH OBBLIGATORIA
-// -------------------------
 veicoloRouter.use(authMiddleware);
 
 // -------------------------
-// GET MARCHE E MODELLI (DEBUG LOGGING)
+// GET MARCHE E MODELLI
 // -------------------------
 veicoloRouter.get('/marche-modelli', async (req, res) => {
-    const fileName = 'marche_modelli.json';
-    const filePath = path.join(process.cwd(), 'data', fileName);
-    
-    console.log(`[DEBUG_FS] Tentativo lettura: ${filePath}`);
-    
     try {
+        const filePath = path.join(process.cwd(), 'data', 'marche_modelli.json');
         const fileContent = await fs.readFile(filePath, 'utf-8');
-        console.log(`[DEBUG_FS] File letto con successo (${fileContent.length} bytes)`);
-        
-        const data = JSON.parse(fileContent);
-        console.log(`[DEBUG_FS] JSON parsato correttamente, elementi: ${Array.isArray(data) ? data.length : 'N/A'}`);
-        
-        res.json(data);
+        res.json(JSON.parse(fileContent));
     } catch (err) {
-        console.error(`[DEBUG_FS_ERROR] Errore su ${filePath}:`, err.message);
-        res.status(500).json({ 
-            error: "Impossibile recuperare il catalogo marche",
-            details: err.message,
-            path: filePath 
-        });
+        res.status(500).json({ error: "Errore catalogo", details: err.message });
     }
 });
 
@@ -84,23 +59,12 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 // -------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
-        console.log(`[DB] Fetching veicoli per driver_id: ${req.user.id}`);
         const result = await pool.query(`
-            SELECT *,
-                   ST_X(coord::geometry) AS lon,
-                   ST_Y(coord::geometry) AS lat
-            FROM veicolo
-            WHERE driver_id=$1
-            ORDER BY id DESC
+            SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
+            FROM veicolo WHERE driver_id=$1 ORDER BY id DESC
         `, [req.user.id]);
-
-        const rows = result.rows.map(v => ({
-            ...v,
-            documenti: v.documenti || { libretto: null, assicurazione: null, licenza_ncc: null }
-        }));
-        res.json(rows);
+        res.json(result.rows);
     } catch (err) {
-        console.error("[DB_ERROR]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -111,20 +75,20 @@ veicoloRouter.get('/', async (req, res) => {
 veicoloRouter.post('/', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
-        console.log("[DB] Inserimento nuovo veicolo per:", req.user.id);
-        
         const result = await pool.query(`
-            INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, lat, lon, localita, image_url, documenti)
-            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14::jsonb)
+            INSERT INTO veicolo (
+                driver_id, marca, modello, posti_totali, raggio_km, targa, 
+                servizi, tipo, anno, coord, localita, image_url, numero_licenza_ncc, comune_licenza
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, ST_SetSRID(ST_MakePoint($10, $11), 4326), $12, $13, $14, $15)
             RETURNING *
         `, [
             req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa,
-            JSON.stringify(data.servizi), data.tipo, data.anno, data.lat, data.lon, data.localita,
-            data.image_url, JSON.stringify(data.documenti)
+            JSON.stringify(data.servizi), data.tipo, data.anno,
+            data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune
         ]);
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("[DB_ERROR_POST]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -135,20 +99,21 @@ veicoloRouter.post('/', upload.none(), async (req, res) => {
 veicoloRouter.put('/:id', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
-        console.log(`[DB] Update veicolo ${req.params.id} per user ${req.user.id}`);
-        
         const result = await pool.query(`
-            UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8, lat=$9, lon=$10, localita=$11, image_url=$12, documenti=$13::jsonb
-            WHERE id=$14 AND driver_id=$15
+            UPDATE veicolo SET 
+                marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
+                servizi=$6::jsonb, tipo=$7, anno=$8, coord=ST_SetSRID(ST_MakePoint($9, $10), 4326), 
+                localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14
+            WHERE id=$15 AND driver_id=$16
             RETURNING *
         `, [
             data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa,
-            JSON.stringify(data.servizi), data.tipo, data.anno, data.lat, data.lon, data.localita,
-            data.image_url, JSON.stringify(data.documenti), req.params.id, req.user.id
+            JSON.stringify(data.servizi), data.tipo, data.anno,
+            data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune,
+            req.params.id, req.user.id
         ]);
         res.json(result.rows[0]);
     } catch (err) {
-        console.error("[DB_ERROR_PUT]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -158,11 +123,9 @@ veicoloRouter.put('/:id', upload.none(), async (req, res) => {
 // -------------------------
 veicoloRouter.delete('/:id', async (req, res) => {
     try {
-        console.log(`[DB] Eliminazione veicolo ${req.params.id}`);
         await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
         res.json({ success: true });
     } catch (err) {
-        console.error("[DB_ERROR_DELETE]", err);
         res.status(500).json({ error: err.message });
     }
 });

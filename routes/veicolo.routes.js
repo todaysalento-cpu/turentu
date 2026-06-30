@@ -6,11 +6,9 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export const veicoloRouter = express.Router();
+// Rimuoviamo upload.none() dalle rotte e usiamo un approccio più robusto
 const upload = multer({ storage: multer.memoryStorage() });
 
-// -------------------------
-// UTILS
-// -------------------------
 const parseBody = (body) => {
     if (typeof body === 'string') {
         try { return JSON.parse(body); } catch { return body; }
@@ -20,6 +18,7 @@ const parseBody = (body) => {
 
 function normalizeInput(body) {
     const b = parseBody(body);
+    console.log("DEBUG [normalizeInput] - Dati parsati:", b);
     return {
         marca: b.marca?.trim() || null,
         modello: b.modello?.trim() || null,
@@ -33,8 +32,6 @@ function normalizeInput(body) {
         lon: b.lon != null ? Number(b.lon) : null,
         localita: b.localita || null,
         image_url: b.image_url || null,
-        // Questi campi rimangono per retrocompatibilità, 
-        // ma la logica principale ora è su documenti_autista
         doc_licenza: b.documenti?.licenza_ncc || null,
         doc_comune: b.documenti?.comune || null
     };
@@ -42,54 +39,12 @@ function normalizeInput(body) {
 
 veicoloRouter.use(authMiddleware);
 
-// -------------------------
-// GET MARCHE E MODELLI
-// -------------------------
-veicoloRouter.get('/marche-modelli', async (req, res) => {
-    try {
-        const filePath = path.join(process.cwd(), 'data', 'marche_modelli.json');
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-        res.json(JSON.parse(fileContent));
-    } catch (err) {
-        res.status(500).json({ error: "Errore catalogo", details: err.message });
-    }
-});
+// --- ROTTA POST ---
+veicoloRouter.post('/', async (req, res) => {
+    console.log("--- LOG [POST /api/veicolo] ---");
+    console.log("Headers:", req.headers['content-type']);
+    console.log("Body Ricevuto:", req.body);
 
-// -------------------------
-// GET VEICOLI (AGGIORNATO CON JOIN)
-// -------------------------
-veicoloRouter.get('/', async (req, res) => {
-    try {
-        const query = `
-            SELECT v.*, 
-                   ST_X(v.coord::geometry) AS lon, 
-                   ST_Y(v.coord::geometry) AS lat,
-                   json_object_agg(d.tipo, d.url) FILTER (WHERE d.tipo IS NOT NULL) AS docs_json
-            FROM veicolo v
-            LEFT JOIN documenti_autista d ON v.id = d.veicolo_id
-            WHERE v.driver_id = $1
-            GROUP BY v.id
-            ORDER BY v.id DESC
-        `;
-        
-        const result = await pool.query(query, [req.user.id]);
-        
-        // Ritorna oggetti puri, evitando stringhe serializzate
-        const veicoli = result.rows.map(v => ({
-            ...v,
-            documenti: v.docs_json || { libretto: null, assicurazione: null, licenza_ncc: null }
-        }));
-        
-        res.json(veicoli);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// -------------------------
-// CREATE
-// -------------------------
-veicoloRouter.post('/', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
         const result = await pool.query(`
@@ -105,17 +60,18 @@ veicoloRouter.post('/', upload.none(), async (req, res) => {
             data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune
         ]);
         
-        // Invia oggetto vuoto per i documenti, verrà popolato dal prossimo GET/refresh
         res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("❌ ERROR [POST /api/veicolo]:", err.message);
+        res.status(400).json({ error: "Errore nel salvataggio", details: err.message });
     }
 });
 
-// -------------------------
-// UPDATE
-// -------------------------
-veicoloRouter.put('/:id', upload.none(), async (req, res) => {
+// --- ROTTA PUT ---
+veicoloRouter.put('/:id', async (req, res) => {
+    console.log(`--- LOG [PUT /api/veicolo/${req.params.id}] ---`);
+    console.log("Body Ricevuto:", req.body);
+
     try {
         const data = normalizeInput(req.body);
         const result = await pool.query(`
@@ -136,18 +92,7 @@ veicoloRouter.put('/:id', upload.none(), async (req, res) => {
         
         res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// -------------------------
-// DELETE
-// -------------------------
-veicoloRouter.delete('/:id', async (req, res) => {
-    try {
-        await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(`❌ ERROR [PUT /api/veicolo/${req.params.id}]:`, err.message);
+        res.status(400).json({ error: "Errore nell'aggiornamento", details: err.message });
     }
 });

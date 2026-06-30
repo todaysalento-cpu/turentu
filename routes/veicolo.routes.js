@@ -2,6 +2,8 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 
 export const veicoloRouter = express.Router();
 
@@ -47,25 +49,31 @@ veicoloRouter.use((req, res, next) => {
     console.log("🚗 ROUTER VEICOLO");
     console.log("Metodo:", req.method);
     console.log("URL:", req.originalUrl);
-    console.log("Content-Type:", req.headers["content-type"]);
-    console.log("Body:", req.body);
     console.log("==============================\n");
     next();
 });
 
 /* =======================================================
-   🔥 NEW: MARCHE + MODELLI CATALOG (MANCAVA QUESTA ROUTE)
+   🔥 FIX: MARCHE + MODELLI DA JSON (NON DB)
 ======================================================= */
 
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT id, nome, modelli
-            FROM marche_modelli
-            ORDER BY nome ASC
-        `);
+        // path assoluto (Render/Linux safe)
+        const filePath = path.resolve(process.cwd(), 'data', 'marche_modelli.json');
 
-        return res.json(result.rows);
+        if (!fs.existsSync(filePath)) {
+            return res.status(500).json({
+                error: 'File marche_modelli.json non trovato',
+                path: filePath
+            });
+        }
+
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const data = JSON.parse(raw);
+
+        return res.json(data);
+
     } catch (err) {
         console.error("❌ ERROR [GET /api/veicolo/marche-modelli]");
         console.error(err);
@@ -126,12 +134,8 @@ veicoloRouter.get('/', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ ERROR [GET /api/veicolo]");
         console.error(err);
-
-        return res.status(500).json({
-            error: err.message
-        });
+        return res.status(500).json({ error: err.message });
     }
 });
 
@@ -141,10 +145,6 @@ veicoloRouter.get('/', async (req, res) => {
 
 veicoloRouter.post('/', async (req, res) => {
     try {
-        if (!req.body) {
-            return res.status(400).json({ error: "Body mancante" });
-        }
-
         const data = normalizeInput(req.body);
 
         const result = await pool.query(
@@ -199,23 +199,17 @@ veicoloRouter.post('/', async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ ERROR [POST /api/veicolo]");
         console.error(err);
-
         return res.status(400).json({ error: err.message });
     }
 });
 
 /* =======================================================
-   MODIFICA VEICOLO
+   UPDATE VEICOLO
 ======================================================= */
 
 veicoloRouter.put('/:id', async (req, res) => {
     try {
-        if (!req.body) {
-            return res.status(400).json({ error: "Body mancante" });
-        }
-
         const data = normalizeInput(req.body);
 
         const result = await pool.query(
@@ -269,15 +263,13 @@ veicoloRouter.put('/:id', async (req, res) => {
         });
 
     } catch (err) {
-        console.error(`❌ ERROR [PUT /api/veicolo/${req.params.id}]`);
         console.error(err);
-
         return res.status(400).json({ error: err.message });
     }
 });
 
 /* =======================================================
-   DOCUMENTI UPLOAD
+   DOCUMENTI UPLOAD DEBUG
 ======================================================= */
 
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {

@@ -20,6 +20,9 @@ const tipoMapping = {
   libretto: 'libretto',
 };
 
+/* ======================================================
+   UPLOAD DOCUMENTI
+====================================================== */
 router.post(
   '/',
   authMiddleware,
@@ -38,9 +41,6 @@ router.post(
         });
       }
 
-      // ========================
-      // CHECK VEICOLO
-      // ========================
       const veicoloRes = await pool.query(
         'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
         [veicolo_id, driver_id]
@@ -60,9 +60,6 @@ router.post(
         });
       }
 
-      // ========================
-      // UPLOAD CLOUDINARY
-      // ========================
       const fileUrls = {};
 
       for (const field of documentFields) {
@@ -71,6 +68,7 @@ router.post(
 
         try {
           const url = await uploadFile(file.buffer, file.originalname);
+
           if (url) {
             fileUrls[field.name] = url;
             console.log(`✅ ${field.name} -> ${url}`);
@@ -80,9 +78,6 @@ router.post(
         }
       }
 
-      // ========================
-      // DB TRANSACTION
-      // ========================
       await pool.query('BEGIN');
 
       const salvati = [];
@@ -111,9 +106,6 @@ router.post(
 
       await pool.query('COMMIT');
 
-      // ========================
-      // CACHE INVALIDATION
-      // ========================
       await CacheManager.veicolo?.delete?.(veicolo_id);
 
       console.log(`🎉 UPLOAD COMPLETATO:`, salvati);
@@ -135,5 +127,43 @@ router.post(
     }
   }
 );
+
+/* ======================================================
+   GET DOCUMENTI (🔥 QUESTA È LA PARTE CHE TI MANCAVA)
+====================================================== */
+router.get('/:veicolo_id', authMiddleware, async (req, res) => {
+  try {
+    const driver_id = req.user.id;
+    const veicolo_id = Number(req.params.veicolo_id);
+
+    const result = await pool.query(
+      `
+      SELECT tipo, url
+      FROM documenti_autista
+      WHERE autista_id = $1 AND veicolo_id = $2
+      `,
+      [driver_id, veicolo_id]
+    );
+
+    const docs = {
+      libretto: null,
+      assicurazione: null,
+      licenza_ncc: null,
+    };
+
+    result.rows.forEach(r => {
+      docs[r.tipo] = r.url;
+    });
+
+    return res.json(docs);
+
+  } catch (err) {
+    console.error('❌ ERRORE GET DOCUMENTI:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Errore caricamento documenti'
+    });
+  }
+});
 
 export default router;

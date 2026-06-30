@@ -42,7 +42,7 @@ router.post(
       // CHECK VEICOLO
       // ========================
       const veicoloRes = await pool.query(
-        'SELECT id, documenti FROM veicolo WHERE id=$1 AND driver_id=$2',
+        'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
         [veicolo_id, driver_id]
       );
 
@@ -67,12 +67,10 @@ router.post(
 
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
-
         if (!file) continue;
 
         try {
           const url = await uploadFile(file.buffer, file.originalname);
-
           if (url) {
             fileUrls[field.name] = url;
             console.log(`✅ ${field.name} -> ${url}`);
@@ -111,21 +109,6 @@ router.post(
         if (dbRes.rows[0]) salvati.push(tipo);
       }
 
-      // ========================
-      // 🔥 UPDATE VEICOLO (FIX UI)
-      // ========================
-      const existingDocs = veicoloRes.rows[0]?.documenti || {};
-
-      const updatedDocs = {
-        ...existingDocs,
-        ...fileUrls,
-      };
-
-      await pool.query(
-        `UPDATE veicolo SET documenti=$1 WHERE id=$2`,
-        [JSON.stringify(updatedDocs), veicolo_id]
-      );
-
       await pool.query('COMMIT');
 
       // ========================
@@ -137,14 +120,12 @@ router.post(
 
       return res.json({
         success: true,
-        message: 'Documenti aggiornati',
+        message: 'Documenti aggiornati correttamente',
         salvati,
-        documenti: updatedDocs,
       });
 
     } catch (err) {
       await pool.query('ROLLBACK');
-
       console.error('💥 ERRORE UPLOAD DOC:', err);
 
       return res.status(500).json({

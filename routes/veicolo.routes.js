@@ -46,7 +46,7 @@ veicoloRouter.use((req, res, next) => {
 });
 
 /* =======================================================
-   GET VEICOLO
+   GET VEICOLO (🔥 FIX DOCUMENTI QUI)
 ======================================================= */
 
 veicoloRouter.get('/', async (req, res) => {
@@ -68,9 +68,32 @@ veicoloRouter.get('/', async (req, res) => {
             });
         }
 
-        res.json({
-            ...result.rows[0],
-            documenti: {}
+        const veicolo = result.rows[0];
+
+        // 🔥 FETCH DOCUMENTI REALI
+        const docsRes = await pool.query(
+            `
+            SELECT tipo, url
+            FROM documenti_autista
+            WHERE autista_id = $1
+            AND veicolo_id = $2
+            `,
+            [req.user.id, veicolo.id]
+        );
+
+        const documenti = {
+            libretto: null,
+            assicurazione: null,
+            licenza_ncc: null,
+        };
+
+        docsRes.rows.forEach(d => {
+            documenti[d.tipo] = d.url;
+        });
+
+        return res.json({
+            ...veicolo,
+            documenti
         });
 
     } catch (err) {
@@ -78,7 +101,7 @@ veicoloRouter.get('/', async (req, res) => {
         console.error("❌ ERROR [GET /api/veicolo]");
         console.error(err);
 
-        res.status(500).json({
+        return res.status(500).json({
             error: err.message
         });
     }
@@ -121,20 +144,9 @@ veicoloRouter.post('/', async (req, res) => {
             )
             VALUES
             (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                $6,
-                $7::jsonb,
-                $8,
-                $9,
+                $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,
                 ST_SetSRID(ST_MakePoint($10,$11),4326),
-                $12,
-                $13,
-                $14,
-                $15
+                $12,$13,$14,$15
             )
             RETURNING *
             `,
@@ -157,7 +169,7 @@ veicoloRouter.post('/', async (req, res) => {
             ]
         );
 
-        res.status(201).json({
+        return res.status(201).json({
             ...result.rows[0],
             documenti: {}
         });
@@ -167,7 +179,7 @@ veicoloRouter.post('/', async (req, res) => {
         console.error("❌ ERROR [POST /api/veicolo]");
         console.error(err);
 
-        res.status(400).json({
+        return res.status(400).json({
             error: err.message
         });
     }
@@ -237,7 +249,7 @@ veicoloRouter.put('/:id', async (req, res) => {
             });
         }
 
-        res.json({
+        return res.json({
             ...result.rows[0],
             documenti: {}
         });
@@ -247,7 +259,7 @@ veicoloRouter.put('/:id', async (req, res) => {
         console.error(`❌ ERROR [PUT /api/veicolo/${req.params.id}]`);
         console.error(err);
 
-        res.status(400).json({
+        return res.status(400).json({
             error: err.message
         });
     }
@@ -255,7 +267,7 @@ veicoloRouter.put('/:id', async (req, res) => {
 });
 
 /* =======================================================
-   DOCUMENTI
+   DOCUMENTI (UPLOAD DEBUG BASE)
 ======================================================= */
 
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
@@ -263,8 +275,7 @@ veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
     console.log("📄 File ricevuti:");
     console.log(req.files);
 
-    res.json({
+    return res.json({
         success: true
     });
-
 });

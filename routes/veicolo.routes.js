@@ -2,51 +2,40 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
-import fs from 'fs/promises';
-import path from 'path';
 
 export const veicoloRouter = express.Router();
-// Rimuoviamo upload.none() dalle rotte e usiamo un approccio più robusto
 const upload = multer({ storage: multer.memoryStorage() });
 
-const parseBody = (body) => {
-    if (typeof body === 'string') {
-        try { return JSON.parse(body); } catch { return body; }
-    }
-    return body;
-};
-
-function normalizeInput(body) {
-    const b = parseBody(body);
-    console.log("DEBUG [normalizeInput] - Dati parsati:", b);
+// Middleware per gestire il parsing del body in modo sicuro
+// Rimuoviamo la dipendenza da b.documenti, poiché i documenti ora viaggiano su un'altra rotta
+function normalizeInput(b) {
     return {
         marca: b.marca?.trim() || null,
         modello: b.modello?.trim() || null,
         posti_totali: Number(b.posti_totali || 1),
         raggio_km: Number(b.raggio_km || 50),
         targa: b.targa?.trim().toUpperCase() || null,
-        servizi: b.servizi ? (typeof b.servizi === 'string' ? JSON.parse(b.servizi) : b.servizi) : [],
+        servizi: Array.isArray(b.servizi) ? b.servizi : [],
         tipo: b.tipo || null,
         anno: b.anno ? Number(b.anno) : null,
-        lat: b.lat != null ? Number(b.lat) : null,
-        lon: b.lon != null ? Number(b.lon) : null,
+        lat: b.lat != null ? Number(b.lat) : 0,
+        lon: b.lon != null ? Number(b.lon) : 0,
         localita: b.localita || null,
         image_url: b.image_url || null,
-        doc_licenza: b.documenti?.licenza_ncc || null,
-        doc_comune: b.documenti?.comune || null
+        // Questi campi ora li prendiamo solo se esplicitamente inviati
+        doc_licenza: b.doc_licenza || null,
+        doc_comune: b.doc_comune || null
     };
 }
 
 veicoloRouter.use(authMiddleware);
 
 // --- ROTTA POST ---
+// Nota: Rimosso upload.none() per evitare conflitti con application/json
 veicoloRouter.post('/', async (req, res) => {
-    console.log("--- LOG [POST /api/veicolo] ---");
-    console.log("Headers:", req.headers['content-type']);
-    console.log("Body Ricevuto:", req.body);
-
     try {
         const data = normalizeInput(req.body);
+        
         const result = await pool.query(`
             INSERT INTO veicolo (
                 driver_id, marca, modello, posti_totali, raggio_km, targa, 
@@ -60,7 +49,7 @@ veicoloRouter.post('/', async (req, res) => {
             data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune
         ]);
         
-        res.json({ ...result.rows[0], documenti: {} });
+        res.status(201).json({ ...result.rows[0], documenti: {} });
     } catch (err) {
         console.error("❌ ERROR [POST /api/veicolo]:", err.message);
         res.status(400).json({ error: "Errore nel salvataggio", details: err.message });
@@ -69,11 +58,9 @@ veicoloRouter.post('/', async (req, res) => {
 
 // --- ROTTA PUT ---
 veicoloRouter.put('/:id', async (req, res) => {
-    console.log(`--- LOG [PUT /api/veicolo/${req.params.id}] ---`);
-    console.log("Body Ricevuto:", req.body);
-
     try {
         const data = normalizeInput(req.body);
+        
         const result = await pool.query(`
             UPDATE veicolo SET 
                 marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
@@ -95,4 +82,11 @@ veicoloRouter.put('/:id', async (req, res) => {
         console.error(`❌ ERROR [PUT /api/veicolo/${req.params.id}]:`, err.message);
         res.status(400).json({ error: "Errore nell'aggiornamento", details: err.message });
     }
+});
+
+// --- ROTTA DOCUMENTI (Solo qui serve multer) ---
+veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
+    // Gestione separata per i file
+    console.log("File ricevuti:", req.files);
+    res.json({ success: true });
 });

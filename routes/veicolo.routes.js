@@ -33,7 +33,6 @@ function normalizeInput(body) {
         lon: b.lon != null ? Number(b.lon) : null,
         localita: b.localita || null,
         image_url: b.image_url || null,
-        // Gestione documenti mappata su colonne esistenti
         doc_licenza: b.documenti?.licenza_ncc || null,
         doc_comune: b.documenti?.comune || null
     };
@@ -55,15 +54,32 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 });
 
 // -------------------------
-// GET VEICOLI
+// GET VEICOLI (AGGIORNATO CON JOIN)
 // -------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT *, ST_X(coord::geometry) AS lon, ST_Y(coord::geometry) AS lat
-            FROM veicolo WHERE driver_id=$1 ORDER BY id DESC
-        `, [req.user.id]);
-        res.json(result.rows);
+        // Usiamo una JOIN per aggregare i documenti dalla tabella dedicata
+        const query = `
+            SELECT v.*, 
+                   ST_X(v.coord::geometry) AS lon, 
+                   ST_Y(v.coord::geometry) AS lat,
+                   json_object_agg(d.tipo, d.url) FILTER (WHERE d.tipo IS NOT NULL) AS docs_json
+            FROM veicolo v
+            LEFT JOIN documenti_autista d ON v.id = d.veicolo_id
+            WHERE v.driver_id = $1
+            GROUP BY v.id
+            ORDER BY v.id DESC
+        `;
+        
+        const result = await pool.query(query, [req.user.id]);
+        
+        // Formattiamo la risposta per il frontend
+        const veicoli = result.rows.map(v => ({
+            ...v,
+            documenti: v.docs_json || { libretto: null, assicurazione: null, licenza_ncc: null }
+        }));
+        
+        res.json(veicoli);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

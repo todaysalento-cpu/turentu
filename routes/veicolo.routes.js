@@ -33,6 +33,8 @@ function normalizeInput(body) {
         lon: b.lon != null ? Number(b.lon) : null,
         localita: b.localita || null,
         image_url: b.image_url || null,
+        // Questi campi rimangono per retrocompatibilità, 
+        // ma la logica principale ora è su documenti_autista
         doc_licenza: b.documenti?.licenza_ncc || null,
         doc_comune: b.documenti?.comune || null
     };
@@ -58,7 +60,6 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 // -------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
-        // Usiamo una JOIN per aggregare i documenti dalla tabella dedicata
         const query = `
             SELECT v.*, 
                    ST_X(v.coord::geometry) AS lon, 
@@ -73,7 +74,7 @@ veicoloRouter.get('/', async (req, res) => {
         
         const result = await pool.query(query, [req.user.id]);
         
-        // Formattiamo la risposta per il frontend
+        // Ritorna oggetti puri, evitando stringhe serializzate
         const veicoli = result.rows.map(v => ({
             ...v,
             documenti: v.docs_json || { libretto: null, assicurazione: null, licenza_ncc: null }
@@ -103,7 +104,9 @@ veicoloRouter.post('/', upload.none(), async (req, res) => {
             JSON.stringify(data.servizi), data.tipo, data.anno,
             data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune
         ]);
-        res.json(result.rows[0]);
+        
+        // Invia oggetto vuoto per i documenti, verrà popolato dal prossimo GET/refresh
+        res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -128,7 +131,10 @@ veicoloRouter.put('/:id', upload.none(), async (req, res) => {
             data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune,
             req.params.id, req.user.id
         ]);
-        res.json(result.rows[0]);
+
+        if (result.rowCount === 0) return res.status(404).json({ error: "Veicolo non trovato" });
+        
+        res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

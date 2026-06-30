@@ -2,11 +2,19 @@ import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import multer from 'multer';
-import fs from 'fs/promises'; // Importa le promesse per file system
+import fs from 'fs/promises';
 import path from 'path';
 
 export const veicoloRouter = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// -------------------------
+// DEBUG GLOBALE
+// -------------------------
+veicoloRouter.use((req, res, next) => {
+    console.log(`[DEBUG_ROUTER] ${req.method} ${req.originalUrl}`);
+    next();
+});
 
 // -------------------------
 // UTILS
@@ -45,21 +53,29 @@ function normalizeInput(body) {
 veicoloRouter.use(authMiddleware);
 
 // -------------------------
-// GET MARCHE E MODELLI (LETTURA DA FILE JSON)
+// GET MARCHE E MODELLI (DEBUG LOGGING)
 // -------------------------
 veicoloRouter.get('/marche-modelli', async (req, res) => {
+    const fileName = 'marche_modelli.json';
+    const filePath = path.join(process.cwd(), 'data', fileName);
+    
+    console.log(`[DEBUG_FS] Tentativo lettura: ${filePath}`);
+    
     try {
-        // Percorso al file nella cartella /data alla radice del progetto
-        const filePath = path.join(process.cwd(), 'data', 'marche_modelli.json');
-        
-        // Legge il file e lo invia come JSON
         const fileContent = await fs.readFile(filePath, 'utf-8');
+        console.log(`[DEBUG_FS] File letto con successo (${fileContent.length} bytes)`);
+        
         const data = JSON.parse(fileContent);
+        console.log(`[DEBUG_FS] JSON parsato correttamente, elementi: ${Array.isArray(data) ? data.length : 'N/A'}`);
         
         res.json(data);
     } catch (err) {
-        console.error("Errore lettura file marche_modelli.json:", err);
-        res.status(500).json({ error: "Impossibile recuperare il catalogo marche" });
+        console.error(`[DEBUG_FS_ERROR] Errore su ${filePath}:`, err.message);
+        res.status(500).json({ 
+            error: "Impossibile recuperare il catalogo marche",
+            details: err.message,
+            path: filePath 
+        });
     }
 });
 
@@ -68,6 +84,7 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 // -------------------------
 veicoloRouter.get('/', async (req, res) => {
     try {
+        console.log(`[DB] Fetching veicoli per driver_id: ${req.user.id}`);
         const result = await pool.query(`
             SELECT *,
                    ST_X(coord::geometry) AS lon,
@@ -83,6 +100,7 @@ veicoloRouter.get('/', async (req, res) => {
         }));
         res.json(rows);
     } catch (err) {
+        console.error("[DB_ERROR]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -93,6 +111,8 @@ veicoloRouter.get('/', async (req, res) => {
 veicoloRouter.post('/', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
+        console.log("[DB] Inserimento nuovo veicolo per:", req.user.id);
+        
         const result = await pool.query(`
             INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, lat, lon, localita, image_url, documenti)
             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14::jsonb)
@@ -104,6 +124,7 @@ veicoloRouter.post('/', upload.none(), async (req, res) => {
         ]);
         res.json(result.rows[0]);
     } catch (err) {
+        console.error("[DB_ERROR_POST]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -114,6 +135,8 @@ veicoloRouter.post('/', upload.none(), async (req, res) => {
 veicoloRouter.put('/:id', upload.none(), async (req, res) => {
     try {
         const data = normalizeInput(req.body);
+        console.log(`[DB] Update veicolo ${req.params.id} per user ${req.user.id}`);
+        
         const result = await pool.query(`
             UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8, lat=$9, lon=$10, localita=$11, image_url=$12, documenti=$13::jsonb
             WHERE id=$14 AND driver_id=$15
@@ -125,6 +148,7 @@ veicoloRouter.put('/:id', upload.none(), async (req, res) => {
         ]);
         res.json(result.rows[0]);
     } catch (err) {
+        console.error("[DB_ERROR_PUT]", err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -134,9 +158,11 @@ veicoloRouter.put('/:id', upload.none(), async (req, res) => {
 // -------------------------
 veicoloRouter.delete('/:id', async (req, res) => {
     try {
+        console.log(`[DB] Eliminazione veicolo ${req.params.id}`);
         await pool.query(`DELETE FROM veicolo WHERE id=$1 AND driver_id=$2`, [req.params.id, req.user.id]);
         res.json({ success: true });
     } catch (err) {
+        console.error("[DB_ERROR_DELETE]", err);
         res.status(500).json({ error: err.message });
     }
 });

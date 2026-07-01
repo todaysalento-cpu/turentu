@@ -11,19 +11,29 @@ const upload = multer({
     storage: multer.memoryStorage()
 });
 
+console.log("🔥 [VEICOLO ROUTER] FILE CARICATO CORRETTAMENTE");
+
 /* =======================================================
-   LOG DEBUG
+   LOG GLOBALE ROUTER
 ======================================================= */
 veicoloRouter.use((req, res, next) => {
-    console.log(`\n🚀 [INCOMING REQUEST] ${req.method} ${req.originalUrl}`);
-    console.log("Headers:", req.headers['content-type']);
+    console.log("\n==============================");
+    console.log("🚗 [VEICOLO ROUTER HIT]");
+    console.log("METHOD:", req.method);
+    console.log("URL:", req.originalUrl);
+    console.log("PATH:", req.path);
+    console.log("HEADERS auth:", req.headers.authorization ? "YES" : "NO");
+    console.log("==============================\n");
     next();
 });
 
 /* =======================================================
    AUTH
 ======================================================= */
-veicoloRouter.use(authMiddleware);
+veicoloRouter.use((req, res, next) => {
+    console.log("🔐 [AUTH MIDDLEWARE ENTRY]");
+    next();
+}, authMiddleware);
 
 /* =======================================================
    NORMALIZE INPUT
@@ -48,17 +58,22 @@ function normalizeInput(b = {}) {
 }
 
 /* =======================================================
-   🔥 CHECK TARGA (MANCAVA QUESTO)
+   🔥 CHECK TARGA DEBUG (CRUCIALE)
 ======================================================= */
 veicoloRouter.post('/check-targa', async (req, res) => {
+    console.log("🔥 [CHECK TARGA HIT] BODY:", req.body);
+
     try {
         const { targa, id } = req.body;
 
         if (!targa) {
+            console.log("⚠️ TARGA MANCANTE");
             return res.status(400).json({ error: 'Targa mancante' });
         }
 
         const normalized = targa.trim().toUpperCase();
+
+        console.log("🔎 QUERY CHECK TARGA:", normalized);
 
         const result = await pool.query(
             `SELECT id FROM veicolo 
@@ -67,25 +82,32 @@ veicoloRouter.post('/check-targa', async (req, res) => {
             [normalized, req.user.id]
         );
 
-        // Se esiste un altro veicolo con stessa targa
+        console.log("📦 RESULT ROWS:", result.rows);
+
         const inUse = result.rows.some(v => String(v.id) !== String(id));
 
+        console.log("🚨 IN USE:", inUse);
+
         return res.json({ inUse });
+
     } catch (err) {
-        console.error("❌ ERROR [POST /check-targa]", err);
+        console.error("❌ ERROR CHECK TARGA:", err);
         return res.status(500).json({ error: err.message });
     }
 });
 
 /* =======================================================
-   MARCHE + MODELLI
+   MARCHE MODELLI
 ======================================================= */
 veicoloRouter.get('/marche-modelli', async (req, res) => {
+    console.log("📚 GET MARCHE MODELLI");
+
     try {
         const filePath = path.resolve(process.cwd(), 'data', 'marche_modelli.json');
         const raw = fs.readFileSync(filePath, 'utf-8');
         return res.json(JSON.parse(raw));
     } catch (err) {
+        console.error("❌ ERROR MARCHE:", err);
         return res.status(500).json({ error: err.message });
     }
 });
@@ -94,6 +116,8 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
    GET VEICOLI
 ======================================================= */
 veicoloRouter.get('/', async (req, res) => {
+    console.log("📦 GET VEICOLI");
+
     try {
         const result = await pool.query(
             `SELECT * FROM veicolo WHERE driver_id = $1`,
@@ -102,6 +126,7 @@ veicoloRouter.get('/', async (req, res) => {
 
         return res.json(result.rows);
     } catch (err) {
+        console.error("❌ ERROR GET VEICOLI:", err);
         return res.status(500).json({ error: err.message });
     }
 });
@@ -110,6 +135,8 @@ veicoloRouter.get('/', async (req, res) => {
    CREA VEICOLO
 ======================================================= */
 veicoloRouter.post('/', async (req, res) => {
+    console.log("🆕 CREATE VEICOLO:", req.body);
+
     try {
         const data = normalizeInput(req.body);
 
@@ -139,7 +166,9 @@ veicoloRouter.post('/', async (req, res) => {
         );
 
         return res.status(201).json(result.rows[0]);
+
     } catch (err) {
+        console.error("❌ ERROR CREATE VEICOLO:", err);
         return res.status(400).json({ error: err.message });
     }
 });
@@ -148,6 +177,8 @@ veicoloRouter.post('/', async (req, res) => {
    UPDATE VEICOLO
 ======================================================= */
 veicoloRouter.put('/:id', async (req, res) => {
+    console.log("✏️ UPDATE VEICOLO:", req.params.id);
+
     try {
         const data = normalizeInput(req.body);
 
@@ -193,17 +224,19 @@ veicoloRouter.put('/:id', async (req, res) => {
         }
 
         return res.json(result.rows[0]);
+
     } catch (err) {
+        console.error("❌ ERROR UPDATE VEICOLO:", err);
         return res.status(400).json({ error: err.message });
     }
 });
 
 /* =======================================================
-   DOCUMENTI UPLOAD
+   DOCUMENTI
 ======================================================= */
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
-    console.log("🔍 BODY:", req.body);
-    console.log("🔍 FILES:", req.files);
+    console.log("📎 DOCUMENTI BODY:", req.body);
+    console.log("📎 DOCUMENTI FILES:", req.files);
 
     if (!req.files || req.files.length === 0) {
         return res.status(400).json({ error: "Nessun file ricevuto" });

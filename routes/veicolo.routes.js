@@ -59,82 +59,51 @@ veicoloRouter.use((req, res, next) => {
 
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
-        // path assoluto (Render/Linux safe)
         const filePath = path.resolve(process.cwd(), 'data', 'marche_modelli.json');
-
         if (!fs.existsSync(filePath)) {
-            return res.status(500).json({
-                error: 'File marche_modelli.json non trovato',
-                path: filePath
-            });
+            return res.status(500).json({ error: 'File marche_modelli.json non trovato' });
         }
-
         const raw = fs.readFileSync(filePath, 'utf-8');
-        const data = JSON.parse(raw);
-
-        return res.json(data);
-
+        return res.json(JSON.parse(raw));
     } catch (err) {
-        console.error("❌ ERROR [GET /api/veicolo/marche-modelli]");
-        console.error(err);
-
-        return res.status(500).json({
-            error: err.message
-        });
+        console.error("❌ ERROR [GET /api/veicolo/marche-modelli]", err);
+        return res.status(500).json({ error: err.message });
     }
 });
 
 /* =======================================================
-   GET VEICOLO
+   GET VEICOLI (AGGIORNATO: Rimosso LIMIT 1)
 ======================================================= */
 
 veicoloRouter.get('/', async (req, res) => {
     try {
+        // Recupera tutti i veicoli associati all'autista
         const result = await pool.query(
-            `
-            SELECT *
-            FROM veicolo
-            WHERE driver_id = $1
-            LIMIT 1
-            `,
+            `SELECT * FROM veicolo WHERE driver_id = $1`,
             [req.user.id]
         );
 
         if (result.rowCount === 0) {
-            return res.status(404).json({
-                error: "Veicolo non trovato"
-            });
+            return res.json([]); // Ritorna array vuoto se non ci sono veicoli
         }
 
-        const veicolo = result.rows[0];
+        // Recupera i documenti per ogni veicolo trovato
+        const veicoliConDocumenti = await Promise.all(result.rows.map(async (veicolo) => {
+            const docsRes = await pool.query(
+                `SELECT tipo, url FROM documenti_autista WHERE autista_id = $1 AND veicolo_id = $2`,
+                [req.user.id, veicolo.id]
+            );
 
-        const docsRes = await pool.query(
-            `
-            SELECT tipo, url
-            FROM documenti_autista
-            WHERE autista_id = $1
-            AND veicolo_id = $2
-            `,
-            [req.user.id, veicolo.id]
-        );
+            const documenti = { libretto: null, assicurazione: null, licenza_ncc: null };
+            docsRes.rows.forEach(d => { documenti[d.tipo] = d.url; });
 
-        const documenti = {
-            libretto: null,
-            assicurazione: null,
-            licenza_ncc: null,
-        };
+            return { ...veicolo, documenti };
+        }));
 
-        docsRes.rows.forEach(d => {
-            documenti[d.tipo] = d.url;
-        });
-
-        return res.json({
-            ...veicolo,
-            documenti
-        });
+        return res.json(veicoliConDocumenti);
 
     } catch (err) {
-        console.error(err);
+        console.error("❌ ERROR [GET /api/veicolo]", err);
         return res.status(500).json({ error: err.message });
     }
 });
@@ -146,58 +115,12 @@ veicoloRouter.get('/', async (req, res) => {
 veicoloRouter.post('/', async (req, res) => {
     try {
         const data = normalizeInput(req.body);
-
         const result = await pool.query(
-            `
-            INSERT INTO veicolo
-            (
-                driver_id,
-                marca,
-                modello,
-                posti_totali,
-                raggio_km,
-                targa,
-                servizi,
-                tipo,
-                anno,
-                coord,
-                localita,
-                image_url,
-                numero_licenza_ncc,
-                comune_licenza
-            )
-            VALUES
-            (
-                $1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,
-                ST_SetSRID(ST_MakePoint($10,$11),4326),
-                $12,$13,$14,$15
-            )
-            RETURNING *
-            `,
-            [
-                req.user.id,
-                data.marca,
-                data.modello,
-                data.posti_totali,
-                data.raggio_km,
-                data.targa,
-                JSON.stringify(data.servizi),
-                data.tipo,
-                data.anno,
-                data.lon,
-                data.lat,
-                data.localita,
-                data.image_url,
-                data.doc_licenza,
-                data.doc_comune
-            ]
+            `INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url, numero_licenza_ncc, comune_licenza)
+             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9, ST_SetSRID(ST_MakePoint($10,$11),4326), $12,$13,$14,$15) RETURNING *`,
+            [req.user.id, data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune]
         );
-
-        return res.status(201).json({
-            ...result.rows[0],
-            documenti: {}
-        });
-
+        return res.status(201).json({ ...result.rows[0], documenti: {} });
     } catch (err) {
         console.error(err);
         return res.status(400).json({ error: err.message });
@@ -211,57 +134,13 @@ veicoloRouter.post('/', async (req, res) => {
 veicoloRouter.put('/:id', async (req, res) => {
     try {
         const data = normalizeInput(req.body);
-
         const result = await pool.query(
-            `
-            UPDATE veicolo
-            SET
-                marca=$1,
-                modello=$2,
-                posti_totali=$3,
-                raggio_km=$4,
-                targa=$5,
-                servizi=$6::jsonb,
-                tipo=$7,
-                anno=$8,
-                coord=ST_SetSRID(ST_MakePoint($9,$10),4326),
-                localita=$11,
-                image_url=$12,
-                numero_licenza_ncc=$13,
-                comune_licenza=$14
-            WHERE id=$15
-            AND driver_id=$16
-            RETURNING *
-            `,
-            [
-                data.marca,
-                data.modello,
-                data.posti_totali,
-                data.raggio_km,
-                data.targa,
-                JSON.stringify(data.servizi),
-                data.tipo,
-                data.anno,
-                data.lon,
-                data.lat,
-                data.localita,
-                data.image_url,
-                data.doc_licenza,
-                data.doc_comune,
-                req.params.id,
-                req.user.id
-            ]
+            `UPDATE veicolo SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, servizi=$6::jsonb, tipo=$7, anno=$8, coord=ST_SetSRID(ST_MakePoint($9,$10),4326), localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14 
+             WHERE id=$15 AND driver_id=$16 RETURNING *`,
+            [data.marca, data.modello, data.posti_totali, data.raggio_km, data.targa, JSON.stringify(data.servizi), data.tipo, data.anno, data.lon, data.lat, data.localita, data.image_url, data.doc_licenza, data.doc_comune, req.params.id, req.user.id]
         );
-
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: "Veicolo non trovato" });
-        }
-
-        return res.json({
-            ...result.rows[0],
-            documenti: {}
-        });
-
+        if (result.rowCount === 0) return res.status(404).json({ error: "Veicolo non trovato" });
+        return res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
         console.error(err);
         return res.status(400).json({ error: err.message });
@@ -273,8 +152,6 @@ veicoloRouter.put('/:id', async (req, res) => {
 ======================================================= */
 
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
-    console.log("📄 File ricevuti:");
-    console.log(req.files);
-
+    console.log("📄 File ricevuti:", req.files);
     return res.json({ success: true });
 });

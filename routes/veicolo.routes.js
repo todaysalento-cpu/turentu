@@ -12,6 +12,18 @@ const upload = multer({
 });
 
 /* =======================================================
+   MIDDLEWARE DI LOG DIAGNOSTICO (PER IL DEBUG)
+======================================================= */
+veicoloRouter.use((req, res, next) => {
+    console.log(`\n🚀 [INCOMING REQUEST] ${req.method} ${req.originalUrl}`);
+    console.log("   Headers:", JSON.stringify(req.headers, null, 2));
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+        console.log("   ⚠️ Tipologia: MULTIPART/FORM-DATA rilevato");
+    }
+    next();
+});
+
+/* =======================================================
    NORMALIZE INPUT
 ======================================================= */
 
@@ -41,27 +53,14 @@ function normalizeInput(b = {}) {
 veicoloRouter.use(authMiddleware);
 
 /* =======================================================
-   DEBUG MIDDLEWARE
-======================================================= */
-
-veicoloRouter.use((req, res, next) => {
-    console.log("\n==============================");
-    console.log("🚗 ROUTER VEICOLO");
-    console.log("Metodo:", req.method);
-    console.log("URL:", req.originalUrl);
-    console.log("==============================\n");
-    next();
-});
-
-/* =======================================================
-   🔥 FIX: MARCHE + MODELLI DA JSON (NON DB)
+   MARCHE + MODELLI
 ======================================================= */
 
 veicoloRouter.get('/marche-modelli', async (req, res) => {
     try {
         const filePath = path.resolve(process.cwd(), 'data', 'marche_modelli.json');
         if (!fs.existsSync(filePath)) {
-            return res.status(500).json({ error: 'File marche_modelli.json non trovato' });
+            return res.status(500).json({ error: 'File non trovato' });
         }
         const raw = fs.readFileSync(filePath, 'utf-8');
         return res.json(JSON.parse(raw));
@@ -72,36 +71,24 @@ veicoloRouter.get('/marche-modelli', async (req, res) => {
 });
 
 /* =======================================================
-   GET VEICOLI (AGGIORNATO: Rimosso LIMIT 1)
+   GET VEICOLI
 ======================================================= */
 
 veicoloRouter.get('/', async (req, res) => {
     try {
-        // Recupera tutti i veicoli associati all'autista
-        const result = await pool.query(
-            `SELECT * FROM veicolo WHERE driver_id = $1`,
-            [req.user.id]
-        );
+        const result = await pool.query(`SELECT * FROM veicolo WHERE driver_id = $1`, [req.user.id]);
+        if (result.rowCount === 0) return res.json([]);
 
-        if (result.rowCount === 0) {
-            return res.json([]); // Ritorna array vuoto se non ci sono veicoli
-        }
-
-        // Recupera i documenti per ogni veicolo trovato
         const veicoliConDocumenti = await Promise.all(result.rows.map(async (veicolo) => {
             const docsRes = await pool.query(
                 `SELECT tipo, url FROM documenti_autista WHERE autista_id = $1 AND veicolo_id = $2`,
                 [req.user.id, veicolo.id]
             );
-
             const documenti = { libretto: null, assicurazione: null, licenza_ncc: null };
-            docsRes.rows.forEach(d => { documenti[d.tipo] = d.url; });
-
+            docsRes.rows.forEach(d => documenti[d.tipo] = d.url);
             return { ...veicolo, documenti };
         }));
-
         return res.json(veicoliConDocumenti);
-
     } catch (err) {
         console.error("❌ ERROR [GET /api/veicolo]", err);
         return res.status(500).json({ error: err.message });
@@ -122,7 +109,7 @@ veicoloRouter.post('/', async (req, res) => {
         );
         return res.status(201).json({ ...result.rows[0], documenti: {} });
     } catch (err) {
-        console.error(err);
+        console.error("❌ ERROR [POST /api/veicolo]", err);
         return res.status(400).json({ error: err.message });
     }
 });
@@ -142,7 +129,7 @@ veicoloRouter.put('/:id', async (req, res) => {
         if (result.rowCount === 0) return res.status(404).json({ error: "Veicolo non trovato" });
         return res.json({ ...result.rows[0], documenti: {} });
     } catch (err) {
-        console.error(err);
+        console.error("❌ ERROR [PUT /api/veicolo]", err);
         return res.status(400).json({ error: err.message });
     }
 });
@@ -152,6 +139,12 @@ veicoloRouter.put('/:id', async (req, res) => {
 ======================================================= */
 
 veicoloRouter.post('/documenti', upload.any(), async (req, res) => {
-    console.log("📄 File ricevuti:", req.files);
-    return res.json({ success: true });
+    console.log("🔍 [DEBUG DOCUMENTI] Body:", req.body);
+    console.log("🔍 [DEBUG DOCUMENTI] Files:", req.files ? req.files.map(f => f.originalname) : "Nessun file");
+    
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: "Nessun file ricevuto dal server" });
+    }
+    
+    return res.json({ success: true, count: req.files.length });
 });

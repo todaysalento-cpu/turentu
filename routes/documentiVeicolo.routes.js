@@ -21,6 +21,31 @@ const tipoMapping = {
 };
 
 /* ======================================================
+   HELPER: Recupero dati (Include URL e STATO)
+====================================================== */
+async function getDocumentiData(driver_id, veicolo_id) {
+  const result = await pool.query(
+    'SELECT tipo, url, stato FROM documenti_autista WHERE autista_id = $1 AND veicolo_id = $2',
+    [driver_id, veicolo_id]
+  );
+  
+  const docs = { 
+    libretto: null, 
+    assicurazione: null, 
+    licenza_ncc: null 
+  };
+  
+  result.rows.forEach(r => { 
+    docs[r.tipo] = {
+      url: r.url,
+      stato: r.stato
+    }; 
+  });
+  
+  return docs;
+}
+
+/* ======================================================
    UPLOAD DOCUMENTI
 ====================================================== */
 router.post('/', authMiddleware, upload.fields(documentFields), async (req, res) => {
@@ -56,13 +81,16 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
         `INSERT INTO documenti_autista (autista_id, veicolo_id, tipo, url, stato, created_at)
          VALUES ($1, $2, $3, $4, 'pending', NOW())
          ON CONFLICT (autista_id, veicolo_id, tipo)
-         DO UPDATE SET url = EXCLUDED.url, stato = 'pending', created_at = NOW()`,
+         DO UPDATE SET 
+            url = EXCLUDED.url, 
+            stato = 'pending', 
+            created_at = NOW()`,
         [driver_id, veicolo_id, tipoMapping[field], url]
       );
     }
     await pool.query('COMMIT');
 
-    // 4. Invalida cache e recupera stato aggiornato per il client
+    // 4. Invalida cache e recupera stato aggiornato
     await CacheManager.veicolo?.delete?.(veicolo_id);
     
     const updatedDocs = await getDocumentiData(driver_id, veicolo_id);
@@ -80,19 +108,6 @@ router.post('/', authMiddleware, upload.fields(documentFields), async (req, res)
 });
 
 /* ======================================================
-   HELPER: Recupero dati
-====================================================== */
-async function getDocumentiData(driver_id, veicolo_id) {
-  const result = await pool.query(
-    'SELECT tipo, url FROM documenti_autista WHERE autista_id = $1 AND veicolo_id = $2',
-    [driver_id, veicolo_id]
-  );
-  const docs = { libretto: null, assicurazione: null, licenza_ncc: null };
-  result.rows.forEach(r => { docs[r.tipo] = r.url; });
-  return docs;
-}
-
-/* ======================================================
    GET DOCUMENTI
 ====================================================== */
 router.get('/:veicolo_id', authMiddleware, async (req, res) => {
@@ -100,6 +115,7 @@ router.get('/:veicolo_id', authMiddleware, async (req, res) => {
     const docs = await getDocumentiData(req.user.id, Number(req.params.veicolo_id));
     return res.json(docs);
   } catch (err) {
+    console.error('💥 [GET_DOC_ERROR]:', err);
     return res.status(500).json({ success: false, message: 'Errore recupero documenti' });
   }
 });

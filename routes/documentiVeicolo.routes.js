@@ -26,11 +26,9 @@ const tipoMapping = {
 router.post(
   '/',
   authMiddleware,
-  // Middleware di debug per ispezionare la richiesta prima di multer
   (req, res, next) => {
-    console.log(`\n🔍 [DOC_UPLOAD_DEBUG] Richiesta ricevuta`);
+    console.log(`\n🔍 [DOC_UPLOAD] Richiesta POST ricevuta`);
     console.log(`   Headers Content-Type: ${req.headers['content-type']}`);
-    console.log(`   Body veicolo_id: ${req.body?.veicolo_id}`);
     next();
   },
   upload.fields(documentFields),
@@ -38,13 +36,20 @@ router.post(
     const driver_id = req.user.id;
     const veicolo_id = Number(req.body.veicolo_id);
 
-    console.log(`📥 UPLOAD DOC driver=${driver_id} veicolo=${veicolo_id}`);
+    console.log(`📥 [DOC_UPLOAD] Inizio elaborazione`);
+    console.log(`   Driver ID: ${driver_id}`);
+    console.log(`   Veicolo ID: ${veicolo_id}`);
 
-    // Log per vedere quali file sono stati intercettati da Multer
+    // LOG DI DEBUG FILE INTERCETTATI
     if (req.files) {
-      console.log(`   File intercettati: ${Object.keys(req.files).join(', ')}`);
+      console.log(`   ✅ Multer ha trovato campi: ${Object.keys(req.files).join(', ')}`);
+      Object.keys(req.files).forEach(field => {
+        const file = req.files[field][0];
+        console.log(`      - Field [${field}]: ${file.originalname} (${file.size} bytes)`);
+      });
     } else {
-      console.log(`   ⚠️ Nessun file intercettato da Multer.`);
+      console.log(`   ❌ [DOC_UPLOAD] Multer NON ha trovato alcun file.`);
+      console.log(`      Verifica che i nomi nel FormData lato client siano: ${documentFields.map(f => f.name).join(', ')}`);
     }
 
     try {
@@ -52,43 +57,52 @@ router.post(
         return res.status(400).json({ success: false, message: 'veicolo_id mancante' });
       }
 
+      // Validazione esistenza veicolo
       const veicoloRes = await pool.query(
         'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
         [veicolo_id, driver_id]
       );
 
       if (veicoloRes.rowCount === 0) {
-        return res.status(404).json({ success: false, message: 'Veicolo non trovato' });
+        return res.status(404).json({ success: false, message: 'Veicolo non trovato o non autorizzato' });
       }
 
       if (!req.files || Object.keys(req.files).length === 0) {
-        return res.status(400).json({ success: false, message: 'Nessun file caricato' });
+        return res.status(400).json({ success: false, message: 'Nessun file presente nella richiesta' });
       }
 
       const fileUrls = {};
 
+      // Elaborazione file
       for (const field of documentFields) {
         const file = req.files?.[field.name]?.[0];
         if (!file) continue;
 
         try {
-          console.log(`   Uploading ${field.name} to Cloudinary...`);
+          console.log(`   🚀 Uploading ${field.name} su Cloudinary...`);
           const url = await uploadFile(file.buffer, file.originalname);
 
           if (url) {
             fileUrls[field.name] = url;
-            console.log(`   ✅ ${field.name} caricato -> ${url}`);
+            console.log(`   ✅ ${field.name} caricato con successo.`);
           }
         } catch (err) {
-          console.error(`   ❌ Upload fallito ${field.name}`, err);
+          console.error(`   ❌ Errore Cloudinary per ${field.name}:`, err);
         }
       }
 
+      if (Object.keys(fileUrls).length === 0) {
+        throw new Error('Nessun file è stato caricato con successo su Cloudinary');
+      }
+
+      // Salva nel DB
       await pool.query('BEGIN');
       const salvati = [];
 
       for (const [field, url] of Object.entries(fileUrls)) {
         const tipo = tipoMapping[field];
+        console.log(`   💾 Salvo nel DB: ${tipo} -> ${url}`);
+        
         const dbRes = await pool.query(
           `
           INSERT INTO documenti_autista 
@@ -100,7 +114,7 @@ router.post(
             stato = 'pending',
             note_admin = NULL,
             created_at = NOW()
-          RETURNING *
+          RETURNING tipo
           `,
           [driver_id, veicolo_id, tipo, url]
         );
@@ -111,7 +125,7 @@ router.post(
       await pool.query('COMMIT');
       await CacheManager.veicolo?.delete?.(veicolo_id);
 
-      console.log(`🎉 UPLOAD COMPLETATO per veicolo ${veicolo_id}:`, salvati);
+      console.log(`🎉 [DOC_UPLOAD] Completato per veicolo ${veicolo_id}. Salvati: ${salvati.join(', ')}`);
 
       return res.json({
         success: true,
@@ -120,9 +134,11 @@ router.post(
       });
 
     } catch (err) {
-      await pool.query('ROLLBACK');
-      console.error('💥 ERRORE CRITICO UPLOAD DOC:', err);
-      return res.status(500).json({ success: false, message: 'Errore server upload documenti' });
+      if (err.message !== 'Nessun file è stato caricato...') {
+         await pool.query('ROLLBACK');
+      }
+      console.error('💥 [DOC_UPLOAD] Errore critico:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Errore interno' });
     }
   }
 );

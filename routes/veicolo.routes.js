@@ -35,17 +35,15 @@ const normalizeInput = (b = {}) => ({
    ROTTE
 ======================================================= */
 
-// Check Targa (Consolidato in una sola rotta POST)
+// Check Targa
 veicoloRouter.post('/check-targa', async (req, res) => {
     try {
         const { targa, id } = req.body;
         if (!targa) return res.status(400).json({ error: "Targa mancante" });
-
         const result = await pool.query(
             "SELECT id FROM veicolo WHERE UPPER(targa)=UPPER($1) AND driver_id=$2",
             [targa.trim().toUpperCase(), req.user.id]
         );
-
         const inUse = result.rows.some(v => String(v.id) !== String(id));
         res.json({ inUse });
     } catch (err) {
@@ -53,7 +51,7 @@ veicoloRouter.post('/check-targa', async (req, res) => {
     }
 });
 
-// Marque & Modelli (Lettura statica)
+// Marque & Modelli
 veicoloRouter.get('/marche-modelli', (req, res) => {
     try {
         const filePath = path.resolve(process.cwd(), 'data', 'marche_modelli.json');
@@ -64,11 +62,36 @@ veicoloRouter.get('/marche-modelli', (req, res) => {
     }
 });
 
-// GET Veicoli
+// GET Veicoli (CON JOIN DOCUMENTI)
 veicoloRouter.get('/', async (req, res) => {
     try {
-        const { rows } = await pool.query("SELECT * FROM veicolo WHERE driver_id=$1", [req.user.id]);
-        res.json(rows);
+        const query = `
+            SELECT v.*, 
+                   json_agg(json_build_object('tipo', d.tipo, 'url', d.url, 'stato', d.stato)) 
+                   FILTER (WHERE d.tipo IS NOT NULL) as documenti_array
+            FROM veicolo v
+            LEFT JOIN documenti_autista d ON v.id = d.veicolo_id
+            WHERE v.driver_id = $1
+            GROUP BY v.id`;
+        
+        const { rows } = await pool.query(query, [req.user.id]);
+
+        // Mappatura per formattare come atteso dal frontend
+        const veicoliNormalizzati = rows.map(v => {
+            const docs = { libretto: null, assicurazione: null, licenza_ncc: null };
+            if (v.documenti_array) {
+                v.documenti_array.forEach(d => {
+                    if (docs.hasOwnProperty(d.tipo)) {
+                        docs[d.tipo] = { url: d.url, stato: d.stato };
+                    }
+                });
+            }
+            // Rimuoviamo il campo temporaneo usato per il JSON
+            delete v.documenti_array;
+            return { ...v, documenti: docs };
+        });
+
+        res.json(veicoliNormalizzati);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -88,7 +111,8 @@ veicoloRouter.post('/', async (req, res) => {
             JSON.stringify(d.servizi), d.tipo, d.anno, d.lon, d.lat, 
             d.localita, d.image_url, d.doc_licenza, d.doc_comune
         ]);
-        res.status(201).json(rows[0]);
+        // Aggiungiamo struttura documenti vuota per coerenza
+        res.status(201).json({ ...rows[0], documenti: { libretto: null, assicurazione: null, licenza_ncc: null } });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -109,7 +133,9 @@ veicoloRouter.put('/:id', async (req, res) => {
         ]);
 
         if (!rowCount) return res.status(404).json({ error: "Veicolo non trovato" });
-        res.json(rows[0]);
+        
+        // Mantieni i documenti esistenti nel ritorno
+        res.json({ ...rows[0], documenti: req.body.documenti || { libretto: null, assicurazione: null, licenza_ncc: null } });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }

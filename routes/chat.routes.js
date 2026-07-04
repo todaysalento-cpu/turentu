@@ -4,7 +4,6 @@ import { pool } from "../db/db.js";
 import jwt from "jsonwebtoken";
 import { cloudinary } from "../services/cloudinary.js"; 
 import streamifier from "streamifier";
-// Servizio centralizzato per le notifiche
 import { notifyUser } from "../services/notifications/notification.service.js";
 
 const chatRouter = express.Router();
@@ -14,7 +13,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 /* ================= LOGGER ================= */
 const log = (label, data = {}) => {
-  console.log(JSON.stringify({ time: new Date().toISOString(), label, ...data }, null, 2));
+  console.log(JSON.stringify({ 
+    time: new Date().toISOString(), 
+    label, 
+    ...data 
+  }, null, 2));
 };
 
 /* ================= AUTH ================= */
@@ -27,6 +30,7 @@ const authMiddleware = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (err) {
+    log("AUTH_ERROR", { error: err.message });
     return res.status(401).json({ message: "Invalid token" });
   }
 };
@@ -44,6 +48,8 @@ async function getDriverIdByCorsa(corsa_id) {
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
+  
+  log("INIT_REQUEST", { userId, role });
 
   try {
     const query = `
@@ -57,17 +63,21 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
               WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
               ORDER BY m.created_at DESC LIMIT 1) as last_time_ms,
              COALESCE((SELECT COUNT(m.id)::int FROM messaggi m
-                        WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
-                          AND m.sender_id != $1
-                          AND NOT EXISTS (SELECT 1 FROM message_receipts mr 
-                                          WHERE mr.message_id = m.id AND mr.user_id = $1 AND mr.read_at IS NOT NULL)
-                     ), 0) as unread_count
+                       WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
+                         AND m.sender_id != $1
+                         AND NOT EXISTS (SELECT 1 FROM message_receipts mr 
+                                         WHERE mr.message_id = m.id AND mr.user_id = $1)
+                      ), 0) as unread_count
       FROM chat_threads ct
       JOIN utente u ON ct.cliente_id = u.id
       WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
       ORDER BY ct.updated_at DESC
     `;
+    
     const { rows } = await pool.query(query, [userId]);
+    
+    log("DB_THREADS_RESULT", { count: rows.length });
+
     const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,
       corsa_id: Number(t.corsa_id),
@@ -75,11 +85,12 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       nome_cliente: t.nome_cliente ?? "Cliente",
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",
-      updated_at: Number(t.last_time_ms ?? t.updated_at_ms),
+      updated_at: Number(t.last_time_ms ?? t.updated_at_ms ?? Date.now()),
     }));
+
     return res.json(threads);
   } catch (err) {
-    log("INIT_THREADS_FAILED", { error: err.message });
+    log("INIT_THREADS_FAILED", { error: err.message, userId });
     return res.status(500).json({ message: "init error" });
   }
 });
@@ -89,7 +100,10 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const corsa_id = Number(req.query.corsa_id);
   const cliente_id = Number(req.query.cliente_id);
 
-  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
+  if (!corsa_id || !cliente_id) {
+    log("MESSAGES_MISSING_PARAMS", { query: req.query });
+    return res.status(400).json({ message: "missing params" });
+  }
 
   try {
     const { rows } = await pool.query(
@@ -117,15 +131,18 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
     return res.json(messages);
   } catch (err) {
+    log("GET_MESSAGES_FAILED", { error: err.message, corsa_id, cliente_id });
     return res.status(500).json({ message: "messages error" });
   }
 });
 
-/* ================= UPLOAD MEDIA + INVIO NOTIFICA PUSH ================= */
+/* ================= UPLOAD MEDIA ================= */
 chatRouter.post("/messages/media", authMiddleware, upload.single('file'), async (req, res) => {
   const { corsa_id, cliente_id, client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
   const sender_id = req.user.id;
   const sender_role = req.user.role;
+
+  log("UPLOAD_MEDIA_START", { corsa_id, cliente_id, tipo_messaggio });
 
   try {
     let mediaUrl = null;
@@ -152,11 +169,9 @@ chatRouter.post("/messages/media", authMiddleware, upload.single('file'), async 
 
     const newMessage = rows[0];
 
-    // 1. Socket: Aggiornamento in tempo reale
     const { getIO } = await import("../socket.js");
     getIO().emit("new_message", newMessage);
 
-    // 2. Push Notification: Notifica per il destinatario
     const recipientId = (sender_role === 'autista') ? cliente_id : await getDriverIdByCorsa(corsa_id);
     const recipientRole = (sender_role === 'autista') ? 'cliente' : 'autista';
 
@@ -167,6 +182,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single('file'), async 
       data: { corsa_id, cliente_id }
     });
 
+    log("UPLOAD_MEDIA_SUCCESS", { message_id: newMessage.id });
     return res.json(newMessage);
   } catch (err) {
     log("UPLOAD_MEDIA_FAILED", { error: err.message });
@@ -178,6 +194,9 @@ chatRouter.post("/messages/media", authMiddleware, upload.single('file'), async 
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
   const userId = Number(req.user.id);
+  
+  log("MARK_AS_READ", { corsa_id, cliente_id, userId });
+
   try {
     const { rows } = await pool.query(
       `INSERT INTO message_receipts (message_id, user_id, read_at)
@@ -187,8 +206,11 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
        RETURNING message_id`,
       [corsa_id, cliente_id, userId]
     );
+    
+    log("MARK_AS_READ_SUCCESS", { count: rows.length });
     return res.json({ success: true });
   } catch (err) {
+    log("MARK_AS_READ_FAILED", { error: err.message });
     return res.status(500).json({ message: "error" });
   }
 });

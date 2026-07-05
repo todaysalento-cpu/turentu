@@ -35,20 +35,23 @@ const authMiddleware = (req, res, next) => {
 
 /* ================= HELPER ================= */
 async function getDriverIdByCorsa(corsa_id) {
-  const { rows } = await pool.query(
-    `SELECT v.driver_id 
-     FROM corse c 
-     JOIN veicolo v ON c.veicolo_id = v.id 
-     WHERE c.id = $1`,
-    [corsa_id]
-  );
-  return rows[0]?.driver_id;
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.driver_id FROM corse c JOIN veicolo v ON c.veicolo_id = v.id WHERE c.id = $1`,
+      [corsa_id]
+    );
+    return rows[0]?.driver_id;
+  } catch (err) {
+    log("DB_QUERY_ERROR_DRIVER_ID", { corsa_id, error: err.message });
+    return null;
+  }
 }
 
 /* ================= INIT THREADS ================= */
 chatRouter.get("/init", authMiddleware, async (req, res) => {
   const userId = Number(req.user.id);
   const role = req.user.role;
+  log("INIT_REQUEST_RECEIVED", { userId, role });
 
   try {
     const query = `
@@ -81,6 +84,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     `;
 
     const { rows } = await pool.query(query, [userId]);
+    log("INIT_DB_SUCCESS", { count: rows.length });
 
     const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,
@@ -102,25 +106,16 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 /* ================= GET MESSAGES ================= */
 chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.query;
+  log("GET_MESSAGES_RECEIVED", { corsa_id, cliente_id });
 
-  if (!corsa_id || !cliente_id)
-    return res.status(400).json({ message: "missing params" });
+  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
 
   try {
     const { rows } = await pool.query(
       `
-      SELECT 
-        m.id,
-        m.sender_id,
-        m.testo,
-        m.audio_url,
-        m.media_url,
-        m.tipo_messaggio,
-        EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
-        EXISTS (
-          SELECT 1 FROM message_receipts mr
-          WHERE mr.message_id = m.id
-        ) as is_read
+      SELECT m.id, m.sender_id, m.testo, m.audio_url, m.media_url, m.tipo_messaggio,
+             EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
+             EXISTS (SELECT 1 FROM message_receipts mr WHERE mr.message_id = m.id) as is_read
       FROM messaggi m
       WHERE m.corsa_id = $1 AND m.cliente_id = $2
       ORDER BY m.created_at ASC
@@ -131,22 +126,15 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
     const messages = rows.map((m) => ({
       id: String(m.id),
       sender_id: Number(m.sender_id),
-
-      // 🔥 UNIFICAZIONE: SEMPRE text
       text: m.testo ?? "",
-
       audio_url: m.audio_url ?? null,
       media_url: m.media_url ?? null,
       tipo_messaggio: m.tipo_messaggio ?? "text",
-
       created_at: Number(m.created_at_ms),
-
-      status: {
-        sent: true,
-        read: Boolean(m.is_read),
-      },
+      status: { sent: true, read: Boolean(m.is_read) },
     }));
 
+    log("GET_MESSAGES_SUCCESS", { count: messages.length });
     return res.json(messages);
   } catch (err) {
     log("GET_MESSAGES_FAILED", { error: err.message });
@@ -155,128 +143,87 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* ================= MEDIA MESSAGE ================= */
-chatRouter.post(
-  "/messages/media",
-  authMiddleware,
-  upload.single("file"),
-  async (req, res) => {
-    const {
-      corsa_id,
-      cliente_id,
-      client_msg_id,
-      tipo_messaggio,
-      text,
-      lat,
-      lng,
-    } = req.body;
+chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async (req, res) => {
+  const { corsa_id, cliente_id, client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
+  const sender_id = req.user.id;
+  const sender_role = req.user.role;
 
-    const sender_id = req.user.id;
-    const sender_role = req.user.role;
+  log("MEDIA_UPLOAD_STARTED", { sender_id, tipo_messaggio, corsa_id });
 
-    try {
-      let mediaUrl = null;
-      let content = text || null;
+  try {
+    let mediaUrl = null;
+    let content = text || null;
 
-      if (req.file) {
-        const uploadToCloudinary = (buffer) =>
-          new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              {
-                resource_type:
-                  tipo_messaggio === "audio" ? "video" : "image",
-              },
-              (err, result) => (err ? reject(err) : resolve(result.secure_url))
-            );
-            streamifier.createReadStream(buffer).pipe(stream);
-          });
+    if (req.file) {
+      const uploadToCloudinary = (buffer) =>
+        new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { resource_type: tipo_messaggio === "audio" ? "video" : "image" },
+            (err, result) => (err ? reject(err) : resolve(result.secure_url))
+          );
+          streamifier.createReadStream(buffer).pipe(stream);
+        });
 
-        mediaUrl = await uploadToCloudinary(req.file.buffer);
-      }
-
-      if (tipo_messaggio === "location") {
-        content = JSON.stringify({ lat, lng });
-      }
-
-      const { rows } = await pool.query(
-        `
-        INSERT INTO messaggi 
-        (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, client_msg_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        RETURNING *
-        `,
-        [
-          corsa_id,
-          cliente_id,
-          sender_id,
-          tipo_messaggio,
-          content,
-          mediaUrl,
-          client_msg_id,
-        ]
-      );
-
-      const msg = rows[0];
-
-      /* 🔥 SOCKET FIX: DTO UNICO */
-      const socketMessage = {
-        id: msg.id,
-        sender_id: msg.sender_id,
-        text: msg.testo ?? "",
-        audio_url: msg.audio_url ?? null,
-        media_url: msg.media_url ?? null,
-        tipo_messaggio: msg.tipo_messaggio,
-        corsa_id: msg.corsa_id,
-        cliente_id: msg.cliente_id,
-        created_at: Date.now(),
-        client_msg_id: msg.client_msg_id ?? null,
-      };
-
-      const { getIO } = await import("../socket.js");
-      getIO().emit("new_message", socketMessage);
-
-      const recipientId =
-        sender_role === "autista"
-          ? cliente_id
-          : await getDriverIdByCorsa(corsa_id);
-
-      const recipientRole =
-        sender_role === "autista" ? "cliente" : "autista";
-
-      await notifyUser(recipientId, {
-        type: "chat",
-        message:
-          tipo_messaggio === "text"
-            ? text || "Nuovo messaggio"
-            : "Hai ricevuto un nuovo file",
-        role: recipientRole,
-        data: { corsa_id, cliente_id },
-      });
-
-      return res.json(msg);
-    } catch (err) {
-      log("UPLOAD_MEDIA_FAILED", { error: err.message });
-      return res.status(500).json({ message: "Errore invio" });
+      mediaUrl = await uploadToCloudinary(req.file.buffer);
+      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { mediaUrl });
     }
+
+    if (tipo_messaggio === "location") content = JSON.stringify({ lat, lng });
+
+    const { rows } = await pool.query(
+      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, client_msg_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [corsa_id, cliente_id, sender_id, tipo_messaggio, content, mediaUrl, client_msg_id]
+    );
+
+    const msg = rows[0];
+    const socketMessage = {
+      id: msg.id,
+      sender_id: msg.sender_id,
+      text: msg.testo ?? "",
+      audio_url: msg.audio_url ?? null,
+      media_url: msg.media_url ?? null,
+      tipo_messaggio: msg.tipo_messaggio,
+      corsa_id: msg.corsa_id,
+      cliente_id: msg.cliente_id,
+      created_at: Date.now(),
+      client_msg_id: msg.client_msg_id ?? null,
+    };
+
+    const { getIO } = await import("../socket.js");
+    getIO().emit("new_message", socketMessage);
+    log("SOCKET_MESSAGE_EMITTED", { msgId: msg.id });
+
+    const recipientId = sender_role === "autista" ? cliente_id : await getDriverIdByCorsa(corsa_id);
+    await notifyUser(recipientId, {
+      type: "chat",
+      message: tipo_messaggio === "text" ? text || "Nuovo messaggio" : "Hai ricevuto un file",
+      role: sender_role === "autista" ? "cliente" : "autista",
+      data: { corsa_id, cliente_id },
+    });
+
+    return res.json(msg);
+  } catch (err) {
+    log("UPLOAD_MEDIA_FAILED", { error: err.message });
+    return res.status(500).json({ message: "Errore invio" });
   }
-);
+});
 
 /* ================= MARK AS READ ================= */
 chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.body;
   const userId = Number(req.user.id);
+  log("MARK_READ_REQUEST", { corsa_id, cliente_id, userId });
 
   try {
     await pool.query(
-      `
-      INSERT INTO message_receipts (message_id, user_id, read_at)
-      SELECT m.id, $3, NOW()
-      FROM messaggi m
-      WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
-      ON CONFLICT DO NOTHING
-      `,
+      `INSERT INTO message_receipts (message_id, user_id, read_at)
+       SELECT m.id, $3, NOW()
+       FROM messaggi m
+       WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
+       ON CONFLICT DO NOTHING`,
       [corsa_id, cliente_id, userId]
     );
-
     return res.json({ success: true });
   } catch (err) {
     log("MARK_READ_FAILED", { error: err.message });

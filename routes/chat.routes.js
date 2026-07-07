@@ -38,9 +38,9 @@ async function getDriverIdByCorsa(corsa_id) {
   try {
     const { rows } = await pool.query(
       `SELECT v.driver_id FROM corse c JOIN veicolo v ON c.veicolo_id = v.id WHERE c.id = $1`,
-      [corsa_id]
+      [Number(corsa_id)]
     );
-    return rows[0]?.driver_id;
+    return rows[0]?.driver_id ? Number(rows[0].driver_id) : null;
   } catch (err) {
     log("DB_QUERY_ERROR_DRIVER_ID", { corsa_id, error: err.message });
     return null;
@@ -120,7 +120,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       WHERE m.corsa_id = $1 AND m.cliente_id = $2
       ORDER BY m.created_at ASC
       `,
-      [corsa_id, cliente_id]
+      [Number(corsa_id), Number(cliente_id)]
     );
 
     const messages = rows.map((m) => ({
@@ -144,11 +144,13 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
 /* ================= MEDIA MESSAGE ================= */
 chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async (req, res) => {
-  const { corsa_id, cliente_id, client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
-  const sender_id = req.user.id;
+  const { client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
+  const corsa_id = Number(req.body.corsa_id);
+  const cliente_id = Number(req.body.cliente_id);
+  const sender_id = Number(req.user.id);
   const sender_role = req.user.role;
 
-  log("MEDIA_UPLOAD_STARTED", { sender_id, tipo_messaggio, corsa_id });
+  log("MEDIA_UPLOAD_STARTED", { sender_id, tipo_messaggio, corsa_id, cliente_id });
 
   try {
     let mediaUrl = null;
@@ -158,7 +160,6 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     if (req.file) {
       const uploadToCloudinary = (buffer) =>
         new Promise((resolve, reject) => {
-          // AGGIORNATO: resource_type "auto" rileva automaticamente se è un audio, un video o un'immagine
           const stream = cloudinary.uploader.upload_stream(
             { resource_type: "auto" },
             (err, result) => (err ? reject(err) : resolve(result.secure_url))
@@ -187,13 +188,13 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     const msg = rows[0];
     const socketMessage = {
       id: msg.id,
-      sender_id: msg.sender_id,
+      sender_id: Number(msg.sender_id),
       text: msg.testo ?? "",
       audio_url: msg.audio_url ?? null,
       media_url: msg.media_url ?? null,
       tipo_messaggio: msg.tipo_messaggio,
-      corsa_id: msg.corsa_id,
-      cliente_id: msg.cliente_id,
+      corsa_id: Number(msg.corsa_id),
+      cliente_id: Number(msg.cliente_id),
       created_at: Date.now(),
       client_msg_id: msg.client_msg_id ?? null,
     };
@@ -202,17 +203,22 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     getIO().emit("new_message", socketMessage);
     log("SOCKET_MESSAGE_EMITTED", { msgId: msg.id });
 
+    // CORRETTO: Risoluzione sicura del destinatario prima dell'invio notifica
     const recipientId = sender_role === "autista" ? cliente_id : await getDriverIdByCorsa(corsa_id);
     
-    try {
-      await notifyUser(recipientId, {
-        type: "chat",
-        message: tipo_messaggio === "text" ? text || "Nuovo messaggio" : "Hai ricevuto un file",
-        role: sender_role === "autista" ? "cliente" : "autista",
-        data: { corsa_id, cliente_id },
-      });
-    } catch (fcmErr) {
-      log("FCM_NOTIFICATION_SKIPPED_OR_FAILED", { error: fcmErr.message });
+    if (recipientId) {
+      try {
+        await notifyUser(recipientId, {
+          type: "chat",
+          message: tipo_messaggio === "text" ? text || "Nuovo messaggio" : "Hai ricevuto un file",
+          role: sender_role === "autista" ? "cliente" : "autista",
+          data: { corsa_id, cliente_id },
+        });
+      } catch (fcmErr) {
+        log("FCM_NOTIFICATION_FAILED", { error: fcmErr.message });
+      }
+    } else {
+      log("FCM_NOTIFICATION_SKIPPED", { reason: "Recipient ID not found" });
     }
 
     return res.json(msg);
@@ -235,7 +241,7 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
        FROM messaggi m
        WHERE m.corsa_id = $1 AND m.cliente_id = $2 AND m.sender_id != $3
        ON CONFLICT DO NOTHING`,
-      [corsa_id, cliente_id, userId]
+      [Number(corsa_id), Number(cliente_id), userId]
     );
     return res.json({ success: true });
   } catch (err) {

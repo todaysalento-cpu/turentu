@@ -55,7 +55,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT ct.*, 
+      SELECT ct*, 
              u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -144,7 +144,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 
 /* ================= MEDIA MESSAGE ================= */
 chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async (req, res) => {
-  const { client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
+  const { client_msg_id, tipo_messaggio, text, lat, lng, audio_base64, media_base64 } = req.body;
   const corsa_id = Number(req.body.corsa_id);
   const cliente_id = Number(req.body.cliente_id);
   const sender_id = Number(req.user.id);
@@ -157,25 +157,36 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
     let audioUrl = null;
     let content = text || (tipo_messaggio === "audio" ? "Audio" : null);
 
-    if (req.file) {
-      const uploadToCloudinary = (buffer) =>
-        new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            { resource_type: "auto" },
-            (err, result) => (err ? reject(err) : resolve(result.secure_url))
-          );
-          streamifier.createReadStream(buffer).pipe(stream);
-        });
+    const uploadToCloudinary = (buffer) =>
+      new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: "auto" },
+          (err, result) => (err ? reject(err) : resolve(result.secure_url))
+        );
+        streamifier.createReadStream(buffer).pipe(stream);
+      });
 
+    // 1. Gestione file binario via Multer (multipart/form-data)
+    if (req.file) {
       const secureUrl = await uploadToCloudinary(req.file.buffer);
-      
       if (tipo_messaggio === "audio") {
         audioUrl = secureUrl;
       } else {
         mediaUrl = secureUrl;
       }
-      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { secureUrl, audioUrl, mediaUrl });
+    } 
+    // 2. Gestione stringa Base64 inviata tramite JSON body
+    else if (tipo_messaggio === "audio" && audio_base64) {
+      const base64Data = audio_base64.replace(/^data:audio\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, 'base64');
+      audioUrl = await uploadToCloudinary(buffer);
+    } else if (tipo_messaggio !== "audio" && media_base64) {
+      const base64Data = media_base64.replace(/^data:\w+\/\w+;base64,/, "");
+      const buffer = Buffer.from(base64Data, 'base64');
+      mediaUrl = await uploadToCloudinary(buffer);
     }
+
+    log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { audioUrl, mediaUrl });
 
     if (tipo_messaggio === "location") content = JSON.stringify({ lat, lng });
 

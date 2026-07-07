@@ -55,7 +55,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT ct.*, 
+      SELECT ct., 
              u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -152,7 +152,8 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
 
   try {
     let mediaUrl = null;
-    let content = text || null;
+    let audioUrl = null;
+    let content = text || (tipo_messaggio === "audio" ? "Audio" : null);
 
     if (req.file) {
       const uploadToCloudinary = (buffer) =>
@@ -164,16 +165,23 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
           streamifier.createReadStream(buffer).pipe(stream);
         });
 
-      mediaUrl = await uploadToCloudinary(req.file.buffer);
-      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { mediaUrl });
+      const secureUrl = await uploadToCloudinary(req.file.buffer);
+      
+      if (tipo_messaggio === "audio") {
+        audioUrl = secureUrl;
+      } else {
+        mediaUrl = secureUrl;
+      }
+      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { secureUrl });
     }
 
     if (tipo_messaggio === "location") content = JSON.stringify({ lat, lng });
 
+    // Inserimento aggiornato con audio_url e media_url distinti per rispettare il constraint del DB
     const { rows } = await pool.query(
-      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, client_msg_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [corsa_id, cliente_id, sender_id, tipo_messaggio, content, mediaUrl, client_msg_id]
+      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, audio_url, client_msg_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [corsa_id, cliente_id, sender_id, tipo_messaggio, content, mediaUrl, audioUrl, client_msg_id]
     );
 
     const msg = rows[0];

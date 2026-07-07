@@ -143,7 +143,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
 });
 
 /* ================= MEDIA MESSAGE ================= */
-chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async (req, res) => {
+chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async (req, res) => {
   const { client_msg_id, tipo_messaggio, text, lat, lng } = req.body;
   const corsa_id = Number(req.body.corsa_id);
   const cliente_id = Number(req.body.cliente_id);
@@ -203,7 +203,6 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     getIO().emit("new_message", socketMessage);
     log("SOCKET_MESSAGE_EMITTED", { msgId: msg.id });
 
-    // CORRETTO: Risoluzione sicura del destinatario prima dell'invio notifica
     const recipientId = sender_role === "autista" ? cliente_id : await getDriverIdByCorsa(corsa_id);
     
     if (recipientId) {

@@ -55,7 +55,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT ct., 
+      SELECT ct.*, 
              u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -158,8 +158,9 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     if (req.file) {
       const uploadToCloudinary = (buffer) =>
         new Promise((resolve, reject) => {
+          // AGGIORNATO: resource_type "auto" rileva automaticamente se è un audio, un video o un'immagine
           const stream = cloudinary.uploader.upload_stream(
-            { resource_type: tipo_messaggio === "audio" ? "video" : "image" },
+            { resource_type: "auto" },
             (err, result) => (err ? reject(err) : resolve(result.secure_url))
           );
           streamifier.createReadStream(buffer).pipe(stream);
@@ -172,12 +173,11 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
       } else {
         mediaUrl = secureUrl;
       }
-      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { secureUrl });
+      log("MEDIA_UPLOAD_CLOUDINARY_SUCCESS", { secureUrl, audioUrl, mediaUrl });
     }
 
     if (tipo_messaggio === "location") content = JSON.stringify({ lat, lng });
 
-    // Inserimento aggiornato con audio_url e media_url distinti per rispettare il constraint del DB
     const { rows } = await pool.query(
       `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, audio_url, client_msg_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
@@ -203,12 +203,17 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("file"), async 
     log("SOCKET_MESSAGE_EMITTED", { msgId: msg.id });
 
     const recipientId = sender_role === "autista" ? cliente_id : await getDriverIdByCorsa(corsa_id);
-    await notifyUser(recipientId, {
-      type: "chat",
-      message: tipo_messaggio === "text" ? text || "Nuovo messaggio" : "Hai ricevuto un file",
-      role: sender_role === "autista" ? "cliente" : "autista",
-      data: { corsa_id, cliente_id },
-    });
+    
+    try {
+      await notifyUser(recipientId, {
+        type: "chat",
+        message: tipo_messaggio === "text" ? text || "Nuovo messaggio" : "Hai ricevuto un file",
+        role: sender_role === "autista" ? "cliente" : "autista",
+        data: { corsa_id, cliente_id },
+      });
+    } catch (fcmErr) {
+      log("FCM_NOTIFICATION_SKIPPED_OR_FAILED", { error: fcmErr.message });
+    }
 
     return res.json(msg);
   } catch (err) {

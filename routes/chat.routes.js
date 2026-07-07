@@ -55,7 +55,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT ct*, 
+      SELECT ct.*, 
              u.nome as nome_cliente,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 

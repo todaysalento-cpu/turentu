@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import twilio from 'twilio';
-import AppleAuth from 'apple-auth'; // Aggiunto per il supporto Apple
+import AppleAuth from 'apple-auth';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
@@ -99,7 +99,7 @@ router.delete('/me/delete', authenticate, async (req, res) => {
       [userId]
     );
 
-    // 4. Pending (QUI era il tuo errore)
+    // 4. Pending
     await client.query(
       'DELETE FROM pending WHERE cliente_id = $1',
       [userId]
@@ -172,6 +172,7 @@ router.delete('/me/delete', authenticate, async (req, res) => {
     client.release();
   }
 });
+
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -286,9 +287,9 @@ router.post('/apple', async (req, res) => {
   try {
     const payload = await apple.verifyIdToken(identityToken);
     const appleId = payload.sub;
-    const email = payload.email;
+    const email = payload.email || `${appleId}@privaterelay.appleid.com`;
 
-    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE apple_id=$1 OR ($2 IS NOT NULL AND email=$2)', [appleId, email]);
+    let userRes = await client.query('SELECT id, tipo, email, nome, apple_id FROM utente WHERE apple_id=$1 OR ($2 IS NOT NULL AND email=$2)', [appleId, email]);
     let user;
 
     if (userRes.rows.length > 0) {
@@ -297,7 +298,15 @@ router.post('/apple', async (req, res) => {
         await client.query('UPDATE utente SET apple_id=$1 WHERE id=$2', [appleId, user.id]);
       }
     } else {
-      const nome = fullName ? `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim() : 'Utente Apple';
+      let nome = 'Utente Apple';
+      if (fullName) {
+        if (typeof fullName === 'object') {
+          nome = `${fullName.givenName || ''} ${fullName.familyName || ''}`.trim() || 'Utente Apple';
+        } else if (typeof fullName === 'string') {
+          nome = fullName.trim() || 'Utente Apple';
+        }
+      }
+
       const hashed = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
       const insert = await client.query(
         `INSERT INTO utente (nome, email, apple_id, password, tipo)

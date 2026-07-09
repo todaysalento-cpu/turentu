@@ -38,6 +38,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     for (const slot of slots) {
       console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
+      
+      // ================= LOG DEBUG DATA IN INGRESSO =================
+      console.log(`⏰ [DEBUG-DATE:${requestId}] Slot ${slot.id} - start_datetime grezzo dal client:`, slot.start_datetime);
+      console.log(`⏰ [DEBUG-DATE:${requestId}] Interpretato in ISO dal server:`, new Date(slot.start_datetime).toISOString());
 
       const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
 
@@ -135,6 +139,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
         const role = savedRow.autista_id ? 'driver' : 'admin';
         console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
+        console.log(`📦 [DEBUG-PAYLOAD-ADMIN] start_datetime inviato:`, slot.start_datetime);
 
         await notifyUser(Number(targetId), {
           type: 'NEW_REQUEST',
@@ -155,6 +160,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       // ================= NOTIFICA CLIENTE =================
       try {
         console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
+        console.log(`📦 [DEBUG-PAYLOAD-CLIENT] start_datetime inviato:`, slot.start_datetime);
+        
         await notifyUser(Number(clienteId), {
           type: 'REQUEST_CREATED',
           message: `La tua richiesta è stata inviata correttamente`,

@@ -200,9 +200,15 @@ router.post('/google', async (req, res) => {
   }
 });
 
-// ===================== LOGIN APPLE =====================
+// ===================== LOGIN APPLE (CON LOG DETTAGLIATI) =====================
 router.post('/apple', async (req, res) => {
   const { identityToken, fullName } = req.body;
+  
+  console.log('🍎 [POST /apple] Richiesta ricevuta.');
+  console.log('🍎 [POST /apple] APPLE_CLIENT_ID configurato:', process.env.APPLE_CLIENT_ID || 'NON IMPOSTATO');
+  console.log('🍎 [POST /apple] identityToken presente:', identityToken ? `Sì (lunghezza: ${identityToken.length})` : 'NO');
+  console.log('🍎 [POST /apple] fullName ricevuto:', JSON.stringify(fullName));
+
   if (!identityToken) {
     console.warn('⚠️ [POST /apple] identityToken mancante nel payload');
     return res.status(400).json({ message: 'Token Apple richiesto' });
@@ -210,7 +216,7 @@ router.post('/apple', async (req, res) => {
 
   const client = await pool.connect();
   try {
-    console.log('🍎 [POST /apple] Tentativo di verifica identityToken con Apple...');
+    console.log('🍎 [POST /apple] Avvio verifica crittografica identityToken con Apple...');
     
     // Verifica il token nativo di Apple
     const appleData = await appleSignin.verifyIdToken(identityToken, {
@@ -220,7 +226,7 @@ router.post('/apple', async (req, res) => {
 
     const appleId = appleData.sub;
     const email = appleData.email || `${appleId}@privaterelay.appleid.com`;
-    console.log(`✅ [POST /apple] Token verificato con successo. Apple ID: ${appleId}, Email: ${email}`);
+    console.log(`✅ [POST /apple] Token verificato con successo! Apple ID (sub): ${appleId}, Email decodificata: ${email}`);
 
     let userRes = await client.query(
       'SELECT id, tipo, email, nome, apple_id FROM utente WHERE apple_id=$1 OR ($2 IS NOT NULL AND email=$2)', 
@@ -230,10 +236,18 @@ router.post('/apple', async (req, res) => {
 
     if (userRes.rows.length > 0) {
       user = userRes.rows[0];
+      console.log(`ℹ️ [POST /apple] Utente già esistente nel DB con ID: ${user.id}`);
+      
       if (!user.apple_id) {
+        console.log(`ℹ️ [POST /apple] Associazione apple_id mancante per l'utente ${user.id}. Eseguo update...`);
         await client.query('UPDATE utente SET apple_id=$1 WHERE id=$2', [appleId, user.id]);
       }
+      
+      // Ricarichiamo i dati freschi dell'utente
+      const refreshed = await client.query('SELECT id, tipo, email, nome FROM utente WHERE id=$1', [user.id]);
+      user = refreshed.rows[0];
     } else {
+      console.log('ℹ️ [POST /apple] Utente non trovato nel DB. Creo un nuovo record...');
       let nome = 'Utente Apple';
       if (fullName) {
         if (typeof fullName === 'object') {
@@ -249,14 +263,17 @@ router.post('/apple', async (req, res) => {
         [nome, email, appleId, hashed, 'cliente']
       );
       user = insert.rows[0];
-      console.log(`👤 [POST /apple] Creato nuovo utente Apple ID: ${user.id}`);
+      console.log(`👤 [POST /apple] Creato nuovo utente Apple con ID DB: ${user.id}`);
     }
 
     const jwtToken = jwt.sign({ id: user.id, role: user.tipo, email: user.email, nome: user.nome }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('token', jwtToken, cookieOptions);
+    
+    console.log(`🚀 [POST /apple] Autenticazione completata con successo per utente ID: ${user.id}. Invio risposta JSON.`);
     res.json({ ...user, token: jwtToken });
   } catch (err) {
-    console.error('❌ [POST /apple] Errore verifica token/server Apple:', err.message);
+    console.error('❌ [POST /apple] ERRORE CRITICO durante la verifica o la gestione DB di Apple:', err.message);
+    console.error('❌ [POST /apple] Stack trace errore:', err.stack);
     res.status(500).json({ message: 'Login Apple fallito', details: err.message });
   } finally {
     client.release();

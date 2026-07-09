@@ -2,6 +2,12 @@ import { pool } from '../../db/db.js';
 import { sendPush } from './push.service.js';
 import { getIO } from '../../socket.js';
 
+// Helper per ottenere la data attuale formattata nel fuso orario di Roma (Italia)
+const getRomeISOString = () => {
+  const d = new Date();
+  return new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Rome' })).toISOString();
+};
+
 /**
  * Servizio centralizzato per notifiche (FCM)
  */
@@ -13,10 +19,12 @@ export const notifyUser = async (
     // =========================
     // 1. SAVE NOTIFICATION DB
     // =========================
+    const romeTime = getRomeISOString();
+
     const result = await pool.query(
-      `INSERT INTO notifications(user_id, type, message, seen, created_at) 
-       VALUES ($1, $2, $3, false, NOW()) RETURNING *`,
-      [userId, type, message]
+      `INSERT INTO notifications(user_id, type, message, seen, created_at)  
+       VALUES ($1, $2, $3, false, $4) RETURNING *`,
+      [userId, type, message, romeTime]
     );
 
     const notification = result.rows[0];

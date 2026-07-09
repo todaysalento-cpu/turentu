@@ -140,7 +140,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
           role,
-          data: { requestId, rowId: savedRow.id, type }
+          data: { 
+            requestId, 
+            rowId: savedRow.id, 
+            type, 
+            start_datetime: slot.start_datetime 
+          }
         });
 
       } catch (notifyErr) {
@@ -154,7 +159,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           type: 'REQUEST_CREATED',
           message: `La tua richiesta è stata inviata correttamente`,
           role: 'cliente',
-          data: { requestId, rowId: savedRow.id, type }
+          data: { 
+            requestId, 
+            rowId: savedRow.id, 
+            type, 
+            start_datetime: slot.start_datetime 
+          }
         });
       } catch (notifyErr) {
         console.error(`⚠️ [NOTIFY_CLIENT] Errore notifica:`, notifyErr);

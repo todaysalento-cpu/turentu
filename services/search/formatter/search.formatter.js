@@ -1,8 +1,7 @@
 import { calcolaPrezzo } from '../../../utils/pricing.util.js';
-import { getLocalitaSafe } from '../../../utils/maps.util.js';
+import { getLocalitaSafe, getDurataDistanza } from '../../../utils/maps.util.js';
 
 const localitaCache = new Map();
-const VELOCITA_MEDIA_KM_MIN = 1.0; 
 
 const UI_CONFIG = {
     'pop-bus': { colore: '#FF9800' }, 
@@ -23,15 +22,12 @@ const parseServizi = (servizi) => {
     try { return JSON.parse(servizi); } catch (e) { return {}; }
 };
 
-const determinaArrivo = (partenzaISO, distanzaMetri) => {
+const determinaArrivoReale = (partenzaISO, durataMinuti) => {
     try {
         const d = new Date(partenzaISO);
         if (isNaN(d.getTime())) return null;
 
-        const distanzaKm = (Number(distanzaMetri) || 0) / 1000;
-        const durataMinuti = Math.max(30, Math.round(distanzaKm / VELOCITA_MEDIA_KM_MIN));
-        
-        d.setMinutes(d.getMinutes() + durataMinuti);
+        d.setMinutes(d.getMinutes() + Math.max(1, Math.round(durataMinuti)));
         return d.toISOString();
     } catch (e) {
         return null;
@@ -78,8 +74,15 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    const distMetriRichiesta = Number(richiesta.distanzaMetri || 1000);
-    const distKmRichiesta = distMetriRichiesta / 1000;
+    // Interrogazione a Google Maps per la tratta principale della richiesta
+    const coordOrigine = richiesta.coord;
+    const coordDestinazione = richiesta.coordDest;
+    const mapInfo = await getDurataDistanza(coordOrigine, coordDestinazione);
+
+    const distKmRichiesta = mapInfo.distanzaKm > 0 ? mapInfo.distanzaKm : (Number(richiesta.distanzaMetri || 1000) / 1000);
+    const distMetriRichiesta = distKmRichiesta * 1000;
+    const durataMinutiRichiesta = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmRichiesta / 1.0));
+
     const oraPartenzaISO = getSafeISO(richiesta.start_datetime || Date.now());
 
     const results = await Promise.all(risultatiLimitati.map(async (item) => {
@@ -88,6 +91,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const t = String(item.tipo || "").toLowerCase().trim();
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
             const itemId = String(item.id || "");
+
+            // Calcolo distanza specifica per elementi di tipo pool o standard
+            let distMetriItem = distMetriRichiesta;
+            if (item.is_pool) {
+                distMetriItem = item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)) || distMetriRichiesta;
+            }
+            const distKmItem = distMetriItem / 1000;
+            const durataMinutiItem = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmItem / 1.0));
 
             // 1. LOGICA VIRTUAL (POP-BUS)
             if (itemId.startsWith('virtual_pop_')) {
@@ -104,7 +115,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: oraPartenzaISO,
-                    oraArrivo: determinaArrivo(oraPartenzaISO, distMetriRichiesta),
+                    oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiRichiesta),
+                    distanza_metri: distMetriRichiesta,
+                    durata_minuti: Math.round(durataMinutiRichiesta),
                     prezzo: prezzoVal,
                     prezzo_display: `~ ${prezzoVal}€`,
                     posti_necessari_break_even: p.targetPasseggeri || 1,
@@ -118,22 +131,21 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             }
 
             // 2. LOGICA STANDARD
-            let distMetri = item.is_pool ? (item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0))) : distMetriRichiesta;
-            if (!distMetri || isNaN(distMetri) || distMetri <= 0) distMetri = 1000;
-            
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distMetri/1000, item.distanzaTotaleRotte || (distMetri/1000), 0, item.classe).catch(() => ({ prezzo: (distMetri/1000) * 0.50 }));
+            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
             return {
                 id: itemId || `slot_${item.veicolo_id}`,
-                veicolo_id: item.veicolo_id, // ✅ AGGIUNTO: Necessario per il backend (pending)
+                veicolo_id: item.veicolo_id, // ✅ Necessario per il backend (pending)
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza: oraPartenzaISO,
-                oraArrivo: determinaArrivo(oraPartenzaISO, distMetri),
+                oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiItem),
+                distanza_metri: distMetriItem,
+                durata_minuti: Math.round(durataMinutiItem),
                 prezzo: prezzoVal,
                 prezzo_display: prezzoVal.toString(),
                 postiDisponibili: item.posti_disponibili || 0,

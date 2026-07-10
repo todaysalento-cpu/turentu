@@ -92,6 +92,10 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
             const itemId = String(item.id || "");
 
+            // ✅ Recupero sicuro di marca/modello supportando sia proprietà dirette che annidate
+            const marcaVal = item.marca || item.veicolo?.marca || '';
+            const modelloVal = item.modello || item.veicolo?.modello || '';
+
             // Calcolo distanza specifica per elementi di tipo pool o standard
             let distMetriItem = distMetriRichiesta;
             if (item.is_pool) {
@@ -112,8 +116,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     tipo: 'pop-bus',
                     colore_ui: UI_CONFIG['pop-bus'].colore,
                     classe: item.classe || 'STANDARD',
-                    marca: item.marca || '',
-                    modello: item.modello || '',
+                    marca: marcaVal,
+                    modello: modelloVal,
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: oraPartenzaISO,
@@ -142,8 +146,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
-                marca: item.marca || '',
-                modello: item.modello || '',
+                marca: marcaVal,
+                modello: modelloVal,
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza: oraPartenzaISO,

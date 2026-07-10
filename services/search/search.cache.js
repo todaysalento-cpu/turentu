@@ -70,7 +70,6 @@ export const upsertCorsa = async (c, indicizzare = false) => {
 export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
-    // Logica di rimozione indici Redis (opzionale se gestita altrove)
 };
 
 // --- SYNC ENGINE ---
@@ -81,8 +80,9 @@ export async function loadCachesUltra(force = false) {
     try {
         console.log(`⏳ [SYNC] Inizio caricamento cache...`);
         
+        // ✅ Aggiunti v.marca, v.modello, v.servizi e v.rating alla query principale
         let dRes = await client.query(`
-            SELECT dv.*, v.driver_id, v.servizi, v.tipo, 
+            SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
                    ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
             FROM disponibilita_veicolo dv 
             JOIN veicolo v ON dv.veicolo_id = v.id 
@@ -91,8 +91,9 @@ export async function loadCachesUltra(force = false) {
 
         if (dRes.rows.length === 0) {
             console.warn("⚠️ [SYNC] Nessuno slot attivo, fallback su record correnti.");
+            // ✅ Aggiunti v.marca, v.modello, v.servizi e v.rating anche al fallback
             dRes = await client.query(`
-                SELECT dv.*, v.driver_id, v.servizi, v.tipo, 
+                SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
                        ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
                 FROM disponibilita_veicolo dv 
                 JOIN veicolo v ON dv.veicolo_id = v.id LIMIT 50

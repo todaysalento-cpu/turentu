@@ -14,7 +14,8 @@ export async function getDisponibilita(veicoloId) {
  * 2. VERSIONE BATCH: Logica oraria con eccezione Pop-Bus
  */
 export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(), impegniForti = []) {
-  const targetMinutes = targetDate.getUTCHours() * 60 + targetDate.getUTCMinutes();
+  // ✅ FIX: Uso dell'orario locale per evitare lo sfasamento di un'ora
+  const targetMinutes = targetDate.getHours() * 60 + targetDate.getMinutes();
   const results = new Map();
 
   for (const vId of veicoloIds) {
@@ -27,8 +28,6 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
       continue;
     }
 
-    // LOG DI ISPEZIONE TIPO
-    // Verifica se il tipo è stato corrotto da 'disponibilita'
     const isPopBus = String(turno.tipo).toLowerCase().includes('pop-bus');
     console.log(`🔍 [DISP-DEBUG] Valutazione V:${veicoloId} | Tipo rilevato: '${turno.tipo}' | IsPopBus: ${isPopBus}`);
 
@@ -68,9 +67,18 @@ export async function getDisponibilitaBatch(veicoloIds, targetDate = new Date(),
   return results;
 }
 
+// ✅ FIX: Calcolo dei minuti basato sull'ora locale
 function toMinutes(timeStr) {
+  if (!timeStr) return 0;
   const d = new Date(timeStr);
-  return d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (!isNaN(d.getTime())) {
+    return d.getHours() * 60 + d.getMinutes();
+  }
+  if (timeStr.includes(':')) {
+    const [hh, mm] = timeStr.split(':').map(Number);
+    return hh * 60 + mm;
+  }
+  return 0;
 }
 
 // --- CRUD OPERAZIONI ---
@@ -117,9 +125,16 @@ export async function createDisponibilita(turno) {
   return finalTurno;
 }
 
+// ✅ FIX: Parsing della stringa oraria senza forzatura UTC
 function parseTimeString(timeStr) {
   if (!timeStr) return null;
+  if (timeStr.match(/^\d{2}:\d{2}$/)) {
+    // Trasforma HH:mm in una data locale pulita memorizzata come stringa/ISO locale
+    const [hh, mm] = timeStr.split(':').map(Number);
+    const d = new Date();
+    d.setHours(hh, mm, 0, 0);
+    return d.toISOString();
+  }
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
-  const [hh, mm] = timeStr.split(':').map(Number);
-  return new Date(Date.UTC(1970, 0, 1, hh, mm, 0)).toISOString();
+  return timeStr;
 }

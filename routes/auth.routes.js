@@ -200,7 +200,7 @@ router.post('/google', async (req, res) => {
   }
 });
 
-// ===================== LOGIN APPLE (CON LOG DETTAGLIATI) =====================
+// ===================== LOGIN APPLE (CORRETTO) =====================
 router.post('/apple', async (req, res) => {
   const { identityToken, fullName } = req.body;
   
@@ -228,9 +228,11 @@ router.post('/apple', async (req, res) => {
     const email = appleData.email || `${appleId}@privaterelay.appleid.com`;
     console.log(`✅ [POST /apple] Token verificato con successo! Apple ID (sub): ${appleId}, Email decodificata: ${email}`);
 
+    // Gestione sicura del parametro email con cast esplicito ::text per evitare l'errore sul tipo in PG
+    const lookupEmail = email || null;
     let userRes = await client.query(
-      'SELECT id, tipo, email, nome, apple_id FROM utente WHERE apple_id=$1 OR ($2 IS NOT NULL AND email=$2)', 
-      [appleId, email]
+      'SELECT id, tipo, email, nome, apple_id FROM utente WHERE apple_id = $1 OR ($2::text IS NOT NULL AND email = $2::text)', 
+      [appleId, lookupEmail]
     );
     let user;
 

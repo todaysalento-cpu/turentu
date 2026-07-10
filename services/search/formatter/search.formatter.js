@@ -108,10 +108,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
                 return {
                     id: itemId,
-                    veicolo_id: null, // Esplicito per logica virtuale
+                    veicolo_id: null,
                     tipo: 'pop-bus',
                     colore_ui: UI_CONFIG['pop-bus'].colore,
                     classe: item.classe || 'STANDARD',
+                    marca: item.marca || '',
+                    modello: item.modello || '',
                     localitaOrigine,
                     localitaDestinazione,
                     oraPartenza: oraPartenzaISO,
@@ -136,10 +138,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             return {
                 id: itemId || `slot_${item.veicolo_id}`,
-                veicolo_id: item.veicolo_id, // ✅ Necessario per il backend (pending)
+                veicolo_id: item.veicolo_id,
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',
+                marca: item.marca || '',
+                modello: item.modello || '',
                 localitaOrigine,
                 localitaDestinazione,
                 oraPartenza: oraPartenzaISO,

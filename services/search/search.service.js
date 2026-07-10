@@ -93,14 +93,21 @@ export async function cercaSlotUltra(richiesta) {
         if (distVeicolo < 50) {
             if (disp.is_slot && disp.disponibile !== false) {
                 const cap = await getCapacitaDirettrice(disp.veicolo_id);
+                
+                // ✅ Estrazione corretta di marca e modello anche per le private dalla cache
                 risultatiPrivati.push({
                     id: `priv_${veicoloId}`, 
                     tipo: 'privata', 
                     veicolo_id: veicoloId, 
+                    marca: disp.marca || disp.veicolo?.marca || '',
+                    modello: disp.modello || disp.veicolo?.modello || '',
+                    classe: disp.classe || 'STANDARD',
+                    servizi: disp.servizi || {},
                     posti_disponibili: cap,
                     posti_totali: cap, 
                     distanza: distanzaMetri, 
-                    is_pool: false
+                    is_pool: false,
+                    is_privato: true
                 });
             }
         }
@@ -108,7 +115,7 @@ export async function cercaSlotUltra(richiesta) {
 
     // 3. POP-BUS (Reali)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT d.id, d.stato, d.partenza_prevista, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
+        SELECT d.id, d.stato, d.partenza_prevista, d.veicolo_id, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
         JOIN segmenti s1 ON d.id = s1.direttrice_id
         JOIN segmenti s2 ON d.id = s2.direttrice_id
@@ -123,7 +130,20 @@ export async function cercaSlotUltra(richiesta) {
         const disponibili = capacita - occupati;
         
         if (disponibili >= postiRichiesti) {
-            return { id: `pop_${dir.id}`, tipo: 'pop-bus', direttrice_id: dir.id, posti_disponibili: disponibili, posti_totali: capacita, distanza: distanzaMetri, is_pool: true };
+            // ✅ Recupero dei dati del veicolo per i pop-bus reali se presenti in cache
+            const dispVeicolo = CacheStore.veicoloToDisponibilita.get(dir.veicolo_id) || {};
+            return { 
+                id: `pop_${dir.id}`, 
+                tipo: 'pop-bus', 
+                direttrice_id: dir.id, 
+                veicolo_id: dir.veicolo_id,
+                marca: dispVeicolo.marca || dispVeicolo.veicolo?.marca || '',
+                modello: dispVeicolo.modello || dispVeicolo.veicolo?.modello || '',
+                posti_disponibili: disponibili, 
+                posti_totali: capacita, 
+                distanza: distanzaMetri, 
+                is_pool: true 
+            };
         }
         return null;
     }))).filter(Boolean);

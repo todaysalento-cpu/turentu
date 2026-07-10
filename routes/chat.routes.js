@@ -1,3 +1,4 @@
+// ======================= routes/chat.routes.js =======================
 import express from "express";
 import multer from "multer";
 import { pool } from "../db/db.js";
@@ -20,7 +21,10 @@ const log = (label, data = {}) => {
 const authMiddleware = (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token;
-    if (!token) return res.status(401).json({ message: "No token" });
+    if (!token) {
+      log("AUTH_ERROR", { error: "No token provided" });
+      return res.status(401).json({ message: "No token" });
+    }
 
     const decoded = jwt.verify(token, JWT_SECRET);
     decoded.role = decoded.role?.toLowerCase();
@@ -40,7 +44,9 @@ async function getDriverIdByCorsa(corsa_id) {
       `SELECT v.driver_id FROM corse c JOIN veicolo v ON c.veicolo_id = v.id WHERE c.id = $1`,
       [Number(corsa_id)]
     );
-    return rows[0]?.driver_id ? Number(rows[0].driver_id) : null;
+    const driverId = rows[0]?.driver_id ? Number(rows[0].driver_id) : null;
+    log("GET_DRIVER_ID_SUCCESS", { corsa_id, driverId });
+    return driverId;
   } catch (err) {
     log("DB_QUERY_ERROR_DRIVER_ID", { corsa_id, error: err.message });
     return null;
@@ -108,7 +114,10 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   const { corsa_id, cliente_id } = req.query;
   log("GET_MESSAGES_RECEIVED", { corsa_id, cliente_id });
 
-  if (!corsa_id || !cliente_id) return res.status(400).json({ message: "missing params" });
+  if (!corsa_id || !cliente_id) {
+    log("GET_MESSAGES_MISSING_PARAMS", { corsa_id, cliente_id });
+    return res.status(400).json({ message: "missing params" });
+  }
 
   try {
     const { rows } = await pool.query(
@@ -150,7 +159,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
   const sender_id = Number(req.user.id);
   const sender_role = req.user.role;
 
-  log("MEDIA_UPLOAD_STARTED", { sender_id, tipo_messaggio, corsa_id, cliente_id });
+  log("MEDIA_UPLOAD_STARTED", { sender_id, sender_role, tipo_messaggio, corsa_id, cliente_id });
 
   try {
     let mediaUrl = null;
@@ -168,6 +177,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
 
     // 1. Gestione file binario via Multer (multipart/form-data)
     if (req.file) {
+      log("CLOUDINARY_UPLOAD_MULTER", { size: req.file.buffer.length });
       const secureUrl = await uploadToCloudinary(req.file.buffer);
       if (tipo_messaggio === "audio") {
         audioUrl = secureUrl;
@@ -177,10 +187,12 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
     } 
     // 2. Gestione stringa Base64 inviata tramite JSON body
     else if (tipo_messaggio === "audio" && audio_base64) {
+      log("CLOUDINARY_UPLOAD_BASE64_AUDIO");
       const base64Data = audio_base64.replace(/^data:audio\/\w+;base64,/, "");
       const buffer = Buffer.from(base64Data, 'base64');
       audioUrl = await uploadToCloudinary(buffer);
     } else if (tipo_messaggio !== "audio" && media_base64) {
+      log("CLOUDINARY_UPLOAD_BASE64_MEDIA");
       const base64Data = media_base64.replace(/^data:\w+\/\w+;base64,/, "");
       const buffer = Buffer.from(base64Data, 'base64');
       mediaUrl = await uploadToCloudinary(buffer);
@@ -224,6 +236,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
           role: sender_role === "autista" ? "cliente" : "autista",
           data: { corsa_id, cliente_id },
         });
+        log("FCM_NOTIFICATION_SUCCESS", { recipientId });
       } catch (fcmErr) {
         log("FCM_NOTIFICATION_FAILED", { error: fcmErr.message });
       }
@@ -253,6 +266,7 @@ chatRouter.post("/messages/read", authMiddleware, async (req, res) => {
        ON CONFLICT DO NOTHING`,
       [Number(corsa_id), Number(cliente_id), userId]
     );
+    log("MARK_READ_SUCCESS", { userId });
     return res.json({ success: true });
   } catch (err) {
     log("MARK_READ_FAILED", { error: err.message });

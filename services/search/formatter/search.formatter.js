@@ -74,7 +74,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             : getLocalitaSafeCached(richiesta.coordDest)
     ]);
 
-    // Interrogazione a Google Maps per la tratta principale della richiesta
     const coordOrigine = richiesta.coord;
     const coordDestinazione = richiesta.coordDest;
     const mapInfo = await getDurataDistanza(coordOrigine, coordDestinazione);
@@ -92,11 +91,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
             const itemId = String(item.id || "");
 
-            // ✅ Recupero sicuro di marca/modello supportando sia proprietà dirette che annidate
             const marcaVal = item.marca || item.veicolo?.marca || '';
             const modelloVal = item.modello || item.veicolo?.modello || '';
 
-            // Calcolo distanza specifica per elementi di tipo pool o standard
             let distMetriItem = distMetriRichiesta;
             if (item.is_pool) {
                 distMetriItem = item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)) || distMetriRichiesta;
@@ -104,10 +101,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const distKmItem = distMetriItem / 1000;
             const durataMinutiItem = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmItem / 1.0));
 
-            // 1. LOGICA VIRTUAL (POP-BUS)
+            // 1. LOGICA VIRTUAL (POP-BUS) - Adattato per gestire la classe dinamica unificata
             if (itemId.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
-                const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, item.classe || 'STANDARD');
+                const classeCorrente = item.classe || richiesta.classe || 'STANDARD';
+                const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
                 const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
 
                 return {
@@ -115,7 +113,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     veicolo_id: null,
                     tipo: 'pop-bus',
                     colore_ui: UI_CONFIG['pop-bus'].colore,
-                    classe: item.classe || 'STANDARD',
+                    classe: classeCorrente,
                     marca: marcaVal,
                     modello: modelloVal,
                     localitaOrigine,

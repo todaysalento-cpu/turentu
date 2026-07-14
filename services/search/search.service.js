@@ -94,7 +94,6 @@ export async function cercaSlotUltra(richiesta) {
             if (disp.is_slot && disp.disponibile !== false) {
                 const cap = await getCapacitaDirettrice(disp.veicolo_id);
                 
-                // ✅ Estrazione corretta di marca e modello anche per le private dalla cache
                 risultatiPrivati.push({
                     id: `priv_${veicoloId}`, 
                     tipo: 'privata', 
@@ -115,13 +114,13 @@ export async function cercaSlotUltra(richiesta) {
 
     // 3. POP-BUS (Reali)
     const { rows: direttriciAttivate } = await pool.query(`
-        SELECT d.id, d.stato, d.partenza_prevista, d.veicolo_id, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
+        SELECT d.id, d.stato, d.partenza_prevista, d.veicolo_id, d.tipo_servizio, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
         FROM direttrici_virtuali d
         JOIN segmenti s1 ON d.id = s1.direttrice_id
         JOIN segmenti s2 ON d.id = s2.direttrice_id
         WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
         AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '1 hour' AND $1::timestamptz + INTERVAL '1 hour'
-        GROUP BY d.id
+        GROUP BY d.id, d.stato, d.partenza_prevista, d.veicolo_id, d.tipo_servizio
     `, [orarioRichiesto.toISOString()]);
 
     const risultatiPool = (await Promise.all(direttriciAttivate.map(async (dir) => {
@@ -130,7 +129,6 @@ export async function cercaSlotUltra(richiesta) {
         const disponibili = capacita - occupati;
         
         if (disponibili >= postiRichiesti) {
-            // ✅ Recupero dei dati del veicolo per i pop-bus reali se presenti in cache
             const dispVeicolo = CacheStore.veicoloToDisponibilita.get(dir.veicolo_id) || {};
             return { 
                 id: `pop_${dir.id}`, 
@@ -151,36 +149,34 @@ export async function cercaSlotUltra(richiesta) {
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
     console.log(`📊 [SearchEngine] Risultati trovati: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
-    // --- LOGICA PROATTIVA (MULTI-CLASSE) ---
+    // --- LOGICA PROATTIVA (UNIFICATA) ---
     if (risultatiPool.length === 0) {
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);
         
-        const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
+        const classeScelta = richiesta.classe || 'STANDARD';
         
         try {
             const startNode = await getNearestNode(lat, lon);
             const endNode = await getNearestNode(destLat, destLon);
 
-            for (const classe of classiDisponibili) {
-                await pool.query(`
-                    INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                    VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
-                `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, classe]);
-                
-                risultatiFinali.push({
-                    id: `virtual_pop_${classe.toLowerCase()}`,
-                    tipo: 'pop-bus',
-                    is_pool: true,
-                    veicoli_pool_ids: veicoliDisponibili,
-                    stato: 'in_attesa',
-                    classe: classe,
-                    distanza: distanzaMetri,
-                    distanzaTotaleRotte: distanzaMetri,
-                    messaggio: `Richiesta ${classe} registrata.`
-                });
-            }
+            await pool.query(`
+                INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
+                VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
+            `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRichiesto, postiRichiesti, startNode?.id, endNode?.id, classeScelta]);
+            
+            risultatiFinali.push({
+                id: `virtual_pop_${classeScelta.toLowerCase()}`,
+                tipo: 'pop-bus',
+                is_pool: true,
+                veicoli_pool_ids: veicoliDisponibili,
+                stato: 'in_attesa',
+                classe: classeScelta,
+                distanza: distanzaMetri,
+                distanzaTotaleRotte: distanzaMetri,
+                messaggio: `Richiesta ${classeScelta} registrata nel pool.`
+            });
         } catch (err) {
             console.error("❌ Errore innesco proattivo:", err);
         }

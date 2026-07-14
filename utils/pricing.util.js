@@ -88,10 +88,8 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                     prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmUtente) * multiplier;
                 } else {
                     const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
-                    // Filtra veicoli validi ed economici
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
-                    // SELEZIONE OTTIMIZZATA: Sceglie il veicolo con euro_km MINORE
                     const mezzo = poolFiltrato.length > 0 
                         ? poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr) 
                         : poolData.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
@@ -100,7 +98,7 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
                     prezzoCalcolato = ((breakEvenTotale / targetPasseggeri) * (kmUtente / kmTotali)) * multiplier;
                     
-                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id}. Target:${targetPasseggeri} persone per break-even.`);
+                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id} [${classeKey}]. Target:${targetPasseggeri} persone per break-even.`);
                 }
                 break;
 
@@ -114,7 +112,6 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
 
     const finale = Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);
     
-    // Ritorna l'oggetto completo
     return {
         prezzo: finale,
         targetPasseggeri: targetPasseggeri

@@ -65,8 +65,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            // Logica "Proattiva": controllo con startsWith per supportare tutte le classi virtuali (saver, standard, express)
-            const isProattivo = c.id?.startsWith('virtual_pop_');
+            // CORRETTO: Uso di String(c.id) per evitare TypeError se l'id non è stringa o è indefinito
+            const idString = String(c.id || '');
+            const isProattivo = idString.startsWith('virtual_pop_');
             
             const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };
             const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM) : { ordine_sequenziale: 999 };

@@ -1,5 +1,5 @@
 import { pool } from '../../db/db.js';
-import { getIO } from '../../socket.js';
+import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
@@ -34,7 +34,7 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
 
-      // Inserimento segmento (rimossa colonna distanza_km mancante)
+      // Inserimento segmento
       const { rows: seg } = await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
         VALUES ($1, $2, $3, $4)
@@ -43,30 +43,81 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
 
-      // Inserimento missioni_ritorno con cast corretto per evitare errori di tipo
+      // Inserimento / Aggiornamento missioni_ritorno legate al segmento
       await client.query(`
-        INSERT INTO missioni_ritorno (segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato)
-        VALUES ($1, $2, $3, $4, ($5::timestamptz + INTERVAL '1 hour'), 'in_attesa')
-        ON CONFLICT (segmento_id, capolinea_finale_id) DO NOTHING
-      `, [seg[0].id, dir[0].id, c.end_node_id, c.end_node_id, c.slot_orario]);
+        INSERT INTO missioni_ritorno (
+          segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
+        )
+        VALUES (
+          $1, $2, $3, $4, 
+          ($5::timestamptz + 
+            CASE 
+              WHEN UPPER($6) = 'EXTRAURBANO' THEN INTERVAL '30 minutes'
+              WHEN UPPER($6) = 'SCOLASTICO' THEN INTERVAL '3 hours'
+              ELSE INTERVAL '15 minutes'
+            END
+          ), 
+          'in_attesa',
+          CASE 
+            WHEN UPPER($6) = 'EXTRAURBANO' THEN 45
+            WHEN UPPER($6) = 'SCOLASTICO' THEN 180
+            ELSE 20
+          END
+        )
+        ON CONFLICT (segmento_id, capolinea_finale_id) 
+        DO UPDATE SET 
+          orario_previsto = EXCLUDED.orario_previsto,
+          nodo_origine = EXCLUDED.nodo_origine
+      `, [seg[0].id, dir[0].id, c.end_node_id, c.end_node_id, c.slot_orario, c.classe]);
     }
 
     // 2. CALCOLO ATTIVAZIONE
     const { rows: tratteAttivate } = await client.query(`
-      WITH calcolo_orari AS (
-        SELECT s.id, s.direttrice_id,
-          d.partenza_prevista + (SUM(COALESCE(s.tempo_stimato, 0)) OVER (
-              PARTITION BY s.direttrice_id ORDER BY s.ordine_sequenziale
-            ) * INTERVAL '1 minute') as calculated_start
+      WITH ricavi_segmento AS (
+        SELECT 
+          s.id as segmento_id,
+          s.direttrice_id,
+          s.tempo_stimato,
+          s.ordine_sequenziale,
+          (
+            ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
+            COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
+            COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
+          ) as km_segmento,
+          COALESCE(SUM(p.prezzo_totale), 0) as ricavo_attuale
         FROM segmenti s
-        JOIN direttrici_virtuali d ON s.direttrice_id = d.id
+        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+        LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
+        LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
+        LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
+        LEFT JOIN direttrici_richieste dr ON dr.direttrice_id = s.direttrice_id
+        LEFT JOIN richieste_pop_bus r ON r.id = dr.richiesta_id
+          AND r.start_node_id <= s.end_node_id 
+          AND r.end_node_id >= s.start_node_id
+        LEFT JOIN prenotazioni p ON p.cliente_id = r.cliente_id
+        WHERE s.stato = 'in_attesa'
+        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+      ),
+      calcolo_orari AS (
+        SELECT 
+          rs.segmento_id, 
+          rs.direttrice_id,
+          d.partenza_prevista + (SUM(COALESCE(rs.tempo_stimato, 0)) OVER (
+              PARTITION BY rs.direttrice_id ORDER BY rs.ordine_sequenziale
+            ) * INTERVAL '1 minute') as calculated_start,
+          rs.ricavo_attuale,
+          0.50 * rs.km_segmento as soglia_dinamica_segmento
+        FROM ricavi_segmento rs
+        JOIN direttrici_virtuali d ON rs.direttrice_id = d.id
         WHERE d.stato = 'in_formazione'
       )
       UPDATE segmenti s
-      SET start_datetime = co.calculated_start, stato = 'attivo'
+      SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
       FROM calcolo_orari co
-      WHERE s.id = co.id
-      RETURNING s.direttrice_id, s.stato
+      WHERE s.id = co.segmento_id
+        AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
+      RETURNING s.id, s.direttrice_id, s.stato
     `);
 
     // 3. AUTO-UPGRADE
@@ -75,28 +126,17 @@ export async function processaProposteDinamiche() {
       SET target_missione_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-       AND d_source.end_node_id = d_target.end_node_id
+         AND d_source.end_node_id = d_target.end_node_id
       WHERE r.target_missione_id = d_source.id
         AND d_source.stato = 'in_attesa'
         AND d_target.stato = 'attivo'
     `);
 
-    // 4. DISPATCH
-    const activeDirIds = [...new Map(tratteAttivate.map(t => [t.direttrice_id, t])).values()];
-
-    for (const t of activeDirIds) {
-      await client.query(`UPDATE direttrici_virtuali SET stato = 'in_attesa_autista' WHERE id = $1`, [t.direttrice_id]);
-      
-      const { rows: meta } = await client.query(`SELECT tipo_servizio FROM direttrici_virtuali WHERE id = $1`, [t.direttrice_id]);
-      
-      getIO().emit('nuova_proposta_popbus', { 
-        direttrice_id: t.direttrice_id, 
-        classe: meta[0]?.tipo_servizio || 'urbano' 
-      });
-    }
+    // 4. DELEGATED DISPATCH
+    const countAttive = await dispatchDirettriciAttive(tratteAttivate, client);
 
     await client.query('COMMIT');
-    console.log(`✨ [WORKER] OK. Direttrici attive: ${activeDirIds.length}`);
+    console.log(`✨ [WORKER] OK. Direttrici attive: ${countAttive}`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ WORKER ERROR:', err);

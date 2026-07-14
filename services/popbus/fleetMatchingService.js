@@ -18,7 +18,7 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
     FROM veicolo v
     JOIN nodi_direttrice n ON n.id = $1
     LEFT JOIN tariffe t ON t.veicolo_id = v.id
-    WHERE v.servizi ILIKE '%' || $2 || '%'
+    WHERE v.servizi::text ILIKE '%' || $2 || '%'
       -- Se vuoi mantenere un filtro di sicurezza molto ampio (es. 50km) per evitare veicoli dall'altra parte del mondo, 
       -- oppure puoi rimuovere del tutto la riga ST_DWithin se la flotta è circoscritta.
       AND (v.posizione_corrente IS NULL OR ST_DWithin(n.posizione::geography, v.posizione_corrente::geography, $3 * 1000))
@@ -50,7 +50,7 @@ export async function getDestinatariDispatching(direttriceId) {
     SELECT DISTINCT v.driver_id, v.id as veicolo_id
     FROM direttrici_virtuali d
     JOIN segmenti s ON s.direttrice_id = d.id
-    JOIN veicolo v ON v.servizi ILIKE '%' || d.tipo_servizio || '%'
+    JOIN veicolo v ON v.servizi::text ILIKE '%' || d.tipo_servizio || '%'
     WHERE d.id = $1 
       AND v.driver_id IS NOT NULL
   `;

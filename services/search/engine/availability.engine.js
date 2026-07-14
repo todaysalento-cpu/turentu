@@ -65,8 +65,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            // Logica "Proattiva": se è un oggetto virtuale, bypassiamo lo snap
-            const isProattivo = c.id === 'virtual_pop_pending';
+            // Logica "Proattiva": controllo con startsWith per supportare tutte le classi virtuali (saver, standard, express)
+            const isProattivo = c.id?.startsWith('virtual_pop_');
             
             const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };
             const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM) : { ordine_sequenziale: 999 };
@@ -86,7 +86,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
 
             // --- LOGICA POP-BUS (Universale) ---
-            // Trattiamo qualsiasi corsa o risorsa proattiva come candidata Pop-Bus
             const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
 
             if (c.direttrice_id) {

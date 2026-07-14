@@ -63,10 +63,11 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     return {
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
+            if (!c) return null;
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            // CORRETTO: Uso di String(c.id) per evitare TypeError se l'id non è stringa o è indefinito
-            const idString = String(c.id || '');
+            // PROTEZIONE TOTALE: normalizzazione sicura dell'id per evitare TypeError
+            const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
             const isProattivo = idString.startsWith('virtual_pop_');
             
             const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };

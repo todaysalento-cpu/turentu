@@ -1,4 +1,4 @@
-import { pool } from '../../../db/db.js';
+import { pool } from '../../db/db.js';
 
 /**
  * Trova tutti i veicoli compatibili con il tipo di servizio per un segmento,

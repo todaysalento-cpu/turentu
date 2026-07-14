@@ -84,8 +84,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
     const oraPartenzaISO = getSafeISO(richiesta.start_datetime || Date.now());
 
-    const results = await Promise.all(risultatiLimitati.map(async (item) => {
-        if (!item) return null;
+    const resultsNested = await Promise.all(risultatiLimitati.map(async (item) => {
+        if (!item) return [];
         try {
             const t = String(item.tipo || "").toLowerCase().trim();
             const tipoCoerente = t.includes('pop') ? 'pop-bus' : (t.includes('priv') ? 'privata' : 'condivisa');
@@ -101,44 +101,50 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const distKmItem = distMetriItem / 1000;
             const durataMinutiItem = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmItem / 1.0));
 
-            // 1. LOGICA VIRTUAL (POP-BUS) - Adattato per gestire la classe dinamica unificata
+            // 1. LOGICA VIRTUAL (POP-BUS) - Espansa in 3 opzioni (SAVER, STANDARD, EXPRESS)
             if (itemId.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
-                const classeCorrente = item.classe || richiesta.classe || 'STANDARD';
-                const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
-                const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
+                const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
 
-                return {
-                    id: itemId,
-                    veicolo_id: null,
-                    tipo: 'pop-bus',
-                    colore_ui: UI_CONFIG['pop-bus'].colore,
-                    classe: classeCorrente,
-                    marca: marcaVal,
-                    modello: modelloVal,
-                    localitaOrigine,
-                    localitaDestinazione,
-                    oraPartenza: oraPartenzaISO,
-                    oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiRichiesta),
-                    distanza_metri: distMetriRichiesta,
-                    durata_minuti: Math.round(durataMinutiRichiesta),
-                    prezzo: prezzoVal,
-                    prezzo_display: `~ ${prezzoVal}€`,
-                    posti_necessari_break_even: p.targetPasseggeri || 1,
-                    messaggio: item.messaggio || null,
-                    postiDisponibili: 0,
-                    postiTotali: 0,
-                    is_pool: true,
-                    veicoli_pool_ids: poolSicuro,
-                    servizi: {}
-                };
+                const opzioniPopBus = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
+                    const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
+                    const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
+
+                    return {
+                        id: `${itemId}_${classeCorrente.toLowerCase()}`,
+                        veicolo_id: null,
+                        tipo: 'pop-bus',
+                        colore_ui: UI_CONFIG['pop-bus'].colore,
+                        classe: classeCorrente,
+                        badge: `POP BUS ${classeCorrente}`,
+                        marca: marcaVal,
+                        modello: modelloVal,
+                        localitaOrigine,
+                        localitaDestinazione,
+                        oraPartenza: oraPartenzaISO,
+                        oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiRichiesta),
+                        distanza_metri: distMetriRichiesta,
+                        durata_minuti: Math.round(durataMinutiRichiesta),
+                        prezzo: prezzoVal,
+                        prezzo_display: `~ ${prezzoVal}€`,
+                        posti_necessari_break_even: p.targetPasseggeri || 1,
+                        messaggio: item.messaggio || null,
+                        postiDisponibili: 0,
+                        postiTotali: 0,
+                        is_pool: true,
+                        veicoli_pool_ids: poolSicuro,
+                        servizi: {}
+                    };
+                }));
+
+                return opzioniPopBus;
             }
 
             // 2. LOGICA STANDARD
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
-            return {
+            return [{
                 id: itemId || `slot_${item.veicolo_id}`,
                 veicolo_id: item.veicolo_id,
                 tipo: tipoCoerente,
@@ -159,12 +165,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 is_pool: !!item.is_pool,
                 messaggio: item.messaggio || null,
                 servizi: parseServizi(item.servizi)
-            };
+            }];
         } catch (err) {
             console.error(`💥 [FORMAT] Errore su ID ${item?.id}:`, err);
-            return null;
+            return [];
         }
     }));
 
-    return results.filter(r => r !== null);
+    return resultsNested.flat().filter(r => r !== null);
 }

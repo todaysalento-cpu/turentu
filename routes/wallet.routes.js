@@ -7,7 +7,33 @@ import { notifyUser } from '../services/notifications/notification.service.js';
 
 const router = express.Router();
 
-// ======================= ROUTE WALLET =======================
+// ======================= ROUTE GET SALDO =======================
+router.get('/saldo', authMiddleware, async (req, res) => {
+  try {
+    const clienteId = req.user.id;
+    
+    const utenteRes = await pool.query(
+      'SELECT saldo_wallet FROM utente WHERE id = $1',
+      [clienteId]
+    );
+
+    if (utenteRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Utente non trovato' });
+    }
+
+    const saldo = parseFloat(utenteRes.rows[0].saldo_wallet || 0);
+
+    return res.json({
+      success: true,
+      saldo_attuale: saldo
+    });
+  } catch (error) {
+    console.error("❌ [WALLET-SALDO] Errore recupero saldo:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ======================= ROUTE PAGAMENTO WALLET =======================
 router.post('/payment-wallet', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   const requestId = uuidv4();
@@ -113,8 +139,6 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
         const distanza = slot.distanzaKm || 0;
         const durata = slot.durata_minuti || 0;
 
-        // Nota: Qui salviamo lo stato direttamente come 'confermata' o 'pending_pagato' 
-        // poiché il pagamento è andato a buon fine istantaneamente tramite il wallet.
         const result = await client.query(
           `INSERT INTO pending (
             veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
@@ -140,7 +164,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
             slot.origine.lat,
             slot.destinazione.lon,
             slot.destinazione.lat,
-            `wallet_${transazioneWalletId}`, // Usiamo un riferimento fittizio per tracciabilità
+            `wallet_${transazioneWalletId}`,
             requestId
           ]
         );

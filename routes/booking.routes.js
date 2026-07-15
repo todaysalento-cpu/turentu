@@ -29,10 +29,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     // ================= CONTROLLO E GESTIONE WALLET =================
     if (usaWallet) {
-      const walletRes = await client.query('SELECT saldo FROM wallet WHERE utente_id = $1', [clienteId]);
-      const saldoAttuale = walletRes.rows[0]?.saldo || 0;
+      const saldoRes = await client.query(
+        'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
+        [clienteId]
+      );
+      const saldoAttuale = parseFloat(saldoRes.rows[0]?.saldo_attuale || 0);
 
-      if (saldoAttuale >= prezzo) {
+      if (saldoAttuale >= parseFloat(prezzo)) {
         console.log(`👛 [PAYMENT:${requestId}] Saldo sufficiente (€${saldoAttuale}). Utilizzo il wallet per €${prezzo}.`);
         pagatoConWallet = true;
       } else {
@@ -55,17 +58,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     await client.query('BEGIN');
     const pendingRows = [];
 
-    // Se ha pagato con il wallet, scaliamo subito i fondi e registriamo la transazione
+    // Se ha pagato con il wallet, registriamo direttamente l'importo negativo nelle transazioni
     if (pagatoConWallet) {
-      await client.query(
-        'UPDATE wallet SET saldo = saldo - $1, updated_at = NOW() WHERE utente_id = $2',
-        [prezzo, clienteId]
-      );
-
       await client.query(
         `INSERT INTO transazioni_wallet (utente_id, tipo, importo, descrizione, riferimento_id) 
          VALUES ($1, 'pagamento_corsa', $2, $3, $4)`,
-        [clienteId, -prezzo, `Pagamento corsa / prenotazione ${requestId}`, requestId]
+        [clienteId, -parseFloat(prezzo), `Pagamento corsa / prenotazione ${requestId}`, requestId]
       );
     }
 

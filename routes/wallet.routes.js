@@ -4,8 +4,12 @@ import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
 import { notifyUser } from '../services/notifications/notification.service.js'; 
+import Stripe from 'stripe';
 
 const router = express.Router();
+
+// Inizializza Stripe con la tua chiave segreta presa dalle variabili d'ambiente
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // ======================= ROUTE GET SALDO =======================
 router.get('/saldo', authMiddleware, async (req, res) => {
@@ -29,9 +33,8 @@ router.get('/saldo', authMiddleware, async (req, res) => {
   }
 });
 
-// ======================= ROUTE INIZIALIZZAZIONE RICARICA =======================
+// ======================= ROUTE INIZIALIZZAZIONE RICARICA (STRIPE) =======================
 router.post('/ricarica/init', authMiddleware, async (req, res) => {
-  const client = await pool.connect();
   const requestId = uuidv4();
 
   try {
@@ -42,19 +45,82 @@ router.post('/ricarica/init', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Importo non valido' });
     }
 
-    console.log(`💳 [RICARICA-INIT:${requestId}] Richiesta ricarica di €${importo} per utente ${clienteId}`);
+    console.log(`💳 [RICARICA-INIT:${requestId}] Richiesta Stripe PaymentIntent per €${importo}, utente ${clienteId}`);
+
+    // Stripe richiede l'importo in centesimi (es. 20 euro = 2000 centesimi)
+    const amountInCents = Math.round(parseFloat(importo) * 100);
+
+    // 1. Crea il PaymentIntent su Stripe
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: 'eur',
+      metadata: {
+        clienteId: clienteId.toString(),
+        tipo: 'RICARICA_WALLET'
+      },
+      automatic_payment_methods: { enabled: true },
+    });
+
+    console.log(`✅ [RICARICA-INIT:${requestId}] PaymentIntent creato con successo: ${paymentIntent.id}`);
+
+    // Restituisce il client_secret necessario all'app mobile per aprire la schermata di pagamento di Stripe
+    return res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      importo
+    });
+
+  } catch (error) {
+    console.error(`❌ [RICARICA-INIT:${requestId}] Errore Stripe:`, error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ======================= ROUTE CONFERMA RICARICA (OPZIONALE MA UTILE) =======================
+// Da chiamare dall'app mobile dopo che il pagamento con Stripe è andato a buon fine, 
+// oppure puoi farlo gestire in automatico tramite i Webhook di Stripe.
+router.post('/ricarica/conferma', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  const requestId = uuidv4();
+
+  try {
+    const { paymentIntentId, importo } = req.body;
+    const clienteId = req.user.id;
+
+    if (!paymentIntentId || !importo) {
+      return res.status(400).json({ success: false, error: 'Dati pagamento mancanti' });
+    }
+
+    // Verifica lo stato direttamente da Stripe per sicurezza
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ success: false, error: 'Il pagamento non è stato completato su Stripe' });
+    }
 
     await client.query('BEGIN');
 
-    // Registra subito la transazione di ricarica nel database (puoi adattare il tipo se usi un gateway di pagamento esterno come Stripe)
+    // Controlla che questa transazione non sia già stata registrata (prevenzione doppie ricariche)
+    const checkRes = await client.query(
+      'SELECT id FROM transazioni_wallet WHERE riferimento_id = $1',
+      [paymentIntentId]
+    );
+
+    if (checkRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, error: 'Transazione già registrata' });
+    }
+
+    // Registra la ricarica effettiva nel database
     const transazioneRes = await client.query(
       'INSERT INTO transazioni_wallet (utente_id, importo, tipo, riferimento_id) VALUES ($1, $2, $3, $4) RETURNING id',
-      [clienteId, parseFloat(importo), 'RICARICA_WALLET', null]
+      [clienteId, parseFloat(importo), 'RICARICA_WALLET', paymentIntentId]
     );
 
     const transazioneId = transazioneRes.rows[0].id;
 
-    // Ricalcola il saldo aggiornato post-ricarica
+    // Ricalcola il saldo aggiornato
     const saldoRes = await client.query(
       'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
       [clienteId]
@@ -64,19 +130,17 @@ router.post('/ricarica/init', authMiddleware, async (req, res) => {
 
     await client.query('COMMIT');
 
-    console.log(`✅ [RICARICA-INIT:${requestId}] Ricarica completata. Transazione ID: ${transazioneId}, Nuovo saldo: ${nuovoSaldo}`);
+    console.log(`✅ [RICARICA-CONFERMA:${requestId}] Credito caricato. Utente: ${clienteId}, Importo: €${importo}`);
 
     return res.json({
       success: true,
-      message: 'Ricarica effettuata con successo',
-      transazione_id: transazioneId,
-      nuovo_saldo: nuovoSaldo,
-      importo
+      message: 'Ricarica accreditata con successo',
+      nuovo_saldo: nuovoSaldo
     });
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error(`❌ [RICARICA-INIT:${requestId}] Errore critico:`, error);
+    console.error(`❌ [RICARICA-CONFERMA:${requestId}] Errore:`, error);
     return res.status(500).json({ success: false, error: error.message });
   } finally {
     client.release();

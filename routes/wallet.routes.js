@@ -12,23 +12,20 @@ router.get('/saldo', authMiddleware, async (req, res) => {
   try {
     const clienteId = req.user.id;
     
-    const utenteRes = await pool.query(
-      'SELECT saldo_wallet FROM utente WHERE id = $1',
+    // Calcola il saldo sommando tutte le transazioni dell'utente
+    const saldoRes = await pool.query(
+      'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
       [clienteId]
     );
 
-    if (utenteRes.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Utente non trovato' });
-    }
-
-    const saldo = parseFloat(utenteRes.rows[0].saldo_wallet || 0);
+    const saldo = parseFloat(saldoRes.rows[0].saldo_attuale || 0);
 
     return res.json({
       success: true,
       saldo_attuale: saldo
     });
   } catch (error) {
-    console.error("❌ [WALLET-SALDO] Errore recupero saldo:", error);
+    console.error("❌ [WALLET-SALDO] Errore calcolo saldo da transazioni:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -76,18 +73,13 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
 
     await client.query('BEGIN');
 
-    // 1. Controllo e blocco del saldo utente (SELECT FOR UPDATE per evitare race conditions)
-    const utenteRes = await client.query(
-      'SELECT saldo_wallet FROM utente WHERE id = $1 FOR UPDATE',
+    // 1. Controllo del saldo disponibile calcolato dalle transazioni (con blocco FOR UPDATE)
+    const saldoRes = await client.query(
+      'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1 FOR UPDATE',
       [clienteId]
     );
 
-    if (utenteRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Utente non trovato' });
-    }
-
-    const saldoDisponibile = parseFloat(utenteRes.rows[0].saldo_wallet || 0);
+    const saldoDisponibile = parseFloat(saldoRes.rows[0].saldo_attuale || 0);
 
     if (saldoDisponibile < parseFloat(prezzo)) {
       await client.query('ROLLBACK');
@@ -99,13 +91,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       });
     }
 
-    // 2. Scala il saldo totale dalla tabella utente
-    await client.query(
-      'UPDATE utente SET saldo_wallet = saldo_wallet - $1 WHERE id = $2',
-      [prezzo, clienteId]
-    );
-
-    // 3. Registra il movimento in uscita nella tabella transazioni_wallet
+    // 2. Registra il movimento in uscita nella tabella transazioni_wallet
     const transazioneRes = await client.query(
       'INSERT INTO transazioni_wallet (utente_id, importo, tipo, riferimento_id) VALUES ($1, $2, $3, $4) RETURNING id',
       [clienteId, -parseFloat(prezzo), 'SCALATURA_CORSA', null]

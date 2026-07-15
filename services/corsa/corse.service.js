@@ -33,10 +33,6 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
     `;
     const params = [driver_id];
     
-    // Logica flessibile:
-    // 'today' -> Filtra solo per oggi
-    // 'tutte' (default) -> Nessun filtro sullo stato
-    // altro -> Filtra per lo stato specifico (in_corso, completata, etc.)
     if (status === 'today') {
       query += ` AND c.start_datetime::date = CURRENT_DATE`;
     } else if (status && status !== 'tutte') {
@@ -44,7 +40,6 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
       params.push(status);
     }
     
-    // Ordinamento per mostrare sempre le più recenti per prime
     query += ` ORDER BY c.start_datetime DESC`;
     
     const res = await client.query(query, params);
@@ -102,7 +97,7 @@ export async function toggleCorsa(corsa_id, action) {
 
     if (action === 'end') {
       const prenRes = await client.query(
-        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, pr.posti_richiesti
+        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, pr.posti_richiesti, pr.cliente_id
          FROM public.pagamenti p 
          JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
          WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
@@ -116,13 +111,30 @@ export async function toggleCorsa(corsa_id, action) {
           const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
           const importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
           
-          const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
-          if (pi.status === 'requires_capture') {
-            await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
-              amount_to_capture: Math.round(importoFinale * 100) 
-            });
-            await client.query(`UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
-              [importoFinale, pren.pagamento_id]);
+          // Controlla se il pagamento è stato fatto tramite Wallet
+          if (pren.stripe_payment_intent.startsWith('wallet_')) {
+            console.log(`👛 [WALLET] Rilevato pagamento via wallet per la prenotazione ${pren.prenotazione_id}. Importo finale: €${importoFinale}`);
+            
+            // Aggiorna lo stato del pagamento a 'pagato'
+            await client.query(
+              `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
+              [importoFinale, pren.pagamento_id]
+            );
+
+            // Nota: Se l'importo finale della corsa differisce dall'importo bloccato/iniziale, 
+            // potresti voler gestire qui eventuali conguagli sul wallet. Per adesso viene confermato l'importo calcolato.
+          } else {
+            // Gestione standard Stripe (PaymentIntent)
+            const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
+            if (pi.status === 'requires_capture') {
+              await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
+                amount_to_capture: Math.round(importoFinale * 100) 
+              });
+              await client.query(
+                `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
+                [importoFinale, pren.pagamento_id]
+              );
+            }
           }
         } catch (err) {
           console.error(`Errore pagamento ${pren.pagamento_id}:`, err);

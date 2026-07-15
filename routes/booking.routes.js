@@ -19,27 +19,59 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   console.log(`📥 [PAYMENT:${requestId}] Payload ricevuto:`, JSON.stringify(req.body, null, 2));
 
   try {
-    const { type, prezzo, slots } = req.body;
+    const { type, prezzo, slots, usaWallet } = req.body;
 
     if (!prezzo || prezzo <= 0) return res.status(400).json({ error: 'Prezzo non valido' });
     if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
 
     const clienteId = req.user.id;
+    let pagatoConWallet = false;
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(prezzo * 100),
-      currency: 'eur',
-      metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
-      capture_method: 'manual',
-    });
+    // ================= CONTROLLO E GESTIONE WALLET =================
+    if (usaWallet) {
+      const walletRes = await client.query('SELECT saldo FROM wallet WHERE utente_id = $1', [clienteId]);
+      const saldoAttuale = walletRes.rows[0]?.saldo || 0;
+
+      if (saldoAttuale >= prezzo) {
+        console.log(`👛 [PAYMENT:${requestId}] Saldo sufficiente (€${saldoAttuale}). Utilizzo il wallet per €${prezzo}.`);
+        pagatoConWallet = true;
+      } else {
+        console.log(`👛 [PAYMENT:${requestId}] Saldo insufficiente (€${saldoAttuale} < €${prezzo}). Ripiego su Stripe.`);
+      }
+    }
+
+    let paymentIntent = null;
+
+    // Se NON paga con il wallet, creiamo il PaymentIntent su Stripe
+    if (!pagatoConWallet) {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(prezzo * 100),
+        currency: 'eur',
+        metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
+        capture_method: 'manual',
+      });
+    }
     
     await client.query('BEGIN');
     const pendingRows = [];
 
+    // Se ha pagato con il wallet, scaliamo subito i fondi e registriamo la transazione
+    if (pagatoConWallet) {
+      await client.query(
+        'UPDATE wallet SET saldo = saldo - $1, updated_at = NOW() WHERE utente_id = $2',
+        [prezzo, clienteId]
+      );
+
+      await client.query(
+        `INSERT INTO transazioni_wallet (utente_id, tipo, importo, descrizione, riferimento_id) 
+         VALUES ($1, 'pagamento_corsa', $2, $3, $4)`,
+        [clienteId, -prezzo, `Pagamento corsa / prenotazione ${requestId}`, requestId]
+      );
+    }
+
     for (const slot of slots) {
       console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
       
-      // ================= LOG DEBUG DATA IN INGRESSO =================
       console.log(`⏰ [DEBUG-DATE:${requestId}] Slot ${slot.id} - start_datetime grezzo dal client:`, slot.start_datetime);
       console.log(`⏰ [DEBUG-DATE:${requestId}] Interpretato in ISO dal server:`, new Date(slot.start_datetime).toISOString());
 
@@ -78,7 +110,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         savedRow = result.rows[0];
 
       } else {
-        // --- CONTROLLO DI INTEGRITÀ PRE-QUERY ---
         if (slot.veicolo_id === undefined || slot.veicolo_id === null) {
           console.error(`🚨 [PAYMENT:${requestId}] ERRORE CRITICO: Lo slot ${slot.id} non ha veicolo_id!`);
           throw new Error(`Dato corrotto: veicolo_id mancante per lo slot ${slot.id}`);
@@ -112,7 +143,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
             slot.origine.lat,
             slot.destinazione.lon,
             slot.destinazione.lat,
-            paymentIntent.id,
+            pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
             requestId
           ]
         );
@@ -139,7 +170,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
         const role = savedRow.autista_id ? 'driver' : 'admin';
         console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
-        console.log(`📦 [DEBUG-PAYLOAD-ADMIN] start_datetime inviato:`, slot.start_datetime);
 
         await notifyUser(Number(targetId), {
           type: 'NEW_REQUEST',
@@ -160,7 +190,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       // ================= NOTIFICA CLIENTE =================
       try {
         console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
-        console.log(`📦 [DEBUG-PAYLOAD-CLIENT] start_datetime inviato:`, slot.start_datetime);
         
         await notifyUser(Number(clienteId), {
           type: 'REQUEST_CREATED',
@@ -180,7 +209,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     await client.query('COMMIT');
     console.log(`✅ [PAYMENT:${requestId}] Transazione completata.`);
-    res.json({ clientSecret: paymentIntent.client_secret, pending: pendingRows, requestId });
+
+    res.json({ 
+      pagatoConWallet, 
+      clientSecret: pagatoConWallet ? null : paymentIntent.client_secret, 
+      pending: pendingRows, 
+      requestId 
+    });
 
   } catch (err) {
     await client.query('ROLLBACK');

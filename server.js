@@ -51,6 +51,7 @@ import documentiAutistaRouter from './routes/documentiAutista.routes.js';
 import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
 import prenotazioniRouter from './routes/prenotazioni.routes.js';
 import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
+import walletRouter from './routes/wallet.routes.js'; // 👛 AGGIUNTO: Import della nuova route wallet
 
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -75,7 +76,6 @@ app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 
 // ======================= MIDDLEWARE PARSING JSON =======================
-// Rimosso il middleware di sanificazione manuale perché corrompe il payload
 app.use(express.json({ limit: '50mb' }));
 
 // GESTIONE ERRORI PARSING JSON: Previene il crash e risponde con JSON
@@ -121,6 +121,7 @@ app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
+app.use('/api/wallet', walletRouter); // 👛 AGGIUNTO: Montaggio della route wallet (es. /api/wallet/payment-wallet)
 
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 app.get('/api/config/version', (req, res) => { res.json({ minVersion: "1.0.0" }); });

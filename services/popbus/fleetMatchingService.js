@@ -4,7 +4,7 @@ import { pool } from '../../db/db.js';
  * Trova tutti i veicoli compatibili con il tipo di servizio per un segmento,
  * a prescindere dalla distanza o includendo la distanza come semplice metadato.
  */
-export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio, maxDistanzaKm = 50) {
+export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio, maxDistanzaKm = 50, client = pool) {
   const query = `
     SELECT 
       v.id as veicolo_id,
@@ -26,7 +26,7 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
   `;
 
   const values = [startNodeId, tipoServizio, maxDistanzaKm];
-  const { rows } = await pool.query(query, values);
+  const { rows } = await client.query(query, values);
   
   return rows;
 }
@@ -34,8 +34,8 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
 /**
  * Seleziona il veicolo ottimale (ordinato per vicinanza o convenienza) tra tutti i disponibili.
  */
-export async function getMigliorVeicoloPerSoglia(startNodeId, tipoServizio) {
-  const candidati = await getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio);
+export async function getMigliorVeicoloPerSoglia(startNodeId, tipoServizio, client = pool) {
+  const candidati = await getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio, 50, client);
   if (!candidati || candidati.length === 0) return null;
 
   return candidati[0];
@@ -45,7 +45,7 @@ export async function getMigliorVeicoloPerSoglia(startNodeId, tipoServizio) {
  * Restituisce l'elenco di tutti i potenziali destinatari per il dispatching della direttrice,
  * rimuovendo i vincoli rigidi di raggio ristretto.
  */
-export async function getDestinatariDispatching(direttriceId) {
+export async function getDestinatariDispatching(direttriceId, client = pool) {
   const query = `
     SELECT DISTINCT v.driver_id, v.id as veicolo_id
     FROM direttrici_virtuali d
@@ -55,6 +55,6 @@ export async function getDestinatariDispatching(direttriceId) {
       AND v.driver_id IS NOT NULL
   `;
   
-  const { rows } = await pool.query(query, [direttriceId]);
+  const { rows } = await client.query(query, [direttriceId]);
   return rows;
 }

@@ -15,7 +15,8 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
       WHERE d.id = $1
     `, [t.direttrice_id]);
     
-    const destinatari = await getDestinatariDispatching(t.direttrice_id);
+    // Passiamo il client transattivo per evitare query sul pool globale inattivo durante i test
+    const destinatari = await getDestinatariDispatching(t.direttrice_id, client);
     
     const payloadProposta = {
       direttrice_id: t.direttrice_id,

@@ -12,7 +12,6 @@ router.get('/saldo', authMiddleware, async (req, res) => {
   try {
     const clienteId = req.user.id;
     
-    // Calcola il saldo sommando tutte le transazioni dell'utente
     const saldoRes = await pool.query(
       'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
       [clienteId]
@@ -32,6 +31,9 @@ router.get('/saldo', authMiddleware, async (req, res) => {
 
 // ======================= ROUTE INIZIALIZZAZIONE RICARICA =======================
 router.post('/ricarica/init', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  const requestId = uuidv4();
+
   try {
     const { importo } = req.body;
     const clienteId = req.user.id;
@@ -40,17 +42,44 @@ router.post('/ricarica/init', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Importo non valido' });
     }
 
-    console.log(`💳 [RICARICA-INIT] Richiesta ricarica di €${importo} per utente ${clienteId}`);
+    console.log(`💳 [RICARICA-INIT:${requestId}] Richiesta ricarica di €${importo} per utente ${clienteId}`);
 
-    // Restituisce una risposta mock o il client secret se usi Stripe
+    await client.query('BEGIN');
+
+    // Registra subito la transazione di ricarica nel database (puoi adattare il tipo se usi un gateway di pagamento esterno come Stripe)
+    const transazioneRes = await client.query(
+      'INSERT INTO transazioni_wallet (utente_id, importo, tipo, riferimento_id) VALUES ($1, $2, $3, $4) RETURNING id',
+      [clienteId, parseFloat(importo), 'RICARICA_WALLET', null]
+    );
+
+    const transazioneId = transazioneRes.rows[0].id;
+
+    // Ricalcola il saldo aggiornato post-ricarica
+    const saldoRes = await client.query(
+      'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
+      [clienteId]
+    );
+
+    const nuovoSaldo = parseFloat(saldoRes.rows[0].saldo_attuale || 0);
+
+    await client.query('COMMIT');
+
+    console.log(`✅ [RICARICA-INIT:${requestId}] Ricarica completata. Transazione ID: ${transazioneId}, Nuovo saldo: ${nuovoSaldo}`);
+
     return res.json({
       success: true,
-      message: 'Inizializzazione ricarica completata',
+      message: 'Ricarica effettuata con successo',
+      transazione_id: transazioneId,
+      nuovo_saldo: nuovoSaldo,
       importo
     });
+
   } catch (error) {
-    console.error("❌ [WALLET-RICARICA-INIT] Errore:", error);
+    await client.query('ROLLBACK');
+    console.error(`❌ [RICARICA-INIT:${requestId}] Errore critico:`, error);
     return res.status(500).json({ success: false, error: error.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -73,7 +102,6 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
 
     await client.query('BEGIN');
 
-    // 1. Controllo del saldo disponibile calcolato dalle transazioni (con blocco FOR UPDATE)
     const saldoRes = await client.query(
       'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1 FOR UPDATE',
       [clienteId]
@@ -91,7 +119,6 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       });
     }
 
-    // 2. Registra il movimento in uscita nella tabella transazioni_wallet
     const transazioneRes = await client.query(
       'INSERT INTO transazioni_wallet (utente_id, importo, tipo, riferimento_id) VALUES ($1, $2, $3, $4) RETURNING id',
       [clienteId, -parseFloat(prezzo), 'SCALATURA_CORSA', null]

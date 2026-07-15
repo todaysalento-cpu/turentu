@@ -33,6 +33,30 @@ router.get('/saldo', authMiddleware, async (req, res) => {
   }
 });
 
+// ======================= ROUTE INIZIALIZZAZIONE RICARICA =======================
+router.post('/ricarica/init', authMiddleware, async (req, res) => {
+  try {
+    const { importo } = req.body;
+    const clienteId = req.user.id;
+
+    if (!importo || importo <= 0) {
+      return res.status(400).json({ success: false, error: 'Importo non valido' });
+    }
+
+    console.log(`💳 [RICARICA-INIT] Richiesta ricarica di €${importo} per utente ${clienteId}`);
+
+    // Restituisce una risposta mock o il client secret se usi Stripe
+    return res.json({
+      success: true,
+      message: 'Inizializzazione ricarica completata',
+      importo
+    });
+  } catch (error) {
+    console.error("❌ [WALLET-RICARICA-INIT] Errore:", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ======================= ROUTE PAGAMENTO WALLET =======================
 router.post('/payment-wallet', authMiddleware, async (req, res) => {
   const client = await pool.connect();

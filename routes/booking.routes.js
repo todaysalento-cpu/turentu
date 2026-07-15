@@ -58,12 +58,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     await client.query('BEGIN');
     const pendingRows = [];
 
-    // Se ha pagato con il wallet, registriamo direttamente l'importo negativo nelle transazioni
+    // Se ha pagato con il wallet, registriamo l'importo negativo senza colonne inesistenti
     if (pagatoConWallet) {
       await client.query(
-        `INSERT INTO transazioni_wallet (utente_id, tipo, importo, descrizione, riferimento_id) 
-         VALUES ($1, 'pagamento_corsa', $2, $3, $4)`,
-        [clienteId, -parseFloat(prezzo), `Pagamento corsa / prenotazione ${requestId}`, requestId]
+        `INSERT INTO transazioni_wallet (utente_id, tipo, importo, riferimento_id) 
+         VALUES ($1, 'pagamento_corsa', $2, $3)`,
+        [clienteId, -parseFloat(prezzo), requestId]
       );
     }
 

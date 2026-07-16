@@ -82,9 +82,9 @@ router.get('/search', async (req, res) => {
 
     // 4. Filtro geografico opzionale (Formula dell'Haversine in SQL)
     if (lat && lng) {
-      const parsedLat = parseFloat(lat as string);
-      const parsedLng = parseFloat(lng as string);
-      const parsedRadius = parseFloat(radius as string);
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      const parsedRadius = parseFloat(radius);
 
       if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
         query = `
@@ -125,7 +125,7 @@ router.get('/search', async (req, res) => {
       data: rows,
     });
 
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ [API /events/search] Errore critico:', err);
     return res.status(500).json({ 
       success: false, 

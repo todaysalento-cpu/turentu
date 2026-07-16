@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // ==========================================
-// API: Cerca Eventi (con filtri categoria, quando, nome e coordinate geografiche opzionali)
+// API: Cerca Eventi (con log dettagliati)
 // ==========================================
 router.get('/search', async (req, res) => {
   const client = await pool.connect();
@@ -21,6 +21,15 @@ router.get('/search', async (req, res) => {
       lng, 
       radius = 50 
     } = req.query;
+
+    console.log("📥 [API /events/search] Parametri ricevuti:", {
+      categoria,
+      quando,
+      nome,
+      lat,
+      lng,
+      radius
+    });
 
     let query = `
       SELECT 
@@ -52,7 +61,7 @@ router.get('/search', async (req, res) => {
       paramIndex++;
     }
 
-    // 2. Filtro per Nome/Parola chiave (sfrutta la colonna titolo o descrizione)
+    // 2. Filtro per Nome/Parola chiave
     if (nome && typeof nome === 'string' && nome.trim() !== '') {
       query += ` AND (titolo ILIKE $${paramIndex} OR descrizione ILIKE $${paramIndex})`;
       queryParams.push(`%${nome.trim()}%`);
@@ -73,9 +82,9 @@ router.get('/search', async (req, res) => {
 
     // 4. Filtro geografico opzionale (Formula dell'Haversine in SQL)
     if (lat && lng) {
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-      const parsedRadius = parseFloat(radius);
+      const parsedLat = parseFloat(lat as string);
+      const parsedLng = parseFloat(lng as string);
+      const parsedRadius = parseFloat(radius as string);
 
       if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
         query = `
@@ -103,7 +112,12 @@ router.get('/search', async (req, res) => {
     // Ordinamento cronologico predefinito
     query += ` ORDER BY data_inizio ASC LIMIT 50;`;
 
+    console.log("🛠️ [API /events/search] Query SQL generata:\n", query);
+    console.log("📦 [API /events/search] Parametri passati alla query:", queryParams);
+
     const { rows } = await client.query(query, queryParams);
+
+    console.log(`✅ [API /events/search] Risultati trovati dal DB: ${rows.length}`);
 
     return res.status(200).json({
       success: true,
@@ -111,8 +125,8 @@ router.get('/search', async (req, res) => {
       data: rows,
     });
 
-  } catch (err) {
-    console.error('❌ Errore durante la ricerca degli eventi:', err);
+  } catch (err: any) {
+    console.error('❌ [API /events/search] Errore critico:', err);
     return res.status(500).json({ 
       success: false, 
       error: err.message 

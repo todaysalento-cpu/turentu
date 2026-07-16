@@ -51,7 +51,8 @@ import documentiAutistaRouter from './routes/documentiAutista.routes.js';
 import documentiVeicoloRouter from './routes/documentiVeicolo.routes.js';
 import prenotazioniRouter from './routes/prenotazioni.routes.js';
 import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
-import walletRouter from './routes/wallet.routes.js'; // 👛 AGGIUNTO: Import della nuova route wallet
+import walletRouter from './routes/wallet.routes.js';
+import { eventiRouter } from './routes/eventi.routes.js'; // 🎉 AGGIUNTO: Import della nuova route eventi
 
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -121,7 +122,8 @@ app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
-app.use('/api/wallet', walletRouter); // 👛 AGGIUNTO: Montaggio della route wallet (es. /api/wallet/payment-wallet)
+app.use('/api/wallet', walletRouter);
+app.use('/api/eventi', eventiRouter); // 🎉 AGGIUNTO: Montaggio della route eventi (es. /api/eventi/search)
 
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
 app.get('/api/config/version', (req, res) => { res.json({ minVersion: "1.0.0" }); });

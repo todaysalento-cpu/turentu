@@ -42,7 +42,7 @@ router.get('/search', async (req, res) => {
       WHERE 1=1
     `;
 
-    const queryParams: any[] = [];
+    const queryParams = [];
     let paramIndex = 1;
 
     // 1. Filtro per Categoria (se presente e diversa da "all")
@@ -73,9 +73,9 @@ router.get('/search', async (req, res) => {
 
     // 4. Filtro geografico opzionale (Formula dell'Haversine in SQL)
     if (lat && lng) {
-      const parsedLat = parseFloat(lat as string);
-      const parsedLng = parseFloat(lng as string);
-      const parsedRadius = parseFloat(radius as string);
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      const parsedRadius = parseFloat(radius);
 
       if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
         query = `
@@ -111,7 +111,7 @@ router.get('/search', async (req, res) => {
       data: rows,
     });
 
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ Errore durante la ricerca degli eventi:', err);
     return res.status(500).json({ 
       success: false, 

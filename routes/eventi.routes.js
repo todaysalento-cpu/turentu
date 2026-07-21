@@ -182,7 +182,6 @@ router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => 
 
     let immagineUrl = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop";
 
-    // Se è stato caricato un file dal client, caricalo su Cloudinary
     if (req.file) {
       const b64 = Buffer.from(req.file.buffer).toString("base64");
       let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
@@ -235,7 +234,81 @@ router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => 
 });
 
 // ==========================================
-// 4. API: Elimina evento (PROTETTA)
+// 4. API: Modifica evento esistente (PROTETTA + Cloudinary)
+// ==========================================
+router.put('/:id', authMiddleware, upload.single('immagine'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { 
+      titolo, categoria, descrizione, data_inizio, data_fine, 
+      luogo_nome, indirizzo, citta, lat, lng 
+    } = req.body;
+
+    if (!titolo || !categoria || !luogo_nome) {
+      return res.status(400).json({ success: false, error: "Campi obbligatori mancanti" });
+    }
+
+    // Recuperiamo l'evento esistente per mantenere l'immagine precedente se non ne viene caricata una nuova
+    const checkEvent = await client.query('SELECT * FROM public.eventi WHERE id = $1', [id]);
+    if (checkEvent.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Evento non trovato" });
+    }
+
+    let immagineUrl = checkEvent.rows[0].immagine_url;
+
+    if (req.file) {
+      const b64 = Buffer.from(req.file.buffer).toString("base64");
+      let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+
+      const uploadResponse = await cloudinary.uploader.upload(dataURI, {
+        folder: "turentu_eventi",
+      });
+
+      immagineUrl = uploadResponse.secure_url;
+    }
+
+    const query = `
+      UPDATE public.eventi 
+      SET titolo = $1, categoria = $2, descrizione = $3, data_inizio = $4, data_fine = $5, 
+          luogo_nome = $6, indirizzo = $7, citta = $8, lat = $9, lng = $10, immagine_url = $11
+      WHERE id = $12
+      RETURNING *;
+    `;
+
+    const values = [
+      titolo,
+      categoria.toLowerCase(),
+      descrizione || null,
+      data_inizio || new Date(),
+      data_fine || null,
+      luogo_nome,
+      indirizzo || null,
+      citta || null,
+      lat ? parseFloat(lat) : null,
+      lng ? parseFloat(lng) : null,
+      immagineUrl,
+      id
+    ];
+
+    const result = await client.query(query, values);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: "Evento aggiornato con successo", 
+      data: result.rows[0] 
+    });
+
+  } catch (err) {
+    console.error('❌ [API PUT /events/:id] Errore:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// 5. API: Elimina evento (PROTETTA)
 // ==========================================
 router.delete('/:id', authMiddleware, async (req, res) => {
   const client = await pool.connect();

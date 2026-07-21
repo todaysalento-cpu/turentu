@@ -5,10 +5,9 @@ import { getIO } from '../socket.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 
 const router = express.Router();
-router.use(authMiddleware);
 
 // ==========================================
-// API: Cerca Eventi (con log dettagliati)
+// 1. API: Cerca Eventi (PUBBLICA - Non richiede auth)
 // ==========================================
 router.get('/search', async (req, res) => {
   const client = await pool.connect();
@@ -129,6 +128,104 @@ router.get('/search', async (req, res) => {
       success: false, 
       error: err.message 
     });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// 2. API: Ottieni i "miei" eventi (PROTETTA)
+// ==========================================
+router.get('/miei', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id; 
+    if (!userId) {
+      return res.status(401).json({ success: false, error: "Utente non autenticato" });
+    }
+
+    const result = await client.query(
+      'SELECT * FROM public.eventi WHERE creato_da = $1 ORDER BY data_inizio DESC',
+      [userId]
+    );
+
+    return res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error('❌ [API /events/miei] Errore:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// 3. API: Crea un nuovo evento (PROTETTA)
+// ==========================================
+router.post('/', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const { 
+      titolo, categoria, descrizione, data_inizio, data_fine, 
+      luogo_nome, indirizzo, citta, lat, lng, immagine_url 
+    } = req.body;
+
+    if (!titolo || !categoria || !luogo_nome) {
+      return res.status(400).json({ success: false, error: "Campi obbligatori mancanti" });
+    }
+
+    const query = `
+      INSERT INTO public.eventi (
+        titolo, categoria, descrizione, data_inizio, data_fine, 
+        luogo_nome, indirizzo, citta, lat, lng, immagine_url, creato_da
+      ) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING *;
+    `;
+
+    const values = [
+      titolo,
+      categoria.toLowerCase(),
+      descrizione || null,
+      data_inizio || new Date(),
+      data_fine || null,
+      luogo_nome,
+      indirizzo || null,
+      citta || null,
+      lat ? parseFloat(lat) : null,
+      lng ? parseFloat(lng) : null,
+      immagine_url || null,
+      userId || null
+    ];
+
+    const result = await client.query(query, values);
+
+    return res.status(201).json({ 
+      success: true, 
+      message: "Evento creato con successo", 
+      data: result.rows[0] 
+    });
+
+  } catch (err) {
+    console.error('❌ [API POST /events] Errore:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// 4. API: Elimina evento (PROTETTA)
+// ==========================================
+router.delete('/:id', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    await client.query('DELETE FROM public.eventi WHERE id = $1', [id]);
+    return res.status(200).json({ success: true, message: "Evento eliminato" });
+  } catch (err) {
+    console.error('❌ [API DELETE /events] Errore:', err);
+    return res.status(500).json({ success: false, error: err.message });
   } finally {
     client.release();
   }

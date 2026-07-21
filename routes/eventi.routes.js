@@ -4,7 +4,6 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 import { v2 as cloudinary } from 'cloudinary';
-import multer from 'multer';
 
 const router = express.Router();
 
@@ -14,9 +13,6 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY || 'tua_api_key',
   api_secret: process.env.CLOUDINARY_API_SECRET || 'tuo_api_secret',
 });
-
-// Configurazione multer per memorizzare temporaneamente il file in memoria
-const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
 // 1. API: Cerca Eventi (PUBBLICA - Non richiede auth)
@@ -165,15 +161,15 @@ router.get('/miei', authMiddleware, async (req, res) => {
 });
 
 // ==========================================
-// 3. API: Crea un nuovo evento (PROTETTA + Cloudinary)
+// 3. API: Crea un nuovo evento (PROTETTA + Cloudinary Base64)
 // ==========================================
-router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     const userId = req.user?.id;
     const { 
       titolo, categoria, descrizione, data_inizio, data_fine, 
-      luogo_nome, indirizzo, citta, lat, lng 
+      luogo_nome, indirizzo, citta, lat, lng, immagine 
     } = req.body;
 
     if (!titolo || !categoria || !luogo_nome) {
@@ -182,14 +178,11 @@ router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => 
 
     let immagineUrl = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop";
 
-    if (req.file) {
-      const b64 = Buffer.from(req.file.buffer).toString("base64");
-      let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
-
-      const uploadResponse = await cloudinary.uploader.upload(dataURI, {
+    // Se viene passata un'immagine in formato Base64 Data URI dal frontend
+    if (immagine && typeof immagine === 'string' && immagine.startsWith('data:image')) {
+      const uploadResponse = await cloudinary.uploader.upload(immagine, {
         folder: "turentu_eventi",
       });
-
       immagineUrl = uploadResponse.secure_url;
     }
 
@@ -234,22 +227,22 @@ router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => 
 });
 
 // ==========================================
-// 4. API: Modifica evento esistente (PROTETTA + Cloudinary)
+// 4. API: Modifica evento esistente (PROTETTA + Cloudinary Base64)
 // ==========================================
-router.put('/:id', authMiddleware, upload.single('immagine'), async (req, res) => {
+router.put('/:id', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
     const { 
       titolo, categoria, descrizione, data_inizio, data_fine, 
-      luogo_nome, indirizzo, citta, lat, lng 
+      luogo_nome, indirizzo, citta, lat, lng, immagine 
     } = req.body;
 
     if (!titolo || !categoria || !luogo_nome) {
       return res.status(400).json({ success: false, error: "Campi obbligatori mancanti" });
     }
 
-    // Recuperiamo l'evento esistente per mantenere l'immagine precedente se non ne viene caricata una nuova
+    // Recuperiamo l'evento esistente per mantenere l'immagine precedente se non ne viene passata una nuova
     const checkEvent = await client.query('SELECT * FROM public.eventi WHERE id = $1', [id]);
     if (checkEvent.rows.length === 0) {
       return res.status(404).json({ success: false, error: "Evento non trovato" });
@@ -257,14 +250,11 @@ router.put('/:id', authMiddleware, upload.single('immagine'), async (req, res) =
 
     let immagineUrl = checkEvent.rows[0].immagine_url;
 
-    if (req.file) {
-      const b64 = Buffer.from(req.file.buffer).toString("base64");
-      let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
-
-      const uploadResponse = await cloudinary.uploader.upload(dataURI, {
+    // Se viene passata una nuova immagine in formato Base64 Data URI
+    if (immagine && typeof immagine === 'string' && immagine.startsWith('data:image')) {
+      const uploadResponse = await cloudinary.uploader.upload(immagine, {
         folder: "turentu_eventi",
       });
-
       immagineUrl = uploadResponse.secure_url;
     }
 

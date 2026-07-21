@@ -31,32 +31,59 @@ router.get('/search', async (req, res) => {
       radius
     });
 
-    let query = `
-      SELECT 
-        id, 
-        titolo, 
-        categoria, 
-        descrizione, 
-        data_inizio, 
-        data_fine, 
-        luogo_nome, 
-        indirizzo, 
-        citta, 
-        lat, 
-        lng, 
-        creato_da, 
-        created_at, 
-        immagine_url
-      FROM public.eventi
-      WHERE 1=1
-    `;
-
     const queryParams = [];
     let paramIndex = 1;
 
-    // 1. Filtro per Categoria (se presente e diversa da "all")
-    if (categoria && categoria !== 'all') {
-      query += ` AND categoria = $${paramIndex}`;
+    // Se sono presenti coordinate valide, usiamo la struttura con Haversine incorporata
+    const hasGeo = lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng));
+
+    let query = '';
+
+    if (hasGeo) {
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      const parsedRadius = parseFloat(radius);
+
+      // Inseriamo lat e lng iniziali per il calcolo della distanza
+      queryParams.push(parsedLat, parsedLng);
+      const latParamIdx = paramIndex++;
+      const lngParamIdx = paramIndex++;
+
+      query = `
+        SELECT * FROM (
+          SELECT 
+            id, titolo, categoria, descrizione, data_inizio, data_fine, 
+            luogo_nome, indirizzo, citta, lat, lng, creato_da, created_at, immagine_url,
+            (
+              6371 * acos(
+                cos(radians($${latParamIdx})) * cos(radians(lat)) * 
+                cos(radians(lng) - radians($${lngParamIdx})) + 
+                sin(radians($${latParamIdx})) * sin(radians(lat))
+              )
+            ) AS distanza_km
+          FROM public.eventi
+          WHERE lat IS NOT NULL AND lng IS NOT NULL
+        ) sub
+        WHERE distanza_km <= $${paramIndex}
+      `;
+      queryParams.push(parsedRadius);
+      paramIndex++;
+
+    } else {
+      // Query standard senza geolocalizzazione
+      query = `
+        SELECT 
+          id, titolo, categoria, descrizione, data_inizio, data_fine, 
+          luogo_nome, indirizzo, citta, lat, lng, creato_da, created_at, immagine_url,
+          0 AS distanza_km
+        FROM public.eventi
+        WHERE 1=1
+      `;
+    }
+
+    // 1. Filtro per Categoria (se presente e diversa da "all" o "Tutti")
+    if (categoria && categoria !== 'all' && categoria !== 'Tutti') {
+      query += ` AND LOWER(categoria) = LOWER($${paramIndex})`;
       queryParams.push(categoria);
       paramIndex++;
     }
@@ -69,7 +96,7 @@ router.get('/search', async (req, res) => {
     }
 
     // 3. Filtro temporale (quando)
-    if (quando && quando !== 'any') {
+    if (quando && quando !== 'any' && quando !== 'Tutti') {
       if (quando === 'today') {
         query += ` AND data_inizio::date = CURRENT_DATE`;
       } else if (quando === 'tomorrow') {
@@ -77,35 +104,6 @@ router.get('/search', async (req, res) => {
       } else if (quando === 'weekend') {
         query += ` AND data_inizio >= date_trunc('week', CURRENT_DATE) + INTERVAL '5 days' 
                    AND data_inizio < date_trunc('week', CURRENT_DATE) + INTERVAL '7 days' + INTERVAL '1 day'`;
-      }
-    }
-
-    // 4. Filtro geografico opzionale (Formula dell'Haversine in SQL)
-    if (lat && lng) {
-      const parsedLat = parseFloat(lat);
-      const parsedLng = parseFloat(lng);
-      const parsedRadius = parseFloat(radius);
-
-      if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
-        query = `
-          SELECT * FROM (
-            SELECT 
-              id, titolo, categoria, descrizione, data_inizio, data_fine, 
-              luogo_nome, indirizzo, citta, lat, lng, creato_da, created_at, immagine_url,
-              (
-                6371 * acos(
-                  cos(radians($${paramIndex})) * cos(radians(lat)) * 
-                  cos(radians(lng) - radians($${paramIndex + 1})) + 
-                  sin(radians($${paramIndex})) * sin(radians(lat))
-                )
-              ) AS distanza_km
-            FROM public.eventi
-            WHERE lat IS NOT NULL AND lng IS NOT NULL
-          ) sub
-          WHERE distanza_km <= $${paramIndex + 2}
-        `;
-        queryParams.push(parsedLat, parsedLng, parsedRadius);
-        paramIndex += 3;
       }
     }
 

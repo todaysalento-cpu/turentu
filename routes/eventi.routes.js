@@ -3,8 +3,20 @@ import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
 
 const router = express.Router();
+
+// Configurazione Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'tuo_cloud_name',
+  api_key: process.env.CLOUDINARY_API_KEY || 'tua_api_key',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'tuo_api_secret',
+});
+
+// Configurazione multer per memorizzare temporaneamente il file in memoria
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ==========================================
 // 1. API: Cerca Eventi (PUBBLICA - Non richiede auth)
@@ -43,7 +55,6 @@ router.get('/search', async (req, res) => {
       const parsedLng = parseFloat(lng);
       const parsedRadius = parseFloat(radius);
 
-      // Inseriamo lat e lng iniziali per il calcolo della distanza
       queryParams.push(parsedLat, parsedLng);
       const latParamIdx = paramIndex++;
       const lngParamIdx = paramIndex++;
@@ -69,7 +80,6 @@ router.get('/search', async (req, res) => {
       paramIndex++;
 
     } else {
-      // Query standard senza geolocalizzazione
       query = `
         SELECT 
           id, titolo, categoria, descrizione, data_inizio, data_fine, 
@@ -80,21 +90,18 @@ router.get('/search', async (req, res) => {
       `;
     }
 
-    // 1. Filtro per Categoria (se presente e diversa da "all" o "Tutti")
     if (categoria && categoria !== 'all' && categoria !== 'Tutti') {
       query += ` AND LOWER(categoria) = LOWER($${paramIndex})`;
       queryParams.push(categoria);
       paramIndex++;
     }
 
-    // 2. Filtro per Nome/Parola chiave
     if (nome && typeof nome === 'string' && nome.trim() !== '') {
       query += ` AND (titolo ILIKE $${paramIndex} OR descrizione ILIKE $${paramIndex})`;
       queryParams.push(`%${nome.trim()}%`);
       paramIndex++;
     }
 
-    // 3. Filtro temporale (quando)
     if (quando && quando !== 'any' && quando !== 'Tutti') {
       if (quando === 'today') {
         query += ` AND data_inizio::date = CURRENT_DATE`;
@@ -106,7 +113,6 @@ router.get('/search', async (req, res) => {
       }
     }
 
-    // Ordinamento cronologico predefinito
     query += ` ORDER BY data_inizio ASC LIMIT 50;`;
 
     console.log("🛠️ [API /events/search] Query SQL generata:\n", query);
@@ -159,19 +165,33 @@ router.get('/miei', authMiddleware, async (req, res) => {
 });
 
 // ==========================================
-// 3. API: Crea un nuovo evento (PROTETTA)
+// 3. API: Crea un nuovo evento (PROTETTA + Cloudinary)
 // ==========================================
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, upload.single('immagine'), async (req, res) => {
   const client = await pool.connect();
   try {
     const userId = req.user?.id;
     const { 
       titolo, categoria, descrizione, data_inizio, data_fine, 
-      luogo_nome, indirizzo, citta, lat, lng, immagine_url 
+      luogo_nome, indirizzo, citta, lat, lng 
     } = req.body;
 
     if (!titolo || !categoria || !luogo_nome) {
       return res.status(400).json({ success: false, error: "Campi obbligatori mancanti" });
+    }
+
+    let immagineUrl = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop";
+
+    // Se è stato caricato un file dal client, caricalo su Cloudinary
+    if (req.file) {
+      const b64 = Buffer.from(req.file.buffer).toString("base64");
+      let dataURI = "data:" + req.file.mimetype + ";base64," + b64;
+
+      const uploadResponse = await cloudinary.uploader.upload(dataURI, {
+        folder: "turentu_eventi",
+      });
+
+      immagineUrl = uploadResponse.secure_url;
     }
 
     const query = `
@@ -194,7 +214,7 @@ router.post('/', authMiddleware, async (req, res) => {
       citta || null,
       lat ? parseFloat(lat) : null,
       lng ? parseFloat(lng) : null,
-      immagine_url || null,
+      immagineUrl,
       userId || null
     ];
 

@@ -8,7 +8,7 @@ export async function processaProposteDinamiche() {
   try {
     await client.query('BEGIN');
 
-    // 1. CLUSTERING
+    // 1. CLUSTERING (Con filtro per evitare nodi di partenza e arrivo coincidenti)
     console.log('🔍 [WORKER] Fase 1: Ricerca e clustering delle richieste in attesa...');
     const { rows: clusters } = await client.query(`
       SELECT 
@@ -22,10 +22,11 @@ export async function processaProposteDinamiche() {
       JOIN nodi_direttrice n1 ON r.start_node_id = n1.id
       JOIN nodi_direttrice n2 ON r.end_node_id = n2.id
       WHERE r.stato = 'in_attesa'
+        AND r.start_node_id <> r.end_node_id
       GROUP BY r.start_node_id, r.end_node_id, r.classe, slot_orario
     `);
 
-    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste da elaborare.`);
+    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste validi da elaborare.`);
 
     for (const [index, c] of clusters.entries()) {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
@@ -42,6 +43,19 @@ export async function processaProposteDinamiche() {
 
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
+
+      // Associazione delle richieste alla direttrice nella tabella ponte (Fondamentale per il calcolo ricavi)
+      await client.query(`
+        INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
+        SELECT $1, r.id
+        FROM richieste_pop_bus r
+        WHERE r.stato = 'in_attesa'
+          AND r.start_node_id = $2
+          AND r.end_node_id = $3
+          AND r.classe = $4
+          AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $5
+        ON CONFLICT DO NOTHING
+      `, [direttriceId, c.start_node_id, c.end_node_id, c.classe, c.slot_orario]);
 
       // Inserimento segmento
       const { rows: seg } = await client.query(`

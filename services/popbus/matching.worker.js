@@ -9,6 +9,7 @@ export async function processaProposteDinamiche() {
     await client.query('BEGIN');
 
     // 1. CLUSTERING
+    console.log('🔍 [WORKER] Fase 1: Ricerca e clustering delle richieste in attesa...');
     const { rows: clusters } = await client.query(`
       SELECT 
         r.start_node_id,
@@ -24,7 +25,12 @@ export async function processaProposteDinamiche() {
       GROUP BY r.start_node_id, r.end_node_id, r.classe, slot_orario
     `);
 
-    for (const c of clusters) {
+    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste da elaborare.`);
+
+    for (const [index, c] of clusters.entries()) {
+      console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
+      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Classe: ${c.classe} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
+
       // Inserimento direttrice
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
@@ -34,6 +40,9 @@ export async function processaProposteDinamiche() {
         RETURNING id
       `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
 
+      const direttriceId = dir[0].id;
+      console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
+
       // Inserimento segmento
       const { rows: seg } = await client.query(`
         INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
@@ -41,7 +50,10 @@ export async function processaProposteDinamiche() {
         ON CONFLICT (direttrice_id, start_node_id, end_node_id)
         DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
         RETURNING id
-      `, [dir[0].id, c.start_node_id, c.end_node_id, c.posti_totali]);
+      `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+
+      const segmentoId = seg[0].id;
+      console.log(`    ✅ Segmento associato con ID: ${segmentoId}`);
 
       // Inserimento / Aggiornamento missioni_ritorno legate al segmento
       await client.query(`
@@ -68,10 +80,11 @@ export async function processaProposteDinamiche() {
         DO UPDATE SET 
           orario_previsto = EXCLUDED.orario_previsto,
           nodo_origine = EXCLUDED.nodo_origine
-      `, [seg[0].id, dir[0].id, c.end_node_id, c.end_node_id, c.slot_orario, c.classe]);
+      `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe]);
     }
 
     // 2. CALCOLO ATTIVAZIONE
+    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione delle tratte...');
     const { rows: tratteAttivate } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -120,7 +133,11 @@ export async function processaProposteDinamiche() {
       RETURNING s.id, s.direttrice_id, s.stato
     `);
 
+    console.log(`🚀 [WORKER] Tratte/Segmenti passati allo stato 'attivo': ${tratteAttivate.length}`);
+    tratteAttivate.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
+
     // 3. AUTO-UPGRADE
+    console.log('🔄 [WORKER] Fase 3: Esecuzione auto-upgrade delle richieste...');
     await client.query(`
       UPDATE richieste_pop_bus r
       SET target_missione_id = d_target.id
@@ -133,15 +150,17 @@ export async function processaProposteDinamiche() {
     `);
 
     // 4. DELEGATED DISPATCH
+    console.log('📡 [WORKER] Fase 4: Invio al servizio di dispatch...');
     const countAttive = await dispatchDirettriciAttive(tratteAttivate, client);
 
     await client.query('COMMIT');
-    console.log(`✨ [WORKER] OK. Direttrici attive: ${countAttive}`);
+    console.log(`✨ [WORKER] Transazione completata con successo. Direttrici attive dispatchate: ${countAttive}`);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ WORKER ERROR:', err);
+    console.error('❌ [WORKER ERROR] Errore critico durante l\'elaborazione, eseguito ROLLBACK:', err);
     throw err;
   } finally {
     client.release();
+    console.log('🔌 [WORKER] Connessione al database rilasciata.\n');
   }
 }

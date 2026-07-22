@@ -52,7 +52,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     // 2. Elaborazione Foto Profilo (se inviata in Base64)
-    if (foto_profilo && foto_profilo.startsWith('data:image')) {
+    if (foto_profilo && typeof foto_profilo === 'string' && foto_profilo.startsWith('data:image')) {
       const buffer = base64ToBuffer(foto_profilo);
       const url = await uploadFile(buffer, 'foto_profilo.jpg');
       if (url) {
@@ -61,23 +61,28 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     // 3. Elaborazione Documenti (se inviati in Base64)
+    // NOTA: Usiamo `utente_id` perché la foreign key della tabella punta a `utente(id)`
     if (documenti && typeof documenti === 'object') {
       for (const [key, uri] of Object.entries(documenti)) {
-        if (uri && uri.startsWith('data:image') && TIPO_DOCUMENTO_MAP[key]) {
+        if (uri && typeof uri === 'string' && uri.startsWith('data:image') && TIPO_DOCUMENTO_MAP[key]) {
           const tipo = TIPO_DOCUMENTO_MAP[key];
           const buffer = base64ToBuffer(uri);
           const url = await uploadFile(buffer, `${key}.jpg`);
           
           if (!url) continue;
 
-          // CORRETTO: Usiamo profileId (o utente_id in base a come è strutturato il tuo DB, 
-          // ma legarlo a profileId risolve il disallineamento)
-          const docCheck = await pool.query('SELECT id FROM documenti_autista WHERE autista_id = $1 AND tipo = $2', [profileId, tipo]);
+          const docCheck = await pool.query(
+            'SELECT id FROM documenti_autista WHERE autista_id = $1 AND tipo = $2 AND veicolo_id IS NULL', 
+            [utente_id, tipo]
+          );
           
           if (docCheck.rowCount > 0) {
             await pool.query('UPDATE documenti_autista SET url = $1, stato = $2 WHERE id = $3', [url, 'pending', docCheck.rows[0].id]);
           } else {
-            await pool.query('INSERT INTO documenti_autista (autista_id, tipo, url, stato) VALUES ($1, $2, $3, $4)', [profileId, tipo, url, 'pending']);
+            await pool.query(
+              'INSERT INTO documenti_autista (autista_id, tipo, url, stato) VALUES ($1, $2, $3, $4)', 
+              [utente_id, tipo, url, 'pending']
+            );
           }
         }
       }
@@ -86,7 +91,7 @@ router.post('/', authMiddleware, async (req, res) => {
     res.json({ success: true, message: 'Profilo salvato correttamente' });
   } catch (err) {
     console.error('❌ Errore POST /autista/profilo:', err);
-    res.status(500).json({ success: false, message: 'Errore interno server' });
+    res.status(500).json({ success: false, message: err.message || 'Errore interno server' });
   }
 });
 
@@ -95,14 +100,14 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     const utente_id = req.user.id;
     
-    // Recuperiamo prima il profilo per avere il suo ID corretto
+    // Recuperiamo prima il profilo per avere i dati anagrafici/bancari
     const profiloRes = await pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1 ORDER BY id DESC LIMIT 1', [utente_id]);
     const profilo = profiloRes.rows[0] || null;
 
     let documenti = {};
-    if (profilo) {
-      // Usiamo profileId per recuperare i documenti collegati a questo autista
-      const docRes = await pool.query('SELECT tipo, url FROM documenti_autista WHERE autista_id = $1', [profilo.id]);
+    if (utente_id) {
+      // Usiamo utente_id per recuperare i documenti collegati (come strutturato nel DB)
+      const docRes = await pool.query('SELECT tipo, url FROM documenti_autista WHERE autista_id = $1 AND veicolo_id IS NULL', [utente_id]);
       docRes.rows.forEach(({ tipo, url }) => {
         const frontendKey = Object.keys(TIPO_DOCUMENTO_MAP).find(key => TIPO_DOCUMENTO_MAP[key] === tipo) || tipo;
         documenti[frontendKey] = url;

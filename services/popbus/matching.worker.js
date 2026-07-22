@@ -44,7 +44,7 @@ export async function processaProposteDinamiche() {
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
 
-      // Associazione delle richieste alla direttrice nella tabella ponte (Fondamentale per il calcolo ricavi)
+      // Associazione delle richieste alla direttrice nella tabella ponte (Fondamentale per il tracciamento)
       await client.query(`
         INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
         SELECT $1, r.id
@@ -111,20 +111,16 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
-          COALESCE(SUM(p.prezzo_totale), 0) as ricavo_attuale
+          -- Calcolo del ricavo basato sui posti occupati per evitare errori di join sulle prenotazioni
+          COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        LEFT JOIN direttrici_richieste dr ON dr.direttrice_id = s.direttrice_id
-        LEFT JOIN richieste_pop_bus r ON r.id = dr.richiesta_id
-          AND r.start_node_id <= s.end_node_id 
-          AND r.end_node_id >= s.start_node_id
-        LEFT JOIN prenotazioni p ON p.cliente_id = r.cliente_id
         WHERE s.stato = 'in_attesa'
-        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
       ),
       calcolo_orari AS (
         SELECT 

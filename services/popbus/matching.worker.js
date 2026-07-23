@@ -37,7 +37,7 @@ export async function processaProposteDinamiche() {
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
-        DO UPDATE SET stato = 'in_formazione'
+        DO UPDATE SET tipo_servizio = EXCLUDED.tipo_servizio
         RETURNING id
       `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe_riferimento]);
 
@@ -56,17 +56,31 @@ export async function processaProposteDinamiche() {
         ON CONFLICT DO NOTHING
       `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
 
-      // Inserimento segmento
-      const { rows: seg } = await client.query(`
-        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-        VALUES ($1, $2, $3, $4, 'in_attesa')
-        ON CONFLICT (direttrice_id, start_node_id, end_node_id)
-        DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
-        RETURNING id
-      `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+      // GESTIONE SEGMENTO: Se ne esiste uno 'in_attesa' lo aggiorna, altrimenti ne crea uno nuovo
+      let segmentoId;
+      const { rows: existingSeg } = await client.query(`
+        SELECT id FROM segmenti 
+        WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
+        LIMIT 1
+      `, [direttriceId, c.start_node_id, c.end_node_id]);
 
-      const segmentoId = seg[0].id;
-      console.log(`    ✅ Segmento associato con ID: ${segmentoId}`);
+      if (existingSeg.length > 0) {
+        segmentoId = existingSeg[0].id;
+        await client.query(`
+          UPDATE segmenti 
+          SET posti_occupati = posti_occupati + $1 
+          WHERE id = $2
+        `, [c.posti_totali, segmentoId]);
+        console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
+      } else {
+        const { rows: newSeg } = await client.query(`
+          INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+          VALUES ($1, $2, $3, $4, 'in_attesa')
+          RETURNING id
+        `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+        segmentoId = newSeg[0].id;
+        console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId}`);
+      }
 
       // Inserimento / Aggiornamento missioni_ritorno legate al segmento
       await client.query(`
@@ -160,14 +174,14 @@ export async function processaProposteDinamiche() {
       update_direttrici AS (
         UPDATE direttrici_virtuali dv
         SET stato = 'attivo'
-        FROM update_segmenti us
-        WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
+        FROM segmenti s
+        WHERE dv.id = s.direttrice_id AND s.stato = 'attivo'
         RETURNING dv.id
       )
-      SELECT id, direttrice_id, stato FROM update_segmenti
+      SELECT id, direttrice_id, stato FROM segmenti WHERE stato = 'attivo'
     `);
 
-    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
+    console.log(`🚀 [WORKER] Segmenti totali nello stato 'attivo': ${segmentiAttivati.length}`);
     segmentiAttivati.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
 
     // 3. AUTO-UPGRADE

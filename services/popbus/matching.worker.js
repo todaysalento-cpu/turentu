@@ -134,13 +134,21 @@ export async function processaProposteDinamiche() {
         FROM ricavi_segmento rs
         JOIN direttrici_virtuali d ON rs.direttrice_id = d.id
         WHERE d.stato = 'in_formazione'
+      ),
+      update_segmenti AS (
+        UPDATE segmenti s
+        SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
+        FROM calcolo_orari co
+        WHERE s.id = co.segmento_id
+          AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
+        RETURNING s.id, s.direttrice_id, s.stato
       )
-      UPDATE segmenti s
-      SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
-      FROM calcolo_orari co
-      WHERE s.id = co.segmento_id
-        AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
-      RETURNING s.id, s.direttrice_id, s.stato
+      -- Aggiorna contestualmente anche la direttrice virtuale corrispondente
+      UPDATE direttrici_virtuali dv
+      SET stato = 'attivo'
+      FROM update_segmenti us
+      WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
+      RETURNING us.id, us.direttrice_id, us.stato
     `);
 
     console.log(`🚀 [WORKER] Tratte/Segmenti passati allo stato 'attivo': ${tratteAttivate.length}`);

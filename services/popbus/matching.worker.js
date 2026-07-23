@@ -8,43 +8,43 @@ export async function processaProposteDinamiche() {
   try {
     await client.query('BEGIN');
 
-    // 1. CLUSTERING (Con filtro per evitare nodi di partenza e arrivo coincidenti)
+    // 1. CLUSTERING (Raggruppato per tratta e slot, ignorando la classe per il raggruppamento)
     console.log('🔍 [WORKER] Fase 1: Ricerca e clustering delle richieste in attesa...');
     const { rows: clusters } = await client.query(`
       SELECT 
         r.start_node_id,
         r.end_node_id,
-        r.classe,
         TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) as slot_orario,
         SUM(r.posti_richiesti) as posti_totali,
+        MAX(r.classe) as classe_riferimento,
         MAX(ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as dist_km
       FROM richieste_pop_bus r
       JOIN nodi_direttrice n1 ON r.start_node_id = n1.id
       JOIN nodi_direttrice n2 ON r.end_node_id = n2.id
       WHERE r.stato = 'in_attesa'
         AND r.start_node_id <> r.end_node_id
-      GROUP BY r.start_node_id, r.end_node_id, r.classe, slot_orario
+      GROUP BY r.start_node_id, r.end_node_id, slot_orario
     `);
 
     console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste validi da elaborare.`);
 
     for (const [index, c] of clusters.entries()) {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
-      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Classe: ${c.classe} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
+      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
 
-      // Inserimento direttrice
+      // Inserimento direttrice unificata
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
         DO UPDATE SET stato = 'in_formazione'
         RETURNING id
-      `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe]);
+      `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe_riferimento]);
 
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
 
-      // Associazione delle richieste alla direttrice nella tabella ponte (Fondamentale per il tracciamento)
+      // Associazione di TUTTE le richieste dello slot alla direttrice nella tabella ponte (indipendentemente dalla classe)
       await client.query(`
         INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
         SELECT $1, r.id
@@ -52,10 +52,9 @@ export async function processaProposteDinamiche() {
         WHERE r.stato = 'in_attesa'
           AND r.start_node_id = $2
           AND r.end_node_id = $3
-          AND r.classe = $4
-          AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $5
+          AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
         ON CONFLICT DO NOTHING
-      `, [direttriceId, c.start_node_id, c.end_node_id, c.classe, c.slot_orario]);
+      `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
 
       // Inserimento segmento
       const { rows: seg } = await client.query(`
@@ -94,7 +93,7 @@ export async function processaProposteDinamiche() {
         DO UPDATE SET 
           orario_previsto = EXCLUDED.orario_previsto,
           nodo_origine = EXCLUDED.nodo_origine
-      `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe]);
+      `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
     }
 
     // 2. CALCOLO ATTIVAZIONE

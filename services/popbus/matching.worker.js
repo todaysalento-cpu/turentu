@@ -32,7 +32,7 @@ export async function processaProposteDinamiche() {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
       console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
 
-      // Inserimento direttrice unificata
+      // Inserimento direttrice unificata (contenitore geo-temporale)
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
@@ -44,7 +44,7 @@ export async function processaProposteDinamiche() {
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
 
-      // Associazione di TUTTE le richieste dello slot alla direttrice nella tabella ponte (indipendentemente dalla classe)
+      // Associazione di TUTTE le richieste dello slot alla direttrice nella tabella ponte
       await client.query(`
         INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
         SELECT $1, r.id
@@ -58,8 +58,8 @@ export async function processaProposteDinamiche() {
 
       // Inserimento segmento
       const { rows: seg } = await client.query(`
-        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+        VALUES ($1, $2, $3, $4, 'in_attesa')
         ON CONFLICT (direttrice_id, start_node_id, end_node_id)
         DO UPDATE SET posti_occupati = segmenti.posti_occupati + EXCLUDED.posti_occupati
         RETURNING id
@@ -96,28 +96,10 @@ export async function processaProposteDinamiche() {
       `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Con diagnostica log inserita)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione delle tratte...');
+    // 2. CALCOLO ATTIVAZIONE (Granulare sui singoli segmenti, direttrice aggiornata se ha almeno un segmento attivo)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione dei singoli segmenti...');
     
-    const { rows: debugCheck } = await client.query(`
-      SELECT 
-        s.id as segmento_id,
-        s.direttrice_id,
-        s.posti_occupati,
-        COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale,
-        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento,
-        (0.50 * (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as soglia_dinamica,
-        s.tempo_stimato,
-        s.stato as stato_segmento,
-        d.stato as stato_direttrice
-      FROM segmenti s
-      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-      JOIN direttrici_virtuali d ON s.direttrice_id = d.id
-    `);
-    console.log('📊 [DEBUG FASE 2] Stato attuale dei segmenti nel DB:', debugCheck);
-
-    const { rows: tratteAttivate } = await client.query(`
+    const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
           s.id as segmento_id,
@@ -129,7 +111,6 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
-          -- Calcolo del ricavo basato sui posti occupati per evitare errori di join sulle prenotazioni
           COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -151,7 +132,6 @@ export async function processaProposteDinamiche() {
           0.50 * rs.km_segmento as soglia_dinamica_segmento
         FROM ricavi_segmento rs
         JOIN direttrici_virtuali d ON rs.direttrice_id = d.id
-        WHERE d.stato = 'in_formazione'
       ),
       update_segmenti AS (
         UPDATE segmenti s
@@ -160,17 +140,20 @@ export async function processaProposteDinamiche() {
         WHERE s.id = co.segmento_id
           AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
         RETURNING s.id, s.direttrice_id, s.stato
+      ),
+      -- Aggiorna la direttrice virtuale (contenitore) a 'attivo' se ha almeno un segmento attivo al suo interno
+      update_direttrici AS (
+        UPDATE direttrici_virtuali dv
+        SET stato = 'attivo'
+        FROM update_segmenti us
+        WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
+        RETURNING dv.id
       )
-      -- Aggiorna contestualmente anche la direttrice virtuale corrispondente
-      UPDATE direttrici_virtuali dv
-      SET stato = 'attivo'
-      FROM update_segmenti us
-      WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
-      RETURNING us.id, us.direttrice_id, us.stato
+      SELECT id, direttrice_id, stato FROM update_segmenti
     `);
 
-    console.log(`🚀 [WORKER] Tratte/Segmenti passati allo stato 'attivo': ${tratteAttivate.length}`);
-    tratteAttivate.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
+    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
+    segmentiAttivati.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
 
     // 3. AUTO-UPGRADE
     console.log('🔄 [WORKER] Fase 3: Esecuzione auto-upgrade delle richieste...');
@@ -187,10 +170,10 @@ export async function processaProposteDinamiche() {
 
     // 4. DELEGATED DISPATCH
     console.log('📡 [WORKER] Fase 4: Invio al servizio di dispatch...');
-    const countAttive = await dispatchDirettriciAttive(tratteAttivate, client);
+    const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);
 
     await client.query('COMMIT');
-    console.log(`✨ [WORKER] Transazione completata con successo. Direttrici attive dispatchate: ${countAttive}`);
+    console.log(`✨ [WORKER] Transazione completata con successo. Segmenti attivi dispatchati: ${countAttive}`);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ [WORKER ERROR] Errore critico durante l\'elaborazione, eseguito ROLLBACK:', err);

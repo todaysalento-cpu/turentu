@@ -96,8 +96,27 @@ export async function processaProposteDinamiche() {
       `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
     }
 
-    // 2. CALCOLO ATTIVAZIONE
+    // 2. CALCOLO ATTIVAZIONE (Con diagnostica log inserita)
     console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione delle tratte...');
+    
+    const { rows: debugCheck } = await client.query(`
+      SELECT 
+        s.id as segmento_id,
+        s.direttrice_id,
+        s.posti_occupati,
+        COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale,
+        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento,
+        (0.50 * (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as soglia_dinamica,
+        s.tempo_stimato,
+        s.stato as stato_segmento,
+        d.stato as stato_direttrice
+      FROM segmenti s
+      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+      JOIN direttrici_virtuali d ON s.direttrice_id = d.id
+    `);
+    console.log('📊 [DEBUG FASE 2] Stato attuale dei segmenti nel DB:', debugCheck);
+
     const { rows: tratteAttivate } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 

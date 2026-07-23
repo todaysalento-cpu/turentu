@@ -176,8 +176,8 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia di attivazione di uno o più veicoli del pool)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli e attivazione...');
+    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia economica minima basata sulle tariffe)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sulle tariffe di sistema...');
     
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -186,7 +186,6 @@ export async function processaProposteDinamiche() {
           s.direttrice_id,
           s.tempo_stimato,
           s.ordine_sequenziale,
-          COALESCE(d.veicoli_pool_ids, ARRAY[]::int[]) as pool_ids,
           (
             ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
@@ -196,21 +195,19 @@ export async function processaProposteDinamiche() {
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-        JOIN direttrici_virtuali d ON s.direttrice_id = d.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
-        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, d.veicoli_pool_ids, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
       ),
       min_soglia_pool AS (
-        -- Trova il veicolo economicamente più conveniente (euro_km minimo) all'interno del pool della direttrice
+        -- Trova il costo chilometrico (euro_km) più basso disponibile nella tabella tariffe
         SELECT 
           rs.segmento_id,
           MIN(t.euro_km) as min_euro_km
         FROM ricavi_segmento rs
-        LEFT JOIN LATERAL unnest(rs.pool_ids) as pid ON true
-        JOIN tariffe t ON t.veicolo_id = pid
+        CROSS JOIN tariffe t
         WHERE t.euro_km > 0
         GROUP BY rs.segmento_id
       ),

@@ -176,8 +176,8 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Valuta solo i segmenti effettivamente toccati in questo giro)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione dei segmenti coinvolti...');
+    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia di attivazione di uno o più veicoli del pool)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli e attivazione...');
     
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -186,6 +186,7 @@ export async function processaProposteDinamiche() {
           s.direttrice_id,
           s.tempo_stimato,
           s.ordine_sequenziale,
+          COALESCE(d.veicoli_pool_ids, ARRAY[]::int[]) as pool_ids,
           (
             ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
@@ -195,30 +196,50 @@ export async function processaProposteDinamiche() {
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+        JOIN direttrici_virtuali d ON s.direttrice_id = d.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
-        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, d.veicoli_pool_ids, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+      ),
+      min_soglia_pool AS (
+        -- Trova il veicolo economicamente più conveniente (euro_km minimo) all'interno del pool della direttrice
+        SELECT 
+          rs.segmento_id,
+          MIN(t.euro_km) as min_euro_km
+        FROM ricavi_segmento rs
+        LEFT JOIN LATERAL unnest(rs.pool_ids) as pid ON true
+        JOIN tariffe t ON t.veicolo_id = pid
+        WHERE t.euro_km > 0
+        GROUP BY rs.segmento_id
+      ),
+      costo_attivazione AS (
+        SELECT 
+          rs.*,
+          COALESCE(m.min_euro_km, 0.50) as euro_km_selezionato
+        FROM ricavi_segmento rs
+        LEFT JOIN min_soglia_pool m ON rs.segmento_id = m.segmento_id
       ),
       calcolo_orari AS (
         SELECT 
-          rs.segmento_id, 
-          rs.direttrice_id,
-          d.partenza_prevista + (SUM(COALESCE(rs.tempo_stimato, 0)) OVER (
-              PARTITION BY rs.direttrice_id ORDER BY rs.ordine_sequenziale
+          ca.segmento_id, 
+          ca.direttrice_id,
+          d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
+              PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
             ) * INTERVAL '1 minute') as calculated_start,
-          rs.ricavo_attuale,
-          0.50 * rs.km_segmento as soglia_dinamica_segmento
-        FROM ricavi_segmento rs
-        JOIN direttrici_virtuali d ON rs.direttrice_id = d.id
+          ca.ricavo_attuale,
+          (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima
+        FROM costo_attivazione ca
+        JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
+        JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
       ),
       update_segmenti AS (
         UPDATE segmenti s
         SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
         FROM calcolo_orari co
         WHERE s.id = co.segmento_id
-          AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
+          AND co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
         RETURNING s.id, s.direttrice_id, s.stato
       ),
       update_direttrici AS (

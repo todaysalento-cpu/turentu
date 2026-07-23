@@ -58,22 +58,36 @@ export async function processaProposteDinamiche() {
         ON CONFLICT DO NOTHING
       `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
 
-      // GESTIONE SEGMENTO: Aggiorna se esiste 'in_attesa', altrimenti crea un nuovo segmento (gestendo eventuali concorrenze)
+      // GESTIONE SEGMENTO UNICO: Verifica se esiste un segmento per la direttrice e tratta a prescindere dallo stato
       let segmentoId;
       const { rows: existingSeg } = await client.query(`
-        SELECT id FROM segmenti 
-        WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
+        SELECT id, stato FROM segmenti 
+        WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
         LIMIT 1
       `, [direttriceId, c.start_node_id, c.end_node_id]);
 
       if (existingSeg.length > 0) {
         segmentoId = existingSeg[0].id;
-        await client.query(`
-          UPDATE segmenti 
-          SET posti_occupati = posti_occupati + $1 
-          WHERE id = $2
-        `, [c.posti_totali, segmentoId]);
-        console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
+        const statoCorrente = existingSeg[0].stato;
+
+        if (statoCorrente === 'in_attesa') {
+          // Se è ancora in attesa, accumuliamo i posti sullo stesso segmento
+          await client.query(`
+            UPDATE segmenti 
+            SET posti_occupati = posti_occupati + $1 
+            WHERE id = $2
+          `, [c.posti_totali, segmentoId]);
+          console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
+        } else {
+          // Se il segmento esistente è già attivo, creiamo un nuovo segmento parallelo (nuova corsa)
+          const { rows: newSeg } = await client.query(`
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+            VALUES ($1, $2, $3, $4, 'in_attesa')
+            RETURNING id
+          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+          segmentoId = newSeg[0].id;
+          console.log(`    ✅ Segmento precedente già attivo. Creato nuovo segmento parallelo 'in_attesa' con ID: ${segmentoId}`);
+        }
       } else {
         try {
           const { rows: newSeg } = await client.query(`
@@ -86,19 +100,29 @@ export async function processaProposteDinamiche() {
         } catch (insertErr) {
           if (insertErr.code === '23505') {
             const { rows: fallbackSeg } = await client.query(`
-              SELECT id FROM segmenti 
-              WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
+              SELECT id, stato FROM segmenti 
+              WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
               LIMIT 1
             `, [direttriceId, c.start_node_id, c.end_node_id]);
             
             if (fallbackSeg.length > 0) {
               segmentoId = fallbackSeg[0].id;
-              await client.query(`
-                UPDATE segmenti 
-                SET posti_occupati = posti_occupati + $1 
-                WHERE id = $2
-              `, [c.posti_totali, segmentoId]);
-              console.log(`    ⚠️ Conflitto gestito: aggiornato segmento esistente ID: ${segmentoId}`);
+              if (fallbackSeg[0].stato === 'in_attesa') {
+                await client.query(`
+                  UPDATE segmenti 
+                  SET posti_occupati = posti_occupati + $1 
+                  WHERE id = $2
+                `, [c.posti_totali, segmentoId]);
+                console.log(`    ⚠️ Conflitto gestito: aggiornato segmento esistente ID: ${segmentoId}`);
+              } else {
+                const { rows: forcedNew } = await client.query(`
+                  INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+                  VALUES ($1, $2, $3, $4, 'in_attesa')
+                  RETURNING id
+                `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+                segmentoId = forcedNew[0].id;
+                console.log(`    ✅ Conflitto gestito (già attivo): creato nuovo segmento parallelo con ID: ${segmentoId}`);
+              }
             } else {
               const { rows: forcedNew } = await client.query(`
                 INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)

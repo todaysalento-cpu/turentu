@@ -28,6 +28,8 @@ export async function processaProposteDinamiche() {
 
     console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste validi da elaborare.`);
 
+    const segmentiCoinvoltiIds = [];
+
     for (const [index, c] of clusters.entries()) {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
       console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
@@ -56,7 +58,7 @@ export async function processaProposteDinamiche() {
         ON CONFLICT DO NOTHING
       `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
 
-      // GESTIONE SEGMENTO: Se ne esiste uno 'in_attesa' lo aggiorna, altrimenti ne crea uno nuovo
+      // GESTIONE SEGMENTO: Aggiorna se esiste 'in_attesa', altrimenti crea un nuovo segmento (gestendo eventuali concorrenze)
       let segmentoId;
       const { rows: existingSeg } = await client.query(`
         SELECT id FROM segmenti 
@@ -73,13 +75,47 @@ export async function processaProposteDinamiche() {
         `, [c.posti_totali, segmentoId]);
         console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
       } else {
-        const { rows: newSeg } = await client.query(`
-          INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-          VALUES ($1, $2, $3, $4, 'in_attesa')
-          RETURNING id
-        `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
-        segmentoId = newSeg[0].id;
-        console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId}`);
+        try {
+          const { rows: newSeg } = await client.query(`
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+            VALUES ($1, $2, $3, $4, 'in_attesa')
+            RETURNING id
+          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+          segmentoId = newSeg[0].id;
+          console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId}`);
+        } catch (insertErr) {
+          if (insertErr.code === '23505') {
+            const { rows: fallbackSeg } = await client.query(`
+              SELECT id FROM segmenti 
+              WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
+              LIMIT 1
+            `, [direttriceId, c.start_node_id, c.end_node_id]);
+            
+            if (fallbackSeg.length > 0) {
+              segmentoId = fallbackSeg[0].id;
+              await client.query(`
+                UPDATE segmenti 
+                SET posti_occupati = posti_occupati + $1 
+                WHERE id = $2
+              `, [c.posti_totali, segmentoId]);
+              console.log(`    ⚠️ Conflitto gestito: aggiornato segmento esistente ID: ${segmentoId}`);
+            } else {
+              const { rows: forcedNew } = await client.query(`
+                INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
+                VALUES ($1, $2, $3, $4, 'in_attesa')
+                RETURNING id
+              `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+              segmentoId = forcedNew[0].id;
+              console.log(`    ✅ Nuovo segmento parallelo forzato creato con ID: ${segmentoId}`);
+            }
+          } else {
+            throw insertErr;
+          }
+        }
+      }
+
+      if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
+        segmentiCoinvoltiIds.push(Number(segmentoId));
       }
 
       // Inserimento / Aggiornamento missioni_ritorno legate al segmento
@@ -110,25 +146,15 @@ export async function processaProposteDinamiche() {
       `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Con diagnostica dettagliata prima dell'update)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione dei singoli segmenti...');
-    
-    const { rows: debugCheck } = await client.query(`
-      SELECT 
-        s.id as segmento_id,
-        s.direttrice_id,
-        s.posti_occupati,
-        COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale,
-        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento,
-        (0.50 * (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as soglia_dinamica,
-        s.stato as stato_segmento
-      FROM segmenti s
-      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-      WHERE s.stato = 'in_attesa'
-    `);
-    console.log('📊 [DEBUG FASE 2] Stato economico attuale dei segmenti in attesa:', debugCheck);
+    if (segmentiCoinvoltiIds.length === 0) {
+      console.log('ℹ️ [WORKER] Nessun segmento da valutare in questa esecuzione.');
+      await client.query('COMMIT');
+      return;
+    }
 
+    // 2. CALCOLO ATTIVAZIONE (Valuta solo i segmenti effettivamente toccati in questo giro)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione dei segmenti coinvolti...');
+    
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -148,7 +174,7 @@ export async function processaProposteDinamiche() {
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        WHERE s.stato = 'in_attesa'
+        WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
         GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
       ),
       calcolo_orari AS (
@@ -174,14 +200,14 @@ export async function processaProposteDinamiche() {
       update_direttrici AS (
         UPDATE direttrici_virtuali dv
         SET stato = 'attivo'
-        FROM segmenti s
-        WHERE dv.id = s.direttrice_id AND s.stato = 'attivo'
+        FROM update_segmenti us
+        WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
         RETURNING dv.id
       )
-      SELECT id, direttrice_id, stato FROM segmenti WHERE stato = 'attivo'
-    `);
+      SELECT id, direttrice_id, stato FROM update_segmenti
+    `, [segmentiCoinvoltiIds]);
 
-    console.log(`🚀 [WORKER] Segmenti totali nello stato 'attivo': ${segmentiAttivati.length}`);
+    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
     segmentiAttivati.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
 
     // 3. AUTO-UPGRADE

@@ -96,9 +96,25 @@ export async function processaProposteDinamiche() {
       `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Granulare sui singoli segmenti, direttrice aggiornata se ha almeno un segmento attivo)
+    // 2. CALCOLO ATTIVAZIONE (Con diagnostica dettagliata prima dell'update)
     console.log('💰 [WORKER] Fase 2: Calcolo economico e attivazione dei singoli segmenti...');
     
+    const { rows: debugCheck } = await client.query(`
+      SELECT 
+        s.id as segmento_id,
+        s.direttrice_id,
+        s.posti_occupati,
+        COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale,
+        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento,
+        (0.50 * (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000)) as soglia_dinamica,
+        s.stato as stato_segmento
+      FROM segmenti s
+      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+      WHERE s.stato = 'in_attesa'
+    `);
+    console.log('📊 [DEBUG FASE 2] Stato economico attuale dei segmenti in attesa:', debugCheck);
+
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -141,7 +157,6 @@ export async function processaProposteDinamiche() {
           AND co.ricavo_attuale >= COALESCE(co.soglia_dinamica_segmento, 0)
         RETURNING s.id, s.direttrice_id, s.stato
       ),
-      -- Aggiorna la direttrice virtuale (contenitore) a 'attivo' se ha almeno un segmento attivo al suo interno
       update_direttrici AS (
         UPDATE direttrici_virtuali dv
         SET stato = 'attivo'

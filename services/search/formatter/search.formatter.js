@@ -83,6 +83,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     const durataMinutiRichiesta = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmRichiesta / 1.0));
 
     const oraPartenzaISO = getSafeISO(richiesta.start_datetime || Date.now());
+    const oraRitornoISO = richiesta.return_datetime ? getSafeISO(richiesta.return_datetime) : null;
 
     const resultsNested = await Promise.all(risultatiLimitati.map(async (item) => {
         if (!item) return [];
@@ -95,13 +96,13 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const modelloVal = item.modello || item.veicolo?.modello || '';
 
             let distMetriItem = distMetriRichiesta;
-            if (item.is_pool) {
-                distMetriItem = item.distanza || Math.abs(Number(item.endOffset || 0) - Number(item.startOffset || 0)) || distMetriRichiesta;
+            if (item.is_pool && item.distanza) {
+                distMetriItem = item.distanza;
             }
             const distKmItem = distMetriItem / 1000;
             const durataMinutiItem = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmItem / 1.0));
 
-            // 1. LOGICA VIRTUAL (POP-BUS) - Espansa in 3 opzioni (SAVER, STANDARD, EXPRESS)
+            // 1. LOGICA VIRTUAL (POP-BUS PENDING / PROATTIVO)
             if (itemId.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
@@ -123,6 +124,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                         localitaDestinazione,
                         oraPartenza: oraPartenzaISO,
                         oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiRichiesta),
+                        oraRitorno: oraRitornoISO,
+                        oraArrivoRitorno: oraRitornoISO ? determinaArrivoReale(oraRitornoISO, durataMinutiRichiesta) : null,
                         distanza_metri: distMetriRichiesta,
                         durata_minuti: Math.round(durataMinutiRichiesta),
                         prezzo: prezzoVal,
@@ -140,7 +143,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 return opzioniPopBus;
             }
 
-            // 2. LOGICA STANDARD
+            // 2. LOGICA STANDARD (Corse reali trovate)
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
@@ -154,8 +157,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 modello: modelloVal,
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza: oraPartenzaISO,
-                oraArrivo: determinaArrivoReale(oraPartenzaISO, durataMinutiItem),
+                oraPartenza: item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO,
+                oraArrivo: determinaArrivoReale(item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO, durataMinutiItem),
+                oraRitorno: oraRitornoISO,
                 distanza_metri: distMetriItem,
                 durata_minuti: Math.round(durataMinutiItem),
                 prezzo: prezzoVal,

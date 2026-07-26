@@ -34,7 +34,7 @@ export async function processaProposteDinamiche() {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
       console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
 
-      // Inserimento direttrice unificata (contenitore geo-temporale)
+      // Inserimento o recupero della direttrice virtuale unificata per slot
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
@@ -46,7 +46,7 @@ export async function processaProposteDinamiche() {
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
 
-      // Associazione di TUTTE le richieste dello slot alla direttrice nella tabella ponte
+      // Associazione delle richieste dello slot alla direttrice nella tabella ponte
       await client.query(`
         INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
         SELECT $1, r.id
@@ -58,10 +58,21 @@ export async function processaProposteDinamiche() {
         ON CONFLICT DO NOTHING
       `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
 
-      // GESTIONE SEGMENTO UNICO: Verifica se esiste un segmento per la direttrice e tratta a prescindere dallo stato
+      // LOGICA NODALE / SEGMENTI CON SEQUENZIALITÀ
+      const { rows: segmentiEsistentiDirettrice } = await client.query(`
+        SELECT id, start_node_id, end_node_id, ordine_sequenziale, stato 
+        FROM segmenti 
+        WHERE direttrice_id = $1 
+        ORDER BY ordine_sequenziale ASC NULLS LAST
+      `, [direttriceId]);
+
+      // Calcolo dinamico dell'ordine sequenziale progressivo
+      let maxOrdine = segmentiEsistentiDirettrice.reduce((max, s) => Math.max(max, s.ordine_sequenziale || 0), 0);
+
+      // Verifichiamo se esiste già un segmento identico per la tratta corrente
       let segmentoId;
       const { rows: existingSeg } = await client.query(`
-        SELECT id, stato FROM segmenti 
+        SELECT id, stato, ordine_sequenziale FROM segmenti 
         WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
         LIMIT 1
       `, [direttriceId, c.start_node_id, c.end_node_id]);
@@ -71,7 +82,6 @@ export async function processaProposteDinamiche() {
         const statoCorrente = existingSeg[0].stato;
 
         if (statoCorrente === 'in_attesa') {
-          // Se è ancora in attesa, accumuliamo i posti sullo stesso segmento
           await client.query(`
             UPDATE segmenti 
             SET posti_occupati = posti_occupati + $1 
@@ -79,24 +89,25 @@ export async function processaProposteDinamiche() {
           `, [c.posti_totali, segmentoId]);
           console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
         } else {
-          // Se il segmento esistente è già attivo, creiamo un nuovo segmento parallelo (nuova corsa)
+          maxOrdine += 1;
           const { rows: newSeg } = await client.query(`
-            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-            VALUES ($1, $2, $3, $4, 'in_attesa')
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
+            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
             RETURNING id
-          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Segmento precedente già attivo. Creato nuovo segmento parallelo 'in_attesa' con ID: ${segmentoId}`);
+          console.log(`    ✅ Segmento precedente già attivo. Creato nuovo segmento parallelo 'in_attesa' con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
         }
       } else {
+        maxOrdine += 1;
         try {
           const { rows: newSeg } = await client.query(`
-            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-            VALUES ($1, $2, $3, $4, 'in_attesa')
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
+            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
             RETURNING id
-          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId}`);
+          console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
         } catch (insertErr) {
           if (insertErr.code === '23505') {
             const { rows: fallbackSeg } = await client.query(`
@@ -116,21 +127,21 @@ export async function processaProposteDinamiche() {
                 console.log(`    ⚠️ Conflitto gestito: aggiornato segmento esistente ID: ${segmentoId}`);
               } else {
                 const { rows: forcedNew } = await client.query(`
-                  INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-                  VALUES ($1, $2, $3, $4, 'in_attesa')
+                  INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
+                  VALUES ($1, $2, $3, $4, 'in_attesa', $5)
                   RETURNING id
-                `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+                `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
                 segmentoId = forcedNew[0].id;
-                console.log(`    ✅ Conflitto gestito (già attivo): creato nuovo segmento parallelo con ID: ${segmentoId}`);
+                console.log(`    ✅ Conflitto gestito (già attivo): creato nuovo segmento parallelo con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
               }
             } else {
               const { rows: forcedNew } = await client.query(`
-                INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato)
-                VALUES ($1, $2, $3, $4, 'in_attesa')
+                INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
+                VALUES ($1, $2, $3, $4, 'in_attesa', $5)
                 RETURNING id
-              `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali]);
+              `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
               segmentoId = forcedNew[0].id;
-              console.log(`    ✅ Nuovo segmento parallelo forzato creato con ID: ${segmentoId}`);
+              console.log(`    ✅ Nuovo segmento parallelo forzato creato con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
             }
           } else {
             throw insertErr;
@@ -176,8 +187,8 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia economica minima basata sulle tariffe)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sulle tariffe di sistema...');
+    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia economica considerando andata e ritorno)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato su andata e ritorno...');
     
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -191,18 +202,27 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
-          COALESCE(s.posti_occupati * 2.50, 0) as ricavo_attuale
+          (
+            COALESCE(s.posti_occupati, 0) * 2.50 +
+            COALESCE(mr_posti.posti_ritorno, 0) * 2.50
+          ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
+        LEFT JOIN (
+          SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
+          FROM missioni_ritorno m
+          JOIN richieste_pop_bus r ON r.target_missione_id = m.direttrice_id
+          WHERE r.stato = 'in_attesa'
+          GROUP BY m.segmento_id
+        ) mr_posti ON mr_posti.segmento_id = s.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
-        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
+        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, mr_posti.posti_ritorno, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
       ),
       min_soglia_pool AS (
-        -- Trova il costo chilometrico (euro_km) più basso disponibile nella tabella tariffe
         SELECT 
           rs.segmento_id,
           MIN(t.euro_km) as min_euro_km

@@ -92,8 +92,30 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
             if (c.direttrice_id) {
                 if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
-                const isSaturato = await verificaSaturazioneSegmenti(c.direttrice_id, startSnap.ordine_sequenziale, endSnap.ordine_sequenziale, Number(richiesta.posti_richiesti), capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0));
-                return isSaturato ? null : baseResult;
+                
+                const capacitaTotale = capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0);
+                
+                // 1. Verifica saturazione sull'andata (segmenti)
+                const isAndataSaturata = await verificaSaturazioneSegmenti(
+                    c.direttrice_id, 
+                    startSnap.ordine_sequenziale, 
+                    endSnap.ordine_sequenziale, 
+                    Number(richiesta.posti_richiesti), 
+                    capacitaTotale
+                );
+                if (isAndataSaturata) return null;
+
+                // 2. Se la richiesta prevede un ritorno, verifica la saturazione anche sulla missione/segmento di ritorno
+                if (richiesta.return_datetime || richiesta.include_ritorno) {
+                    const isRitornoSaturato = await verificaSaturazioneRitorno(
+                        c.direttrice_id,
+                        Number(richiesta.posti_richiesti),
+                        capacitaTotale
+                    );
+                    if (isRitornoSaturato) return null;
+                }
+
+                return baseResult;
             }
 
             // Se arriviamo qui, è una risorsa proattiva valida per il Pricing
@@ -103,7 +125,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 }
 
 /**
- * SATURAZIONE SEGMENTI
+ * SATURAZIONE SEGMENTI (ANDATA)
  */
 async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, postiRichiesti, capacitaTotale) {
     const { rows } = await pool.query(
@@ -114,6 +136,20 @@ async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, post
         [direttrice_id, seqStart, seqEnd]
     );
     return Number(rows[0]?.occupati || 0) + postiRichiesti > capacitaTotale;
+}
+
+/**
+ * SATURAZIONE MISSIONE DI RITORNO
+ */
+async function verificaSaturazioneRitorno(direttrice_id, postiRichiesti, capacitaTotale) {
+    const { rows } = await pool.query(
+        `SELECT COALESCE(SUM(s.posti_occupati), 0) as occupati_ritorno
+         FROM missioni_ritorno mr
+         JOIN segmenti s ON mr.segmento_id = s.id
+         WHERE s.direttrice_id = $1`,
+        [direttrice_id]
+    );
+    return Number(rows[0]?.occupati_ritorno || 0) + postiRichiesti > capacitaTotale;
 }
 
 /**

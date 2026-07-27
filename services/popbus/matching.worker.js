@@ -3,12 +3,12 @@ import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
-  console.log('🔄 [WORKER] Avvio cluster pop-bus con chiusura transitiva multi-tratta...');
+  console.log('🔄 [WORKER] Avvio cluster pop-bus con separazione per classe/fascia di percorrenza (bassa, media, alta)...');
 
   try {
     await client.query('BEGIN');
 
-    // 1A. CLUSTERING BASE (Ricerca richieste in attesa per singola tratta e slot)
+    // 1A. CLUSTERING BASE CON CLASSIFICAZIONE DELLA PERCORRENZA
     console.log('🔍 [WORKER] Fase 1A: Ricerca e clustering delle richieste in attesa...');
     const { rows: clustersBase } = await client.query(`
       SELECT 
@@ -26,23 +26,38 @@ export async function processaProposteDinamiche() {
       GROUP BY r.start_node_id, r.end_node_id, slot_orario
     `);
 
-    // Mappa per aggregare le tratte base e quelle composte derivate
     const clusterMap = new Map();
 
     clustersBase.forEach(c => {
+      const dist = Number(c.dist_km || 0);
+      
+      // Classificazione della percorrenza in base ai chilometri:
+      // - bassa: < 20 km
+      // - media: tra 20 e 60 km inclusi
+      // - alta: > 60 km
+      let fasciaPercorrenza = 'bassa';
+      if (dist > 60) {
+        fasciaPercorrenza = 'alta';
+      } else if (dist >= 20) {
+        fasciaPercorrenza = 'media';
+      }
+
       const slotKey = new Date(c.slot_orario).toISOString();
-      const key = `${slotKey}_${c.start_node_id}_${c.end_node_id}`;
+      const key = `${slotKey}_${fasciaPercorrenza}_${c.start_node_id}_${c.end_node_id}`;
+      
       clusterMap.set(key, {
-        start_node_id: c.start_node_id,
-        end_node_id: c.end_node_id,
+        start_node_id: Number(c.start_node_id),
+        end_node_id: Number(c.end_node_id),
         slot_orario: c.slot_orario,
         posti_totali: Number(c.posti_totali),
         classe_riferimento: c.classe_riferimento,
+        dist_km: dist,
+        fascia_percorrenza: fasciaPercorrenza,
         is_composta: false
       });
     });
 
-    // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA (Supporto per catene arbitrarie AB -> BC -> CD -> ...)
+    // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA (vincolata alla stessa fascia di percorrenza)
     let addedNew = true;
     while (addedNew) {
       addedNew = false;
@@ -53,17 +68,15 @@ export async function processaProposteDinamiche() {
           const slot1 = new Date(t1.slot_orario).getTime();
           const slot2 = new Date(t2.slot_orario).getTime();
 
-          // Se la fine di t1 combacia con l'inizio di t2 nello stesso slot
-          if (t1.end_node_id === t2.start_node_id && slot1 === slot2) {
+          if (t1.end_node_id === t2.start_node_id && slot1 === slot2 && t1.fascia_percorrenza === t2.fascia_percorrenza) {
             const startNode = t1.start_node_id;
             const endNode = t2.end_node_id;
 
             if (startNode !== endNode) {
               const slotKey = new Date(t1.slot_orario).toISOString();
-              const keyNew = `${slotKey}_${startNode}_${endNode}`;
+              const keyNew = `${slotKey}_${t1.fascia_percorrenza}_${startNode}_${endNode}`;
 
               if (!clusterMap.has(keyNew)) {
-                // I posti di una tratta composta lungo una catena sono limitati dal collo di bottiglia minimo
                 const postiComplessivi = Math.min(t1.posti_totali, t2.posti_totali);
                 clusterMap.set(keyNew, {
                   start_node_id: startNode,
@@ -71,10 +84,12 @@ export async function processaProposteDinamiche() {
                   slot_orario: t1.slot_orario,
                   posti_totali: postiComplessivi,
                   classe_riferimento: t1.classe_riferimento,
+                  dist_km: t1.dist_km + t2.dist_km,
+                  fascia_percorrenza: t1.fascia_percorrenza,
                   is_composta: true
                 });
-                addedNew = true; // Continua il ciclo finché non si scoprono nuove combinazioni transitive
-                console.log(`🔗 [WORKER] Tratta transitiva generata: ${startNode} -> ${endNode} (slot: ${t1.slot_orario})`);
+                addedNew = true;
+                console.log(`🔗 [WORKER] Tratta transitiva [${t1.fascia_percorrenza}] generata: ${startNode} -> ${endNode}`);
               }
             }
           }
@@ -82,160 +97,148 @@ export async function processaProposteDinamiche() {
       }
     }
 
-    const clusters = Array.from(clusterMap.values());
-    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster totali dopo la chiusura transitiva.`);
+    const allClusters = Array.from(clusterMap.values());
+    console.log(`📦 [WORKER] Trovati ${allClusters.length} cluster totali dopo la chiusura transitiva.`);
+
+    const direttriciPerSlotEFascia = new Map();
+    allClusters.forEach(c => {
+      const slotKey = new Date(c.slot_orario).toISOString();
+      const mapKey = `${slotKey}_${c.fascia_percorrenza}`;
+      
+      if (!direttriciPerSlotEFascia.has(mapKey)) {
+        direttriciPerSlotEFascia.set(mapKey, {
+          slot_orario: c.slot_orario,
+          classe_riferimento: c.classe_riferimento,
+          fascia_percorrenza: c.fascia_percorrenza,
+          nodi: new Set(),
+          clustersInclusi: []
+        });
+      }
+      const dirInfo = direttriciPerSlotEFascia.get(mapKey);
+      dirInfo.nodi.add(c.start_node_id);
+      dirInfo.nodi.add(c.end_node_id);
+      dirInfo.clustersInclusi.push(c);
+    });
 
     const segmentiCoinvoltiIds = [];
 
-    for (const [index, c] of clusters.entries()) {
-      console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
-      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali} ${c.is_composta ? '(Composta)' : ''}`);
+    for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
+      const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
+      const startAssoluto = nodiOrdinati[0];
+      const endAssoluto = nodiOrdinati[nodiOrdinati.length - 1];
 
-      // Inserimento o recupero della direttrice virtuale unificata per slot
+      console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
+      console.log(`    Asse Principale: Node ${startAssoluto} -> Node ${endAssoluto}`);
+
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
         DO UPDATE SET tipo_servizio = EXCLUDED.tipo_servizio
         RETURNING id
-      `, [c.slot_orario, c.start_node_id, c.end_node_id, c.classe_riferimento]);
+      `, [info.slot_orario, startAssoluto, endAssoluto, `${info.classe_riferimento}_${info.fascia_percorrenza}`]);
 
       const direttriceId = dir[0].id;
-      console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
+      console.log(`    ✅ Direttrice ${info.fascia_percorrenza} creata/aggiornata con ID: ${direttriceId}`);
 
-      // Associazione delle richieste dello slot alla direttrice nella tabella ponte (solo per tratte non sintetiche/composte)
-      if (!c.is_composta) {
-        await client.query(`
-          INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
-          SELECT $1, r.id
-          FROM richieste_pop_bus r
-          WHERE r.stato = 'in_attesa'
-            AND r.start_node_id = $2
-            AND r.end_node_id = $3
-            AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
-          ON CONFLICT DO NOTHING
-        `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
-      }
+      const segmentiDaCreare = new Map();
 
-      // LOGICA NODALE / SEGMENTI CON SEQUENZIALITÀ
-      const { rows: segmentiEsistentiDirettrice } = await client.query(`
-        SELECT id, start_node_id, end_node_id, ordine_sequenziale, stato 
-        FROM segmenti 
-        WHERE direttrice_id = $1 
-        ORDER BY ordine_sequenziale ASC NULLS LAST
-      `, [direttriceId]);
+      for (const c of info.clustersInclusi) {
+        const idxStart = nodiOrdinati.indexOf(c.start_node_id);
+        const idxEnd = nodiOrdinati.indexOf(c.end_node_id);
 
-      let maxOrdine = segmentiEsistentiDirettrice.reduce((max, s) => Math.max(max, s.ordine_sequenziale || 0), 0);
+        for (let i = idxStart; i < idxEnd; i++) {
+          const sId = nodiOrdinati[i];
+          const eId = nodiOrdinati[i + 1];
+          const subKey = `${sId}_${eId}`;
+          const currentPosti = segmentiDaCreare.get(subKey) || 0;
+          segmentiDaCreare.set(subKey, currentPosti + c.posti_totali);
+        }
 
-      let segmentoId;
-      const { rows: existingSeg } = await client.query(`
-        SELECT id, stato, ordine_sequenziale FROM segmenti 
-        WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
-        LIMIT 1
-      `, [direttriceId, c.start_node_id, c.end_node_id]);
-
-      if (existingSeg.length > 0) {
-        segmentoId = existingSeg[0].id;
-        const statoCorrente = existingSeg[0].stato;
-
-        if (statoCorrente === 'in_attesa') {
+        if (!c.is_composta) {
           await client.query(`
-            UPDATE segmenti 
-            SET posti_occupati = posti_occupati + $1 
-            WHERE id = $2
-          `, [c.posti_totali, segmentoId]);
-          console.log(`    ✅ Segmento esistente 'in_attesa' aggiornato con ID: ${segmentoId}`);
+            INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
+            SELECT $1, r.id
+            FROM richieste_pop_bus r
+            WHERE r.stato = 'in_attesa'
+              AND r.start_node_id = $2
+              AND r.end_node_id = $3
+              AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
+            ON CONFLICT DO NOTHING
+          `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
+        }
+      }
+
+      for (const c of info.clustersInclusi) {
+        const directKey = `${c.start_node_id}_${c.end_node_id}`;
+        if (!segmentiDaCreare.has(directKey)) {
+          segmentiDaCreare.set(directKey, c.posti_totali);
         } else {
-          maxOrdine += 1;
-          const { rows: newSeg } = await client.query(`
-            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
-            RETURNING id
-          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
-          segmentoId = newSeg[0].id;
-          console.log(`    ✅ Segmento precedente già attivo. Creato nuovo segmento parallelo 'in_attesa' con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
+          segmentiDaCreare.set(directKey, Math.max(segmentiDaCreare.get(directKey), c.posti_totali));
         }
-      } else {
-        maxOrdine += 1;
-        try {
-          const { rows: newSeg } = await client.query(`
-            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
-            RETURNING id
-          `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
-          segmentoId = newSeg[0].id;
-          console.log(`    ✅ Nuovo segmento creato 'in_attesa' con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
-        } catch (insertErr) {
-          if (insertErr.code === '23505') {
-            const { rows: fallbackSeg } = await client.query(`
-              SELECT id, stato FROM segmenti 
-              WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
-              LIMIT 1
-            `, [direttriceId, c.start_node_id, c.end_node_id]);
-            
-            if (fallbackSeg.length > 0) {
-              segmentoId = fallbackSeg[0].id;
-              if (fallbackSeg[0].stato === 'in_attesa') {
-                await client.query(`
-                  UPDATE segmenti 
-                  SET posti_occupati = posti_occupati + $1 
-                  WHERE id = $2
-                `, [c.posti_totali, segmentoId]);
-                console.log(`    ⚠️ Conflitto gestito: aggiornato segmento esistente ID: ${segmentoId}`);
-              } else {
-                const { rows: forcedNew } = await client.query(`
-                  INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-                  VALUES ($1, $2, $3, $4, 'in_attesa', $5)
-                  RETURNING id
-                `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
-                segmentoId = forcedNew[0].id;
-                console.log(`    ✅ Conflitto gestito (già attivo): creato nuovo segmento parallelo con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
-              }
-            } else {
-              const { rows: forcedNew } = await client.query(`
-                INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-                VALUES ($1, $2, $3, $4, 'in_attesa', $5)
-                RETURNING id
-              `, [direttriceId, c.start_node_id, c.end_node_id, c.posti_totali, maxOrdine]);
-              segmentoId = forcedNew[0].id;
-              console.log(`    ✅ Nuovo segmento parallelo forzato creato con ID: ${segmentoId} (Ordine: ${maxOrdine})`);
-            }
-          } else {
-            throw insertErr;
+      }
+
+      let ordineSeq = 0;
+      for (const [subKey, postiTotaliSub] of segmentiDaCreare.entries()) {
+        const [sNode, eNode] = subKey.split('_').map(Number);
+        ordineSeq++;
+
+        const { rows: existingSeg } = await client.query(`
+          SELECT id, stato FROM segmenti 
+          WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
+          LIMIT 1
+        `, [direttriceId, sNode, eNode]);
+
+        let segmentoId;
+        if (existingSeg.length > 0) {
+          segmentoId = existingSeg[0].id;
+          if (existingSeg[0].stato === 'in_attesa') {
+            await client.query(`
+              UPDATE segmenti 
+              SET posti_occupati = GREATEST(posti_occupati, $1) 
+              WHERE id = $2
+            `, [postiTotaliSub, segmentoId]);
           }
+        } else {
+          const { rows: newSeg } = await client.query(`
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
+            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
+            RETURNING id
+          `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
+          segmentoId = newSeg[0].id;
+          console.log(`    ✅ Creato segmento 'in_attesa' [${info.fascia_percorrenza}]: ${sNode} -> ${eNode} (ID: ${segmentoId})`);
         }
-      }
 
-      if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
-        segmentiCoinvoltiIds.push(Number(segmentoId));
-      }
+        if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
+          segmentiCoinvoltiIds.push(Number(segmentoId));
+        }
 
-      // Inserimento / Aggiornamento missioni_ritorno legate al segmento
-      await client.query(`
-        INSERT INTO missioni_ritorno (
-          segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
-        )
-        VALUES (
-          $1, $2, $3, $4, 
-          ($5::timestamptz + 
+        await client.query(`
+          INSERT INTO missioni_ritorno (
+            segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
+          )
+          VALUES (
+            $1, $2, $3, $4, 
+            ($5::timestamptz + 
+              CASE 
+                WHEN $6 = 'alta' THEN INTERVAL '30 minutes'
+                WHEN $6 = 'media' THEN INTERVAL '20 minutes'
+                ELSE INTERVAL '10 minutes'
+              END
+            ), 
+            'in_attesa',
             CASE 
-              WHEN UPPER($6) = 'EXTRAURBANO' THEN INTERVAL '30 minutes'
-              WHEN UPPER($6) = 'SCOLASTICO' THEN INTERVAL '3 hours'
-              ELSE INTERVAL '15 minutes'
+              WHEN $6 = 'alta' THEN 40
+              WHEN $6 = 'media' THEN 25
+              ELSE 15
             END
-          ), 
-          'in_attesa',
-          CASE 
-            WHEN UPPER($6) = 'EXTRAURBANO' THEN 45
-            WHEN UPPER($6) = 'SCOLASTICO' THEN 180
-            ELSE 20
-          END
-        )
-        ON CONFLICT (segmento_id, capolinea_finale_id) 
-        DO UPDATE SET 
-          orario_previsto = EXCLUDED.orario_previsto,
-          nodo_origine = EXCLUDED.nodo_origine
-      `, [segmentoId, direttriceId, c.end_node_id, c.end_node_id, c.slot_orario, c.classe_riferimento]);
+          )
+          ON CONFLICT (segmento_id, capolinea_finale_id) 
+          DO UPDATE SET 
+            orario_previsto = EXCLUDED.orario_previsto,
+            nodo_origine = EXCLUDED.nodo_origine
+        `, [segmentoId, direttriceId, eNode, endAssoluto, info.slot_orario, info.fascia_percorrenza]);
+      }
     }
 
     if (segmentiCoinvoltiIds.length === 0) {
@@ -244,8 +247,8 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE (Basato sul raggiungimento della soglia economica considerando andata e ritorno)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico basato su andata e ritorno...');
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA (con aggregazione ricavi dei segmenti inclusi)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico dei segmenti...');
     
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -260,8 +263,28 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
           (
-            COALESCE(s.posti_occupati, 0) * 2.50 +
-            COALESCE(mr_posti.posti_ritorno, 0) * 2.50
+            SELECT COALESCE(SUM(
+              (COALESCE(s_sub.posti_occupati, 0) + COALESCE(mr_posti_sub.posti_ritorno, 0)) * 2.50
+            ), (COALESCE(s.posti_occupati, 0) + COALESCE(mr_posti.posti_ritorno, 0)) * 2.50)
+            FROM segmenti s_sub
+            LEFT JOIN (
+              SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
+              FROM missioni_ritorno m
+              JOIN richieste_pop_bus r ON r.target_missione_id = m.direttrice_id
+              WHERE r.stato = 'in_attesa'
+              GROUP BY m.segmento_id
+            ) mr_posti_sub ON mr_posti_sub.segmento_id = s_sub.id
+            WHERE s_sub.direttrice_id = s.direttrice_id
+              AND s_sub.ordine_sequenziale >= (
+                SELECT MIN(s_in.ordine_sequenziale) FROM segmenti s_in 
+                WHERE s_in.direttrice_id = s.direttrice_id 
+                  AND s_in.start_node_id >= s.start_node_id
+              )
+              AND s_sub.ordine_sequenziale <= (
+                SELECT MAX(s_in.ordine_sequenziale) FROM segmenti s_in 
+                WHERE s_in.direttrice_id = s.direttrice_id 
+                  AND s_in.end_node_id <= s.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -277,21 +300,16 @@ export async function processaProposteDinamiche() {
           GROUP BY m.segmento_id
         ) mr_posti ON mr_posti.segmento_id = s.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
-        GROUP BY s.id, s.direttrice_id, s.tempo_stimato, s.ordine_sequenziale, s.posti_occupati, mr_posti.posti_ritorno, n1.posizione, n2.posizione, n_orig.posizione, n_dest.posizione
       ),
       min_soglia_pool AS (
-        SELECT 
-          rs.segmento_id,
-          MIN(t.euro_km) as min_euro_km
+        SELECT rs.segmento_id, MIN(t.euro_km) as min_euro_km
         FROM ricavi_segmento rs
         CROSS JOIN tariffe t
         WHERE t.euro_km > 0
         GROUP BY rs.segmento_id
       ),
       costo_attivazione AS (
-        SELECT 
-          rs.*,
-          COALESCE(m.min_euro_km, 0.50) as euro_km_selezionato
+        SELECT rs.*, COALESCE(m.min_euro_km, 0.50) as euro_km_selezionato
         FROM ricavi_segmento rs
         LEFT JOIN min_soglia_pool m ON rs.segmento_id = m.segmento_id
       ),
@@ -300,8 +318,8 @@ export async function processaProposteDinamiche() {
           ca.segmento_id, 
           ca.direttrice_id,
           d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
-              PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
-            ) * INTERVAL '1 minute') as calculated_start,
+            PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
+          ) * INTERVAL '1 minute') as calculated_start,
           ca.ricavo_attuale,
           (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima
         FROM costo_attivazione ca
@@ -327,33 +345,29 @@ export async function processaProposteDinamiche() {
     `, [segmentiCoinvoltiIds]);
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
-    segmentiAttivati.forEach(t => console.log(`    - Segmento ID: ${t.id} (Direttrice ID: ${t.direttrice_id})`));
 
     // 3. AUTO-UPGRADE
-    console.log('🔄 [WORKER] Fase 3: Esecuzione auto-upgrade delle richieste...');
     await client.query(`
       UPDATE richieste_pop_bus r
       SET target_missione_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-         AND d_source.end_node_id = d_target.end_node_id
+           AND d_source.end_node_id = d_target.end_node_id
       WHERE r.target_missione_id = d_source.id
         AND d_source.stato = 'in_attesa'
         AND d_target.stato = 'attivo'
     `);
 
     // 4. DELEGATED DISPATCH
-    console.log('📡 [WORKER] Fase 4: Invio al servizio di dispatch...');
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);
 
     await client.query('COMMIT');
     console.log(`✨ [WORKER] Transazione completata con successo. Segmenti attivi dispatchati: ${countAttive}`);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ [WORKER ERROR] Errore critico durante l\'elaborazione, eseguito ROLLBACK:', err);
+    console.error('❌ [WORKER ERROR] Errore critico:', err);
     throw err;
   } finally {
     client.release();
-    console.log('🔌 [WORKER] Connessione al database rilasciata.\n');
   }
 }

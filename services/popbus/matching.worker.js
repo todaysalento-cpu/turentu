@@ -3,14 +3,14 @@ import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
-  console.log('🔄 [WORKER] Avvio cluster pop-bus...');
+  console.log('🔄 [WORKER] Avvio cluster pop-bus con chiusura transitiva multi-tratta...');
 
   try {
     await client.query('BEGIN');
 
-    // 1. CLUSTERING (Raggruppato per tratta e slot, ignorando la classe per il raggruppamento)
-    console.log('🔍 [WORKER] Fase 1: Ricerca e clustering delle richieste in attesa...');
-    const { rows: clusters } = await client.query(`
+    // 1A. CLUSTERING BASE (Ricerca richieste in attesa per singola tratta e slot)
+    console.log('🔍 [WORKER] Fase 1A: Ricerca e clustering delle richieste in attesa...');
+    const { rows: clustersBase } = await client.query(`
       SELECT 
         r.start_node_id,
         r.end_node_id,
@@ -26,13 +26,70 @@ export async function processaProposteDinamiche() {
       GROUP BY r.start_node_id, r.end_node_id, slot_orario
     `);
 
-    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster di richieste validi da elaborare.`);
+    // Mappa per aggregare le tratte base e quelle composte derivate
+    const clusterMap = new Map();
+
+    clustersBase.forEach(c => {
+      const slotKey = new Date(c.slot_orario).toISOString();
+      const key = `${slotKey}_${c.start_node_id}_${c.end_node_id}`;
+      clusterMap.set(key, {
+        start_node_id: c.start_node_id,
+        end_node_id: c.end_node_id,
+        slot_orario: c.slot_orario,
+        posti_totali: Number(c.posti_totali),
+        classe_riferimento: c.classe_riferimento,
+        is_composta: false
+      });
+    });
+
+    // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA (Supporto per catene arbitrarie AB -> BC -> CD -> ...)
+    let addedNew = true;
+    while (addedNew) {
+      addedNew = false;
+      const currentTratte = Array.from(clusterMap.values());
+
+      for (const t1 of currentTratte) {
+        for (const t2 of currentTratte) {
+          const slot1 = new Date(t1.slot_orario).getTime();
+          const slot2 = new Date(t2.slot_orario).getTime();
+
+          // Se la fine di t1 combacia con l'inizio di t2 nello stesso slot
+          if (t1.end_node_id === t2.start_node_id && slot1 === slot2) {
+            const startNode = t1.start_node_id;
+            const endNode = t2.end_node_id;
+
+            if (startNode !== endNode) {
+              const slotKey = new Date(t1.slot_orario).toISOString();
+              const keyNew = `${slotKey}_${startNode}_${endNode}`;
+
+              if (!clusterMap.has(keyNew)) {
+                // I posti di una tratta composta lungo una catena sono limitati dal collo di bottiglia minimo
+                const postiComplessivi = Math.min(t1.posti_totali, t2.posti_totali);
+                clusterMap.set(keyNew, {
+                  start_node_id: startNode,
+                  end_node_id: endNode,
+                  slot_orario: t1.slot_orario,
+                  posti_totali: postiComplessivi,
+                  classe_riferimento: t1.classe_riferimento,
+                  is_composta: true
+                });
+                addedNew = true; // Continua il ciclo finché non si scoprono nuove combinazioni transitive
+                console.log(`🔗 [WORKER] Tratta transitiva generata: ${startNode} -> ${endNode} (slot: ${t1.slot_orario})`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const clusters = Array.from(clusterMap.values());
+    console.log(`📦 [WORKER] Trovati ${clusters.length} cluster totali dopo la chiusura transitiva.`);
 
     const segmentiCoinvoltiIds = [];
 
     for (const [index, c] of clusters.entries()) {
       console.log(`--- Elaborazione Cluster [${index + 1}/${clusters.length}] ---`);
-      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali}`);
+      console.log(`    Tratta: Node ${c.start_node_id} -> Node ${c.end_node_id} | Slot: ${c.slot_orario} | Posti Totali: ${c.posti_totali} ${c.is_composta ? '(Composta)' : ''}`);
 
       // Inserimento o recupero della direttrice virtuale unificata per slot
       const { rows: dir } = await client.query(`
@@ -46,17 +103,19 @@ export async function processaProposteDinamiche() {
       const direttriceId = dir[0].id;
       console.log(`    ✅ Direttrice virtuale assicurata con ID: ${direttriceId}`);
 
-      // Associazione delle richieste dello slot alla direttrice nella tabella ponte
-      await client.query(`
-        INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
-        SELECT $1, r.id
-        FROM richieste_pop_bus r
-        WHERE r.stato = 'in_attesa'
-          AND r.start_node_id = $2
-          AND r.end_node_id = $3
-          AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
-        ON CONFLICT DO NOTHING
-      `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
+      // Associazione delle richieste dello slot alla direttrice nella tabella ponte (solo per tratte non sintetiche/composte)
+      if (!c.is_composta) {
+        await client.query(`
+          INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
+          SELECT $1, r.id
+          FROM richieste_pop_bus r
+          WHERE r.stato = 'in_attesa'
+            AND r.start_node_id = $2
+            AND r.end_node_id = $3
+            AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
+          ON CONFLICT DO NOTHING
+        `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
+      }
 
       // LOGICA NODALE / SEGMENTI CON SEQUENZIALITÀ
       const { rows: segmentiEsistentiDirettrice } = await client.query(`
@@ -66,10 +125,8 @@ export async function processaProposteDinamiche() {
         ORDER BY ordine_sequenziale ASC NULLS LAST
       `, [direttriceId]);
 
-      // Calcolo dinamico dell'ordine sequenziale progressivo
       let maxOrdine = segmentiEsistentiDirettrice.reduce((max, s) => Math.max(max, s.ordine_sequenziale || 0), 0);
 
-      // Verifichiamo se esiste già un segmento identico per la tratta corrente
       let segmentoId;
       const { rows: existingSeg } = await client.query(`
         SELECT id, stato, ordine_sequenziale FROM segmenti 

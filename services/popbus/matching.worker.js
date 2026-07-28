@@ -149,14 +149,13 @@ export async function processaProposteDinamiche() {
 
         if (!c.is_composta) {
           await client.query(`
-            INSERT INTO direttrici_richieste (direttrice_id, richiesta_id)
-            SELECT $1, r.id
-            FROM richieste_pop_bus r
-            WHERE r.stato = 'in_attesa'
-              AND r.start_node_id = $2
-              AND r.end_node_id = $3
-              AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) = $4
-            ON CONFLICT DO NOTHING
+            UPDATE richieste_pop_bus
+            SET direttrice_id = $1
+            WHERE stato = 'in_attesa'
+              AND start_node_id = $2
+              AND end_node_id = $3
+              AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM start_datetime) / 3600) * 3600) = $4
+              AND direttrice_id IS NULL
           `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
         }
       }
@@ -264,7 +263,7 @@ export async function processaProposteDinamiche() {
             LEFT JOIN (
               SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
               FROM missioni_ritorno m
-              JOIN richieste_pop_bus r ON r.target_missione_id = m.direttrice_id
+              JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
               WHERE r.stato = 'in_attesa'
               GROUP BY m.segmento_id
             ) mr_posti_sub ON mr_posti_sub.segmento_id = s_sub.id
@@ -291,7 +290,7 @@ export async function processaProposteDinamiche() {
         LEFT JOIN (
           SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
           FROM missioni_ritorno m
-          JOIN richieste_pop_bus r ON r.target_missione_id = m.direttrice_id
+          JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
           WHERE r.stato = 'in_attesa'
           GROUP BY m.segmento_id
         ) mr_posti ON mr_posti.segmento_id = s.id
@@ -345,14 +344,14 @@ export async function processaProposteDinamiche() {
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
-    // 3. AUTO-UPGRADE
+    // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
     await client.query(`
       UPDATE richieste_pop_bus r
-      SET target_missione_id = d_target.id
+      SET direttrice_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
            AND d_source.end_node_id = d_target.end_node_id
-      WHERE r.target_missione_id = d_source.id
+      WHERE r.direttrice_id = d_source.id
         AND d_source.stato = 'in_attesa'
         AND d_target.stato = 'attivo'
     `);

@@ -247,8 +247,8 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE ECONOMICA (con aggregazione ricavi dei segmenti inclusi)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico dei segmenti...');
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA & VALIDAZIONE CAPIENZA FLOTTA
+    console.log('💰 [WORKER] Fase 2: Calcolo economico e verifica capienza flotta...');
     
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -257,6 +257,8 @@ export async function processaProposteDinamiche() {
           s.direttrice_id,
           s.tempo_stimato,
           s.ordine_sequenziale,
+          s.posti_occupati,
+          COALESCE(v.posti_totali, 50) as capacita_veicolo,
           (
             ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
@@ -289,6 +291,8 @@ export async function processaProposteDinamiche() {
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+        JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+        LEFT JOIN veicolo v ON dv.veicolo_id = v.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
@@ -321,6 +325,8 @@ export async function processaProposteDinamiche() {
             PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
           ) * INTERVAL '1 minute') as calculated_start,
           ca.ricavo_attuale,
+          ca.posti_occupati,
+          ca.capacita_veicolo,
           (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima
         FROM costo_attivazione ca
         JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
@@ -332,6 +338,7 @@ export async function processaProposteDinamiche() {
         FROM calcolo_orari co
         WHERE s.id = co.segmento_id
           AND co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
+          AND co.posti_occupati <= co.capacita_veicolo
         RETURNING s.id, s.direttrice_id, s.stato
       ),
       update_direttrici AS (

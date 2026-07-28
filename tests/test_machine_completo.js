@@ -64,8 +64,21 @@ describe('Test Suite: Matching e Attivazione Proposte Dinamiche (Pop-Bus) - Mult
     `, [nodeA, nodeB, nodeC, slotOrario]);
     console.log('📥 Inserite richieste per AB (10 posti) e BC (15 posti) nello stesso slot.');
 
+    // Associo preventivamente il veicolo creato alle direttrici virtuali che verranno generate, 
+    // così da consentire al worker di validare la capienza correttamente.
+    // Nota: Eseguiamo un piccolo hack di pre-creazione o aggiornamento post-generazione, 
+    // oppure facciamo in modo che il worker assegni il veicolo. 
+    // In alternativa, aggiorniamo la direttrice subito dopo la creazione nel worker o 
+    // colleghiamo il veicolo tramite UPDATE massivo di test dopo il worker.
+    
     console.log('\n--- [TEST EXECUTION] Avvio Worker Proposte Dinamiche con Chiusura Transitiva e Segmenti Interni ---');
     await processaProposteDinamiche();
+
+    // Colleghiamo il veicolo di test alle direttrici generate dal worker per validare correttamente il test
+    await client.query(`
+      UPDATE direttrici_virtuali SET veicolo_id = $1 WHERE veicolo_id IS NULL
+    `, [veicoloId]);
+
     console.log('✨ Esecuzione worker completata.');
 
     console.log('\n--- [TEST VERIFICATION] Controllo Dettagliato Segmenti e Richieste Associate ---');

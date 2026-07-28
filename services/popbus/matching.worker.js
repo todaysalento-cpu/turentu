@@ -28,6 +28,7 @@ export async function processaProposteDinamiche() {
     // DEBUG: Stampa le richieste in attesa trovate all'inizio
     const { rows: reqInAttesaIniziali } = await client.query(`SELECT id, start_node_id, end_node_id, posti_richiesti, direttrice_id FROM richieste_pop_bus WHERE stato = 'in_attesa'`);
     console.log(`🔎 [DEBUG DUPLICAZIONE] Richieste totali in stato 'in_attesa' prima del clustering: ${reqInAttesaIniziali.length}`, reqInAttesaIniziali);
+    console.log(`📊 [WORKER] Clusters base grezzi trovati dalla query: ${clustersBase.length}`);
 
     const clusterMap = new Map();
 
@@ -56,9 +57,13 @@ export async function processaProposteDinamiche() {
     });
 
     // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA (vincolata alla stessa fascia di percorrenza)
+    console.log('🔗 [WORKER] Fase 1B: Avvio chiusura transitiva multi-tratta...');
     let addedNew = true;
+    let iterazioneTransitiva = 0;
+
     while (addedNew) {
       addedNew = false;
+      iterazioneTransitiva++;
       const currentTratte = Array.from(clusterMap.values());
 
       for (const t1 of currentTratte) {
@@ -86,7 +91,7 @@ export async function processaProposteDinamiche() {
                   is_composta: true
                 });
                 addedNew = true;
-                console.log(`🔗 [WORKER] Tratta transitiva [${t1.fascia_percorrenza}] generata: ${startNode} -> ${endNode}`);
+                console.log(`🔗 [WORKER-ITER:${iterazioneTransitiva}] Tratta transitiva [${t1.fascia_percorrenza}] generata: ${startNode} -> ${endNode} (Posti: ${postiComplessivi})`);
               }
             }
           }
@@ -129,6 +134,7 @@ export async function processaProposteDinamiche() {
 
       console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
       console.log(`    Asse Principale: Node ${startAssoluto} -> Node ${endAssoluto}`);
+      console.log(`    Nodi coinvolti ordinati:`, nodiOrdinati);
 
       const { rows: dir } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
@@ -167,7 +173,7 @@ export async function processaProposteDinamiche() {
               AND direttrice_id IS NULL
           `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
           
-          console.log(`    🔍 [DEBUG DUPLICAZIONE] Agganciate ${updateRes.rowCount} richieste alla direttrice ${direttriceId} per tratta ${c.start_node_id}->${c.end_node_id}:`, updateRes.rows.map(r => r.id));
+          console.log(`    🔍 [DEBUG DUPLICAZIONE] Agganciate ${updateRes.rowCount} richieste alla direttrice ${direttriceId} per tratta ${c.start_node_id}->${c.end_node_id}`);
         }
       }
 
@@ -194,6 +200,7 @@ export async function processaProposteDinamiche() {
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
+          console.log(`    ℹ️ Segmento esistente trovato: ${sNode} -> ${eNode} (ID: ${segmentoId}, Stato: ${existingSeg[0].stato})`);
           if (existingSeg[0].stato === 'in_attesa') {
             await client.query(`
               UPDATE segmenti 
@@ -208,7 +215,7 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Creato segmento 'in_attesa': ${sNode} -> ${eNode} (ID: ${segmentoId})`);
+          console.log(`    ✅ Creato segmento 'in_attesa': ${sNode} -> ${eNode} (ID: ${segmentoId}) con posti: ${postiTotaliSub}`);
         }
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -236,12 +243,14 @@ export async function processaProposteDinamiche() {
             END
           )
           ON CONFLICT (segmento_id, capolinea_finale_id) 
-          DO UPDATE SET 
+          UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
         `, [segmentoId, direttriceId, eNode, endAssoluto, info.slot_orario, info.fascia_percorrenza]);
       }
     }
+
+    console.log(`📋 [WORKER] ID segmenti totali coinvolti da valutare:`, segmentiCoinvoltiIds);
 
     if (segmentiCoinvoltiIds.length === 0) {
       console.log('ℹ️ [WORKER] Nessun segmento da valutare in questa esecuzione.');
@@ -353,7 +362,7 @@ export async function processaProposteDinamiche() {
       SELECT id, direttrice_id, stato FROM update_segmenti
     `, [segmentiCoinvoltiIds]);
 
-    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
+    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`, segmentiAttivati);
 
     // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
     // 🛡️ [CORRETTO] Controllo su 'in_formazione' anziché 'in_attesa' per evitare loop ed errori
@@ -362,7 +371,7 @@ export async function processaProposteDinamiche() {
       SET direttrice_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-           AND d_source.end_node_id = d_target.end_node_id
+            AND d_source.end_node_id = d_target.end_node_id
       WHERE r.direttrice_id = d_source.id
         AND d_source.stato = 'in_formazione'
         AND d_target.stato = 'attivo'
@@ -373,6 +382,7 @@ export async function processaProposteDinamiche() {
     console.log(`🔄 [DEBUG DUPLICAZIONE] Auto-upgrade eseguito su ${upgradeRes.rowCount} richieste:`, upgradeRes.rows);
 
     // 4. DELEGATED DISPATCH
+    console.log(`📤 [WORKER] Avvio dispatch delegato per i segmenti attivi...`);
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);
 
     await client.query('COMMIT');

@@ -74,14 +74,21 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`⏰ [DEBUG-DATE:${requestId}] Interpretato in ISO dal server:`, new Date(slot.start_datetime).toISOString());
 
       const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
+      
+      // 🔍 LOG AGGIUNTIVO PER VERIFICARE L'EVALUazione PopBus
+      console.log(`🔍 [DEBUG-POPBUS:${requestId}] Slot ${slot.id} valutato come isPopBus = ${isPopBus} (is_pool: ${slot.is_pool})`);
 
       let savedRow;
 
       if (isPopBus) {
+        console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${slot.origine.lat}, ${slot.origine.lon}) e destinazione: (${slot.destinazione.lat}, ${slot.destinazione.lon})`);
+
         const nodeRes = await client.query(
           `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
           [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
         );
+
+        console.log(`🗺️ [DEBUG-NODES:${requestId}] Nodi restituiti dal DB -> start_node_id: ${nodeRes.rows[0]?.start}, end_node_id: ${nodeRes.rows[0]?.end}`);
 
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (
@@ -106,6 +113,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         );
 
         savedRow = result.rows[0];
+        console.log(`✅ [DEBUG-INSERT:${requestId}] Inserimento richieste_pop_bus completato con ID: ${savedRow.id}, start_node: ${savedRow.start_node_id}, end_node: ${savedRow.end_node_id}`);
 
       } else {
         if (slot.veicolo_id === undefined || slot.veicolo_id === null) {

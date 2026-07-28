@@ -31,10 +31,6 @@ export async function processaProposteDinamiche() {
     clustersBase.forEach(c => {
       const dist = Number(c.dist_km || 0);
       
-      // Classificazione della percorrenza in base ai chilometri:
-      // - bassa: < 20 km
-      // - media: tra 20 e 60 km inclusi
-      // - alta: > 60 km
       let fasciaPercorrenza = 'bassa';
       if (dist > 60) {
         fasciaPercorrenza = 'alta';
@@ -343,7 +339,7 @@ export async function processaProposteDinamiche() {
       ),
       update_direttrici AS (
         UPDATE direttrici_virtuali dv
-        SET stato = 'attivo'
+        SET stato = 'in_attesa_autista'
         FROM update_segmenti us
         WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
         RETURNING dv.id
@@ -353,17 +349,16 @@ export async function processaProposteDinamiche() {
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
-    // 3. AUTO-UPGRADE
+    // 3. ASSEGNAZIONE RICHIESTE ALLE DIRETTRICI ATTIVATE (Collegamento tramite direttrici_richieste)
     await client.query(`
       UPDATE richieste_pop_bus r
-      SET target_missione_id = d_target.id
-      FROM direttrici_virtuali d_source
-      JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-           AND d_source.end_node_id = d_target.end_node_id
-      WHERE r.target_missione_id = d_source.id
-        AND d_source.stato = 'in_attesa'
-        AND d_target.stato = 'attivo'
-    `);
+      SET target_missione_id = dr.direttrice_id
+      FROM direttrici_richieste dr
+      JOIN segmenti s ON s.direttrice_id = dr.direttrice_id
+      WHERE dr.richiesta_id = r.id
+        AND s.id = ANY($1::int[])
+        AND (r.target_missione_id IS NULL OR r.target_missione_id <> dr.direttrice_id)
+    `, [segmentiAttivati.map(s => s.id)]);
 
     // 4. DELEGATED DISPATCH
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);

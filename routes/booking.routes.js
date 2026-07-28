@@ -45,7 +45,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     let paymentIntent = null;
 
-    // Se NON paga con il wallet, creiamo il PaymentIntent su Stripe
     if (!pagatoConWallet) {
       paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(prezzo * 100),
@@ -58,7 +57,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     await client.query('BEGIN');
     const pendingRows = [];
 
-    // Se ha pagato con il wallet, registriamo l'importo negativo senza colonne inesistenti
     if (pagatoConWallet) {
       await client.query(
         `INSERT INTO transazioni_wallet (utente_id, tipo, importo, riferimento_id) 
@@ -67,150 +65,128 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       );
     }
 
-    for (const slot of slots) {
-      console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
-      
-      console.log(`⏰ [DEBUG-DATE:${requestId}] Slot ${slot.id} - start_datetime grezzo dal client:`, slot.start_datetime);
-      console.log(`⏰ [DEBUG-DATE:${requestId}] Interpretato in ISO dal server:`, new Date(slot.start_datetime).toISOString());
+    // 🔒 GESTIONE POP BUS: Forziamo l'elaborazione di UN SOLO slot (il primo o quello selezionato)
+    const slot = slots.find(s => s.selected === true) || slots[0];
+    
+    console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
-      const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
-      
-      // 🔍 LOG AGGIUNTIVO PER VERIFICARE L'EVALUazione PopBus
-      console.log(`🔍 [DEBUG-POPBUS:${requestId}] Slot ${slot.id} valutato come isPopBus = ${isPopBus} (is_pool: ${slot.is_pool})`);
+    const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
 
-      let savedRow;
+    let savedRow;
 
-      if (isPopBus) {
-        console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${slot.origine.lat}, ${slot.origine.lon}) e destinazione: (${slot.destinazione.lat}, ${slot.destinazione.lon})`);
+    if (isPopBus) {
+      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${slot.origine.lat}, ${slot.origine.lon}) e destinazione: (${slot.destinazione.lat}, ${slot.destinazione.lon})`);
 
-        const nodeRes = await client.query(
-          `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-          [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
-        );
+      const nodeRes = await client.query(
+        `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
+        [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
+      );
 
-        console.log(`🗺️ [DEBUG-NODES:${requestId}] Nodi restituiti dal DB -> start_node_id: ${nodeRes.rows[0]?.start}, end_node_id: ${nodeRes.rows[0]?.end}`);
+      console.log(`🗺️ [DEBUG-NODES:${requestId}] Nodi restituiti dal DB -> start_node_id: ${nodeRes.rows[0]?.start}, end_node_id: ${nodeRes.rows[0]?.end}`);
 
-        const result = await client.query(
-          `INSERT INTO richieste_pop_bus (
-            cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-            start_node_id, end_node_id
-          )
-            VALUES (
-            $1,
-            ST_SetSRID(ST_MakePoint($2,$3),4326),
-            ST_SetSRID(ST_MakePoint($4,$5),4326),
-            $6, $7, 'in_attesa', $8, $9
-          ) RETURNING *`,
-          [
-            clienteId,
-            slot.origine.lon, slot.origine.lat,
-            slot.destinazione.lon, slot.destinazione.lat,
-            slot.start_datetime,
-            slot.posti_richiesti,
-            nodeRes.rows[0].start,
-            nodeRes.rows[0].end
-          ]
-        );
+      const result = await client.query(
+        `INSERT INTO richieste_pop_bus (
+          cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
+          start_node_id, end_node_id, classe
+        )
+          VALUES (
+          $1,
+          ST_SetSRID(ST_MakePoint($2,$3),4326),
+          ST_SetSRID(ST_MakePoint($4,$5),4326),
+          $6, $7, 'in_attesa', $8, $9, $10
+        ) RETURNING *`,
+        [
+          clienteId,
+          slot.origine.lon, slot.origine.lat,
+          slot.destinazione.lon, slot.destinazione.lat,
+          slot.start_datetime,
+          slot.posti_richiesti || 1,
+          nodeRes.rows[0].start,
+          nodeRes.rows[0].end,
+          slot.classe || 'STANDARD'
+        ]
+      );
 
-        savedRow = result.rows[0];
-        console.log(`✅ [DEBUG-INSERT:${requestId}] Inserimento richieste_pop_bus completato con ID: ${savedRow.id}, start_node: ${savedRow.start_node_id}, end_node: ${savedRow.end_node_id}`);
+      savedRow = result.rows[0];
+      console.log(`✅ [DEBUG-INSERT:${requestId}] Inserimento richieste_pop_bus completato con ID: ${savedRow.id}`);
 
-      } else {
-        if (slot.veicolo_id === undefined || slot.veicolo_id === null) {
-          console.error(`🚨 [PAYMENT:${requestId}] ERRORE CRITICO: Lo slot ${slot.id} non ha veicolo_id!`);
-          throw new Error(`Dato corrotto: veicolo_id mancante per lo slot ${slot.id}`);
-        }
-
-        const distanza = slot.distanzaKm || 0;
-        const durata = slot.durata_minuti || 0;
-
-        const result = await client.query(
-          `INSERT INTO pending (
-            veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
-            distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id
-          )
-            VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            ST_SetSRID(ST_MakePoint($10,$11),4326),
-            ST_SetSRID(ST_MakePoint($12,$13),4326),
-            'pending', $14, $15
-          ) RETURNING *`,
-          [
-            slot.veicolo_id,
-            clienteId,
-            slot.start_datetime,
-            slot.posti_richiesti,
-            type,
-            (prezzo / slots.length),
-            distanza,
-            durata,
-            expiresAt,
-            slot.origine.lon,
-            slot.origine.lat,
-            slot.destinazione.lon,
-            slot.destinazione.lat,
-            pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
-            requestId
-          ]
-        );
-
-        savedRow = result.rows[0];
-        await upsertPrenotazione(savedRow);
+    } else {
+      if (slot.veicolo_id === undefined || slot.veicolo_id === null) {
+        console.error(`🚨 [PAYMENT:${requestId}] ERRORE CRITICO: Lo slot ${slot.id} non ha veicolo_id!`);
+        throw new Error(`Dato corrotto: veicolo_id mancante per lo slot ${slot.id}`);
       }
-      
-      pendingRows.push(savedRow);
-      console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
-      // ================= NOTIFICA DRIVER / ADMIN =================
-      try {
-        const adminRes = await pool.query(
-          "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
-        );
+      const distanza = slot.distanzaKm || 0;
+      const durata = slot.durata_minuti || 0;
 
-        const adminId = adminRes.rows[0]?.id;
-        const targetId = savedRow.autista_id || adminId;
+      const result = await client.query(
+        `INSERT INTO pending (
+          veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
+          distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id
+        )
+          VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9,
+          ST_SetSRID(ST_MakePoint($10,$11),4326),
+          ST_SetSRID(ST_MakePoint($12,$13),4326),
+          'pending', $14, $15
+        ) RETURNING *`,
+        [
+          slot.veicolo_id,
+          clienteId,
+          slot.start_datetime,
+          slot.posti_richiesti || 1,
+          type,
+          prezzo,
+          distanza,
+          durata,
+          expiresAt,
+          slot.origine.lon,
+          slot.origine.lat,
+          slot.destinazione.lon,
+          slot.destinazione.lat,
+          pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
+          requestId
+        ]
+      );
 
-        if (!targetId || Number.isNaN(Number(targetId))) {
-          throw new Error(`targetId non valido: ${targetId}`);
-        }
+      savedRow = result.rows[0];
+      await upsertPrenotazione(savedRow);
+    }
+    
+    pendingRows.push(savedRow);
+    console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
-        const role = savedRow.autista_id ? 'driver' : 'admin';
-        console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
+    // ================= NOTIFICA DRIVER / ADMIN =================
+    try {
+      const adminRes = await pool.query(
+        "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
+      );
 
+      const adminId = adminRes.rows[0]?.id;
+      const targetId = savedRow.autista_id || adminId;
+
+      if (targetId && !Number.isNaN(Number(targetId))) {
         await notifyUser(Number(targetId), {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
-          role,
-          data: { 
-            requestId, 
-            rowId: savedRow.id, 
-            type, 
-            start_datetime: slot.start_datetime 
-          }
+          role: savedRow.autista_id ? 'driver' : 'admin',
+          data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
         });
-
-      } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY_ADMIN] Errore notifica:`, notifyErr);
       }
+    } catch (notifyErr) {
+      console.error(`⚠️ [NOTIFY_ADMIN] Errore notifica:`, notifyErr);
+    }
 
-      // ================= NOTIFICA CLIENTE =================
-      try {
-        console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
-        
-        await notifyUser(Number(clienteId), {
-          type: 'REQUEST_CREATED',
-          message: `La tua richiesta è stata inviata correttamente`,
-          role: 'cliente',
-          data: { 
-            requestId, 
-            rowId: savedRow.id, 
-            type, 
-            start_datetime: slot.start_datetime 
-          }
-        });
-      } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY_CLIENT] Errore notifica:`, notifyErr);
-      }
+    // ================= NOTIFICA CLIENTE =================
+    try {
+      await notifyUser(Number(clienteId), {
+        type: 'REQUEST_CREATED',
+        message: `La tua richiesta è stata inviata correttamente`,
+        role: 'cliente',
+        data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
+      });
+    } catch (notifyErr) {
+      console.error(`⚠️ [NOTIFY_CLIENT] Errore notifica:`, notifyErr);
     }
 
     await client.query('COMMIT');

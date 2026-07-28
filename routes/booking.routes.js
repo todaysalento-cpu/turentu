@@ -65,8 +65,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       );
     }
 
-    // 🔒 GESTIONE POP BUS: Forziamo l'elaborazione di UN SOLO slot (il primo o quello selezionato)
-    const slot = slots.find(s => s.selected === true) || slots[0];
+    // 🔒 GESTIONE POP BUS: Forziamo l'elaborazione RIGOROSA di UN SOLO slot (il primo dell'array)
+    const slot = slots[0];
     
     console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 

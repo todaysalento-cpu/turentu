@@ -150,7 +150,7 @@ export async function processaProposteDinamiche() {
         if (!c.is_composta) {
           await client.query(`
             UPDATE richieste_pop_bus
-            SET direttrice_id = $1
+            SET direttrice_id = $1, stato = 'in_lavorazione'
             WHERE stato = 'in_attesa'
               AND start_node_id = $2
               AND end_node_id = $3
@@ -264,7 +264,7 @@ export async function processaProposteDinamiche() {
               SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
               FROM missioni_ritorno m
               JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
-              WHERE r.stato = 'in_attesa'
+              WHERE r.stato IN ('in_attesa', 'in_lavorazione')
               GROUP BY m.segmento_id
             ) mr_posti_sub ON mr_posti_sub.segmento_id = s_sub.id
             WHERE s_sub.direttrice_id = s.direttrice_id
@@ -291,7 +291,7 @@ export async function processaProposteDinamiche() {
           SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
           FROM missioni_ritorno m
           JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
-          WHERE r.stato = 'in_attesa'
+          WHERE r.stato IN ('in_attesa', 'in_lavorazione')
           GROUP BY m.segmento_id
         ) mr_posti ON mr_posti.segmento_id = s.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'

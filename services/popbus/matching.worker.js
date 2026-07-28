@@ -243,7 +243,7 @@ export async function processaProposteDinamiche() {
             END
           )
           ON CONFLICT (segmento_id, capolinea_finale_id) 
-          UPDATE SET 
+          DO UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
         `, [segmentoId, direttriceId, eNode, endAssoluto, info.slot_orario, info.fascia_percorrenza]);

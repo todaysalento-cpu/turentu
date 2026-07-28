@@ -119,15 +119,12 @@ export async function processaProposteDinamiche() {
     const segmentiCoinvoltiIds = [];
 
     for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
-      // 🛑 CORRETTO: Evitiamo il sort numerico globale che invertiva la rotta.
-      // Usiamo il primo cluster di partenza e l'ultimo di arrivo per definire l'asse principale.
       const clusterIniziale = info.clustersInclusi.reduce((prev, curr) => prev.start_node_id < curr.start_node_id ? prev : curr);
       const clusterFinale = info.clustersInclusi.reduce((prev, curr) => prev.end_node_id > curr.end_node_id ? prev : curr);
       
       const startAssoluto = clusterIniziale.start_node_id;
       const endAssoluto = clusterFinale.end_node_id;
 
-      // Lista ordinata dei nodi univoci usata per mappare i sotto-segmenti intermedi
       const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
 
       console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
@@ -159,7 +156,7 @@ export async function processaProposteDinamiche() {
         }
 
         if (!c.is_composta) {
-          // DEBUG: Controlliamo quali richieste vengono agganciate a questa direttrice
+          // 🛡️ [CORRETTO] Aggiunto controllo rigoroso per evitare ripescaggi multipli
           const updateRes = await client.query(`
             UPDATE richieste_pop_bus
             SET direttrice_id = $1, stato = 'in_lavorazione'
@@ -168,7 +165,6 @@ export async function processaProposteDinamiche() {
               AND end_node_id = $3
               AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM start_datetime) / 3600) * 3600) = $4
               AND direttrice_id IS NULL
-            RETURNING id, start_node_id, end_node_id
           `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
           
           console.log(`    🔍 [DEBUG DUPLICAZIONE] Agganciate ${updateRes.rowCount} richieste alla direttrice ${direttriceId} per tratta ${c.start_node_id}->${c.end_node_id}:`, updateRes.rows.map(r => r.id));
@@ -360,6 +356,7 @@ export async function processaProposteDinamiche() {
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
     // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
+    // 🛡️ [CORRETTO] Controllo su 'in_formazione' anziché 'in_attesa' per evitare loop ed errori
     const upgradeRes = await client.query(`
       UPDATE richieste_pop_bus r
       SET direttrice_id = d_target.id
@@ -367,8 +364,9 @@ export async function processaProposteDinamiche() {
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
            AND d_source.end_node_id = d_target.end_node_id
       WHERE r.direttrice_id = d_source.id
-        AND d_source.stato = 'in_attesa'
+        AND d_source.stato = 'in_formazione'
         AND d_target.stato = 'attivo'
+        AND d_source.id <> d_target.id
       RETURNING r.id, r.direttrice_id as nuova_direttrice_id
     `);
     

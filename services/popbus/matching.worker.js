@@ -3,12 +3,12 @@ import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
-  console.log('🔄 [WORKER] Avvio cluster pop-bus con separazione per classe/fascia di percorrenza (bassa, media, alta)...');
+  console.log('🔄 [WORKER] Avvio cluster pop-bus con separazione per sola fascia di percorrenza (bassa, media, alta)...');
 
   try {
     await client.query('BEGIN');
 
-    // 1A. CLUSTERING BASE CON CLASSIFICAZIONE DELLA PERCORRENZA
+    // 1A. CLUSTERING BASE (Senza separazione per classe, solo per tratta e slot orario)
     console.log('🔍 [WORKER] Fase 1A: Ricerca e clustering delle richieste in attesa...');
     const { rows: clustersBase } = await client.query(`
       SELECT 
@@ -16,7 +16,6 @@ export async function processaProposteDinamiche() {
         r.end_node_id,
         TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM r.start_datetime) / 3600) * 3600) as slot_orario,
         SUM(r.posti_richiesti) as posti_totali,
-        MAX(r.classe) as classe_riferimento,
         MAX(ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as dist_km
       FROM richieste_pop_bus r
       JOIN nodi_direttrice n1 ON r.start_node_id = n1.id
@@ -46,7 +45,6 @@ export async function processaProposteDinamiche() {
         end_node_id: Number(c.end_node_id),
         slot_orario: c.slot_orario,
         posti_totali: Number(c.posti_totali),
-        classe_riferimento: c.classe_riferimento,
         dist_km: dist,
         fascia_percorrenza: fasciaPercorrenza,
         is_composta: false
@@ -79,7 +77,6 @@ export async function processaProposteDinamiche() {
                   end_node_id: endNode,
                   slot_orario: t1.slot_orario,
                   posti_totali: postiComplessivi,
-                  classe_riferimento: t1.classe_riferimento,
                   dist_km: t1.dist_km + t2.dist_km,
                   fascia_percorrenza: t1.fascia_percorrenza,
                   is_composta: true
@@ -104,7 +101,6 @@ export async function processaProposteDinamiche() {
       if (!direttriciPerSlotEFascia.has(mapKey)) {
         direttriciPerSlotEFascia.set(mapKey, {
           slot_orario: c.slot_orario,
-          classe_riferimento: c.classe_riferimento,
           fascia_percorrenza: c.fascia_percorrenza,
           nodi: new Set(),
           clustersInclusi: []
@@ -132,10 +128,10 @@ export async function processaProposteDinamiche() {
         ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
         DO UPDATE SET tipo_servizio = EXCLUDED.tipo_servizio
         RETURNING id
-      `, [info.slot_orario, startAssoluto, endAssoluto, `${info.classe_riferimento}_${info.fascia_percorrenza}`]);
+      `, [info.slot_orario, startAssoluto, endAssoluto, `STANDARD_${info.fascia_percorrenza}`]);
 
       const direttriceId = dir[0].id;
-      console.log(`    ✅ Direttrice ${info.fascia_percorrenza} creata/aggiornata con ID: ${direttriceId}`);
+      console.log(`    ✅ Direttrice creata/aggiornata con ID: ${direttriceId}`);
 
       const segmentiDaCreare = new Map();
 
@@ -202,7 +198,7 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Creato segmento 'in_attesa' [${info.fascia_percorrenza}]: ${sNode} -> ${eNode} (ID: ${segmentoId})`);
+          console.log(`    ✅ Creato segmento 'in_attesa': ${sNode} -> ${eNode} (ID: ${segmentoId})`);
         }
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -339,7 +335,7 @@ export async function processaProposteDinamiche() {
       ),
       update_direttrici AS (
         UPDATE direttrici_virtuali dv
-        SET stato = 'in_attesa_autista'
+        SET stato = 'attivo'
         FROM update_segmenti us
         WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
         RETURNING dv.id
@@ -349,16 +345,17 @@ export async function processaProposteDinamiche() {
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
-    // 3. ASSEGNAZIONE RICHIESTE ALLE DIRETTRICI ATTIVATE (Collegamento tramite direttrici_richieste)
+    // 3. AUTO-UPGRADE
     await client.query(`
       UPDATE richieste_pop_bus r
-      SET target_missione_id = dr.direttrice_id
-      FROM direttrici_richieste dr
-      JOIN segmenti s ON s.direttrice_id = dr.direttrice_id
-      WHERE dr.richiesta_id = r.id
-        AND s.id = ANY($1::int[])
-        AND (r.target_missione_id IS NULL OR r.target_missione_id <> dr.direttrice_id)
-    `, [segmentiAttivati.map(s => s.id)]);
+      SET target_missione_id = d_target.id
+      FROM direttrici_virtuali d_source
+      JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
+           AND d_source.end_node_id = d_target.end_node_id
+      WHERE r.target_missione_id = d_source.id
+        AND d_source.stato = 'in_attesa'
+        AND d_target.stato = 'attivo'
+    `);
 
     // 4. DELEGATED DISPATCH
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);

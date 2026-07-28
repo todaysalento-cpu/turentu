@@ -119,9 +119,16 @@ export async function processaProposteDinamiche() {
     const segmentiCoinvoltiIds = [];
 
     for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
+      // 🛑 CORRETTO: Evitiamo il sort numerico globale che invertiva la rotta.
+      // Usiamo il primo cluster di partenza e l'ultimo di arrivo per definire l'asse principale.
+      const clusterIniziale = info.clustersInclusi.reduce((prev, curr) => prev.start_node_id < curr.start_node_id ? prev : curr);
+      const clusterFinale = info.clustersInclusi.reduce((prev, curr) => prev.end_node_id > curr.end_node_id ? prev : curr);
+      
+      const startAssoluto = clusterIniziale.start_node_id;
+      const endAssoluto = clusterFinale.end_node_id;
+
+      // Lista ordinata dei nodi univoci usata per mappare i sotto-segmenti intermedi
       const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
-      const startAssoluto = nodiOrdinati[0];
-      const endAssoluto = nodiOrdinati[nodiOrdinati.length - 1];
 
       console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
       console.log(`    Asse Principale: Node ${startAssoluto} -> Node ${endAssoluto}`);

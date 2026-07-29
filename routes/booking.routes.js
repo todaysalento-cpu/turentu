@@ -21,14 +21,21 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   try {
     const { type, prezzo, slots, usaWallet } = req.body;
 
-    if (!prezzo || prezzo <= 0) return res.status(400).json({ error: 'Prezzo non valido' });
-    if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
+    if (!prezzo || prezzo <= 0) {
+      console.warn(`⚠️ [PAYMENT:${requestId}] Prezzo non valido: ${prezzo}`);
+      return res.status(400).json({ error: 'Prezzo non valido' });
+    }
+    if (!slots || !Array.isArray(slots) || slots.length === 0) {
+      console.warn(`⚠️ [PAYMENT:${requestId}] Slots mancanti o non validi`);
+      return res.status(400).json({ error: 'Slots mancanti' });
+    }
 
     const clienteId = req.user.id;
     let pagatoConWallet = false;
 
     // ================= CONTROLLO E GESTIONE WALLET =================
     if (usaWallet) {
+      console.log(`👛 [PAYMENT:${requestId}] Controllo saldo wallet per utente: ${clienteId}`);
       const saldoRes = await client.query(
         'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
         [clienteId]
@@ -46,23 +53,29 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     let paymentIntent = null;
 
     if (!pagatoConWallet) {
+      console.log(`💳 [PAYMENT:${requestId}] Creazione Stripe PaymentIntent per importo: €${prezzo}`);
       paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(prezzo * 100),
         currency: 'eur',
         metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
         capture_method: 'manual',
       });
+      console.log(`💳 [PAYMENT:${requestId}}] Stripe PaymentIntent creato con ID: ${paymentIntent.id}`);
     }
     
     await client.query('BEGIN');
+    console.log(`🔄 [PAYMENT:${requestId}] Transazione SQL avviata (BEGIN)`);
+
     const pendingRows = [];
 
     if (pagatoConWallet) {
+      console.log(`📝 [PAYMENT:${requestId}] Inserimento transazione wallet nel DB...`);
       await client.query(
         `INSERT INTO transazioni_wallet (utente_id, tipo, importo, riferimento_id) 
          VALUES ($1, 'pagamento_corsa', $2, $3)`,
         [clienteId, -parseFloat(prezzo), requestId]
       );
+      console.log(`✅ [PAYMENT:${requestId}] Transazione wallet registrata.`);
     }
 
     // 🔒 GESTIONE POP BUS: Forziamo l'elaborazione RIGOROSA di UN SOLO slot (il primo dell'array)
@@ -119,6 +132,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const distanza = slot.distanzaKm || 0;
       const durata = slot.durata_minuti || 0;
 
+      console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}`);
+
       const result = await client.query(
         `INSERT INTO pending (
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
@@ -150,6 +165,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       );
 
       savedRow = result.rows[0];
+      console.log(`✅ [DEBUG-INSERT:${requestId}] Inserimento pending completato con ID: ${savedRow.id}`);
+
+      console.log(`📦 [DEBUG-CACHE:${requestId}] Aggiornamento cache prenotazioni per ID: ${savedRow.id}`);
       await upsertPrenotazione(savedRow);
     }
     
@@ -158,6 +176,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     // ================= NOTIFICA DRIVER / ADMIN =================
     try {
+      console.log(`📢 [NOTIFY_ADMIN:${requestId}] Ricerca admin per invio notifica...`);
       const adminRes = await pool.query(
         "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
       );
@@ -166,31 +185,37 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const targetId = savedRow.autista_id || adminId;
 
       if (targetId && !Number.isNaN(Number(targetId))) {
+        console.log(`📢 [NOTIFY_ADMIN:${requestId}] Invio notifica a utente target ID: ${targetId}`);
         await notifyUser(Number(targetId), {
           type: 'NEW_REQUEST',
           message: `Nuova richiesta di prenotazione ricevuta`,
           role: savedRow.autista_id ? 'driver' : 'admin',
           data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
         });
+        console.log(`✅ [NOTIFY_ADMIN:${requestId}] Notifica admin/driver inviata.`);
+      } else {
+        console.log(`⚠️ [NOTIFY_ADMIN:${requestId}] Nessun destinatario valido trovato per la notifica.`);
       }
     } catch (notifyErr) {
-      console.error(`⚠️ [NOTIFY_ADMIN] Errore notifica:`, notifyErr);
+      console.error(`⚠️ [NOTIFY_ADMIN:${requestId}] Errore durante l'invio della notifica admin:`, notifyErr);
     }
 
     // ================= NOTIFICA CLIENTE =================
     try {
+      console.log(`📢 [NOTIFY_CLIENT:${requestId}] Invio notifica di conferma al cliente ID: ${clienteId}`);
       await notifyUser(Number(clienteId), {
         type: 'REQUEST_CREATED',
         message: `La tua richiesta è stata inviata correttamente`,
         role: 'cliente',
         data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
       });
+      console.log(`✅ [NOTIFY_CLIENT:${requestId}] Notifica cliente inviata.`);
     } catch (notifyErr) {
-      console.error(`⚠️ [NOTIFY_CLIENT] Errore notifica:`, notifyErr);
+      console.error(`⚠️ [NOTIFY_CLIENT:${requestId}] Errore durante l'invio della notifica cliente:`, notifyErr);
     }
 
     await client.query('COMMIT');
-    console.log(`✅ [PAYMENT:${requestId}] Transazione completata.`);
+    console.log(`✅ [PAYMENT:${requestId}] Transazione SQL completata con successo (COMMIT).`);
 
     res.json({ 
       pagatoConWallet, 
@@ -201,10 +226,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(`❌ [PAYMENT:${requestId}] Errore critico:`, err);
+    console.error(`❌ [PAYMENT:${requestId}] Errore critico intercettato. Rollback eseguito. Dettagli:`, err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+    console.log(`🔌 [PAYMENT:${requestId}] Connessione al database rilasciata.`);
   }
 });
 

@@ -189,9 +189,9 @@ export async function cercaSlotUltra(richiesta) {
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
     console.log(`📊 [SearchEngine] Risultati trovati: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
-    // --- LOGICA PROATTIVA DISABILITATA ---
-    // Le scritture automatiche su database (INSERT) sono state rimosse per evitare 
-    // la duplicazione di record non confermati in stato 'in_attesa'.
+    // --- LOGICA PROATTIVA RIMOSSA ---
+    // La registrazione automatica delle richieste nel database è stata disabilitata 
+    // per evitare il salvataggio indesiderato di record in stato 'in_attesa' ad ogni ricerca a vuoto.
     if (risultatiPool.length === 0) {
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)

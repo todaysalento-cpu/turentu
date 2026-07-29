@@ -189,62 +189,24 @@ export async function cercaSlotUltra(richiesta) {
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
     console.log(`📊 [SearchEngine] Risultati trovati: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
-    // --- LOGICA PROATTIVA (Registrazione Richieste nel Database) ---
+    // --- LOGICA PROATTIVA DISABILITATA ---
+    // Le scritture automatiche su database (INSERT) sono state rimosse per evitare 
+    // la duplicazione di record non confermati in stato 'in_attesa'.
     if (risultatiPool.length === 0) {
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);
         
-        const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
-        
-        try {
-            const startNode = await getNearestNode(lat, lon);
-            const endNode = await getNearestNode(destLat, destLon);
-
-            for (const cls of classiDisponibili) {
-                // Inserimento richiesta di Andata standard
-                await pool.query(`
-                    INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                    VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
-                `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioAndataUtente, postiRichiesti, startNode?.id, endNode?.id, cls]);
-
-                // Se presente, inserimento richiesta di Ritorno standard
-                if (orarioRitornoUtente) {
-                    await pool.query(`
-                        INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                        VALUES ($1, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $6, $7, $9, $8, $10, 'in_attesa')
-                    `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioRitornoUtente, postiRichiesti, startNode?.id, endNode?.id, cls]);
-                }
-
-                // Se presente l'evento, registriamo anche le richieste collegate all'evento
-                if (orarioEventoAndata) {
-                    await pool.query(`
-                        INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                        VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10, 'in_attesa')
-                    `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioEventoAndata, postiRichiesti, startNode?.id, endNode?.id, cls]);
-                }
-
-                if (orarioEventoRitorno) {
-                    await pool.query(`
-                        INSERT INTO richieste_pop_bus (cliente_id, origine, destinazione, start_datetime, posti_richiesti, start_node_id, end_node_id, classe, stato)
-                        VALUES ($1, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, $6, $7, $9, $8, $10, 'in_attesa')
-                    `, [richiesta.cliente_id, lon, lat, destLon, destLat, orarioEventoRitorno, postiRichiesti, startNode?.id, endNode?.id, cls]);
-                }
-            }
-            
-            risultatiFinali.push({
-                id: `virtual_pop_pending`,
-                tipo: 'pop-bus',
-                is_pool: true,
-                veicoli_pool_ids: veicoliDisponibili,
-                stato: 'in_attesa',
-                distanza: distanzaMetri,
-                distanzaTotaleRotte: distanzaMetri,
-                messaggio: `Richieste registrate nel pool per attivazione dinamica.`
-            });
-        } catch (err) {
-            console.error("❌ Errore innesco proattivo:", err);
-        }
+        risultatiFinali.push({
+            id: `virtual_pop_pending`,
+            tipo: 'pop-bus',
+            is_pool: true,
+            veicoli_pool_ids: veicoliDisponibili,
+            stato: 'in_attesa',
+            distanza: distanzaMetri,
+            distanzaTotaleRotte: distanzaMetri,
+            messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`
+        });
     }
 
     return await formatResults({ 

@@ -108,17 +108,32 @@ export async function toggleCorsa(corsa_id, action) {
         if (!pren.stripe_payment_intent) continue;
 
         try {
-          const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
+          // 1. Normalizza tipo corsa per pricing.util.js
+          const tipoPricing = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(corsa.tipo_corsa)
+            ? corsa.tipo_corsa
+            : 'standard';
+
+          // 2. Recupera distanza (kmUtente e kmTotali) dal record della corsa
+          const kmTotali = Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
+          const kmUtente = kmTotali;
+
+          console.log(`🔍 [CALCOLO PREZZO] Corsa ID: ${corsa.id}, Posti: ${pren.posti_richiesti}, Tipo: ${tipoPricing}, Km: ${kmTotali}`);
           
-          console.log(`🔍 [CALCOLO PREZZO] Corsa ID: ${corsa.id}, Posti: ${pren.posti_richiesti}, Tipo: ${pricingType}`);
-          const prezzoRisolto = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
+          const prezzoRisolto = await calcolaPrezzo(
+            corsa,
+            pren.posti_richiesti,
+            tipoPricing,
+            kmUtente,
+            kmTotali
+          );
+          
           console.log(`🔍 [PREZZO RISOLTO] Valore grezzo:`, JSON.stringify(prezzoRisolto));
           
           let rawPrezzo = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
             ? (prezzoRisolto.prezzo ?? prezzoRisolto.importo ?? 0) 
             : prezzoRisolto;
           
-          let importoFinale = !isNaN(Number(rawPrezzo)) ? Number(rawPrezzo) : 0;
+          let importoFinale = (!isNaN(Number(rawPrezzo)) && Number(rawPrezzo) > 0) ? Number(rawPrezzo) : 0;
           console.log(`💰 [IMPORTO FINALE] Calcolato: €${importoFinale}`);
           
           // Controlla se il pagamento è stato fatto tramite Wallet

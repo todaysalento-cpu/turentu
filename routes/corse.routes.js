@@ -17,15 +17,13 @@ const populateAddresses = async (corsa) => {
 };
 
 // ======================================================
-// 1️⃣ GET CORSE AUTISTA TODAY (LA ROTTA MANCANTE)
+// 1️⃣ GET CORSE AUTISTA TODAY
 // ======================================================
 corseRouter.get('/autista/today', async (req, res) => {
     try {
-        // req.user.id viene iniettato dal tuo authMiddleware
         const driverId = req.user.id; 
         const corse = await getCorseByAutista(driverId, 'today');
         
-        // Risposta al frontend con la lista delle corse
         res.json(corse);
     } catch (err) {
         console.error("❌ Errore in GET /api/corse/autista/today:", err);
@@ -40,7 +38,6 @@ corseRouter.get('/autista/all', async (req, res) => {
     try {
         const driverId = req.user.id;
         const status = req.query.status;
-        // Se viene passato uno status (es. in_corso), lo usiamo, altrimenti 'tutte'
         const filter = (status && status !== 'tutte') ? status : 'tutte';
         
         const corse = await getCorseByAutista(driverId, filter);
@@ -64,7 +61,6 @@ corseRouter.post('/:id/accetta', async (req, res) => {
     corsa = await populateAddresses(corsa);
 
     CacheManager.corsa.update(corsa);
-    // Aggiorna motore di ricerca: la corsa è accettata
     upsertCorsa(corsa); 
 
     const io = getIO();
@@ -77,15 +73,37 @@ corseRouter.post('/:id/accetta', async (req, res) => {
 });
 
 // ======================================================
+// 4️⃣ START CORSA (AGGIUNTO)
+// ======================================================
+corseRouter.post('/:id/start', async (req, res) => {
+  const corsaId = Number(req.params.id);
+  try {
+    const corsa = await toggleCorsa(corsaId, 'start');
+    if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
+    
+    CacheManager.corsa.update(corsa);
+    upsertCorsa(corsa); 
+
+    const io = getIO();
+    io.to(`autista_${corsa.veicolo_id}`).emit('corsaUpdate', corsa);
+
+    res.json({ success: true, corsa });
+  } catch (err) {
+    console.error("❌ Errore in POST /api/corse/:id/start:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ======================================================
 // 5️⃣ END CORSA
 // ======================================================
 corseRouter.post('/:id/end', async (req, res) => {
   const corsaId = Number(req.params.id);
   try {
     const corsa = await toggleCorsa(corsaId, 'end');
+    if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
     
     CacheManager.corsa.update(corsa);
-    // Rimuovi dal motore di ricerca: la corsa è conclusa
     removeCorsa(corsaId); 
 
     const io = getIO();
@@ -93,6 +111,7 @@ corseRouter.post('/:id/end', async (req, res) => {
 
     res.json({ success: true, corsa });
   } catch (err) {
+    console.error("❌ Errore in POST /api/corse/:id/end:", err);
     res.status(500).json({ error: err.message });
   }
 });

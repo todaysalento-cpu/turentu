@@ -109,20 +109,22 @@ export async function toggleCorsa(corsa_id, action) {
 
         try {
           const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
-          const prezzoRisolto = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
           
-          // Estrae in modo sicuro il valore numerico prevenendo NaN
+          console.log(`🔍 [CALCOLO PREZZO] Corsa ID: ${corsa.id}, Posti: ${pren.posti_richiesti}, Tipo: ${pricingType}`);
+          const prezzoRisolto = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
+          console.log(`🔍 [PREZZO RISOLTO] Valore grezzo:`, JSON.stringify(prezzoRisolto));
+          
           let rawPrezzo = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
             ? (prezzoRisolto.prezzo ?? prezzoRisolto.importo ?? 0) 
             : prezzoRisolto;
           
-          const importoFinale = !isNaN(Number(rawPrezzo)) ? Number(rawPrezzo) : 0;
+          let importoFinale = !isNaN(Number(rawPrezzo)) ? Number(rawPrezzo) : 0;
+          console.log(`💰 [IMPORTO FINALE] Calcolato: €${importoFinale}`);
           
           // Controlla se il pagamento è stato fatto tramite Wallet
           if (pren.stripe_payment_intent.startsWith('wallet_')) {
             console.log(`👛 [WALLET] Rilevato pagamento via wallet per la prenotazione ${pren.prenotazione_id}. Importo finale: €${importoFinale}`);
             
-            // Aggiorna lo stato del pagamento a 'pagato'
             await client.query(
               `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
               [importoFinale, pren.pagamento_id]
@@ -130,19 +132,30 @@ export async function toggleCorsa(corsa_id, action) {
           } else {
             // Gestione standard Stripe (PaymentIntent)
             const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
-            if (pi.status === 'requires_capture') {
+            
+            // Fallback se il calcolo restituisce 0 o un valore non valido, usa l'importo originario del PI
+            if (importoFinale <= 0 && pi.amount > 0) {
+              importoFinale = pi.amount / 100;
+              console.log(`⚠️ [FALLBACK STRIPE] Usato importo originario del PI: €${importoFinale}`);
+            }
+
+            const amountInCents = Math.round(importoFinale * 100);
+
+            if (pi.status === 'requires_capture' && amountInCents >= 1) {
               await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
-                amount_to_capture: Math.round(importoFinale * 100) 
+                amount_to_capture: amountInCents 
               });
               await client.query(
                 `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
                 [importoFinale, pren.pagamento_id]
               );
+              console.log(`✅ [STRIPE CAPTURE] Pagamento ${pren.pagamento_id} catturato con successo per ${amountInCents} centesimi.`);
+            } else {
+              console.warn(`⚠️ Impossibile catturare il pagamento ${pren.pagamento_id}: importo (${amountInCents}) o stato PI non valido (${pi.status}).`);
             }
           }
         } catch (err) {
-          console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
-          // Imposta su 'pendente' per rispettare il vincolo CHECK del database
+          console.error(`❌ Errore pagamento ${pren.pagamento_id}:`, err);
           await client.query(`UPDATE public.pagamenti SET stato = 'pendente' WHERE id = $1`, [pren.pagamento_id]);
         }
       }

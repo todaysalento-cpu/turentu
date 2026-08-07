@@ -140,7 +140,8 @@ export async function toggleCorsa(corsa_id, action) {
           }
         } catch (err) {
           console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
-          await client.query(`UPDATE public.pagamenti SET stato = 'fallito' WHERE id = $1`, [pren.pagamento_id]);
+          // Imposta su 'pendente' o un altro stato valido consentito dal CHECK constraint del DB
+          await client.query(`UPDATE public.pagamenti SET stato = 'pendente' WHERE id = $1`, [pren.pagamento_id]);
         }
       }
     }

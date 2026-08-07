@@ -109,7 +109,12 @@ export async function toggleCorsa(corsa_id, action) {
 
         try {
           const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
-          const importoFinale = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
+          const prezzoRisolto = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
+          
+          // Estrae correttamente il valore numerico dall'oggetto restituito da calcolaPrezzo
+          const importoFinale = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
+            ? (prezzoRisolto.prezzo ?? 0) 
+            : Number(prezzoRisolto) || 0;
           
           // Controlla se il pagamento è stato fatto tramite Wallet
           if (pren.stripe_payment_intent.startsWith('wallet_')) {
@@ -120,9 +125,6 @@ export async function toggleCorsa(corsa_id, action) {
               `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
               [importoFinale, pren.pagamento_id]
             );
-
-            // Nota: Se l'importo finale della corsa differisce dall'importo bloccato/iniziale, 
-            // potresti voler gestire qui eventuali conguagli sul wallet. Per adesso viene confermato l'importo calcolato.
           } else {
             // Gestione standard Stripe (PaymentIntent)
             const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);

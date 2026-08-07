@@ -93,6 +93,7 @@ export async function cercaSlotUltra(richiesta) {
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
     const hashes = [hash, ...ngeohash.neighbors(hash)];
     const corsaResults = await Promise.all(hashes.map(h => redisClient.sMembers(`corsa:in_area:${h}`)));
+    
     const corseCandidate = [...new Set(corsaResults.flat())].map(id => {
         const c = CacheStore.corseCache.get(Number(id));
         if (!c) return null;
@@ -100,12 +101,19 @@ export async function cercaSlotUltra(richiesta) {
         return c;
     }).filter(Boolean);
 
+    console.log(`🔎 [DEBUG CONDIVISE] Trovate ${corsaResults.flat().length} chiavi totali su Redis. Corse uniche candidate estratte dalla cache: ${corseCandidate.length}`);
+
     const { corse: corseValide } = await filterDisponibilita({ 
         ...richiesta, 
         posti_richiesti: postiRichiesti,
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 
     }, corseCandidate, []);
     
+    console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
+    if (corseCandidate.length > 0 && corseValide.length === 0) {
+        console.log("⚠️ [DEBUG CONDIVISE] C'erano corse candidate ma sono state tutte filtrate via da filterDisponibilita.");
+    }
+
     const risultatiCondivise = corseValide.map(c => ({ 
         ...c, 
         tipo: 'condivisa', 
@@ -115,13 +123,19 @@ export async function cercaSlotUltra(richiesta) {
 
     // --- 2. CORSE PRIVATE ---
     const risultatiPrivati = [];
+    console.log(`🚗 [DEBUG PRIVATI] Totale veicoli presenti in CacheStore.veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
+
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
-        if (!disp.lat || !disp.lon) continue;
+        if (!disp.lat || !disp.lon) {
+            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} saltato: coordinate mancanti (lat: ${disp.lat}, lon: ${disp.lon})`);
+            continue;
+        }
         const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
         
         if (distVeicolo < 50) {
             if (disp.is_slot && disp.disponibile !== false) {
                 const cap = await getCapacitaDirettrice(disp.veicolo_id);
+                console.log(`✅ [DEBUG PRIVATI] Veicolo ${veicoloId} IDONEO (<50km, is_slot true, disponibile true). Capacità: ${cap}`);
                 
                 risultatiPrivati.push({
                     id: `priv_${veicoloId}`, 
@@ -137,11 +151,15 @@ export async function cercaSlotUltra(richiesta) {
                     is_pool: false,
                     is_privato: true
                 });
+            } else {
+                console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} nel raggio (<50km) ma scartato -> is_slot: ${disp.is_slot}, disponibile: ${disp.disponibile}`);
             }
+        } else {
+            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} troppo lontano: ${distVeicolo.toFixed(2)} km (>= 50km)`);
         }
     }
 
-    // --- 3. POP-BUS (Raccogliamo sia i pool dell'orario utente che quelli dell'evento) ---
+    // --- 3. POP-BUS ---
     const orariRicercaPool = [orarioAndataUtente];
     if (orarioEventoAndata) orariRicercaPool.push(orarioEventoAndata);
 
@@ -160,6 +178,8 @@ export async function cercaSlotUltra(richiesta) {
 
         direttrici.forEach(d => direttriciAttivateSet.set(d.id, d));
     }
+
+    console.log(`🚌 [DEBUG POOL] Direttrici virtuali trovate nel DB nel range orario: ${direttriciAttivateSet.size}`);
 
     const risultatiPool = (await Promise.all(Array.from(direttriciAttivateSet.values()).map(async (dir) => {
         const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
@@ -187,12 +207,10 @@ export async function cercaSlotUltra(richiesta) {
     }))).filter(Boolean);
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
-    console.log(`📊 [SearchEngine] Risultati trovati: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
+    console.log(`📊 [SearchEngine] Risultati finali prima del fallback: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
-    // --- LOGICA PROATTIVA RIMOSSA ---
-    // La registrazione automatica delle richieste nel database è stata disabilitata 
-    // per evitare il salvataggio indesiderato di record in stato 'in_attesa' ad ogni ricerca a vuoto.
     if (risultatiPool.length === 0) {
+        console.log(`ℹ️ [DEBUG FALLBACK] Nessun pool attivo trovato. Inserimento card virtuale di fallback (virtual_pop_pending).`);
         const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true)
             .map(([id, _]) => id);

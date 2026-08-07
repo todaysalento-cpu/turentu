@@ -41,9 +41,7 @@ router.get('/search', async (req, res) => {
     const queryParams = [];
     let paramIndex = 1;
 
-    // Se sono presenti coordinate valide, usiamo la struttura con Haversine incorporata
     const hasGeo = lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng));
-
     let query = '';
 
     if (hasGeo) {
@@ -178,7 +176,6 @@ router.post('/', authMiddleware, async (req, res) => {
 
     let immagineUrl = "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600&auto=format&fit=crop";
 
-    // Se viene passata un'immagine in formato Base64 Data URI dal frontend
     if (immagine && typeof immagine === 'string' && immagine.startsWith('data:image')) {
       const uploadResponse = await cloudinary.uploader.upload(immagine, {
         folder: "turentu_eventi",
@@ -242,7 +239,6 @@ router.put('/:id', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: "Campi obbligatori mancanti" });
     }
 
-    // Recuperiamo l'evento esistente per mantenere l'immagine precedente se non ne viene passata una nuova
     const checkEvent = await client.query('SELECT * FROM public.eventi WHERE id = $1', [id]);
     if (checkEvent.rows.length === 0) {
       return res.status(404).json({ success: false, error: "Evento non trovato" });
@@ -250,7 +246,6 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
     let immagineUrl = checkEvent.rows[0].immagine_url;
 
-    // Se viene passata una nuova immagine in formato Base64 Data URI
     if (immagine && typeof immagine === 'string' && immagine.startsWith('data:image')) {
       const uploadResponse = await cloudinary.uploader.upload(immagine, {
         folder: "turentu_eventi",

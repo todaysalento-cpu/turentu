@@ -111,10 +111,12 @@ export async function toggleCorsa(corsa_id, action) {
           const pricingType = corsa.tipo_corsa === 'privata' ? 'pubblicato' : 'prenotabile';
           const prezzoRisolto = await calcolaPrezzo(corsa, pren.posti_richiesti, pricingType);
           
-          // Estrae correttamente il valore numerico dall'oggetto restituito da calcolaPrezzo
-          const importoFinale = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
-            ? (prezzoRisolto.prezzo ?? 0) 
-            : Number(prezzoRisolto) || 0;
+          // Estrae in modo sicuro il valore numerico prevenendo NaN
+          let rawPrezzo = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
+            ? (prezzoRisolto.prezzo ?? prezzoRisolto.importo ?? 0) 
+            : prezzoRisolto;
+          
+          const importoFinale = !isNaN(Number(rawPrezzo)) ? Number(rawPrezzo) : 0;
           
           // Controlla se il pagamento è stato fatto tramite Wallet
           if (pren.stripe_payment_intent.startsWith('wallet_')) {
@@ -140,7 +142,7 @@ export async function toggleCorsa(corsa_id, action) {
           }
         } catch (err) {
           console.error(`Errore pagamento ${pren.pagamento_id}:`, err);
-          // Imposta su 'pendente' o un altro stato valido consentito dal CHECK constraint del DB
+          // Imposta su 'pendente' per rispettare il vincolo CHECK del database
           await client.query(`UPDATE public.pagamenti SET stato = 'pendente' WHERE id = $1`, [pren.pagamento_id]);
         }
       }

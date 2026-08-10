@@ -78,9 +78,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`✅ [PAYMENT:${requestId}] Transazione wallet registrata.`);
     }
 
-    // 🔒 GESTIONE POP BUS: Forziamo l'elaborazione RIGOROSA di UN SOLO slot (il primo dell'array)
+    // 🔒 GESTIONE SLOT UNICO E ESTRAZIONE INDIRIZZI
     const slot = slots[0];
     
+    const origineAddress = slot.origine_address || slot.origineAddress || (slot.origine?.lat ? `Posizione (${slot.origine.lat.toFixed(4)}, ${slot.origine.lon.toFixed(4)})` : 'Partenza');
+    const destinazioneAddress = slot.destinazione_address || slot.destinazioneAddress || (slot.destinazione?.lat ? `Destinazione (${slot.destinazione.lat.toFixed(4)}, ${slot.destinazione.lon.toFixed(4)})` : 'Arrivo');
+
     console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
     const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
@@ -100,13 +103,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-          start_node_id, end_node_id, classe
+          start_node_id, end_node_id, classe, origine_address, destinazione_address
         )
           VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12
         ) RETURNING *`,
         [
           clienteId,
@@ -116,7 +119,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           slot.posti_richiesti || 1,
           nodeRes.rows[0].start,
           nodeRes.rows[0].end,
-          slot.classe || 'STANDARD'
+          slot.classe || 'STANDARD',
+          origineAddress,
+          destinazioneAddress
         ]
       );
 
@@ -137,13 +142,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const result = await client.query(
         `INSERT INTO pending (
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
-          distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id
+          distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id,
+          origine_address, destinazione_address
         )
           VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
-          'pending', $14, $15
+          'pending', $14, $15, $16, $17
         ) RETURNING *`,
         [
           slot.veicolo_id,
@@ -160,7 +166,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           slot.destinazione.lon,
           slot.destinazione.lat,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
-          requestId
+          requestId,
+          origineAddress,
+          destinazioneAddress
         ]
       );
 

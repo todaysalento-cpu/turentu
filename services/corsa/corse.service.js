@@ -26,7 +26,12 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
     await client.query('SET search_path TO public');
     
     let query = `
-      SELECT c.*, v.driver_id, v.modello AS veicolo 
+      SELECT 
+        c.*, 
+        v.driver_id, 
+        v.modello AS veicolo,
+        COALESCE(NULLIF(c.origine_address, 'N/D'), NULLIF(c.origine_address, ''), 'Non specificato') AS origine_address,
+        COALESCE(NULLIF(c.destinazione_address, 'N/D'), NULLIF(c.destinazione_address, ''), 'Non specificato') AS destinazione_address
       FROM public.corse c 
       JOIN public.veicolo v ON c.veicolo_id = v.id 
       WHERE v.driver_id = $1

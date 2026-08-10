@@ -22,7 +22,10 @@ const populateAddresses = async (corsa) => {
 corseRouter.get('/autista/today', async (req, res) => {
     try {
         const driverId = req.user.id; 
+        console.log(`🔍 [API CORSE] Richiesta /autista/today per driverId:`, driverId);
+        
         const corse = await getCorseByAutista(driverId, 'today');
+        console.log(`📦 [API CORSE] Risultato today:`, corse);
         
         res.json(corse);
     } catch (err) {
@@ -40,7 +43,10 @@ corseRouter.get('/autista/all', async (req, res) => {
         const status = req.query.status;
         const filter = (status && status !== 'tutte') ? status : 'tutte';
         
+        console.log(`🔍 [API CORSE] Richiesta /autista/all per driverId: ${driverId} con filtro stato: ${filter}`);
+        
         const corse = await getCorseByAutista(driverId, filter);
+        console.log(`📦 [API CORSE] Risultato all:`, corse);
         
         res.json(corse);
     } catch (err) {

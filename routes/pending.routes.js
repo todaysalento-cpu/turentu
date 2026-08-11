@@ -46,12 +46,11 @@ router.get('/autista/:veicolo_id', async (req, res) => {
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
   const notificheDaInviare = [];
+  const id = Number(req.params.id);
 
   try {
-    const id = Number(req.params.id);
     await client.query('BEGIN');
 
-    // Query protetta con pulizia al volo degli indirizzi per evitare stringhe sporche o coordinate con parentesi
     const pendingRes = await client.query(`
         SELECT *, 
           CASE 
@@ -87,7 +86,6 @@ router.post('/:id/accetta', async (req, res) => {
     );
 
     for (const pRow of result.rows) {
-      // Manteniamo gli indirizzi puliti selezionati poc'anzi anche sull'oggetto aggiornato
       pRow.origine_address = p.origine_address;
       pRow.destinazione_address = p.destinazione_address;
 
@@ -96,7 +94,7 @@ router.post('/:id/accetta', async (req, res) => {
          JOIN utente u ON u.id = v.driver_id WHERE v.id = $1`, [pRow.veicolo_id]
       );
 
-      const driverId = driverRes.rows[0]?.driver_id;
+      const driverId = driverRes.rows[0]?.driver_id ?? req.user?.id;
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
       
       const isPopBus = (pRow.tipo_corsa === 'popbus' || pRow.direttrice_id != null);
@@ -180,6 +178,16 @@ router.post('/:id/accetta', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Errore accetta:', err);
+
+    // 🛡️ MISURA DI SICUREZZA ANTI-LOOP: 
+    // Se fallisce l'elaborazione, marchiamo la richiesta come 'rifiutata' / 'errore' 
+    // in modo isolato così non rimarrà bloccata in stato 'pending' facendola ricomparire al refresh.
+    try {
+      await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
+    } catch (cleanupErr) {
+      console.error('❌ Impossibile pulire lo stato della richiesta fallita:', cleanupErr);
+    }
+
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

@@ -16,7 +16,22 @@ router.get('/autista/:veicolo_id', async (req, res) => {
     try {
         const { veicolo_id } = req.params;
         const result = await client.query(
-            `SELECT * FROM pending WHERE veicolo_id = $1 AND stato = 'pending'`,
+            `SELECT 
+                id, veicolo_id, cliente_id, start_datetime, durata, posti_richiesti, tipo_corsa, created_at, expires_at, stato, 
+                COALESCE(prezzo, 0)::float AS prezzo,
+                posti_totali, posti_disponibili, payment_intent_id, request_id, corsa_id, distanza,
+                CASE 
+                    WHEN origine_address IS NULL OR origine_address LIKE '%POINT%' OR origine_address = '' 
+                    THEN 'Punto di partenza' 
+                    ELSE origine_address 
+                END AS origine_address,
+                CASE 
+                    WHEN destinazione_address IS NULL OR destinazione_address LIKE '%POINT%' OR destinazione_address = '' 
+                    THEN 'Destinazione' 
+                    ELSE destinazione_address 
+                END AS destinazione_address
+             FROM pending 
+             WHERE veicolo_id = $1 AND stato = 'pending'`,
             [veicolo_id]
         );
         res.json({ pendings: result.rows });

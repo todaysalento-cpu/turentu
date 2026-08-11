@@ -21,12 +21,12 @@ router.get('/autista/:veicolo_id', async (req, res) => {
                 COALESCE(prezzo, 0)::float AS prezzo,
                 posti_totali, posti_disponibili, payment_intent_id, request_id, corsa_id, distanza,
                 CASE 
-                    WHEN origine_address IS NULL OR origine_address LIKE '%POINT%' OR origine_address = '' 
+                    WHEN origine_address IS NULL OR origine_address LIKE '%POINT%' OR origine_address LIKE '%(%' OR origine_address = '' 
                     THEN 'Punto di partenza' 
                     ELSE origine_address 
                 END AS origine_address,
                 CASE 
-                    WHEN destinazione_address IS NULL OR destinazione_address LIKE '%POINT%' OR destinazione_address = '' 
+                    WHEN destinazione_address IS NULL OR destinazione_address LIKE '%POINT%' OR destinazione_address LIKE '%(%' OR destinazione_address = '' 
                     THEN 'Destinazione' 
                     ELSE destinazione_address 
                 END AS destinazione_address
@@ -51,16 +51,16 @@ router.post('/:id/accetta', async (req, res) => {
     const id = Number(req.params.id);
     await client.query('BEGIN');
 
-    // Query protetta con pulizia al volo degli indirizzi per evitare stringhe sporche o coordinate grezze
+    // Query protetta con pulizia al volo degli indirizzi per evitare stringhe sporche o coordinate con parentesi
     const pendingRes = await client.query(`
         SELECT *, 
           CASE 
-            WHEN origine_address IS NULL OR origine_address LIKE '%POINT%' OR origine_address LIKE '%Posizione%' OR origine_address = 'N/D' OR origine_address = '' 
+            WHEN origine_address IS NULL OR origine_address LIKE '%POINT%' OR origine_address LIKE '%(%' OR origine_address = 'N/D' OR origine_address = '' 
             THEN 'Punto di partenza' 
             ELSE origine_address 
           END AS origine_address,
           CASE 
-            WHEN destinazione_address IS NULL OR destinazione_address LIKE '%POINT%' OR destinazione_address LIKE '%Destinazione%' OR destinazione_address = 'N/D' OR destinazione_address = '' 
+            WHEN destinazione_address IS NULL OR destinazione_address LIKE '%POINT%' OR destinazione_address LIKE '%(%' OR destinazione_address = 'N/D' OR destinazione_address = '' 
             THEN 'Destinazione' 
             ELSE destinazione_address 
           END AS destinazione_address

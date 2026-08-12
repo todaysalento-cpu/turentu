@@ -22,8 +22,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
             try {
                 const decoded = polyline.decode(corsa.percorso_polyline);
                 
-                // NOTA: Se la polyline è [lat, lon], Turf si aspetta [lon, lat]. 
-                // Proviamo direttamente [c[1], c[0]] (lon, lat). Se continua a fallire, inverti in [c[0], c[1]].
+                // NOTA: Mapbox polyline decodifica in [lat, lon]. Turf.js si aspetta [lon, lat] -> [c[1], c[0]]
                 const coordinates = decoded.map(c => [c[1], c[0]]);
                 
                 const line = turf.lineString(coordinates);
@@ -68,16 +67,16 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
  * MAIN ENGINE - FULLY INTEGRATED (UNIVERSAL MODE)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
+    // Corretto ordine a [lon, lat] per coerenza con Turf e polyline
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
-    const TOLLERANZA_KM = 50.0; // ⚠️ Aumentato temporaneamente a 50km per debug tracciati geografici ampi
+    const TOLLERANZA_KM = 50.0;
 
     return {
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             if (!c) return null;
             c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            // PROTEZIONE TOTALE: normalizzazione sicura dell'id per evitare TypeError
             const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
             const isProattivo = idString.startsWith('virtual_pop_');
             
@@ -123,7 +122,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 
                 const capacitaTotale = capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0);
                 
-                // 1. Verifica saturazione sull'andata (segmenti)
                 const isAndataSaturata = await verificaSaturazioneSegmenti(
                     c.direttrice_id, 
                     startSnap.ordine_sequenziale, 
@@ -136,7 +134,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     return null;
                 }
 
-                // 2. Se la richiesta prevede un ritorno, verifica la saturazione anche sulla missione/segmento di ritorno
                 if (richiesta.return_datetime || richiesta.include_ritorno) {
                     const isRitornoSaturato = await verificaSaturazioneRitorno(
                         c.direttrice_id,
@@ -153,7 +150,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return baseResult;
             }
 
-            // Se arriviamo qui, è una risorsa proattiva valida per il Pricing
             return { ...baseResult, is_proattivo: true };
         }))).filter(Boolean)
     };

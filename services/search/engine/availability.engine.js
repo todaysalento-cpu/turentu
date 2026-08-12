@@ -72,6 +72,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     const TOLLERANZA_KM = 50.0;
 
+    // Estrazione della data della richiesta (formato YYYY-MM-DD) per il filtro rigido giornaliero
+    const dataRichiestaStr = new Date(richiesta.start_datetime || new Date()).toISOString().split('T')[0];
+
     return {
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
             if (!c) return null;
@@ -80,6 +83,16 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
             const isProattivo = idString.startsWith('virtual_pop_');
             
+            // --- 🛑 FILTRO RIGIDO: LA CORSA DEVE PARTIRE IL GIORNO DELLA RICHIESTA ---
+            if (!isProattivo && c.start_datetime) {
+                const dataCorsaStr = new Date(c.start_datetime).toISOString().split('T')[0];
+                if (dataCorsaStr !== dataRichiestaStr) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché parte il ${dataCorsaStr} ma la richiesta è per il ${dataRichiestaStr}.`);
+                    return null;
+                }
+            }
+            // -----------------------------------------------------------------------
+
             const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 0 };
             const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 999 };
 

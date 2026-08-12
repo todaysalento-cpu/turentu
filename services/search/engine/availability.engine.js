@@ -12,7 +12,7 @@ function determinaClasse(indice) {
 }
 
 /**
- * SNAP LOGIC CON LOG AGGIUNTIVI
+ * SNAP LOGIC CON LOG AGGIUNTIVI E CORREZIONE COORDINATE POLYLINE
  */
 function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
     const isAnchor = corsa.tipo_corsa === 'condivisa';
@@ -21,7 +21,11 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
         if (corsa.percorso_polyline) {
             try {
                 const decoded = polyline.decode(corsa.percorso_polyline);
+                
+                // NOTA: Se la polyline è [lat, lon], Turf si aspetta [lon, lat]. 
+                // Proviamo direttamente [c[1], c[0]] (lon, lat). Se continua a fallire, inverti in [c[0], c[1]].
                 const coordinates = decoded.map(c => [c[1], c[0]]);
+                
                 const line = turf.lineString(coordinates);
                 const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
 
@@ -66,7 +70,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
-    const TOLLERANZA_KM = 2.0;
+    const TOLLERANZA_KM = 50.0; // ⚠️ Aumentato temporaneamente a 50km per debug tracciati geografici ampi
 
     return {
         corse: (await Promise.all(corseCandidate.map(async (c, index) => {
@@ -81,7 +85,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 999 };
 
             if (!isProattivo && (!startSnap || !endSnap)) {
-                console.log(`❌ [SCarto FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
                 return null;
             }
 

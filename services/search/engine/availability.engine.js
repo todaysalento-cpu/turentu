@@ -157,11 +157,19 @@ async function verificaSaturazioneRitorno(direttrice_id, postiRichiesti, capacit
  */
 function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotazioni, capacitaTotale) {
     const postiTotali = capacitaTotale ?? Number(corsa.posti_totali || 0);
-    const postiGiaPrenotati = Number(corsa.posti_prenotati || 0);
+    let postiOccupatiNelTratto = 0;
+
     for (const p of prenotazioni) {
-        if (startO < Number(p.endOffset) && endO > Number(p.startOffset)) {
-            if (Number(p.posti_richiesti) + postiRichiesti + postiGiaPrenotati > postiTotali) return false;
+        // Gestione compatibile sia con start_index_polyline (DB) che con startOffset (eventuale cache)
+        const pStart = Number(p.start_index_polyline ?? p.startOffset ?? 0);
+        const pEnd = Number(p.end_index_polyline ?? p.endOffset ?? 0);
+
+        // Se l'intervallo della prenotazione esistente si sovrappone al nostro tragitto
+        if (startO < pEnd && endO > pStart) {
+            postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
         }
     }
-    return true;
+
+    // Restituisce true se i posti occupati nel tratto + quelli richiesti rientrano nei posti totali
+    return (postiOccupatiNelTratto + postiRichiesti) <= postiTotali;
 }

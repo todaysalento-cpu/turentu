@@ -31,9 +31,11 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
         v.driver_id, 
         v.modello AS veicolo,
         COALESCE(NULLIF(c.origine_address, 'N/D'), NULLIF(c.origine_address, ''), 'Non specificato') AS origine_address,
-        COALESCE(NULLIF(c.destinazione_address, 'N/D'), NULLIF(c.destinazione_address, ''), 'Non specificato') AS destinazione_address
+        COALESCE(NULLIF(c.destinazione_address, 'N/D'), NULLIF(c.destinazione_address, ''), 'Non specificato') AS destinazione_address,
+        COALESCE(SUM(p.posti_richiesti), 0) AS posti_prenotati
       FROM public.corse c 
       JOIN public.veicolo v ON c.veicolo_id = v.id 
+      LEFT JOIN public.prenotazioni p ON p.corsa_id = c.id
       WHERE v.driver_id = $1
     `;
     const params = [driver_id];
@@ -45,13 +47,14 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
       params.push(status);
     }
     
-    query += ` ORDER BY c.start_datetime DESC`;
+    query += ` GROUP BY c.id, v.id ORDER BY c.start_datetime DESC`;
     
     const res = await client.query(query, params);
     
     return res.rows.map(c => ({ 
       ...c, 
-      durataMinuti: parseDurataMinuti(c.durata) 
+      durataMinuti: parseDurataMinuti(c.durata),
+      posti_prenotati: Number(c.posti_prenotati)
     }));
   } finally { 
     client.release(); 
@@ -113,12 +116,10 @@ export async function toggleCorsa(corsa_id, action) {
         if (!pren.stripe_payment_intent) continue;
 
         try {
-          // 1. Normalizza tipo corsa per pricing.util.js
           const tipoPricing = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(corsa.tipo_corsa)
             ? corsa.tipo_corsa
             : 'standard';
 
-          // 2. Recupera distanza (kmUtente e kmTotali) dal record della corsa
           const kmTotali = Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
           const kmUtente = kmTotali;
 
@@ -141,7 +142,6 @@ export async function toggleCorsa(corsa_id, action) {
           let importoFinale = (!isNaN(Number(rawPrezzo)) && Number(rawPrezzo) > 0) ? Number(rawPrezzo) : 0;
           console.log(`💰 [IMPORTO FINALE] Calcolato: €${importoFinale}`);
           
-          // Controlla se il pagamento è stato fatto tramite Wallet
           if (pren.stripe_payment_intent.startsWith('wallet_')) {
             console.log(`👛 [WALLET] Rilevato pagamento via wallet per la prenotazione ${pren.prenotazione_id}. Importo finale: €${importoFinale}`);
             
@@ -150,10 +150,8 @@ export async function toggleCorsa(corsa_id, action) {
               [importoFinale, pren.pagamento_id]
             );
           } else {
-            // Gestione standard Stripe (PaymentIntent)
             const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
             
-            // Fallback se il calcolo restituisce 0 o un valore non valido, usa l'importo originario del PI
             if (importoFinale <= 0 && pi.amount > 0) {
               importoFinale = pi.amount / 100;
               console.log(`⚠️ [FALLBACK STRIPE] Usato importo originario del PI: €${importoFinale}`);

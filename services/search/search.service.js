@@ -130,10 +130,10 @@ export async function cercaSlotUltra(richiesta) {
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
     if (corseCandidate.length > 0 && corseValide.length === 0) {
         console.log("⚠️ [DEBUG CONDIVISE] C'erano corse candidate ma sono state tutte filtrate via da filterDisponibilita.");
-        // Log dettagliato aggiunto per diagnosticare ogni singola corsa candidata scartata
         corseCandidate.forEach((c, idx) => {
             const prens = prenotazioniBatch[idx] || [];
             console.log(`   -> [DETTAGLIO SCARTO] Corsa ID ${c.id}: Polyline presente? ${!!c.percorso_polyline}, Posti totali: ${c.posti_totali}, Prenotazioni collegate: ${prens.length}`);
+            console.log(`      [PARAMETRI CORSA] Partenza: ${c.partenza_prevista}, Arrivo: ${c.arrivo_previsto} | [UTENTE] Richiesto: ${orarioAndataUtente.toISOString()}`);
         });
     }
 

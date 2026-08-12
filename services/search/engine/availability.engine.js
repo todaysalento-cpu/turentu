@@ -12,9 +12,9 @@ function determinaClasse(indice) {
 }
 
 /**
- * SNAP LOGIC
+ * SNAP LOGIC CON LOG AGGIUNTIVI
  */
-function getSnapResult(point, corsa, tolleranzaKm) {
+function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
     const isAnchor = corsa.tipo_corsa === 'condivisa';
 
     if (isAnchor) {
@@ -31,10 +31,14 @@ function getSnapResult(point, corsa, tolleranzaKm) {
                         type: 'DYNAMIC',
                         dist: snapped.properties.dist
                     };
+                } else {
+                    console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
-                console.error('⚠️ SNAP ERROR', e);
+                console.error(`⚠️ [SNAP ERROR] Corsa ${corsaId}:`, e);
             }
+        } else {
+            console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: percorso_polyline mancante.`);
         }
         return null;
     }
@@ -49,6 +53,9 @@ function getSnapResult(point, corsa, tolleranzaKm) {
             min = d;
             nearest = { ...n, type: 'STATIC', dist: d };
         }
+    }
+    if (!nearest) {
+        console.log(`⚠️ [SNAP STATIC FALLITO] Corsa ${corsaId}: nessun nodo entro ${tolleranzaKm} km.`);
     }
     return nearest;
 }
@@ -70,28 +77,45 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
             const isProattivo = idString.startsWith('virtual_pop_');
             
-            const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM) : { ordine_sequenziale: 0 };
-            const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM) : { ordine_sequenziale: 999 };
+            const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 0 };
+            const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 999 };
 
-            if (!isProattivo && (!startSnap || !endSnap)) return null;
+            if (!isProattivo && (!startSnap || !endSnap)) {
+                console.log(`❌ [SCarto FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
+                return null;
+            }
 
             // --- LOGICA CONDIVISA ---
             if (c.tipo_corsa === 'condivisa') {
                 const startOffset = Number(startSnap.offset_metri);
                 const endOffset = Number(endSnap.offset_metri);
-                if (startOffset >= endOffset || (endOffset - startOffset) < 2000) return null;
+                
+                if (startOffset >= endOffset || (endOffset - startOffset) < 2000) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi (startOffset: ${startOffset}, endOffset: ${endOffset}, differenza: ${endOffset - startOffset} metri).`);
+                    return null;
+                }
 
                 const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
                 const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
 
-                return verificaSaturazioneOffset(c, startOffset, endOffset, Number(richiesta.posti_richiesti), prenotazioni, capacitaTotale) ? c : null;
+                const isSaturata = verificaSaturazioneOffset(c, startOffset, endOffset, Number(richiesta.posti_richiesti), prenotazioni, capacitaTotale);
+                if (!isSaturata) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto.`);
+                    return null;
+                }
+
+                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo!`);
+                return c;
             }
 
             // --- LOGICA POP-BUS (Universale) ---
             const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
 
             if (c.direttrice_id) {
-                if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) return null;
+                if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ordine sequenziale non valido.`);
+                    return null;
+                }
                 
                 const capacitaTotale = capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0);
                 
@@ -103,7 +127,10 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     Number(richiesta.posti_richiesti), 
                     capacitaTotale
                 );
-                if (isAndataSaturata) return null;
+                if (isAndataSaturata) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): andata saturata.`);
+                    return null;
+                }
 
                 // 2. Se la richiesta prevede un ritorno, verifica la saturazione anche sulla missione/segmento di ritorno
                 if (richiesta.return_datetime || richiesta.include_ritorno) {
@@ -112,9 +139,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                         Number(richiesta.posti_richiesti),
                         capacitaTotale
                     );
-                    if (isRitornoSaturato) return null;
+                    if (isRitornoSaturato) {
+                        console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ritorno saturato.`);
+                        return null;
+                    }
                 }
 
+                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} (Pop-Bus) superata con successo!`);
                 return baseResult;
             }
 
@@ -160,16 +191,13 @@ function verificaSaturazioneOffset(corsa, startO, endO, postiRichiesti, prenotaz
     let postiOccupatiNelTratto = 0;
 
     for (const p of prenotazioni) {
-        // Gestione compatibile sia con start_index_polyline (DB) che con startOffset (eventuale cache)
         const pStart = Number(p.start_index_polyline ?? p.startOffset ?? 0);
         const pEnd = Number(p.end_index_polyline ?? p.endOffset ?? 0);
 
-        // Se l'intervallo della prenotazione esistente si sovrappone al nostro tragitto
         if (startO < pEnd && endO > pStart) {
             postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
         }
     }
 
-    // Restituisce true se i posti occupati nel tratto + quelli richiesti rientrano nei posti totali
     return (postiOccupatiNelTratto + postiRichiesti) <= postiTotali;
 }

@@ -103,11 +103,29 @@ export async function cercaSlotUltra(richiesta) {
 
     console.log(`🔎 [DEBUG CONDIVISE] Trovate ${corsaResults.flat().length} chiavi totali su Redis. Corse uniche candidate estratte dalla cache: ${corseCandidate.length}`);
 
+    // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache
+    const corsaIds = corseCandidate.map(c => Number(c.id)).filter(Boolean);
+    let prenotazioniBatch = [];
+    
+    if (corsaIds.length > 0) {
+        const { rows: allPrenotazioni } = await pool.query(
+            `SELECT corsa_id, posti_richiesti, start_index_polyline, end_index_polyline 
+             FROM prenotazioni 
+             WHERE corsa_id = ANY($1::int[])`,
+            [corsaIds]
+        );
+
+        // Mappa le prenotazioni raggruppandole nello stesso ordine delle corse candidate
+        prenotazioniBatch = corseCandidate.map(c => 
+            allPrenotazioni.filter(p => Number(p.corsa_id) === Number(c.id))
+        );
+    }
+
     const { corse: corseValide } = await filterDisponibilita({ 
         ...richiesta, 
         posti_richiesti: postiRichiesti,
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 
-    }, corseCandidate, []);
+    }, corseCandidate, prenotazioniBatch);
     
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
     if (corseCandidate.length > 0 && corseValide.length === 0) {

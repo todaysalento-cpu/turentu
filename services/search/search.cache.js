@@ -60,6 +60,10 @@ export const upsertPrenotazione = async (prenotazione) => {
 };
 
 export const upsertCorsa = async (c, indicizzare = false) => {
+    // Mappatura dei campi temporali reali del DB nei nomi attesi dal motore di disponibilità
+    c.partenza_prevista = c.start_datetime;
+    c.arrivo_previsto = c.arrivo_datetime;
+
     if (c.percorso_polyline) {
         c.decodedCoords = polyline.decode(c.percorso_polyline);
     }
@@ -80,7 +84,6 @@ export async function loadCachesUltra(force = false) {
     try {
         console.log(`⏳ [SYNC] Inizio caricamento cache...`);
         
-        // ✅ Aggiunti v.marca, v.modello, v.servizi e v.rating alla query principale
         let dRes = await client.query(`
             SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
                    ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
@@ -91,7 +94,6 @@ export async function loadCachesUltra(force = false) {
 
         if (dRes.rows.length === 0) {
             console.warn("⚠️ [SYNC] Nessuno slot attivo, fallback su record correnti.");
-            // ✅ Aggiunti v.marca, v.modello, v.servizi e v.rating anche al fallback
             dRes = await client.query(`
                 SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
                        ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 

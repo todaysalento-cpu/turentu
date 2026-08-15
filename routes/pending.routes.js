@@ -30,8 +30,8 @@ router.get('/autista/:veicolo_id', async (req, res) => {
                     THEN 'Destinazione' 
                     ELSE destinazione_address 
                 END AS destinazione_address
-             FROM pending 
-             WHERE veicolo_id = $1 AND stato = 'pending'`,
+               FROM pending 
+               WHERE veicolo_id = $1 AND stato = 'pending'`,
             [veicolo_id]
         );
         res.json({ pendings: result.rows });
@@ -105,10 +105,13 @@ router.post('/:id/accetta', async (req, res) => {
       };
 
       let corsa;
+      let prenotazioneEffettuata = false;
+
       if (!pRow.corsa_id) {
         if (isPopBus) {
             const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
             corsa = resCorsa.corsa;
+            prenotazioneEffettuata = true; 
         } else {
             const existing = await client.query(
               `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
@@ -121,6 +124,7 @@ router.post('/:id/accetta', async (req, res) => {
               const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
               const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
               corsa = resCorsa.corsa;
+              prenotazioneEffettuata = true; // createCorsaFromPending esegue già la prenotaCorsa interna per le corse private
               await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
             }
         }
@@ -131,7 +135,10 @@ router.post('/:id/accetta', async (req, res) => {
 
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
-      await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
+      // Esegue la prenotazione solo se la corsa esisteva già e non è stata creata da zero con prenota inclusa
+      if (!prenotazioneEffettuata) {
+          await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
+      }
 
       upsertCorsa(corsa);
       CacheManager.corsa.update(corsa);
@@ -179,9 +186,6 @@ router.post('/:id/accetta', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('❌ Errore accetta:', err);
 
-    // 🛡️ MISURA DI SICUREZZA ANTI-LOOP: 
-    // Se fallisce l'elaborazione, marchiamo la richiesta come 'rifiutata' / 'errore' 
-    // in modo isolato così non rimarrà bloccata in stato 'pending' facendola ricomparire al refresh.
     try {
       await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
     } catch (cleanupErr) {

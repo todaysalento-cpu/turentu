@@ -182,30 +182,34 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     pendingRows.push(savedRow);
     console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
-    // ================= NOTIFICA DRIVER / ADMIN =================
+    // ================= NOTIFICA DRIVER / AUTISTA =================
     try {
-      console.log(`📢 [NOTIFY_ADMIN:${requestId}] Ricerca admin per invio notifica...`);
-      const adminRes = await pool.query(
-        "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
-      );
+      console.log(`📢 [NOTIFY_DRIVER:${requestId}] Ricerca autista per invio notifica (Veicolo ID: ${slot.veicolo_id})...`);
+      
+      let driverId = savedRow.driver_id || savedRow.autista_id;
 
-      const adminId = adminRes.rows[0]?.id;
-      const targetId = savedRow.autista_id || adminId;
+      if (!driverId && slot.veicolo_id) {
+        const veicoloRes = await client.query(
+          "SELECT driver_id FROM veicolo WHERE id = $1",
+          [slot.veicolo_id]
+        );
+        driverId = veicoloRes.rows[0]?.driver_id;
+      }
 
-      if (targetId && !Number.isNaN(Number(targetId))) {
-        console.log(`📢 [NOTIFY_ADMIN:${requestId}] Invio notifica a utente target ID: ${targetId}`);
-        await notifyUser(Number(targetId), {
+      if (driverId && !Number.isNaN(Number(driverId))) {
+        console.log(`📢 [NOTIFY_DRIVER:${requestId}] Invio notifica all'autista ID: ${driverId}`);
+        await notifyUser(Number(driverId), {
           type: 'NEW_REQUEST',
-          message: `Nuova richiesta di prenotazione ricevuta`,
-          role: savedRow.autista_id ? 'driver' : 'admin',
+          message: `Hai ricevuto una nuova richiesta di prenotazione!`,
+          role: 'driver',
           data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
         });
-        console.log(`✅ [NOTIFY_ADMIN:${requestId}] Notifica admin/driver inviata.`);
+        console.log(`✅ [NOTIFY_DRIVER:${requestId}] Notifica autista inviata.`);
       } else {
-        console.log(`⚠️ [NOTIFY_ADMIN:${requestId}] Nessun destinatario valido trovato per la notifica.`);
+        console.log(`⚠️ [NOTIFY_DRIVER:${requestId}] Nessun driver_id trovato per il veicolo.`);
       }
     } catch (notifyErr) {
-      console.error(`⚠️ [NOTIFY_ADMIN:${requestId}] Errore durante l'invio della notifica admin:`, notifyErr);
+      console.error(`⚠️ [NOTIFY_DRIVER:${requestId}] Errore durante l'invio della notifica all'autista:`, notifyErr);
     }
 
     // ================= NOTIFICA CLIENTE =================

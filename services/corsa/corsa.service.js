@@ -39,7 +39,7 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
     return corsa;
 }
 
-// --- FUNZIONE PRINCIPALE (Mantenuta intatta) ---
+// --- FUNZIONE PRINCIPALE ---
 export async function createCorsaFromPending(pending, veicolo, client, isPopBus = false, autistaId = null) {
   let localClient = false;
   if (!client) {
@@ -73,13 +73,29 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
           pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
         } catch (e) { console.warn('Fallback: Geometria non generata', e); }
 
+        // CORRETTO: Prende i posti totali direttamente dal veicolo reale associato
+        const postiTotaliVeicolo = Number(veicolo.posti_totali) || 4;
+
         const res = await client.query(
           `INSERT INTO corse (veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, posti_totali, distanza, origine, destinazione, origine_address, destinazione_address, percorso_polyline, path_geohashes, created_at)
            VALUES ($1,$2,$3,$4,'prenotabile', $5,$6,$7, ST_SetSRID(ST_MakePoint($9,$8),4326), ST_SetSRID(ST_MakePoint($11,$10),4326), $12,$13, $14, $15, NOW()) RETURNING *`,
-          [veicolo.id, startDatetime, arrivoDatetime, (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), 
-           `${durataMin} minutes`, (pending.posti_totali ?? 4), (pending.distanza ?? 0), 
-           coordOrig.lat, coordOrig.lon, coordDest.lat, coordDest.lon,
-           (pending.origine_address ?? 'N/D'), (pending.destinazione_address ?? 'N/D'), polylineString, pathGeohashes]
+          [
+            veicolo.id, 
+            startDatetime, 
+            arrivoDatetime, 
+            (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), 
+            `${durataMin} minutes`, 
+            postiTotaliVeicolo, 
+            (pending.distanza ?? 0), 
+            coordOrig.lat, 
+            coordOrig.lon, 
+            coordDest.lat, 
+            coordDest.lon,
+            (pending.origine_address ?? 'N/D'), 
+            (pending.destinazione_address ?? 'N/D'), 
+            polylineString, 
+            pathGeohashes
+          ]
         );
         corsa = res.rows[0];
 

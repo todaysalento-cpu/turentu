@@ -63,6 +63,9 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     const query = `
       SELECT ct.*, 
              u.nome as nome_cliente,
+             c.origine_address,
+             c.destinazione_address,
+             c.start_datetime,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
               WHERE m.corsa_id = ct.corsa_id AND m.cliente_id = ct.cliente_id 
@@ -85,6 +88,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
               ), 0) as unread_count
       FROM chat_threads ct
       JOIN utente u ON ct.cliente_id = u.id
+      LEFT JOIN corse c ON ct.corsa_id = c.id
       WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
       ORDER BY ct.updated_at DESC
     `;
@@ -97,6 +101,9 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       nome_cliente: t.nome_cliente ?? "Cliente",
+      origine: t.origine_address ?? "Origine non specificata",
+      destinazione: t.destinazione_address ?? "Destinazione non specificata",
+      start_datetime: t.start_datetime ?? null,
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",
       updated_at: Number(t.last_time_ms ?? t.updated_at_ms),

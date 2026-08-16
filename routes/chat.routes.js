@@ -30,6 +30,7 @@ const authMiddleware = (req, res, next) => {
     decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;
+    log("AUTH_SUCCESS", { userId: decoded.id, role: decoded.role });
     next();
   } catch (err) {
     log("AUTH_ERROR", { error: err.message });
@@ -94,7 +95,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     `;
 
     const { rows } = await pool.query(query, [userId]);
-    log("INIT_DB_SUCCESS", { count: rows.length });
+    log("INIT_DB_SUCCESS", { count: rows.length, sample: rows[0] || null });
 
     const threads = rows.map((t) => ({
       id: `${t.corsa_id}_${t.cliente_id}`,

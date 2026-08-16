@@ -62,7 +62,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
 
   try {
     const query = `
-      SELECT ct.*, 
+      SELECT ct., 
              u.nome as nome_cliente,
              c.origine_address,
              c.destinazione_address,
@@ -147,7 +147,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       audio_url: m.audio_url ?? null,
       media_url: m.media_url ?? null,
       tipo_messaggio: m.tipo_messaggio ?? "text",
-      duration: Number(m.duration ?? 0), // <-- AGGIUNTO: Restituisce la durata
+      duration: Number(m.duration ?? 0),
       created_at: Number(m.created_at_ms),
       status: { sent: true, read: Boolean(m.is_read) },
     }));
@@ -165,7 +165,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
   const { client_msg_id, tipo_messaggio, text, lat, lng, audio_base64, media_base64 } = req.body;
   const corsa_id = Number(req.body.corsa_id);
   const cliente_id = Number(req.body.cliente_id);
-  const duration = Number(req.body.duration ?? 0); // <-- AGGIUNTO: Legge la durata dal body
+  const duration = parseFloat(req.body.duration) || 0; // <-- CONVERSIONE ROBUSTA A NUMERO
   const sender_id = Number(req.user.id);
   const sender_role = req.user.role;
 
@@ -185,7 +185,6 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
         streamifier.createReadStream(buffer).pipe(stream);
       });
 
-    // 1. Gestione file binario via Multer (multipart/form-data)
     if (req.file) {
       log("CLOUDINARY_UPLOAD_MULTER", { size: req.file.buffer.length });
       const secureUrl = await uploadToCloudinary(req.file.buffer);
@@ -195,7 +194,6 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
         mediaUrl = secureUrl;
       }
     } 
-    // 2. Gestione stringa Base64 inviata tramite JSON body
     else if (tipo_messaggio === "audio" && audio_base64) {
       log("CLOUDINARY_UPLOAD_BASE64_AUDIO");
       const base64Data = audio_base64.replace(/^data:audio\/\w+;base64,/, "");
@@ -219,6 +217,8 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
     );
 
     const msg = rows[0];
+    const formattedDuration = Number(msg.duration || 0);
+
     const socketMessage = {
       id: msg.id,
       sender_id: Number(msg.sender_id),
@@ -226,7 +226,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
       audio_url: msg.audio_url ?? null,
       media_url: msg.media_url ?? null,
       tipo_messaggio: msg.tipo_messaggio,
-      duration: Number(msg.duration ?? 0), // <-- AGGIUNTO: Inserito nel socket
+      duration: formattedDuration, // <-- NUMERO PULITO PER IL SOCKET
       corsa_id: Number(msg.corsa_id),
       cliente_id: Number(msg.cliente_id),
       created_at: Date.now(),
@@ -255,7 +255,11 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
       log("FCM_NOTIFICATION_SKIPPED", { reason: "Recipient ID not found" });
     }
 
-    return res.json(msg);
+    // RESTITUZIONE RISPOSTA HTTP CON DURATION FORMATTATA COME NUMERO
+    return res.json({
+      ...msg,
+      duration: formattedDuration
+    });
   } catch (err) {
     log("UPLOAD_MEDIA_FAILED", { error: err.message });
     return res.status(500).json({ message: "Errore invio" });

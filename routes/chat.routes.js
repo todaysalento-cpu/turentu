@@ -64,8 +64,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     const query = `
       SELECT ct.*, 
              u.nome as nome_cliente,
-             c.origine_address,
-             c.destinazione_address,
+             NULLIF(TRIM(c.origine_address), '') as origine_address,
+             NULLIF(TRIM(c.destinazione_address), '') as destinazione_address,
              c.start_datetime,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -102,8 +102,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       nome_cliente: t.nome_cliente ?? "Cliente",
-      origine: t.origine_address && t.origine_address.trim() !== "" ? t.origine_address : "Indirizzo origine non specificato",
-      destinazione: t.destinazione_address && t.destinazione_address.trim() !== "" ? t.destinazione_address : "Indirizzo destinazione non specificato",
+      origine: t.origine_address ? t.origine_address : `Corsa #${t.corsa_id} (Partenza)`,
+      destinazione: t.destinazione_address ? t.destinazione_address : `Corsa #${t.corsa_id} (Arrivo)`,
       start_datetime: t.start_datetime ?? null,
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",

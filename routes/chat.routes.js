@@ -89,7 +89,7 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
               ), 0) as unread_count
       FROM chat_threads ct
       JOIN utente u ON ct.cliente_id = u.id
-      LEFT JOIN corse c ON ct.corsa_id = c.id
+      JOIN corse c ON ct.corsa_id = c.id
       WHERE ${role === "autista" ? "ct.driver_id = $1" : "ct.cliente_id = $1"}
       ORDER BY ct.updated_at DESC
     `;
@@ -102,8 +102,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       nome_cliente: t.nome_cliente ?? "Cliente",
-      origine: t.origine_address ?? "Origine non specificata",
-      destinazione: t.destinazione_address ?? "Destinazione non specificata",
+      origine: t.origine_address && t.origine_address.trim() !== "" ? t.origine_address : "Indirizzo origine non specificato",
+      destinazione: t.destinazione_address && t.destinazione_address.trim() !== "" ? t.destinazione_address : "Indirizzo destinazione non specificato",
       start_datetime: t.start_datetime ?? null,
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",

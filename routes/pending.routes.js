@@ -159,6 +159,14 @@ router.post('/:id/accetta', async (req, res) => {
         );
       }
 
+      // Creazione automatica del thread di chat per questa prenotazione
+      await client.query(
+        `INSERT INTO chat_threads (corsa_id, cliente_id, driver_id, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT DO NOTHING`,
+        [corsa.id, pRow.cliente_id, driverId]
+      );
+
       notificheDaInviare.push({ p: pRow, corsa, driverId, driverNome });
     }
 

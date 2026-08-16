@@ -64,8 +64,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
     const query = `
       SELECT ct.*, 
              u.nome as nome_cliente,
-             NULLIF(TRIM(c.origine_address), '') as origine_address,
-             NULLIF(TRIM(c.destinazione_address), '') as destinazione_address,
+             c.origine_address,
+             c.destinazione_address,
              c.start_datetime,
              EXTRACT(EPOCH FROM ct.updated_at) * 1000 as updated_at_ms,
              (SELECT m.testo FROM messaggi m 
@@ -102,8 +102,8 @@ chatRouter.get("/init", authMiddleware, async (req, res) => {
       corsa_id: Number(t.corsa_id),
       cliente_id: Number(t.cliente_id),
       nome_cliente: t.nome_cliente ?? "Cliente",
-      origine: t.origine_address ? t.origine_address : `Corsa #${t.corsa_id} (Partenza)`,
-      destinazione: t.destinazione_address ? t.destinazione_address : `Corsa #${t.corsa_id} (Arrivo)`,
+      origine: t.origine_address && t.origine_address.trim() !== "" ? t.origine_address : "Indirizzo origine non specificato",
+      destinazione: t.destinazione_address && t.destinazione_address.trim() !== "" ? t.destinazione_address : "Indirizzo destinazione non specificato",
       start_datetime: t.start_datetime ?? null,
       unreadCount: Number(t.unread_count ?? 0),
       lastMessage: t.last_text ?? "Nessun messaggio",
@@ -130,7 +130,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT m.id, m.sender_id, m.testo, m.audio_url, m.media_url, m.tipo_messaggio,
+      SELECT m.id, m.sender_id, m.testo, m.audio_url, m.media_url, m.tipo_messaggio, m.duration,
              EXTRACT(EPOCH FROM m.created_at) * 1000 as created_at_ms,
              EXISTS (SELECT 1 FROM message_receipts mr WHERE mr.message_id = m.id) as is_read
       FROM messaggi m
@@ -147,6 +147,7 @@ chatRouter.get("/messages", authMiddleware, async (req, res) => {
       audio_url: m.audio_url ?? null,
       media_url: m.media_url ?? null,
       tipo_messaggio: m.tipo_messaggio ?? "text",
+      duration: Number(m.duration ?? 0), // <-- AGGIUNTO: Restituisce la durata
       created_at: Number(m.created_at_ms),
       status: { sent: true, read: Boolean(m.is_read) },
     }));
@@ -164,10 +165,11 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
   const { client_msg_id, tipo_messaggio, text, lat, lng, audio_base64, media_base64 } = req.body;
   const corsa_id = Number(req.body.corsa_id);
   const cliente_id = Number(req.body.cliente_id);
+  const duration = Number(req.body.duration ?? 0); // <-- AGGIUNTO: Legge la durata dal body
   const sender_id = Number(req.user.id);
   const sender_role = req.user.role;
 
-  log("MEDIA_UPLOAD_STARTED", { sender_id, sender_role, tipo_messaggio, corsa_id, cliente_id });
+  log("MEDIA_UPLOAD_STARTED", { sender_id, sender_role, tipo_messaggio, corsa_id, cliente_id, duration });
 
   try {
     let mediaUrl = null;
@@ -211,9 +213,9 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
     if (tipo_messaggio === "location") content = JSON.stringify({ lat, lng });
 
     const { rows } = await pool.query(
-      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, audio_url, client_msg_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [corsa_id, cliente_id, sender_id, tipo_messaggio, content, mediaUrl, audioUrl, client_msg_id]
+      `INSERT INTO messaggi (corsa_id, cliente_id, sender_id, tipo_messaggio, testo, media_url, audio_url, client_msg_id, duration)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [corsa_id, cliente_id, sender_id, tipo_messaggio, content, mediaUrl, audioUrl, client_msg_id, duration]
     );
 
     const msg = rows[0];
@@ -224,6 +226,7 @@ chatRouter.post("/messages/media", authMiddleware, upload.single("audio"), async
       audio_url: msg.audio_url ?? null,
       media_url: msg.media_url ?? null,
       tipo_messaggio: msg.tipo_messaggio,
+      duration: Number(msg.duration ?? 0), // <-- AGGIUNTO: Inserito nel socket
       corsa_id: Number(msg.corsa_id),
       cliente_id: Number(msg.cliente_id),
       created_at: Date.now(),

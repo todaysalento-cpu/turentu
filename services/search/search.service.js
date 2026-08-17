@@ -182,6 +182,8 @@ export async function cercaSlotUltra(richiesta) {
                     posti_disponibili: cap,
                     posti_totali: cap, 
                     distanza: distanzaMetri, 
+                    km_avvicinamento: distVeicolo,        // Km calcolati dal veicolo al punto di partenza
+                    km_riposizionamento: 0,               // Eventuale riposizionamento (può essere stimato o impostato)
                     is_pool: false,
                     is_privato: true
                 });
@@ -233,6 +235,8 @@ export async function cercaSlotUltra(richiesta) {
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
                 distanza: distanzaMetri, 
+                km_avvicinamento: 0,
+                km_riposizionamento: 0,
                 is_pool: true,
                 include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno
             };
@@ -257,6 +261,8 @@ export async function cercaSlotUltra(richiesta) {
             stato: 'in_attesa',
             distanza: distanzaMetri,
             distanzaTotaleRotte: distanzaMetri,
+            km_avvicinamento: 0,
+            km_riposizionamento: 0,
             messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`
         });
     }

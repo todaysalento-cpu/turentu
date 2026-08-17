@@ -151,49 +151,78 @@ export async function cercaSlotUltra(richiesta) {
     }));
 
     // --- 2. CORSE PRIVATE ---
-    const risultatiPrivati = [];
     console.log(`🚗 [DEBUG PRIVATI] Totale veicoli presenti in CacheStore.veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
+    const veicoliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries());
 
-    for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
+    const risultatiPrivati = (await Promise.all(veicoliEntries.map(async ([veicoloId, disp]) => {
         // Seleziona la coordinata corretta: LIVE se la richiesta è immediata e la posizione live esiste, altrimenti BASE
         const latVeicolo = (isImmediata && disp.lat_live !== null && disp.lat_live !== undefined) ? disp.lat_live : disp.lat_base;
         const lonVeicolo = (isImmediata && disp.lon_live !== null && disp.lon_live !== undefined) ? disp.lon_live : disp.lon_base;
 
         if (latVeicolo === null || latVeicolo === undefined || lonVeicolo === null || lonVeicolo === undefined) {
             console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} saltato: coordinate mancanti (lat: ${latVeicolo}, lon: ${lonVeicolo})`);
-            continue;
+            return null;
         }
 
-        const distVeicolo = turf.distance(pStart, turf.point([Number(lonVeicolo), Number(latVeicolo)]), { units: 'kilometers' });
+        const pVeicoloPoint = turf.point([Number(lonVeicolo), Number(latVeicolo)]);
+        const distVeicoloGeo = turf.distance(pStart, pVeicoloPoint, { units: 'kilometers' });
         
-        if (distVeicolo < 50) {
-            if (disp.is_slot && disp.disponibile !== false) {
-                const cap = await getCapacitaDirettrice(disp.veicolo_id, true);
-                console.log(`✅ [DEBUG PRIVATI] Veicolo ${veicoloId} IDONEO (<50km, is_slot true, disponibile true). Capacità: ${cap}`);
-                
-                risultatiPrivati.push({
-                    id: `priv_${veicoloId}`, 
-                    tipo: 'privata', 
-                    veicolo_id: veicoloId, 
-                    marca: disp.marca || disp.veicolo?.marca || '',
-                    modello: disp.modello || disp.veicolo?.modello || '',
-                    classe: disp.classe || 'STANDARD',
-                    servizi: disp.servizi || {},
-                    posti_disponibili: cap,
-                    posti_totali: cap, 
-                    distanza: distanzaMetri, 
-                    km_avvicinamento: distVeicolo,        // Km calcolati dal veicolo al punto di partenza
-                    km_riposizionamento: 0,               // Eventuale riposizionamento (può essere stimato o impostato)
-                    is_pool: false,
-                    is_privato: true
-                });
-            } else {
-                console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} nel raggio (<50km) ma scartato -> is_slot: ${disp.is_slot}, disponibile: ${disp.disponibile}`);
-            }
-        } else {
-            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} troppo lontano: ${distVeicolo.toFixed(2)} km (>= 50km)`);
+        if (distVeicoloGeo >= 50) {
+            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} troppo lontano geometricamente: ${distVeicoloGeo.toFixed(2)} km`);
+            return null;
         }
-    }
+
+        if (!disp.is_slot || disp.disponibile === false) {
+            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} nel raggio ma scartato -> is_slot: ${disp.is_slot}, disponibile: ${disp.disponibile}`);
+            return null;
+        }
+
+        const cap = await getCapacitaDirettrice(disp.veicolo_id, true);
+        console.log(`✅ [DEBUG PRIVATI] Veicolo ${veicoloId} IDONEO. Calcolo percorsi stradali reali... Capacità: ${cap}`);
+
+        // 1. Avvicinamento stradale reale (Posizione veicolo -> Partenza utente)
+        let kmAvv = distVeicoloGeo;
+        try {
+            const infoAvv = await getDurataDistanza({ lat: Number(latVeicolo), lon: Number(lonVeicolo) }, { lat, lon });
+            if (infoAvv && infoAvv.distanzaKm) {
+                kmAvv = infoAvv.distanzaKm;
+            }
+        } catch (err) {
+            console.warn(`⚠️ [MAPS ERROR] Fallito calcolo avvicinamento stradale per veicolo ${veicoloId}, uso fallback geometrico.`);
+        }
+
+        // 2. Riposizionamento stradale reale (Arrivo utente -> Base veicolo)
+        let kmRip = 0;
+        const latBase = disp.lat_base;
+        const lonBase = disp.lon_base;
+        if (latBase !== null && latBase !== undefined && lonBase !== null && lonBase !== undefined) {
+            try {
+                const infoRip = await getDurataDistanza({ lat: destLat, lon: destLon }, { lat: Number(latBase), lon: Number(lonBase) });
+                if (infoRip && infoRip.distanzaKm) {
+                    kmRip = infoRip.distanzaKm;
+                }
+            } catch (err) {
+                console.warn(`⚠️ [MAPS ERROR] Fallito calcolo riposizionamento stradale per veicolo ${veicoloId}, uso 0.`);
+            }
+        }
+
+        return {
+            id: `priv_${veicoloId}`, 
+            tipo: 'privata', 
+            veicolo_id: veicoloId, 
+            marca: disp.marca || disp.veicolo?.marca || '',
+            modello: disp.modello || disp.veicolo?.modello || '',
+            classe: disp.classe || 'STANDARD',
+            servizi: disp.servizi || {},
+            posti_disponibili: cap,
+            posti_totali: cap, 
+            distanza: distanzaMetri, 
+            km_avvicinamento: kmAvv,
+            km_riposizionamento: kmRip,
+            is_pool: false,
+            is_privato: true
+        };
+    }))).filter(Boolean);
 
     // --- 3. POP-BUS ---
     const orariRicercaPool = [orarioAndataUtente];

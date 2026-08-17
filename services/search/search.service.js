@@ -24,13 +24,22 @@ async function getNearestNode(lat, lon) {
     return rows[0];
 }
 
-async function getCapacitaDirettrice(direttriceId) {
+async function getCapacitaDirettrice(direttriceIdOrVeicoloId, isVeicolo = false) {
+    if (isVeicolo) {
+        const { rows } = await pool.query(`
+            SELECT COALESCE(posti_totali, 0) as capacita
+            FROM veicolo
+            WHERE id = $1
+        `, [direttriceIdOrVeicoloId]);
+        return Number(rows[0]?.capacita || 0);
+    }
+
     const { rows } = await pool.query(`
         SELECT COALESCE(SUM(v.posti_totali), 0) as capacita
         FROM direttrici_virtuali d
         JOIN veicolo v ON v.id = d.veicolo_id
         WHERE d.id = $1
-    `, [direttriceId]);
+    `, [direttriceIdOrVeicoloId]);
     return Number(rows[0]?.capacita || 0);
 }
 
@@ -159,7 +168,7 @@ export async function cercaSlotUltra(richiesta) {
         
         if (distVeicolo < 50) {
             if (disp.is_slot && disp.disponibile !== false) {
-                const cap = await getCapacitaDirettrice(disp.veicolo_id);
+                const cap = await getCapacitaDirettrice(disp.veicolo_id, true);
                 console.log(`✅ [DEBUG PRIVATI] Veicolo ${veicoloId} IDONEO (<50km, is_slot true, disponibile true). Capacità: ${cap}`);
                 
                 risultatiPrivati.push({

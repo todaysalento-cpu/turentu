@@ -66,12 +66,16 @@ export async function formatResults(richiesta, risultatiFiltrati) {
     ].slice(0, 12);
 
     const [localitaOrigine, localitaDestinazione] = await Promise.all([
-        (typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
-            ? richiesta.localitaOrigine 
-            : getLocalitaSafeCached(richiesta.coord),
-        (typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
-            ? richiesta.localitaDestinazione 
-            : getLocalitaSafeCached(richiesta.coordDest)
+        (typeof richiesta.localitaOrigine === 'object' && richiesta.localitaOrigine?.description)
+            ? richiesta.localitaOrigine.description
+            : ((typeof richiesta.localitaOrigine === 'string' && richiesta.localitaOrigine !== "N/D") 
+                ? richiesta.localitaOrigine 
+                : getLocalitaSafeCached(richiesta.coord)),
+        (typeof richiesta.localitaDestinazione === 'object' && richiesta.localitaDestinazione?.description)
+            ? richiesta.localitaDestinazione.description
+            : ((typeof richiesta.localitaDestinazione === 'string' && richiesta.localitaDestinazione !== "N/D") 
+                ? richiesta.localitaDestinazione 
+                : getLocalitaSafeCached(richiesta.coordDest))
     ]);
 
     const coordOrigine = richiesta.coord;

@@ -56,6 +56,11 @@ export async function cercaSlotUltra(richiesta) {
     let orarioAndataUtente = new Date(richiesta.start_datetime || new Date());
     let orarioRitornoUtente = richiesta.return_datetime ? new Date(richiesta.return_datetime) : null;
 
+    // Controllo se la richiesta è immediata (adesso o entro i prossimi 30 minuti)
+    const adesso = new Date();
+    const diffMinuti = (orarioAndataUtente.getTime() - adesso.getTime()) / (1000 * 60);
+    const isImmediata = diffMinuti >= -5 && diffMinuti <= 30;
+
     let orarioEventoAndata = null;
     let orarioEventoRitorno = null;
 
@@ -84,7 +89,7 @@ export async function cercaSlotUltra(richiesta) {
     const pStart = turf.point([lon, lat]);
     const postiRichiesti = Number(richiesta.posti_richiesti || 1);
 
-    console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon}`);
+    console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} (Immediata: ${isImmediata})`);
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
     const distanzaMetri = (info.distanzaKm || 1) * 1000;
@@ -128,14 +133,6 @@ export async function cercaSlotUltra(richiesta) {
     }, corseCandidate, prenotazioniBatch);
     
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
-    if (corseCandidate.length > 0 && corseValide.length === 0) {
-        console.log("⚠️ [DEBUG CONDIVISE] C'erano corse candidate ma sono state tutte filtrate via da filterDisponibilita.");
-        corseCandidate.forEach((c, idx) => {
-            const prens = prenotazioniBatch[idx] || [];
-            console.log(`   -> [DETTAGLIO SCARTO] Corsa ID ${c.id}: Polyline presente? ${!!c.percorso_polyline}, Posti totali: ${c.posti_totali}, Prenotazioni collegate: ${prens.length}`);
-            console.log(`      [PARAMETRI CORSA] Partenza: ${c.partenza_prevista}, Arrivo: ${c.arrivo_previsto} | [UTENTE] Richiesto: ${orarioAndataUtente.toISOString()}`);
-        });
-    }
 
     const risultatiCondivise = corseValide.map(c => ({ 
         ...c, 
@@ -149,11 +146,16 @@ export async function cercaSlotUltra(richiesta) {
     console.log(`🚗 [DEBUG PRIVATI] Totale veicoli presenti in CacheStore.veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
 
     for (const [veicoloId, disp] of CacheStore.veicoloToDisponibilita) {
-        if (!disp.lat || !disp.lon) {
-            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} saltato: coordinate mancanti (lat: ${disp.lat}, lon: ${disp.lon})`);
+        // Seleziona la coordinata corretta: LIVE se la richiesta è immediata e la posizione live esiste, altrimenti BASE
+        const latVeicolo = (isImmediata && disp.lat_live !== null && disp.lat_live !== undefined) ? disp.lat_live : disp.lat_base;
+        const lonVeicolo = (isImmediata && disp.lon_live !== null && disp.lon_live !== undefined) ? disp.lon_live : disp.lon_base;
+
+        if (latVeicolo === null || latVeicolo === undefined || lonVeicolo === null || lonVeicolo === undefined) {
+            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} saltato: coordinate mancanti (lat: ${latVeicolo}, lon: ${lonVeicolo})`);
             continue;
         }
-        const distVeicolo = turf.distance(pStart, turf.point([Number(disp.lon), Number(disp.lat)]), { units: 'kilometers' });
+
+        const distVeicolo = turf.distance(pStart, turf.point([Number(lonVeicolo), Number(latVeicolo)]), { units: 'kilometers' });
         
         if (distVeicolo < 50) {
             if (disp.is_slot && disp.disponibile !== false) {

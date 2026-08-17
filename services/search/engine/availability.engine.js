@@ -101,6 +101,18 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return null;
             }
 
+            // --- CALCOLO CHILOMETRI OPERATIVI (Avvicinamento e Riposizionamento) ---
+            let kmAvvicinamento = 0;
+            let kmRiposizionamento = 0;
+
+            if (c.lat_deposito && c.lon_deposito) {
+                const pDeposito = turf.point([Number(c.lon_deposito), Number(c.lat_deposito)]);
+                // Avvicinamento di base dal deposito (o integrabile con posizione live se passata)
+                kmAvvicinamento = turf.distance(pDeposito, pStart, { units: 'kilometers' });
+                // Riposizionamento fisso verso la base dal punto di arrivo (pEnd)
+                kmRiposizionamento = turf.distance(pEnd, pDeposito, { units: 'kilometers' });
+            }
+
             // --- LOGICA CONDIVISA ---
             if (c.tipo_corsa === 'condivisa') {
                 const startOffset = Number(startSnap.offset_metri);
@@ -121,11 +133,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 }
 
                 console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo!`);
-                return c;
+                return {
+                    ...c,
+                    km_avvicinamento: kmAvvicinamento,
+                    km_riposizionamento: kmRiposizionamento
+                };
             }
 
             // --- LOGICA POP-BUS (Universale) ---
-            const baseResult = { ...c, veicoli_pool_ids: c.veicoli_pool_ids || [] };
+            const baseResult = { 
+                ...c, 
+                veicoli_pool_ids: c.veicoli_pool_ids || [],
+                km_avvicinamento: kmAvvicinamento,
+                km_riposizionamento: kmRiposizionamento
+            };
 
             if (c.direttrice_id) {
                 if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) {

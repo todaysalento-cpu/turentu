@@ -36,12 +36,17 @@ export const upsertDisponibilita = (d) => {
 export const removeDisponibilita = async (disponibilitaId) => {
     const id = Number(disponibilitaId);
     const d = CacheStore.disponibilitaCache.get(id);
-    if (d && d.lat && d.lon) {
-        const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
-        await redisClient.sRem(`slot:in_area:${hash}`, d.veicolo_id.toString());
+    if (d) {
+        const lat = d.lat_live !== null && d.lat_live !== undefined ? d.lat_live : d.lat_base;
+        const lon = d.lon_live !== null && d.lon_live !== undefined ? d.lon_live : d.lon_base;
+
+        if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
+            const hash = ngeohash.encode(Number(lat), Number(lon), 5);
+            await redisClient.sRem(`slot:in_area:${hash}`, d.veicolo_id.toString());
+        }
+        CacheStore.veicoloToDisponibilita.delete(Number(d.veicolo_id));
+        CacheStore.disponibilitaCache.delete(id);
     }
-    if (d) CacheStore.veicoloToDisponibilita.delete(Number(d.veicolo_id));
-    CacheStore.disponibilitaCache.delete(id);
 };
 
 // --- GESTIONE ENTITÀ ---
@@ -86,9 +91,19 @@ export async function loadCachesUltra(force = false) {
         
         let dRes = await client.query(`
             SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
-                   ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
+                   -- Posizione BASE (dal veicolo)
+                   ST_Y(v.coord::geometry) as lat_base, ST_X(v.coord::geometry) as lon_base,
+                   -- Posizione LIVE (dalla tabella posizioni)
+                   ST_Y(pv.coord::geometry) as lat_live, ST_X(pv.coord::geometry) as lon_live
             FROM disponibilita_veicolo dv 
             JOIN veicolo v ON dv.veicolo_id = v.id 
+            LEFT JOIN LATERAL (
+                SELECT coord 
+                FROM posizione_veicolo 
+                WHERE veicolo_id = v.id 
+                ORDER BY "timestamp" DESC 
+                LIMIT 1
+            ) pv ON true
             WHERE NOW() BETWEEN dv.start AND dv.fine
         `);
 
@@ -96,9 +111,20 @@ export async function loadCachesUltra(force = false) {
             console.warn("⚠️ [SYNC] Nessuno slot attivo, fallback su record correnti.");
             dRes = await client.query(`
                 SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
-                       ST_Y(v.coord::geometry) as lat, ST_X(v.coord::geometry) as lon 
+                       -- Posizione BASE (dal veicolo)
+                       ST_Y(v.coord::geometry) as lat_base, ST_X(v.coord::geometry) as lon_base,
+                       -- Posizione LIVE (dalla tabella posizioni)
+                       ST_Y(pv.coord::geometry) as lat_live, ST_X(pv.coord::geometry) as lon_live
                 FROM disponibilita_veicolo dv 
-                JOIN veicolo v ON dv.veicolo_id = v.id LIMIT 50
+                JOIN veicolo v ON dv.veicolo_id = v.id 
+                LEFT JOIN LATERAL (
+                    SELECT coord 
+                    FROM posizione_veicolo 
+                    WHERE veicolo_id = v.id 
+                    ORDER BY "timestamp" DESC 
+                    LIMIT 1
+                ) pv ON true
+                LIMIT 50
             `);
         }
 
@@ -136,8 +162,12 @@ export async function loadCachesUltra(force = false) {
 }
 
 async function aggiornaIndiciDisponibilita(d) {
-    if (!redisClient || !d.lat || !d.lon) return;
-    const hash = ngeohash.encode(Number(d.lat), Number(d.lon), 5);
+    // Per l'indice Redis usiamo preferibilmente la coordinata LIVE se presente, altrimenti la base
+    const lat = d.lat_live !== null && d.lat_live !== undefined ? d.lat_live : d.lat_base;
+    const lon = d.lon_live !== null && d.lon_live !== undefined ? d.lon_live : d.lon_base;
+
+    if (!redisClient || lat === null || lon === null || lat === undefined || lon === undefined) return;
+    const hash = ngeohash.encode(Number(lat), Number(lon), 5);
     await redisClient.sAdd(`slot:in_area:${hash}`, d.veicolo_id.toString());
 }
 

@@ -50,7 +50,29 @@ async function getDettaglioPool(veicoli_ids) {
     }
 }
 
-export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTotali, totPasseggeriCorrenti = 0, classe = 'STANDARD') {
+/**
+ * Calcola il prezzo considerando la tratta utente, l'avvicinamento e il riposizionamento.
+ * @param {Object} corsa - Dati della corsa/veicolo
+ * @param {Number} postiRichiesti - Posti desiderati dall'utente
+ * @param {String} tipo - Tipologia di servizio (privata, condivisa, pop-bus)
+ * @param {Number} kmUtente - Km della tratta effettiva dell'utente
+ * @param {Number} kmTotali - Km totali della rotta principale
+ * @param {Number} totPasseggeriCorrenti - Passeggeri già a bordo
+ * @param {String} classe - Classe di servizio (SAVER, STANDARD, EXPRESS)
+ * @param {Number} kmAvvicinamento - Km percorsi dal deposito/veicolo per raggiungere l'utente (opzionale)
+ * @param {Number} kmRiposizionamento - Km percorsi dal punto di arrivo per rientrare (opzionale)
+ */
+export async function calcolaPrezzo(
+    corsa, 
+    postiRichiesti, 
+    tipo, 
+    kmUtente, 
+    kmTotali, 
+    totPasseggeriCorrenti = 0, 
+    classe = 'STANDARD',
+    kmAvvicinamento = 0,
+    kmRiposizionamento = 0
+) {
     const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
     const richiesti = Math.max(1, Number(postiRichiesti));
     const classeKey = classe?.toUpperCase() || 'STANDARD';
@@ -59,19 +81,26 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
     let prezzoCalcolato = 0;
     let targetPasseggeri = 1;
 
+    // Sommiamo i km operativi ai km della tratta principale
+    const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
+    const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
+    const kmComplessiviOperativi = kmTotali + avvicinamento + riposizionamento;
+
     try {
         switch (tipoValido) {
             case 'privata':
             case 'standard':
                 const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
-                prezzoCalcolato = (info.euro_km * kmUtente) * multiplier;
+                // Per il privato, il costo include tutta la strada che il veicolo fa (avvicinamento + utente + rientro)
+                const kmTotaliPrivato = kmUtente + avvicinamento + riposizionamento;
+                prezzoCalcolato = (info.euro_km * kmTotaliPrivato) * multiplier;
                 break;
 
             case 'condivisa':
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
-                const costoBase = (infoCond.euro_km * kmTotali) + ((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero);
-                prezzoCalcolato = ((costoBase / totPasseggeriFinale) * (kmUtente / kmTotali)) * multiplier;
+                const costoBaseCond = (infoCond.euro_km * kmComplessiviOperativi) + ((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero);
+                prezzoCalcolato = ((costoBaseCond / totPasseggeriFinale) * (kmUtente / kmTotali)) * multiplier;
                 break;
 
             case 'popbus':
@@ -85,7 +114,7 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                 const poolData = await getDettaglioPool(poolIds || []);
                 
                 if (poolData.length === 0) {
-                    prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmUtente) * multiplier;
+                    prezzoCalcolato = (TARIFF_DEFAULT.euro_km * (kmUtente + avvicinamento + riposizionamento)) * multiplier;
                 } else {
                     const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
@@ -94,16 +123,16 @@ export async function calcolaPrezzo(corsa, postiRichiesti, tipo, kmUtente, kmTot
                         ? poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr) 
                         : poolData.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
 
-                    const breakEvenTotale = mezzo.euro_km * kmTotali;
+                    const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
                     prezzoCalcolato = ((breakEvenTotale / targetPasseggeri) * (kmUtente / kmTotali)) * multiplier;
                     
-                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id} [${classeKey}]. Target:${targetPasseggeri} persone per break-even.`);
+                    console.log(`🚌 [POPBUS] Scelto ID:${mezzo.id} [${classeKey}]. Target:${targetPasseggeri} persone. Km operativi inclusi: ${kmComplessiviOperativi.toFixed(2)}km`);
                 }
                 break;
 
             default:
-                prezzoCalcolato = (0.50 * kmUtente) * multiplier;
+                prezzoCalcolato = (0.50 * (kmUtente + avvicinamento + riposizionamento)) * multiplier;
         }
     } catch (err) {
         console.error("❌ [PRICING] Errore:", err);

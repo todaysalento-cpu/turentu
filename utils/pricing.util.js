@@ -104,20 +104,24 @@ export async function calcolaPrezzo(
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
 
-                // 1. Quota variabile legata strettamente alla tratta percorsa dall'utente
-                const costoTrattaPura = infoCond.euro_km * safeKmTotali;
-                const costoBaseTratta = costoTrattaPura + ((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero);
-                const quotaTrattaUtente = (costoBaseTratta / totPasseggeriFinale) * (safeKmUtente / safeKmTotali);
+                // 1. Ricalcolo dinamico dei km a vuoto residui in base alla presenza di passeggeri a bordo
+                const fattoreAssorbimento = totPasseggeriCorrenti > 0 ? 0.5 : 1.0;
+                const kmAvvicinamentoDinamici = avvicinamento * fattoreAssorbimento;
+                const kmRiposizionamentoDinamici = riposizionamento;
+                const kmVuotiResiduiTotali = kmAvvicinamentoDinamici + kmRiposizionamentoDinamici;
 
-                // 2. Quota fissa dei km a vuoto (avvicinamento + riposizionamento) spalmata equamente sui passeggeri
-                const kmLogisticiTotali = avvicinamento + riposizionamento;
-                const costoLogisticoTotale = infoCond.euro_km * kmLogisticiTotali;
-                const quotaLogisticaUtente = costoLogisticoTotale / totPasseggeriFinale;
+                // 2. Quota dei km a vuoto divisa equamente per i passeggeri finali
+                const costoVuotiTotale = infoCond.euro_km * kmVuotiResiduiTotali;
+                const quotaLogisticaUtente = costoVuotiTotale / totPasseggeriFinale;
 
-                // 3. Somma delle due componenti e applicazione del moltiplicatore di classe
-                prezzoCalcolato = (quotaTrattaUtente + quotaLogisticaUtente) * multiplier;
+                // 3. Quota della tratta personale richiesta dall'utente (con proporzione e costo passeggero)
+                const costoTrattaUtente = infoCond.euro_km * safeKmUtente;
+                const quotaTrattaPura = costoTrattaUtente + (((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero) / totPasseggeriFinale);
 
-                console.log(`👥 [PRICING CONDIVISA] Quota Tratta: ${quotaTrattaUtente.toFixed(2)} | Quota Logistica (Avv+Rip): ${quotaLogisticaUtente.toFixed(2)} | Passeggeri finali: ${totPasseggeriFinale} | Subtotale: ${prezzoCalcolato}`);
+                // 4. Somma delle componenti e moltiplicatore di classe
+                prezzoCalcolato = (quotaTrattaPura + quotaLogisticaUtente) * multiplier;
+
+                console.log(`👥 [PRICING CONDIVISA DINAMICA] Km vuoti residui: ${kmVuotiResiduiTotali} | Quota Logistica: ${quotaLogisticaUtente.toFixed(2)} | Quota Tratta: ${quotaTrattaPura.toFixed(2)} | Passeggeri finali: ${totPasseggeriFinale} | Subtotale: ${prezzoCalcolato}`);
                 break;
 
             case 'popbus':

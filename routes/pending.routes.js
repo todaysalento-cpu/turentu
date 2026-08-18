@@ -113,20 +113,12 @@ router.post('/:id/accetta', async (req, res) => {
             corsa = resCorsa.corsa;
             prenotazioneEffettuata = true; 
         } else {
-            const existing = await client.query(
-              `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
-              [pRow.veicolo_id, pRow.start_datetime]
-            );
-            
-            if (existing.rows.length) {
-              corsa = existing.rows[0];
-            } else {
-              const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
-              const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
-              corsa = resCorsa.corsa;
-              prenotazioneEffettuata = true; // createCorsaFromPending esegue già la prenotaCorsa interna per le corse private
-              await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
-            }
+            // NESSUN AGGANCIO: Crea sempre una nuova corsa dedicata per la richiesta privata
+            const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
+            const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
+            corsa = resCorsa.corsa;
+            prenotazioneEffettuata = true; 
+            await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
         }
       } else {
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [pRow.corsa_id]);
@@ -135,7 +127,6 @@ router.post('/:id/accetta', async (req, res) => {
 
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
-      // Esegue la prenotazione solo se la corsa esisteva già e non è stata creata da zero con prenota inclusa
       if (!prenotazioneEffettuata) {
           await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
       }
@@ -159,7 +150,6 @@ router.post('/:id/accetta', async (req, res) => {
         );
       }
 
-      // Creazione automatica del thread di chat per questa prenotazione
       await client.query(
         `INSERT INTO chat_threads (corsa_id, cliente_id, driver_id, updated_at)
          VALUES ($1, $2, $3, NOW())

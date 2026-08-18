@@ -23,8 +23,8 @@ const normalizeInput = (b = {}) => ({
     servizi: Array.isArray(b.servizi) ? b.servizi : [],
     tipo: b.tipo || null,
     anno: b.anno ? Number(b.anno) : null,
-    lat: b.lat != null ? Number(b.lat) : 0,
-    lon: b.lon != null ? Number(b.lon) : 0,
+    lat: (b.lat != null && Number(b.lat) !== 0) ? Number(b.lat) : null,
+    lon: (b.lon != null && Number(b.lon) !== 0) ? Number(b.lon) : null,
     localita: b.localita || null,
     image_url: b.image_url || null,
     doc_licenza: b.doc_licenza || null,
@@ -135,22 +135,22 @@ veicoloRouter.put('/:id', async (req, res) => {
             RETURNING *`;
         
         const { rows, rowCount } = await pool.query(query, [
-            d.marca,           // $1
-            d.modello,         // $2
-            d.posti_totali,    // $3
-            d.raggio_km,       // $4
-            d.targa,           // $5
+            d.marca,            // $1
+            d.modello,          // $2
+            d.posti_totali,     // $3
+            d.raggio_km,        // $4
+            d.targa,            // $5
             JSON.stringify(d.servizi), // $6
-            d.tipo,            // $7
-            d.anno,            // $8
-            d.lon,             // $9  (Longitudine - Asse X)
-            d.lat,             // $10 (Latitudine - Asse Y)
-            d.localita,        // $11
-            d.image_url,       // $12
-            d.doc_licenza,     // $13
-            d.doc_comune,      // $14
-            req.params.id,     // $15
-            req.user.id        // $16
+            d.tipo,             // $7
+            d.anno,             // $8
+            d.lon,              // $9  (Longitudine - Asse X)
+            d.lat,              // $10 (Latitudine - Asse Y)
+            d.localita,         // $11
+            d.image_url,        // $12
+            d.doc_licenza,      // $13
+            d.doc_comune,       // $14
+            req.params.id,      // $15
+            req.user.id         // $16
         ]);
 
         if (!rowCount) return res.status(404).json({ error: "Veicolo non trovato" });

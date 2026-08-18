@@ -31,6 +31,8 @@ export const upsertDisponibilita = (d) => {
     
     CacheStore.disponibilitaCache.set(Number(d.id), normalized);
     CacheStore.veicoloToDisponibilita.set(Number(d.veicolo_id), normalized);
+    
+    console.log(`📦 [CACHE DISPONIBILITÀ] Salvato/Aggiornato -> Veicolo ID: ${normalized.veicolo_id} (Disponibilità ID: ${d.id}), Slot attivo: ${normalized.is_slot}`);
 };
 
 export const removeDisponibilita = async (disponibilitaId) => {
@@ -46,6 +48,7 @@ export const removeDisponibilita = async (disponibilitaId) => {
         }
         CacheStore.veicoloToDisponibilita.delete(Number(d.veicolo_id));
         CacheStore.disponibilitaCache.delete(id);
+        console.log(`🗑️ [CACHE DISPONIBILITÀ] Rimossa disponibilità ID: ${id} per Veicolo ID: ${d.veicolo_id}`);
     }
 };
 
@@ -65,7 +68,6 @@ export const upsertPrenotazione = async (prenotazione) => {
 };
 
 export const upsertCorsa = async (c, indicizzare = false) => {
-    // Mappatura dei campi temporali reali del DB nei nomi attesi dal motore di disponibilità
     c.partenza_prevista = c.start_datetime;
     c.arrivo_previsto = c.arrivo_datetime;
 
@@ -107,8 +109,10 @@ export async function loadCachesUltra(force = false) {
             WHERE NOW() BETWEEN dv.start AND dv.fine
         `);
 
+        console.log(`🔍 [SYNC DISPONIBILITÀ] Righe trovate con filtro NOW(): ${dRes.rows.length}`);
+
         if (dRes.rows.length === 0) {
-            console.warn("⚠️ [SYNC] Nessuno slot attivo, fallback su record correnti.");
+            console.warn("⚠️ [SYNC] Nessuno slot attivo trovato con NOW(), esecuzione fallback sui record correnti...");
             dRes = await client.query(`
                 SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
                        -- Posizione BASE (dal veicolo)
@@ -124,8 +128,10 @@ export async function loadCachesUltra(force = false) {
                     ORDER BY "timestamp" DESC 
                     LIMIT 1
                 ) pv ON true
+                ORDER BY dv.id DESC
                 LIMIT 50
             `);
+            console.log(`🔍 [SYNC FALLBACK] Righe caricate tramite fallback: ${dRes.rows.length}`);
         }
 
         const [vRes, cRes, dirRes, nodiRes] = await Promise.all([
@@ -136,7 +142,9 @@ export async function loadCachesUltra(force = false) {
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));
+        
         dRes.rows.forEach(d => {
+            console.log(`📋 [SYNC DEBUG] Processo disponibilità DB -> Veicolo ID: ${d.veicolo_id}, Start: ${d.start}, Fine: ${d.fine}`);
             upsertDisponibilita({ ...d, disponibile: true });
             aggiornaIndiciDisponibilita(d); 
         });
@@ -153,20 +161,22 @@ export async function loadCachesUltra(force = false) {
         });
 
         CacheStore.lastSync = Date.now();
-        console.log(`✅ [SYNC] Completata. Veicoli attivi: ${CacheStore.veicoloToDisponibilita.size}`);
+        console.log(`✅ [SYNC] Completata con successo. Totale veicoli attivi in memoria (veicoloToDisponibilita): ${CacheStore.veicoloToDisponibilita.size}`);
     } catch (err) {
-        console.error("❌ [SYNC] Errore critico:", err);
+        console.error("❌ [SYNC] Errore critico durante il caricamento delle cache:", err);
     } finally {
         client.release();
     }
 }
 
 async function aggiornaIndiciDisponibilita(d) {
-    // Per l'indice Redis usiamo preferibilmente la coordinata LIVE se presente, altrimenti la base
     const lat = d.lat_live !== null && d.lat_live !== undefined ? d.lat_live : d.lat_base;
     const lon = d.lon_live !== null && d.lon_live !== undefined ? d.lon_live : d.lon_base;
 
-    if (!redisClient || lat === null || lon === null || lat === undefined || lon === undefined) return;
+    if (!redisClient || lat === null || lon === null || lat === undefined || lon === undefined) {
+        console.warn(`⚠️ [REDIS INDEX] Impossibile indicizzare il veicolo ${d.veicolo_id}: coordinate mancanti (lat: ${lat}, lon: ${lon})`);
+        return;
+    }
     const hash = ngeohash.encode(Number(lat), Number(lon), 5);
     await redisClient.sAdd(`slot:in_area:${hash}`, d.veicolo_id.toString());
 }

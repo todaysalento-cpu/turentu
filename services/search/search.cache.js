@@ -106,32 +106,14 @@ export async function loadCachesUltra(force = false) {
                 ORDER BY "timestamp" DESC 
                 LIMIT 1
             ) pv ON true
-            WHERE NOW() BETWEEN dv.start AND dv.fine
+            ORDER BY dv.id DESC
+            LIMIT 100
         `);
 
-        console.log(`🔍 [SYNC DISPONIBILITÀ] Righe trovate con filtro NOW(): ${dRes.rows.length}`);
+        console.log(`🔍 [SYNC DISPONIBILITÀ] Righe caricate senza filtro NOW(): ${dRes.rows.length}`);
 
         if (dRes.rows.length === 0) {
-            console.warn("⚠️ [SYNC] Nessuno slot attivo trovato con NOW(), esecuzione fallback sui record correnti...");
-            dRes = await client.query(`
-                SELECT dv.*, v.driver_id, v.servizi, v.tipo, v.marca, v.modello, v.rating,
-                       -- Posizione BASE (dal veicolo)
-                       ST_Y(v.coord::geometry) as lat_base, ST_X(v.coord::geometry) as lon_base,
-                       -- Posizione LIVE (dalla tabella posizioni)
-                       ST_Y(pv.coord::geometry) as lat_live, ST_X(pv.coord::geometry) as lon_live
-                FROM disponibilita_veicolo dv 
-                JOIN veicolo v ON dv.veicolo_id = v.id 
-                LEFT JOIN LATERAL (
-                    SELECT coord 
-                    FROM posizione_veicolo 
-                    WHERE veicolo_id = v.id 
-                    ORDER BY "timestamp" DESC 
-                    LIMIT 1
-                ) pv ON true
-                ORDER BY dv.id DESC
-                LIMIT 50
-            `);
-            console.log(`🔍 [SYNC FALLBACK] Righe caricate tramite fallback: ${dRes.rows.length}`);
+            console.warn("⚠️ [SYNC] Nessuna disponibilità trovata.");
         }
 
         const [vRes, cRes, dirRes, nodiRes] = await Promise.all([

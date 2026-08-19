@@ -23,8 +23,8 @@ const normalizeInput = (b = {}) => ({
     servizi: Array.isArray(b.servizi) ? b.servizi : [],
     tipo: b.tipo || null,
     anno: b.anno ? Number(b.anno) : null,
-    lat: (b.lat != null && Number(b.lat) !== 0) ? Number(b.lat) : null,
-    lon: (b.lon != null && Number(b.lon) !== 0) ? Number(b.lon) : null,
+    lat: (b.lat != null && !isNaN(Number(b.lat)) && Number(b.lat) !== 0) ? Number(b.lat) : null,
+    lon: (b.lon != null && !isNaN(Number(b.lon)) && Number(b.lon) !== 0) ? Number(b.lon) : null,
     localita: b.localita || null,
     image_url: b.image_url || null,
     doc_licenza: b.doc_licenza || null,
@@ -62,7 +62,7 @@ veicoloRouter.get('/marche-modelli', (req, res) => {
     }
 });
 
-// GET Veicoli (CON JOIN DOCUMENTI E ESTRAZIONE LAT/LON DA POSTGIS)
+// GET Veicoli (CON JOIN DOCUMENTI E ESTRAZIONE LAT/LON)
 veicoloRouter.get('/', async (req, res) => {
     try {
         const query = `
@@ -78,7 +78,6 @@ veicoloRouter.get('/', async (req, res) => {
         
         const { rows } = await pool.query(query, [req.user.id]);
 
-        // Mappatura per formattare come atteso dal frontend
         const veicoliNormalizzati = rows.map(v => {
             const docs = { libretto: null, assicurazione: null, licenza_ncc: null };
             if (v.documenti_array) {
@@ -88,7 +87,6 @@ veicoloRouter.get('/', async (req, res) => {
                     }
                 });
             }
-            // Rimuoviamo il campo temporaneo usato per il JSON
             delete v.documenti_array;
             return { 
                 ...v, 
@@ -120,8 +118,6 @@ veicoloRouter.post('/', async (req, res) => {
         ]);
 
         const newVehicle = rows[0];
-        
-        // Aggiungiamo struttura documenti vuota per coerenza
         res.status(201).json({ 
             ...newVehicle, 
             lat: newVehicle.lat != null ? Number(newVehicle.lat) : null,
@@ -145,7 +141,6 @@ veicoloRouter.put('/:id', async (req, res) => {
         let queryParams;
 
         if (hasCoordinates) {
-            // Se sono presenti nuove coordinate valide, aggiorniamo anche la colonna coord
             query = `
                 UPDATE veicolo 
                 SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
@@ -162,7 +157,7 @@ veicoloRouter.put('/:id', async (req, res) => {
                 d.doc_licenza, d.doc_comune, req.params.id, req.user.id
             ];
         } else {
-            // Se non ci sono nuove coordinate, aggiorniamo i dati testuali ma lasciamo inalterata la colonna coord esistente
+            // Se non ci sono nuove coordinate nel payload, manteniamo coord e localita esistenti se non specificate
             query = `
                 UPDATE veicolo 
                 SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
@@ -185,7 +180,6 @@ veicoloRouter.put('/:id', async (req, res) => {
         
         const updatedVehicle = rows[0];
 
-        // Mantieni i documenti esistenti nel ritorno
         res.json({ 
             ...updatedVehicle, 
             lat: updatedVehicle.lat != null ? Number(updatedVehicle.lat) : null,

@@ -125,33 +125,46 @@ veicoloRouter.put('/:id', async (req, res) => {
         
         console.log("🛠️ [Backend UPDATE] Dati normalizzati ricevuti:", { lat: d.lat, lon: d.lon, localita: d.localita });
 
-        const query = `
-            UPDATE veicolo 
-            SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
-                servizi=$6::jsonb, tipo=$7, anno=$8, 
-                coord=ST_SetSRID(ST_MakePoint($9, $10), 4326), 
-                localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14
-            WHERE id=$15 AND driver_id=$16 
-            RETURNING *`;
+        const hasCoordinates = d.lat != null && d.lon != null;
+        let query;
+        let queryParams;
+
+        if (hasCoordinates) {
+            // Se sono presenti nuove coordinate valide, aggiorniamo anche la colonna coord
+            query = `
+                UPDATE veicolo 
+                SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
+                    servizi=$6::jsonb, tipo=$7, anno=$8, 
+                    coord=ST_SetSRID(ST_MakePoint($9, $10), 4326), 
+                    localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14
+                WHERE id=$15 AND driver_id=$16 
+                RETURNING *`;
+            
+            queryParams = [
+                d.marca, d.modello, d.posti_totali, d.raggio_km, d.targa, 
+                JSON.stringify(d.servizi), d.tipo, d.anno, 
+                d.lon, d.lat, d.localita, d.image_url, 
+                d.doc_licenza, d.doc_comune, req.params.id, req.user.id
+            ];
+        } else {
+            // Se non ci sono nuove coordinate, aggiorniamo i dati testuali ma lasciamo inalterata la colonna coord esistente
+            query = `
+                UPDATE veicolo 
+                SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
+                    servizi=$6::jsonb, tipo=$7, anno=$8, 
+                    localita=COALESCE($9, localita), image_url=$10, numero_licenza_ncc=$11, comune_licenza=$12
+                WHERE id=$13 AND driver_id=$14 
+                RETURNING *`;
+            
+            queryParams = [
+                d.marca, d.modello, d.posti_totali, d.raggio_km, d.targa, 
+                JSON.stringify(d.servizi), d.tipo, d.anno, 
+                d.localita, d.image_url, d.doc_licenza, d.doc_comune, 
+                req.params.id, req.user.id
+            ];
+        }
         
-        const { rows, rowCount } = await pool.query(query, [
-            d.marca,            // $1
-            d.modello,          // $2
-            d.posti_totali,     // $3
-            d.raggio_km,        // $4
-            d.targa,            // $5
-            JSON.stringify(d.servizi), // $6
-            d.tipo,             // $7
-            d.anno,             // $8
-            d.lon,              // $9  (Longitudine - Asse X)
-            d.lat,              // $10 (Latitudine - Asse Y)
-            d.localita,         // $11
-            d.image_url,        // $12
-            d.doc_licenza,      // $13
-            d.doc_comune,       // $14
-            req.params.id,      // $15
-            req.user.id         // $16
-        ]);
+        const { rows, rowCount } = await pool.query(query, queryParams);
 
         if (!rowCount) return res.status(404).json({ error: "Veicolo non trovato" });
         

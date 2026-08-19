@@ -62,11 +62,13 @@ veicoloRouter.get('/marche-modelli', (req, res) => {
     }
 });
 
-// GET Veicoli (CON JOIN DOCUMENTI)
+// GET Veicoli (CON JOIN DOCUMENTI E ESTRAZIONE LAT/LON DA POSTGIS)
 veicoloRouter.get('/', async (req, res) => {
     try {
         const query = `
             SELECT v.*, 
+                   ST_Y(v.coord::geometry) as lat,
+                   ST_X(v.coord::geometry) as lon,
                    json_agg(json_build_object('tipo', d.tipo, 'url', d.url, 'stato', d.stato)) 
                    FILTER (WHERE d.tipo IS NOT NULL) as documenti_array
             FROM veicolo v
@@ -88,7 +90,12 @@ veicoloRouter.get('/', async (req, res) => {
             }
             // Rimuoviamo il campo temporaneo usato per il JSON
             delete v.documenti_array;
-            return { ...v, documenti: docs };
+            return { 
+                ...v, 
+                lat: v.lat != null ? Number(v.lat) : null,
+                lon: v.lon != null ? Number(v.lon) : null,
+                documenti: docs 
+            };
         });
 
         res.json(veicoliNormalizzati);
@@ -104,15 +111,23 @@ veicoloRouter.post('/', async (req, res) => {
         const query = `
             INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url, numero_licenza_ncc, comune_licenza)
             VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, ST_SetSRID(ST_MakePoint($10,$11),4326), $12, $13, $14, $15)
-            RETURNING *`;
+            RETURNING *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon`;
         
         const { rows } = await pool.query(query, [
             req.user.id, d.marca, d.modello, d.posti_totali, d.raggio_km, d.targa, 
             JSON.stringify(d.servizi), d.tipo, d.anno, d.lon, d.lat, 
             d.localita, d.image_url, d.doc_licenza, d.doc_comune
         ]);
+
+        const newVehicle = rows[0];
+        
         // Aggiungiamo struttura documenti vuota per coerenza
-        res.status(201).json({ ...rows[0], documenti: { libretto: null, assicurazione: null, licenza_ncc: null } });
+        res.status(201).json({ 
+            ...newVehicle, 
+            lat: newVehicle.lat != null ? Number(newVehicle.lat) : null,
+            lon: newVehicle.lon != null ? Number(newVehicle.lon) : null,
+            documenti: { libretto: null, assicurazione: null, licenza_ncc: null } 
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -138,7 +153,7 @@ veicoloRouter.put('/:id', async (req, res) => {
                     coord=ST_SetSRID(ST_MakePoint($9, $10), 4326), 
                     localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14
                 WHERE id=$15 AND driver_id=$16 
-                RETURNING *`;
+                RETURNING *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon`;
             
             queryParams = [
                 d.marca, d.modello, d.posti_totali, d.raggio_km, d.targa, 
@@ -154,7 +169,7 @@ veicoloRouter.put('/:id', async (req, res) => {
                     servizi=$6::jsonb, tipo=$7, anno=$8, 
                     localita=COALESCE($9, localita), image_url=$10, numero_licenza_ncc=$11, comune_licenza=$12
                 WHERE id=$13 AND driver_id=$14 
-                RETURNING *`;
+                RETURNING *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon`;
             
             queryParams = [
                 d.marca, d.modello, d.posti_totali, d.raggio_km, d.targa, 
@@ -168,8 +183,15 @@ veicoloRouter.put('/:id', async (req, res) => {
 
         if (!rowCount) return res.status(404).json({ error: "Veicolo non trovato" });
         
+        const updatedVehicle = rows[0];
+
         // Mantieni i documenti esistenti nel ritorno
-        res.json({ ...rows[0], documenti: req.body.documenti || { libretto: null, assicurazione: null, licenza_ncc: null } });
+        res.json({ 
+            ...updatedVehicle, 
+            lat: updatedVehicle.lat != null ? Number(updatedVehicle.lat) : null,
+            lon: updatedVehicle.lon != null ? Number(updatedVehicle.lon) : null,
+            documenti: req.body.documenti || { libretto: null, assicurazione: null, licenza_ncc: null } 
+        });
     } catch (err) {
         console.error("❌ [Backend UPDATE Error]:", err.message);
         res.status(400).json({ error: err.message });

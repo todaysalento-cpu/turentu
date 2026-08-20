@@ -139,6 +139,33 @@ router.post('/:id/accetta', async (req, res) => {
           await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
       }
 
+      // Salvataggio delle fermate pianificate (ritiro e rilascio) nella tabella corse
+      const nuoveFermate = [
+        {
+          indirizzo: pRow.origine_address,
+          lat: pRow.origine_lat,
+          lon: pRow.origine_lon,
+          tipo: 'ritiro',
+          cliente_id: pRow.cliente_id
+        },
+        {
+          indirizzo: pRow.destinazione_address,
+          lat: pRow.destinazione_lat,
+          lon: pRow.destinazione_lon,
+          tipo: 'rilascio',
+          cliente_id: pRow.cliente_id
+        }
+      ];
+
+      const updateCorsaRes = await client.query(
+        `UPDATE corse 
+         SET fermate_pianificate = COALESCE(fermate_pianificate, '[]'::jsonb) || $1::jsonb 
+         WHERE id = $2
+         RETURNING *`,
+        [JSON.stringify(nuoveFermate), corsa.id]
+      );
+      corsa = updateCorsaRes.rows[0];
+
       upsertCorsa(corsa);
       CacheManager.corsa.update(corsa);
 

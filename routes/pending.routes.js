@@ -98,7 +98,9 @@ router.post('/:id/accetta', async (req, res) => {
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
       
       const isPopBus = (pRow.tipo_corsa === 'popbus' || pRow.direttrice_id != null);
-      const isPrivata = (pRow.tipo_corsa === 'privata');
+      
+      // Controllo rigoroso: cerchiamo la corsa esistente SOLO se il tipo è esplicitamente 'condivisa'
+      const isCondivisa = (pRow.tipo_corsa === 'condivisa');
 
       const segmenti = { 
           startIdx: pRow.start_index_polyline ?? 0, 
@@ -116,8 +118,8 @@ router.post('/:id/accetta', async (req, res) => {
         } else {
             let existing = { rows: [] };
             
-            // Se NON è una corsa privata, cerchiamo una corsa condivisa esistente da riempire
-            if (!isPrivata) {
+            // Seleziona la corsa esistente solo se è una vera corsa condivisa
+            if (isCondivisa) {
                 existing = await client.query(
                     `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND tipo_corsa = 'condivisa' AND stato != 'terminata' LIMIT 1`,
                     [pRow.veicolo_id, pRow.start_datetime]
@@ -127,7 +129,7 @@ router.post('/:id/accetta', async (req, res) => {
             if (existing.rows.length) {
                 corsa = existing.rows[0];
             } else {
-                // Se è privata (o se non esiste una condivisa aperta), creiamo una nuova corsa dedicata
+                // Per 'prenotazione', 'privata' o qualsiasi altro tipo non condiviso, creiamo una nuova corsa dedicata
                 const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
                 const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
                 corsa = resCorsa.corsa;

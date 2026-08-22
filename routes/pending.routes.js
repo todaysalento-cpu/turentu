@@ -98,6 +98,7 @@ router.post('/:id/accetta', async (req, res) => {
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
       
       const isPopBus = (pRow.tipo_corsa === 'popbus' || pRow.direttrice_id != null);
+      const isPrivata = (pRow.tipo_corsa === 'privata');
 
       const segmenti = { 
           startIdx: pRow.start_index_polyline ?? 0, 
@@ -113,19 +114,25 @@ router.post('/:id/accetta', async (req, res) => {
             corsa = resCorsa.corsa;
             prenotazioneEffettuata = true; 
         } else {
-            const existing = await client.query(
-              `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
-              [pRow.veicolo_id, pRow.start_datetime]
-            );
+            let existing = { rows: [] };
+            
+            // Se NON è una corsa privata, cerchiamo una corsa condivisa esistente da riempire
+            if (!isPrivata) {
+                existing = await client.query(
+                    `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND tipo_corsa = 'condivisa' AND stato != 'terminata' LIMIT 1`,
+                    [pRow.veicolo_id, pRow.start_datetime]
+                );
+            }
             
             if (existing.rows.length) {
-              corsa = existing.rows[0];
+                corsa = existing.rows[0];
             } else {
-              const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
-              const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
-              corsa = resCorsa.corsa;
-              prenotazioneEffettuata = true; 
-              await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
+                // Se è privata (o se non esiste una condivisa aperta), creiamo una nuova corsa dedicata
+                const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
+                const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
+                corsa = resCorsa.corsa;
+                prenotazioneEffettuata = true; 
+                await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
             }
         }
       } else {

@@ -98,8 +98,6 @@ router.post('/:id/accetta', async (req, res) => {
       const driverNome = driverRes.rows[0]?.driver_nome ?? 'Autista N/D';
       
       const isPopBus = (pRow.tipo_corsa === 'popbus' || pRow.direttrice_id != null);
-      
-      // Controllo rigoroso: cerchiamo la corsa esistente SOLO se il tipo è esplicitamente 'condivisa'
       const isCondivisa = (pRow.tipo_corsa === 'condivisa');
 
       const segmenti = { 
@@ -118,7 +116,7 @@ router.post('/:id/accetta', async (req, res) => {
         } else {
             let existing = { rows: [] };
             
-            // Seleziona la corsa esistente solo se è una vera corsa condivisa
+            // Cerchiamo una corsa esistente SOLO se è una corsa condivisa
             if (isCondivisa) {
                 existing = await client.query(
                     `SELECT * FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND tipo_corsa = 'condivisa' AND stato != 'terminata' LIMIT 1`,
@@ -129,7 +127,18 @@ router.post('/:id/accetta', async (req, res) => {
             if (existing.rows.length) {
                 corsa = existing.rows[0];
             } else {
-                // Per 'prenotazione', 'privata' o qualsiasi altro tipo non condiviso, creiamo una nuova corsa dedicata
+                // Controllo preventivo: se il veicolo ha già una corsa attiva a quell'orario, blocchiamo per evitare conflitti
+                const conflictCheck = await client.query(
+                    `SELECT id FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
+                    [pRow.veicolo_id, pRow.start_datetime]
+                );
+
+                if (conflictCheck.rows.length > 0) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: "Il veicolo è già impegnato o prenotato in questo orario." });
+                }
+
+                // Creazione nuova corsa dedicata (es. privata / prenota)
                 const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
                 const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
                 corsa = resCorsa.corsa;

@@ -122,7 +122,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
           ]
         );
         corsa = res.rows[0];
-        console.log(`✅ [DB] Corsa ID ${corsase?.id || corsa.id} inserita correttamente nel database.`);
+        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente nel database.`);
 
         const segmenti = { startIdx: pending.start_index_polyline ?? 0, endIdx: pending.end_index_polyline ?? 100 };
         const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, Number(pending.posti_richiesti ?? 1), segmenti, client);

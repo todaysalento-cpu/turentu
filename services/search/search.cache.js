@@ -71,9 +71,16 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     c.partenza_prevista = c.start_datetime;
     c.arrivo_previsto = c.arrivo_datetime;
 
+    // 🗺️ Mappatura di sicurezza per garantire che l'engine legga sempre le coordinate dal DB
+    c.origine_lat = c.origine_lat || c.lat_partenza || c.start_lat;
+    c.origine_lon = c.origine_lon || c.lon_partenza || c.start_lon || c.lng_partenza;
+    c.dest_lat = c.dest_lat || c.lat_arrivo || c.dest_latitudine;
+    c.dest_lon = c.dest_lon || c.lon_arrivo || c.dest_longitudine || c.lng_arrivo;
+
     if (c.percorso_polyline) {
         c.decodedCoords = polyline.decode(c.percorso_polyline);
     }
+    
     CacheStore.corseCache.set(Number(c.id), c);
     if (indicizzare && c.decodedCoords) await aggiornaIndiciRedis(c.id, c.decodedCoords);
 };

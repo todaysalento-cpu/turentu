@@ -99,7 +99,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
 
-        // Inserimento con posti_totali e posti_disponibili inizializzati correttamente
+        // Inserimento corretto: Longitudine (X) prima, Latitudine (Y) dopo
         const res = await client.query(
           `INSERT INTO corse (
               veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, 
@@ -108,25 +108,25 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
            )
            VALUES (
               $1, $2, $3, $4, 'prenotabile', $5, 
-              $6, $6, $7, ST_SetSRID(ST_MakePoint($9,$8),4326), ST_SetSRID(ST_MakePoint($11,$10),4326), 
+              $6, $6, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
               $12, $13, $14, $15, NOW()
            ) RETURNING *`,
           [
-            veicolo.id,                                      // $1
-            startDatetime,                                   // $2
-            arrivoDatetime,                                  // $3
+            veicolo.id,                                // $1
+            startDatetime,                             // $2
+            arrivoDatetime,                            // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,                          // $5
-            postiTotaliVeicolo,                              // $6 (valore usato sia per posti_totali che posti_disponibili)
-            (pending.distanza ?? 0),                         // $7
-            coordOrig.lat,                                   // $8  (latitudine origine)
-            coordOrig.lon,                                   // $9  (longitudine origine)
-            coordDest.lat,                                   // $10 (latitudine destinazione)
-            coordDest.lon,                                   // $11 (longitudine destinazione)
-            (pending.origine_address ?? 'N/D'),              // $12
-            (pending.destinazione_address ?? 'N/D'),         // $13
-            polylineString,                                  // $14
-            pathGeohashes                                    // $15
+            `${durataMin} minutes`,                    // $5
+            postiTotaliVeicolo,                        // $6
+            (pending.distanza ?? 0),                   // $7
+            coordOrig.lon,                             // $8  (longitudine origine - X)
+            coordOrig.lat,                             // $9  (latitudine origine - Y)
+            coordDest.lon,                             // $10 (longitudine destinazione - X)
+            coordDest.lat,                             // $11 (latitudine destinazione - Y)
+            (pending.origine_address ?? 'N/D'),        // $12
+            (pending.destinazione_address ?? 'N/D'),   // $13
+            polylineString,                            // $14
+            pathGeohashes                              // $15
           ]
         );
         corsa = res.rows[0];

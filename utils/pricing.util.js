@@ -135,11 +135,19 @@ export async function calcolaPrezzo(
                     console.log(`🚌 [PRICING POPBUS] Nessun pool trovato, usato default. Subtotale: ${prezzoCalcolato}`);
                 } else {
                     const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
+                    
+                    // Filtraggio rigoroso basato sull'indice della classe (senza fallback aggressivi)
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
-                    const mezzo = poolFiltrato.length > 0 
-                        ? poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr) 
-                        : poolData.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
+                    if (poolFiltrato.length === 0) {
+                        // Se nessun veicolo rispetta l'indice della classe, usiamo il fallback pulito sul default anziché rubare veicoli di altre classi
+                        prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmComplessiviOperativi) * multiplier;
+                        targetPasseggeri = Math.max(1, Math.round(4 * config.soglia));
+                        console.log(`⚠️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}. Applicato default.`);
+                        break;
+                    }
+                    
+                    const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
 
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));

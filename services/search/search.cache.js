@@ -125,7 +125,17 @@ export async function loadCachesUltra(force = false) {
 
         const [vRes, cRes, dirRes, nodiRes] = await Promise.all([
             client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
-            client.query(`SELECT c.*, v.marca, v.modello, v.rating, v.servizi FROM corse c LEFT JOIN veicolo v ON c.veicolo_id = v.id WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare')`),
+            client.query(`
+                SELECT c.*, 
+                       ST_Y(c.origine::geometry) as origine_lat, 
+                       ST_X(c.origine::geometry) as origine_lon,
+                       ST_Y(c.destinazione::geometry) as dest_lat, 
+                       ST_X(c.destinazione::geometry) as dest_lon,
+                       v.marca, v.modello, v.rating, v.servizi 
+                FROM corse c 
+                LEFT JOIN veicolo v ON c.veicolo_id = v.id 
+                WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
+            `),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
             client.query(`SELECT * FROM nodi_direttrice`)
         ]);

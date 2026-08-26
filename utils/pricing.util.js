@@ -104,21 +104,17 @@ export async function calcolaPrezzo(
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
 
-                // 1. Ricalcolo dinamico dei km a vuoto residui in base alla presenza di passeggeri a bordo
                 const fattoreAssorbimento = totPasseggeriCorrenti > 0 ? 0.5 : 1.0;
                 const kmAvvicinamentoDinamici = avvicinamento * fattoreAssorbimento;
                 const kmRiposizionamentoDinamici = riposizionamento;
                 const kmVuotiResiduiTotali = kmAvvicinamentoDinamici + kmRiposizionamentoDinamici;
 
-                // 2. Quota dei km a vuoto divisa equamente per i passeggeri finali
                 const costoVuotiTotale = infoCond.euro_km * kmVuotiResiduiTotali;
                 const quotaLogisticaUtente = costoVuotiTotale / totPasseggeriFinale;
 
-                // 3. Quota della tratta personale richiesta dall'utente (con proporzione e costo passeggero)
                 const costoTrattaUtente = infoCond.euro_km * safeKmUtente;
                 const quotaTrattaPura = costoTrattaUtente + (((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero) / totPasseggeriFinale);
 
-                // 4. Somma delle componenti e moltiplicatore di classe
                 prezzoCalcolato = (quotaTrattaPura + quotaLogisticaUtente) * multiplier;
 
                 console.log(`👥 [PRICING CONDIVISA DINAMICA] Km vuoti residui: ${kmVuotiResiduiTotali} | Quota Logistica: ${quotaLogisticaUtente.toFixed(2)} | Quota Tratta: ${quotaTrattaPura.toFixed(2)} | Passeggeri finali: ${totPasseggeriFinale} | Subtotale: ${prezzoCalcolato}`);
@@ -149,7 +145,13 @@ export async function calcolaPrezzo(
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
                     prezzoCalcolato = ((breakEvenTotale / targetPasseggeri) * (safeKmUtente / safeKmTotali)) * multiplier;
                     
-                    console.log(`🚌 [POPBUS DETTAGLIO] Scelto ID:${mezzo.id} [${classeKey}] | Posti mezzo: ${mezzo.posti} | Target: ${targetPasseggeri} persone | Break-even totale: ${breakEvenTotale} | Subtotale: ${prezzoCalcolato}`);
+                    // --- LOG AGGIUNTIVI DI DEBUG PER EXPRESS / POPBUS ---
+                    console.log(`🔍 [DEBUG POPBUS EXT] Classe: ${classeKey} | Mult: ${multiplier}`);
+                    console.log(`🔍 [DEBUG POPBUS EXT] Mezzo ID: ${mezzo.id} | Euro/km: ${mezzo.euro_km} | Posti: ${mezzo.posti}`);
+                    console.log(`🔍 [DEBUG POPBUS EXT] Config soglia: ${config.soglia} | Target Passeggeri: ${targetPasseggeri}`);
+                    console.log(`🔍 [DEBUG POPBUS EXT] Km complessivi operativi: ${kmComplessiviOperativi} | Break-even totale: ${breakEvenTotale}`);
+                    console.log(`🔍 [DEBUG POPBUS EXT] Rapporto km utente/totali: ${safeKmUtente} / ${safeKmTotali}`);
+                    console.log(`🚌 [POPBUS DETTAGLIO] Scelto ID:${mezzo.id} [${classeKey}] | Subtotale calcolato: ${prezzoCalcolato}`);
                 }
                 break;
 

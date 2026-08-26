@@ -112,6 +112,15 @@ export async function cercaSlotUltra(richiesta) {
         const c = CacheStore.corseCache.get(Number(id));
         if (!c) return null;
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
+        
+        // 🔎 LOG DI DEBUG AGGIUNTIVO PER LO SNAP E I GEOHASH DELLE CANDIDATE
+        console.log(`🔍 [DEBUG SNAP] Corsa ID ${c.id}:`);
+        console.log(`   - Origine richiesta utente: ${lat}, ${lon}`);
+        console.log(`   - Destinazione richiesta utente: ${destLat}, ${destLon}`);
+        console.log(`   - Dati Corsa DB (Origine): ${c.origine_lat || 'N/A'}, ${c.origine_lon || 'N/A'}`);
+        console.log(`   - Dati Corsa DB (Destinazione): ${c.dest_lat || 'N/A'}, ${c.dest_lon || 'N/A'}`);
+        console.log(`   - Geohashes Corsa:`, c.path_geohashes || c.geohashes || 'Non presenti');
+
         return c;
     }).filter(Boolean);
 
@@ -129,7 +138,6 @@ export async function cercaSlotUltra(richiesta) {
             [corsaIds]
         );
 
-        // Mappa le prenotazioni raggruppandole nello stesso ordine delle corse candidate
         prenotazioniBatch = corseCandidate.map(c => 
             allPrenotazioni.filter(p => Number(p.corsa_id) === Number(c.id))
         );
@@ -235,7 +243,6 @@ export async function cercaSlotUltra(richiesta) {
         if (disponibili >= postiRichiesti) {
             const dispVeicolo = CacheStore.veicoloToDisponibilita.get(dir.veicolo_id) || {};
             
-            // Calcolo avvicinamento e riposizionamento per direttrice attiva
             let kmAvvPool = 0;
             let kmRipPool = 0;
             const latV = (isImmediata && dispVeicolo.lat_live != null) ? dispVeicolo.lat_live : dispVeicolo.lat_base;

@@ -111,8 +111,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
 
-                const opzioniPopBus = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
+                const opzioniPopBusMappe = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
                     const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
+                    
+                    // Se la classe non ha veicoli idonei, calcolaPrezzo restituisce null -> scartiamo questa opzione
+                    if (!p) return null;
+
                     const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
 
                     return {
@@ -144,11 +148,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     };
                 }));
 
-                return opzioniPopBus;
+                // Filtriamo via i null (escludendo le classi non disponibili come l'Express)
+                return opzioniPopBusMappe.filter(opzione => opzione !== null);
             }
 
             // 2. LOGICA STANDARD (Corse reali trovate)
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
+            if (!p) return []; // Se il prezzo fallisce anche per i normali, evitiamo il blocco
+
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 
             return [{

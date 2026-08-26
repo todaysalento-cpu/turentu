@@ -155,55 +155,36 @@ export async function cercaSlotUltra(richiesta) {
     const veicoliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries());
 
     const risultatiPrivati = (await Promise.all(veicoliEntries.map(async ([veicoloId, disp]) => {
-        // Seleziona la coordinata corretta: LIVE se la richiesta è immediata e la posizione live esiste, altrimenti BASE
         const latVeicolo = (isImmediata && disp.lat_live !== null && disp.lat_live !== undefined) ? disp.lat_live : disp.lat_base;
         const lonVeicolo = (isImmediata && disp.lon_live !== null && disp.lon_live !== undefined) ? disp.lon_live : disp.lon_base;
 
         if (latVeicolo === null || latVeicolo === undefined || lonVeicolo === null || lonVeicolo === undefined) {
-            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} saltato: coordinate mancanti (lat: ${latVeicolo}, lon: ${lonVeicolo})`);
             return null;
         }
 
         const pVeicoloPoint = turf.point([Number(lonVeicolo), Number(latVeicolo)]);
         const distVeicoloGeo = turf.distance(pStart, pVeicoloPoint, { units: 'kilometers' });
         
-        if (distVeicoloGeo >= 50) {
-            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} troppo lontano geometricamente: ${distVeicoloGeo.toFixed(2)} km`);
-            return null;
-        }
-
-        if (!disp.is_slot || disp.disponibile === false) {
-            console.log(`🚗 [DEBUG PRIVATI] Veicolo ${veicoloId} nel raggio ma scartato -> is_slot: ${disp.is_slot}, disponibile: ${disp.disponibile}`);
+        if (distVeicoloGeo >= 50 || !disp.is_slot || disp.disponibile === false) {
             return null;
         }
 
         const cap = await getCapacitaDirettrice(disp.veicolo_id, true);
-        console.log(`✅ [DEBUG PRIVATI] Veicolo ${veicoloId} IDONEO. Calcolo percorsi stradali reali... Capacità: ${cap}`);
 
-        // 1. Avvicinamento stradale reale (Posizione veicolo -> Partenza utente)
         let kmAvv = distVeicoloGeo;
         try {
             const infoAvv = await getDurataDistanza({ lat: Number(latVeicolo), lon: Number(lonVeicolo) }, { lat, lon });
-            if (infoAvv && infoAvv.distanzaKm) {
-                kmAvv = infoAvv.distanzaKm;
-            }
-        } catch (err) {
-            console.warn(`⚠️ [MAPS ERROR] Fallito calcolo avvicinamento stradale per veicolo ${veicoloId}, uso fallback geometrico.`);
-        }
+            if (infoAvv && infoAvv.distanzaKm) kmAvv = infoAvv.distanzaKm;
+        } catch (err) {}
 
-        // 2. Riposizionamento stradale reale (Arrivo utente -> Base veicolo)
         let kmRip = 0;
         const latBase = disp.lat_base;
         const lonBase = disp.lon_base;
         if (latBase !== null && latBase !== undefined && lonBase !== null && lonBase !== undefined) {
             try {
                 const infoRip = await getDurataDistanza({ lat: destLat, lon: destLon }, { lat: Number(latBase), lon: Number(lonBase) });
-                if (infoRip && infoRip.distanzaKm) {
-                    kmRip = infoRip.distanzaKm;
-                }
-            } catch (err) {
-                console.warn(`⚠️ [MAPS ERROR] Fallito calcolo riposizionamento stradale per veicolo ${veicoloId}, uso 0.`);
-            }
+                if (infoRip && infoRip.distanzaKm) kmRip = infoRip.distanzaKm;
+            } catch (err) {}
         }
 
         return {
@@ -253,6 +234,27 @@ export async function cercaSlotUltra(richiesta) {
         
         if (disponibili >= postiRichiesti) {
             const dispVeicolo = CacheStore.veicoloToDisponibilita.get(dir.veicolo_id) || {};
+            
+            // Calcolo avvicinamento e riposizionamento per direttrice attiva
+            let kmAvvPool = 0;
+            let kmRipPool = 0;
+            const latV = (isImmediata && dispVeicolo.lat_live != null) ? dispVeicolo.lat_live : dispVeicolo.lat_base;
+            const lonV = (isImmediata && dispVeicolo.lon_live != null) ? dispVeicolo.lon_live : dispVeicolo.lon_base;
+
+            if (latV != null && lonV != null) {
+                try {
+                    const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat, lon });
+                    if (infoAvv?.distanzaKm) kmAvvPool = infoAvv.distanzaKm;
+                } catch (e) {}
+
+                if (dispVeicolo.lat_base != null && dispVeicolo.lon_base != null) {
+                    try {
+                        const infoRip = await getDurataDistanza({ lat: destLat, lon: destLon }, { lat: Number(dispVeicolo.lat_base), lon: Number(dispVeicolo.lon_base) });
+                        if (infoRip?.distanzaKm) kmRipPool = infoRip.distanzaKm;
+                    } catch (e) {}
+                }
+            }
+
             return { 
                 id: `pop_${dir.id}`, 
                 tipo: 'pop-bus', 
@@ -264,8 +266,8 @@ export async function cercaSlotUltra(richiesta) {
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
                 distanza: distanzaMetri, 
-                km_avvicinamento: 0,
-                km_riposizionamento: 0,
+                km_avvicinamento: kmAvvPool,
+                km_riposizionamento: kmRipPool,
                 is_pool: true,
                 include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno
             };
@@ -278,20 +280,60 @@ export async function cercaSlotUltra(richiesta) {
 
     if (risultatiPool.length === 0) {
         console.log(`ℹ️ [DEBUG FALLBACK] Nessun pool attivo trovato. Inserimento card virtuale di fallback (virtual_pop_pending).`);
-        const veicoliDisponibili = Array.from(CacheStore.veicoloToDisponibilita.entries())
-            .filter(([_, disp]) => disp.disponibile === true)
-            .map(([id, _]) => id);
+        
+        const veicoliDisponibiliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries())
+            .filter(([_, disp]) => disp.disponibile === true);
+        
+        const veicoliDisponibiliIds = veicoliDisponibiliEntries.map(([id, _]) => id);
+
+        let kmAvvFallback = 0;
+        let kmRipFallback = 0;
+
+        if (veicoliDisponibiliEntries.length > 0) {
+            let minDistance = Infinity;
+            let migliorVeicolo = null;
+
+            for (const [vId, disp] of veicoliDisponibiliEntries) {
+                const latV = (isImmediata && disp.lat_live != null) ? disp.lat_live : disp.lat_base;
+                const lonV = (isImmediata && disp.lon_live != null) ? disp.lon_live : disp.lon_base;
+                
+                if (latV != null && lonV != null) {
+                    const distGeo = turf.distance(pStart, turf.point([Number(lonV), Number(latV)]), { units: 'kilometers' });
+                    if (distGeo < minDistance) {
+                        minDistance = distGeo;
+                        migliorVeicolo = disp;
+                    }
+                }
+            }
+
+            if (migliorVeicolo) {
+                kmAvvFallback = minDistance;
+                try {
+                    const latV = (isImmediata && migliorVeicolo.lat_live != null) ? migliorVeicolo.lat_live : migliorVeicolo.lat_base;
+                    const lonV = (isImmediata && migliorVeicolo.lon_live != null) ? migliorVeicolo.lon_live : migliorVeicolo.lon_base;
+                    const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat, lon });
+                    if (infoAvv?.distanzaKm) kmAvvFallback = infoAvv.distanzaKm;
+                } catch (e) {}
+
+                if (migliorVeicolo.lat_base != null && migliorVeicolo.lon_base != null) {
+                    try {
+                        const infoRip = await getDurataDistanza({ lat: destLat, lon: destLon }, { lat: Number(migliorVeicolo.lat_base), lon: Number(migliorVeicolo.lon_base) });
+                        if (infoRip?.distanzaKm) kmRipFallback = infoRip.distanzaKm;
+                    } catch (e) {}
+                }
+            }
+        }
         
         risultatiFinali.push({
             id: `virtual_pop_pending`,
             tipo: 'pop-bus',
             is_pool: true,
-            veicoli_pool_ids: veicoliDisponibili,
+            veicoli_pool_ids: veicoliDisponibiliIds,
             stato: 'in_attesa',
             distanza: distanzaMetri,
             distanzaTotaleRotte: distanzaMetri,
-            km_avvicinamento: 0,
-            km_riposizionamento: 0,
+            km_avvicinamento: kmAvvFallback,
+            km_riposizionamento: kmRipFallback,
             messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`
         });
     }

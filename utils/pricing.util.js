@@ -78,7 +78,7 @@ export async function calcolaPrezzo(
     const classeKey = classe?.toUpperCase() || 'STANDARD';
     const multiplier = CLASSE_MULTIPLIER[classeKey] || 1.0;
 
-    let prezzoCalcolato = 0;
+    let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
     // Estrazione e normalizzazione dei chilometri operativi
@@ -131,19 +131,17 @@ export async function calcolaPrezzo(
                 const poolData = await getDettaglioPool(poolIds || []);
                 
                 if (poolData.length === 0) {
-                    prezzoCalcolato = (TARIFF_DEFAULT.euro_km * (safeKmUtente + avvicinamento + riposizionamento)) * multiplier;
-                    console.log(`🚌 [PRICING POPBUS] Nessun pool trovato, usato default. Subtotale: ${prezzoCalcolato}`);
+                    console.log(`🚌 [PRICING POPBUS] Nessun pool trovato per la classe ${classeKey}. Classe non disponibile.`);
+                    prezzoCalcolato = null;
                 } else {
                     const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
                     
-                    // Filtraggio rigoroso basato sull'indice della classe (senza fallback aggressivi)
+                    // Filtraggio rigoroso basato sull'indice della classe
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
                     if (poolFiltrato.length === 0) {
-                        // Se nessun veicolo rispetta l'indice della classe, usiamo il fallback pulito sul default anziché rubare veicoli di altre classi
-                        prezzoCalcolato = (TARIFF_DEFAULT.euro_km * kmComplessiviOperativi) * multiplier;
-                        targetPasseggeri = Math.max(1, Math.round(4 * config.soglia));
-                        console.log(`⚠️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}. Applicato default.`);
+                        console.log(`⚠️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey} (range: ${config.minIndice} - ${config.maxIndice}). Classe non disponibile.`);
+                        prezzoCalcolato = null;
                         break;
                     }
                     
@@ -169,7 +167,13 @@ export async function calcolaPrezzo(
         }
     } catch (err) {
         console.error("❌ [PRICING ERROR]", err);
-        prezzoCalcolato = (0.50 * safeKmUtente) * multiplier;
+        prezzoCalcolato = null;
+    }
+
+    // Se la classe non è disponibile (prezzo nullo), restituiamo null o gestiamo l'assenza
+    if (prezzoCalcolato === null) {
+        console.log(`❌ [PRICING FINALE] Classe ${classeKey} non disponibile per mancanza di veicoli idonei.`);
+        return null;
     }
 
     const finale = Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);

@@ -137,19 +137,22 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const distanza = slot.distanzaKm || 0;
       const durata = slot.durata_minuti || 0;
 
-      console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}`);
+      // Estraiamo l'ID della corsa dallo slot se si sta agganciando a una corsa condivisa esistente
+      const corsaIdToSave = (slot.id && !isNaN(Number(slot.id))) ? Number(slot.id) : (slot.corsa_id || null);
+
+      console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}, corsa_id: ${corsaIdToSave}`);
 
       const result = await client.query(
         `INSERT INTO pending (
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
           distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id,
-          origine_address, destinazione_address
+          origine_address, destinazione_address, corsa_id
         )
           VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
-          'pending', $14, $15, $16, $17
+          'pending', $14, $15, $16, $17, $18
         ) RETURNING *`,
         [
           slot.veicolo_id,
@@ -168,7 +171,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
           requestId,
           origineAddress,
-          destinazioneAddress
+          destinazioneAddress,
+          corsaIdToSave
         ]
       );
 

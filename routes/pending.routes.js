@@ -115,34 +115,45 @@ router.post('/:id/accetta', async (req, res) => {
       let corsa;
       let prenotazioneEffettuata = false;
 
-      // Se il pending ha già un corsa_id (es. corsa condivisa selezionata dal cliente), lo usiamo direttamente
+      // Se il pending ha un corsa_id, verifichiamo che esista davvero nella tabella corse
       if (pRow.corsa_id) {
-        console.log(`🔍 [ACCETTA] Corsa già associata al pending (Condivisa), ID: ${pRow.corsa_id}`);
+        console.log(`🔍 [ACCETTA] Verifica esistenza corsa associata ID: ${pRow.corsa_id}`);
         const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [pRow.corsa_id]);
         corsa = corsaRes.rows[0];
-      } else if (isPopBus) {
-        console.log(`🚌 [ACCETTA] Creazione corsa PopBus da pending...`);
-        const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
-        corsa = resCorsa.corsa;
-        prenotazioneEffettuata = true; 
-      } else {
-        // Controllo conflitti rigoroso SOLO per le corse private/dedicate nuove
-        const conflictCheck = await client.query(
-            `SELECT id FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
-            [pRow.veicolo_id, pRow.start_datetime]
-        );
-
-        if (conflictCheck.rows.length > 0) {
-            console.warn(`❌ [ACCETTA CONFLITTO] Il veicolo ${pRow.veicolo_id} è già impegnato nell'orario ${pRow.start_datetime}`);
-            await client.query('ROLLBACK');
-            return res.status(400).json({ error: "Il veicolo è già impegnato o prenotato in questo orario." });
+        
+        if (!corsa) {
+          console.warn(`⚠️ [ACCETTA] Corsa ID ${pRow.corsa_id} non trovata (probabile ID veicolo errato). Creazione nuova corsa d'emergenza...`);
         }
+      }
 
-        console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
-        const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
-        const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
-        corsa = resCorsa.corsa;
-        prenotazioneEffettuata = true; 
+      // Se non esiste una corsa valida associata, la creiamo da zero o la gestiamo in base al tipo
+      if (!corsa) {
+        if (isPopBus) {
+          console.log(`🚌 [ACCETTA] Creazione corsa PopBus da pending...`);
+          const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
+          corsa = resCorsa.corsa;
+          prenotazioneEffettuata = true; 
+        } else {
+          // Controllo conflitti rigoroso per le corse private/dedicate
+          const conflictCheck = await client.query(
+              `SELECT id FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
+              [pRow.veicolo_id, pRow.start_datetime]
+          );
+
+          if (conflictCheck.rows.length > 0) {
+              console.warn(`❌ [ACCETTA CONFLITTO] Il veicolo ${pRow.veicolo_id} è già impegnato nell'orario ${pRow.start_datetime}`);
+              await client.query('ROLLBACK');
+              return res.status(400).json({ error: "Il veicolo è già impegnato o prenotato in questo orario." });
+          }
+
+          console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
+          const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
+          const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
+          corsa = resCorsa.corsa;
+          prenotazioneEffettuata = true; 
+        }
+        
+        // Aggiorniamo il pending con il nuovo ID corsa corretto
         await client.query(`UPDATE pending SET corsa_id = $1 WHERE id = $2`, [corsa.id, pRow.id]);
       }
 

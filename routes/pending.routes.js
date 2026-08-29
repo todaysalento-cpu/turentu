@@ -115,14 +115,16 @@ router.post('/:id/accetta', async (req, res) => {
       let corsa;
       let prenotazioneEffettuata = false;
 
-      // Se il pending ha un corsa_id, verifichiamo che esista davvero nella tabella corse
-      if (pRow.corsa_id) {
-        console.log(`🔍 [ACCETTA] Verifica esistenza corsa associata ID: ${pRow.corsa_id}`);
-        const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [pRow.corsa_id]);
+      // Ignoriamo il corsa_id se corrisponde al veicolo_id (evitando il falso ID veicolo scambiato per corsa)
+      const validCorsaId = (pRow.corsa_id && pRow.corsa_id !== pRow.veicolo_id) ? pRow.corsa_id : null;
+
+      if (validCorsaId) {
+        console.log(`🔍 [ACCETTA] Verifica esistenza corsa associata ID: ${validCorsaId}`);
+        const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [validCorsaId]);
         corsa = corsaRes.rows[0];
         
         if (!corsa) {
-          console.warn(`⚠️ [ACCETTA] Corsa ID ${pRow.corsa_id} non trovata (probabile ID veicolo errato). Creazione nuova corsa d'emergenza...`);
+          console.warn(`⚠️ [ACCETTA] Corsa ID ${validCorsaId} non trovata. Creazione nuova corsa d'emergenza...`);
         }
       }
 

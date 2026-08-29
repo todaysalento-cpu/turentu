@@ -30,6 +30,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Slots mancanti' });
     }
 
+    // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
+    const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
+
     const clienteId = req.user.id;
     let pagatoConWallet = false;
 
@@ -57,7 +60,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(prezzo * 100),
         currency: 'eur',
-        metadata: { tipo: type, clienteId: clienteId.toString(), requestId },
+        metadata: { tipo: sanitizedType, clienteId: clienteId.toString(), requestId },
         capture_method: 'manual',
       });
       console.log(`💳 [PAYMENT:${requestId}}] Stripe PaymentIntent creato con ID: ${paymentIntent.id}`);
@@ -162,7 +165,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           clienteId,
           slot.start_datetime,
           slot.posti_richiesti || 1,
-          type,
+          sanitizedType,
           prezzo,
           distanza,
           durata,
@@ -209,7 +212,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           type: 'NEW_REQUEST',
           message: `Hai ricevuto una nuova richiesta di prenotazione!`,
           role: 'driver',
-          data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
+          data: { requestId, rowId: savedRow.id, type: sanitizedType, start_datetime: slot.start_datetime }
         });
         console.log(`✅ [NOTIFY_DRIVER:${requestId}] Notifica autista inviata.`);
       } else {
@@ -226,7 +229,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         type: 'REQUEST_CREATED',
         message: `La tua richiesta è stata inviata correttamente`,
         role: 'cliente',
-        data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
+        data: { requestId, rowId: savedRow.id, type: sanitizedType, start_datetime: slot.start_datetime }
       });
       console.log(`✅ [NOTIFY_CLIENT:${requestId}] Notifica cliente inviata.`);
     } catch (notifyErr) {

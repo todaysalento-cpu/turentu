@@ -19,7 +19,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   console.log(`📥 [PAYMENT:${requestId}] Payload ricevuto:`, JSON.stringify(req.body, null, 2));
 
   try {
-    const { type, prezzo, slots, usaWallet } = req.body;
+    const { type, prezzo, slots, usaWallet, searchOrigine, searchDestinazione } = req.body;
 
     if (!prezzo || prezzo <= 0) {
       console.warn(`⚠️ [PAYMENT:${requestId}] Prezzo non valido: ${prezzo}`);
@@ -78,11 +78,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`✅ [PAYMENT:${requestId}] Transazione wallet registrata.`);
     }
 
-    // 🔒 GESTIONE SLOT UNICO E ESTRAZIONE INDIRIZZI
+    // 🔒 GESTIONE SLOT UNICO E ESTRAZIONE INDIRIZZI (Con supporto a ricerca personalizzata)
     const slot = slots[0];
     
-    const origineAddress = slot.origine_address || slot.origineAddress || (slot.origine?.lat ? `Posizione (${slot.origine.lat.toFixed(4)}, ${slot.origine.lon.toFixed(4)})` : 'Partenza');
-    const destinazioneAddress = slot.destinazione_address || slot.destinazioneAddress || (slot.destinazione?.lat ? `Destinazione (${slot.destinazione.lat.toFixed(4)}, ${slot.destinazione.lon.toFixed(4)})` : 'Arrivo');
+    const finalOrigine = searchOrigine || slot.origine;
+    const finalDestinazione = searchDestinazione || slot.destinazione;
+
+    const origineAddress = slot.origine_address || slot.origineAddress || (finalOrigine?.lat ? `Posizione (${finalOrigine.lat.toFixed(4)}, ${finalOrigine.lon.toFixed(4)})` : 'Partenza');
+    const destinazioneAddress = slot.destinazione_address || slot.destinazioneAddress || (finalDestinazione?.lat ? `Destinazione (${finalDestinazione.lat.toFixed(4)}, ${finalDestinazione.lon.toFixed(4)})` : 'Arrivo');
 
     console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
@@ -91,11 +94,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     let savedRow;
 
     if (isPopBus) {
-      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${slot.origine.lat}, ${slot.origine.lon}) e destinazione: (${slot.destinazione.lat}, ${slot.destinazione.lon})`);
+      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${finalOrigine.lat}, ${finalOrigine.lon}) e destinazione: (${finalDestinazione.lat}, ${finalDestinazione.lon})`);
 
       const nodeRes = await client.query(
         `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-        [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
+        [finalOrigine.lat, finalOrigine.lon, finalDestinazione.lat, finalDestinazione.lon]
       );
 
       console.log(`🗺️ [DEBUG-NODES:${requestId}] Nodi restituiti dal DB -> start_node_id: ${nodeRes.rows[0]?.start}, end_node_id: ${nodeRes.rows[0]?.end}`);
@@ -113,8 +116,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         ) RETURNING *`,
         [
           clienteId,
-          slot.origine.lon, slot.origine.lat,
-          slot.destinazione.lon, slot.destinazione.lat,
+          finalOrigine.lon, finalOrigine.lat,
+          finalDestinazione.lon, finalDestinazione.lat,
           slot.start_datetime,
           slot.posti_richiesti || 1,
           nodeRes.rows[0].start,
@@ -164,10 +167,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           distanza,
           durata,
           expiresAt,
-          slot.origine.lon,
-          slot.origine.lat,
-          slot.destinazione.lon,
-          slot.destinazione.lat,
+          finalOrigine.lon,
+          finalOrigine.lat,
+          finalDestinazione.lon,
+          finalDestinazione.lat,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
           requestId,
           origineAddress,

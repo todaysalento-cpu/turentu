@@ -46,6 +46,15 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`🚀 [FORMAT] Inizio elaborazione di ${risultatiFiltrati?.length || 0} risultati.`);
 
+    // 🛠️ Recupero sicuro dei posti richiesti dall'utente da qualsiasi nome di proprietà possibile
+    const postiUtenteRichiesti = Number(
+        richiesta.posti_richiesti || 
+        richiesta.posti || 
+        richiesta.passeggeri || 
+        richiesta.numero_passeggeri || 
+        1
+    );
+
     const buckets = { condivisa: [], privata: [], 'pop-bus': [] };
     
     risultatiFiltrati.forEach(item => {
@@ -112,7 +121,15 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
 
                 const opzioniPopBusMappe = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
-                    const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
+                    const p = await calcolaPrezzo(
+                        { ...item, veicoli_pool_ids: poolSicuro }, 
+                        postiUtenteRichiesti, 
+                        'pop-bus', 
+                        distKmRichiesta, 
+                        distKmRichiesta, 
+                        0, 
+                        classeCorrente
+                    );
                     
                     if (!p) return null;
 
@@ -151,7 +168,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             }
 
             // 2. LOGICA STANDARD (Corse reali trovate)
-            const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
+            const passeggeriGiaA1Bordo = Number(item.passeggeri_esistenti || item.posti_occupati || item.passeggeri_correnti || 0);
+
+            const p = await calcolaPrezzo(
+                item, 
+                postiUtenteRichiesti, 
+                tipoCoerente, 
+                distKmItem, 
+                item.distanzaTotaleRotte || distKmItem, 
+                passeggeriGiaA1Bordo, 
+                item.classe
+            ).catch(() => ({ prezzo: distKmItem * 0.50 }));
+            
             if (!p) return [];
 
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));

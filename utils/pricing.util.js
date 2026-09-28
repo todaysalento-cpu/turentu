@@ -115,8 +115,9 @@ export async function calcolaPrezzo(
                 const costoVuotiTotale = infoCond.euro_km * kmVuotiResiduiTotali;
                 const quotaLogisticaUtente = costoVuotiTotale / totPasseggeriFinale;
 
-                const costoTrattaUtente = infoCond.euro_km * safeKmUtente;
-                const quotaTrattaPura = costoTrattaUtente + (((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero) / totPasseggeriFinale);
+                // CORRETTO: Il costo della tratta viene diviso equamente per il totale dei passeggeri finali
+                const costoTrattaTotale = infoCond.euro_km * safeKmUtente;
+                const quotaTrattaPura = (costoTrattaTotale / totPasseggeriFinale) + (((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero) / totPasseggeriFinale);
 
                 prezzoCalcolato = (quotaTrattaPura + quotaLogisticaUtente) * multiplier;
 

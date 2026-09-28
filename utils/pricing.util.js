@@ -102,9 +102,12 @@ export async function calcolaPrezzo(
 
             case 'condivisa':
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
-                const totPasseggeriFinale = Math.max(1, totPasseggeriCorrenti + richiesti);
+                
+                // Integrazione sicura dei passeggeri già a bordo (da parametro o proprietà della corsa)
+                const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
+                const totPasseggeriFinale = Math.max(1, passeggeriGiaPresenti + richiesti);
 
-                const fattoreAssorbimento = totPasseggeriCorrenti > 0 ? 0.5 : 1.0;
+                const fattoreAssorbimento = passeggeriGiaPresenti > 0 ? 0.5 : 1.0;
                 const kmAvvicinamentoDinamici = avvicinamento * fattoreAssorbimento;
                 const kmRiposizionamentoDinamici = riposizionamento;
                 const kmVuotiResiduiTotali = kmAvvicinamentoDinamici + kmRiposizionamentoDinamici;

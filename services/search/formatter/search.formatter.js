@@ -4,9 +4,9 @@ import { getLocalitaSafe, getDurataDistanza } from '../../../utils/maps.util.js'
 const localitaCache = new Map();
 
 const UI_CONFIG = {
-    'pop-bus': { colore: '#FF9800' }, 
-    'privata': { colore: '#000000' },  
-    'condivisa': { colore: '#4A90E2' } 
+    'pop-bus': { colore: '#FF9800' },
+    'privata': { colore: '#000000' },
+    'condivisa': { colore: '#4A90E2' }
 };
 
 const safeDate = (dateInput) => {
@@ -114,7 +114,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 const opzioniPopBusMappe = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
                     const p = await calcolaPrezzo({ ...item, veicoli_pool_ids: poolSicuro }, richiesta.posti_richiesti || 1, 'pop-bus', distKmRichiesta, distKmRichiesta, 0, classeCorrente);
                     
-                    // Se la classe non ha veicoli idonei, calcolaPrezzo restituisce null -> scartiamo questa opzione
                     if (!p) return null;
 
                     const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
@@ -148,13 +147,12 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     };
                 }));
 
-                // Filtriamo via i null (escludendo le classi non disponibili come l'Express)
                 return opzioniPopBusMappe.filter(opzione => opzione !== null);
             }
 
             // 2. LOGICA STANDARD (Corse reali trovate)
             const p = await calcolaPrezzo(item, richiesta.posti_richiesti || 1, tipoCoerente, distKmItem, item.distanzaTotaleRotte || distKmItem, 0, item.classe).catch(() => ({ prezzo: distKmItem * 0.50 }));
-            if (!p) return []; // Se il prezzo fallisce anche per i normali, evitiamo il blocco
+            if (!p) return [];
 
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
 

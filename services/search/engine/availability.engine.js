@@ -126,17 +126,27 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
                 const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
 
-                const isSaturata = verificaSaturazioneOffset(c, startOffset, endOffset, Number(richiesta.posti_richiesti), prenotazioni, capacitaTotale);
-                if (!isSaturata) {
+                // Calcoliamo i passeggeri già presenti nel tratto richiesto
+                let postiOccupatiNelTratto = 0;
+                for (const p of prenotazioni) {
+                    const pStart = Number(p.start_index_polyline ?? p.startOffset ?? 0);
+                    const pEnd = Number(p.end_index_polyline ?? p.endOffset ?? 0);
+                    if (startOffset < pEnd && endOffset > pStart) {
+                        postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
+                    }
+                }
+
+                if ((postiOccupatiNelTratto + Number(richiesta.posti_richiesti)) > capacitaTotale) {
                     console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto.`);
                     return null;
                 }
 
-                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo!`);
+                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto occupato da: ${postiOccupatiNelTratto} passeggeri.`);
                 return {
                     ...c,
                     km_avvicinamento: kmAvvicinamento,
-                    km_riposizionamento: kmRiposizionamento
+                    km_riposizionamento: kmRiposizionamento,
+                    passeggeri_correnti: postiOccupatiNelTratto // <-- VALORE AGGIUNTO QUI
                 };
             }
 

@@ -113,7 +113,6 @@ export async function cercaSlotUltra(richiesta) {
         if (!c) return null;
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
         
-        // 🔎 LOG DI DEBUG AGGIUNTIVO PER LO SNAP E I GEOHASH DELLE CANDIDATE
         console.log(`🔍 [DEBUG SNAP] Corsa ID ${c.id}:`);
         console.log(`   - Origine richiesta utente: ${lat}, ${lon}`);
         console.log(`   - Destinazione richiesta utente: ${destLat}, ${destLon}`);

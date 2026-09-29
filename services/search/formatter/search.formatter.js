@@ -128,7 +128,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                         distKmRichiesta, 
                         distKmRichiesta, 
                         0, 
-                        classeCorrente
+                        classeCorrente,
+                        Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),         // 👈 Passaggio km avvicinamento
+                        Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)   // 👈 Passaggio km riposizionamento
                     );
                     
                     if (!p) return null;
@@ -177,7 +179,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distKmItem, 
                 item.distanzaTotaleRotte || distKmItem, 
                 passeggeriGiaA1Bordo, 
-                item.classe
+                item.classe,
+                Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),         // 👈 Passaggio km avvicinamento
+                Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)   // 👈 Passaggio km riposizionamento
             ).catch(() => ({ prezzo: distKmItem * 0.50 }));
             
             if (!p) return [];

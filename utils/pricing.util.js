@@ -103,25 +103,30 @@ export async function calcolaPrezzo(
             case 'condivisa':
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 
-                // Integrazione sicura dei passeggeri già a bordo (da parametro o proprietà della corsa)
+                // 1. Costo totale della missione dell'autista (Tratta principale + Km a vuoto dinamici)
                 const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
-                const totPasseggeriFinale = Math.max(1, passeggeriGiaPresenti + richiesti);
-
                 const fattoreAssorbimento = passeggeriGiaPresenti > 0 ? 0.5 : 1.0;
                 const kmAvvicinamentoDinamici = avvicinamento * fattoreAssorbimento;
                 const kmRiposizionamentoDinamici = riposizionamento;
-                const kmVuotiResiduiTotali = kmAvvicinamentoDinamici + kmRiposizionamentoDinamici;
+                
+                const costoTotaleMissione = infoCond.euro_km * (safeKmTotali + kmAvvicinamentoDinamici + kmRiposizionamentoDinamici);
 
-                const costoVuotiTotale = infoCond.euro_km * kmVuotiResiduiTotali;
-                const quotaLogisticaUtente = costoVuotiTotale / totPasseggeriFinale;
+                // 2. Percentuale di tratta del nuovo utente (es. 1.0 per 100%, 0.7 per 70%)
+                const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / safeKmTotali));
 
-                // CORRETTO: Il costo della tratta viene diviso equamente per il totale dei passeggeri finali
-                const costoTrattaTotale = infoCond.euro_km * safeKmUtente;
-                const quotaTrattaPura = (costoTrattaTotale / totPasseggeriFinale) + (((totPasseggeriFinale - 1) * infoCond.prezzo_passeggero) / totPasseggeriFinale);
+                // 3. Somma delle percentuali a bordo (recupera le percentuali esistenti o le stima in base ai passeggeri correnti)
+                let percentualiEsistenti = corsa.percentuali_passeggeri_attivi;
+                if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti)) {
+                    // Fallback di stima se l'array puntuale non è passato: suppone che i passeggeri precedenti facciano il 100%
+                    percentualiEsistenti = Array(passeggeriGiaPresenti).fill(1.0);
+                }
+                const sommaPercentuali = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0) + percentualeUtente;
 
-                prezzoCalcolato = (quotaTrattaPura + quotaLogisticaUtente) * multiplier;
+                // 4. Applicazione della formula ponderata proporzionale
+                const quotaProporzionale = sommaPercentuali > 0 ? (percentualeUtente / sommaPercentuali) : 1.0;
+                prezzoCalcolato = (costoTotaleMissione * quotaProporzionale) * multiplier;
 
-                console.log(`👥 [PRICING CONDIVISA DINAMICA] Km vuoti residui: ${kmVuotiResiduiTotali} | Quota Logistica: ${quotaLogisticaUtente.toFixed(2)} | Quota Tratta: ${quotaTrattaPura.toFixed(2)} | Passeggeri finali: ${totPasseggeriFinale} | Subtotale: ${prezzoCalcolato}`);
+                console.log(`👥 [PRICING CONDIVISA PESATA] Costo Missione: ${costoTotaleMissione.toFixed(2)}€ | Somma % a bordo: ${sommaPercentuali.toFixed(2)} | % Utente: ${(percentualeUtente * 100).toFixed(0)}% | Subtotale: ${prezzoCalcolato}`);
                 break;
 
             case 'popbus':

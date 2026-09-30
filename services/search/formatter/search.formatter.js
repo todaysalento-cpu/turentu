@@ -46,7 +46,6 @@ async function getLocalitaSafeCached(coord) {
 export async function formatResults(richiesta, risultatiFiltrati) {
     console.log(`🚀 [FORMAT] Inizio elaborazione di ${risultatiFiltrati?.length || 0} risultati.`);
 
-    // 🛠️ Recupero sicuro dei posti richiesti dall'utente da qualsiasi nome di proprietà possibile
     const postiUtenteRichiesti = Number(
         richiesta.posti_richiesti || 
         richiesta.posti || 
@@ -115,7 +114,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const distKmItem = distMetriItem / 1000;
             const durataMinutiItem = mapInfo.durataMs > 0 ? (mapInfo.durataMs / 60000) : Math.max(30, Math.round(distKmItem / 1.0));
 
-            // 1. LOGICA VIRTUAL (POP-BUS PENDING / PROATTIVO)
+            // 1. LOGICA VIRTUAL / PENDING (POP-BUS PENDING / PROATTIVO)
             if (itemId.startsWith('virtual_pop_')) {
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
@@ -175,18 +174,15 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const kmAvvItem = Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0);
             const kmRipItem = Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0);
             
-            // 🔥 CORRETTO: Tratta effettiva richiesta dall'utente
             const kmTrattaUtente = distKmItem; 
-
-            // 🔥 CORRETTO: Distanza complessiva dell'intera corsa dell'autista
             const kmTotaliRotte = Number(item.km_totali_percorso || item.km_totali_rotta || item.distanza_totale_corsa || item.distanzaTotaleRotte || distKmItem);
 
             const p = await calcolaPrezzo(
                 item, 
                 postiUtenteRichiesti, 
                 tipoCoerente, 
-                kmTrattaUtente,     // <-- Km specifici dell'utente
-                kmTotaliRotte,      // <-- Km totali della missione dell'autista
+                kmTrattaUtente, 
+                kmTotaliRotte, 
                 passeggeriGiaA1Bordo, 
                 item.classe,
                 kmAvvItem,

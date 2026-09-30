@@ -1,6 +1,8 @@
 import * as turf from '@turf/turf';
 import polyline from '@mapbox/polyline';
 import { pool } from '../../../db/db.js';
+import { CacheStore } from '../search.cache.js';
+import { getDurataDistanza } from '../../../utils/maps.util.js';
 
 /**
  * Classe efficienza
@@ -71,6 +73,12 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     const TOLLERANZA_KM = 50.0;
+    
+    const isImmediata = (() => {
+        const orarioAndataUtente = new Date(richiesta.start_datetime || new Date());
+        const diffMinuti = (orarioAndataUtente.getTime() - new Date().getTime()) / (1000 * 60);
+        return diffMinuti >= -5 && diffMinuti <= 30;
+    })();
 
     // Estrazione della data della richiesta (formato YYYY-MM-DD) per il filtro rigido giornaliero
     const dataRichiestaStr = new Date(richiesta.start_datetime || new Date()).toISOString().split('T')[0];
@@ -101,16 +109,42 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return null;
             }
 
-            // --- CALCOLO CHILOMETRI OPERATIVI (Avvicinamento e Riposizionamento) ---
+            // --- CALCOLO CHILOMETRI OPERATIVI (Avvicinamento e Riposizionamento Reali) ---
             let kmAvvicinamento = 0;
             let kmRiposizionamento = 0;
 
-            if (c.lat_deposito && c.lon_deposito) {
-                const pDeposito = turf.point([Number(c.lon_deposito), Number(c.lat_deposito)]);
-                // Avvicinamento di base dal deposito (o integrabile con posizione live se passata)
-                kmAvvicinamento = turf.distance(pDeposito, pStart, { units: 'kilometers' });
-                // Riposizionamento fisso verso la base dal punto di arrivo (pEnd)
-                kmRiposizionamento = turf.distance(pEnd, pDeposito, { units: 'kilometers' });
+            const veicoloIdRiferimento = c.veicolo_id;
+            let dispVeicolo = veicoloIdRiferimento && CacheStore?.veicoloToDisponibilita ? CacheStore.veicoloToDisponibilita.get(Number(veicoloIdRiferimento)) : null;
+
+            const latV = dispVeicolo ? (isImmediata ? (dispVeicolo.lat_live ?? dispVeicolo.lat_base) : dispVeicolo.lat_base) : c.lat_deposito;
+            const lonV = dispVeicolo ? (isImmediata ? (dispVeicolo.lon_live ?? dispVeicolo.lon_base) : dispVeicolo.lon_base) : c.lon_deposito;
+            const latBaseV = dispVeicolo ? dispVeicolo.lat_base : c.lat_deposito;
+            const lonBaseV = dispVeicolo ? dispVeicolo.lon_base : c.lon_deposito;
+
+            if (latV != null && lonV != null) {
+                try {
+                    const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat: richiesta.coord.lat, lon: richiesta.coord.lon });
+                    if (infoAvv?.distanzaKm) {
+                        kmAvvicinamento = infoAvv.distanzaKm;
+                    } else {
+                        kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
+                    }
+                } catch (e) {
+                    kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
+                }
+            }
+
+            if (latBaseV != null && lonBaseV != null) {
+                try {
+                    const infoRip = await getDurataDistanza({ lat: richiesta.coordDest.lat, lon: richiesta.coordDest.lon }, { lat: Number(latBaseV), lon: Number(lonBaseV) });
+                    if (infoRip?.distanzaKm) {
+                        kmRiposizionamento = infoRip.distanzaKm;
+                    } else {
+                        kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
+                    }
+                } catch (e) {
+                    kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
+                }
             }
 
             // --- LOGICA CONDIVISA ---
@@ -129,9 +163,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 // Calcoliamo i passeggeri già presenti nel tratto richiesto
                 let postiOccupatiNelTratto = 0;
                 for (const p of prenotazioni) {
-                    const pStart = Number(p.start_index_polyline ?? p.startOffset ?? 0);
-                    const pEnd = Number(p.end_index_polyline ?? p.endOffset ?? 0);
-                    if (startOffset < pEnd && endOffset > pStart) {
+                    const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
+                    const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
+                    if (startOffset < pEndTratto && endOffset > pStartTratto) {
                         postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                     }
                 }
@@ -146,7 +180,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     ...c,
                     km_avvicinamento: kmAvvicinamento,
                     km_riposizionamento: kmRiposizionamento,
-                    passeggeri_correnti: postiOccupatiNelTratto // <-- VALORE AGGIUNTO QUI
+                    passeggeri_correnti: postiOccupatiNelTratto
                 };
             }
 
@@ -195,7 +229,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
 
             return { ...baseResult, is_proattivo: true };
-        }))).filter(Boolean)
+        })).filter(Boolean)
     };
 }
 

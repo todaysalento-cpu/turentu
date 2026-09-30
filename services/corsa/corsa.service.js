@@ -85,7 +85,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         let polylineString = '';
         let pathGeohashes = [];
-        let distanzaKm = 0;
+        let distanzaKm = Number(pending.distanza) || 0;
 
         try {
             console.log(`🗺️ [ROUTE] Richiesta geometria rotta per pending ${pending.id}...`);
@@ -93,9 +93,11 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             
             polylineString = routeData?.polyline || '';
             
-            // Estrazione e normalizzazione della distanza reale dal routing (o fallback su pending)
-            const distanzaRilevata = routeData?.distance ?? routeData?.distanza ?? pending.distanza ?? 0;
-            distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+            // Estrazione e normalizzazione della distanza reale dal routing (o fallback)
+            const distanzaRilevata = routeData?.distance ?? routeData?.distanza;
+            if (distanzaRilevata) {
+                distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+            }
 
             if (polylineString) {
                 const coords = polyline.decode(polylineString);
@@ -105,21 +107,20 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             }
         } catch (e) {  
             console.warn(`⚠️ [ROUTE WARNING] Impossibile generare la geometria per il pending ${pending.id}:`, e);  
-            distanzaKm = Number(pending.distanza) || 0;
         }
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
 
-        // Inserimento con salvataggio esplicito della distanza su entrambe le colonne per massima compatibilità
+        // Inserimento con salvataggio esplicito della distanza calcolata nella colonna 'distanza'
         const res = await client.query(
           `INSERT INTO corse (
               veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, 
-              posti_totali, posti_disponibili, distanza, km_totali_percorso, origine, destinazione, 
+              posti_totali, posti_disponibili, distanza, origine, destinazione, 
               origine_address, destinazione_address, percorso_polyline, path_geohashes, created_at
            )
            VALUES (
               $1, $2, $3, $4, 'prenotabile', $5, 
-              $6, $6, $7, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
+              $6, $6, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
               $12, $13, $14, $15, NOW()
            ) RETURNING *`,
           [

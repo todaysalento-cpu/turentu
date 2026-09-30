@@ -31,9 +31,12 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
                 const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
 
                 if (snapped.properties.dist <= tolleranzaKm) {
-                    // Utilizziamo i km totali della corsa normalizzati in precedenza, convertiti in metri, 
-                    // oppure la lunghezza effettiva della linea calcolata da Turf come fallback sicuro.
-                    const lunghezzaMetri = (Number(corsa.km_totali_percorso || 0) > 0 ? Number(corsa.km_totali_percorso) * 1000 : turf.length(line, { units: 'meters' }));
+                    // Utilizziamo prioritariamente la colonna 'distanza' della corsa, convertita in metri,
+                    // oppure fallback su km_totali_percorso o sulla lunghezza geometrica di Turf.
+                    const kmTotaliCorsa = Number(corsa.distanza) || Number(corsa.km_totali_percorso) || 0;
+                    const lunghezzaMetri = kmTotaliCorsa > 0 
+                        ? kmTotaliCorsa * 1000 
+                        : turf.length(line, { units: 'meters' });
 
                     return {
                         offset_metri: snapped.properties.location * lunghezzaMetri,
@@ -44,10 +47,10 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
                     console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
-                console.error(`⚠️ [SNAP ERROR] Corsa ${corsaId}:`, e);
+                console.error(`⚠️️ [SNAP ERROR] Corsa ${corsaId}:`, e);
             }
         } else {
-            console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: percorso_polyline mancante.`);
+            console.log(`⚠️️ [SNAP FALLITO] Corsa ${corsaId}: percorso_polyline mancante.`);
         }
         return null;
     }

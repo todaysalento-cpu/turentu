@@ -151,14 +151,12 @@ export async function cercaSlotUltra(richiesta) {
     
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
 
-    const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => ({ 
         ...c, 
         tipo: 'condivisa', 
         is_pool: false, 
-        distanza: Number(c.distanza || distanzaCondivisaValida), 
-        distanzaKm: Number(c.distanzaKm || c.distanza || distanzaCondivisaValida),
-        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaCondivisaValida)
+        distanza: Number(c.distanza || distanzaKm), 
+        km_totali_percorso: Number(c.distanza) || Number(c.km_totali_percorso) || Number(c.distanza_totale) || Number(c.km_totali) || distanzaKm
     }));
 
     // --- 2. CORSE PRIVATE ---
@@ -209,7 +207,6 @@ export async function cercaSlotUltra(richiesta) {
             posti_disponibili: cap,
             posti_totali: cap, 
             distanza: distanzaKm, 
-            distanzaKm: distanzaKm, // <-- Garantito esplicito
             km_avvicinamento: kmAvv,
             km_riposizionamento: kmRip,
             is_pool: false,
@@ -277,7 +274,6 @@ export async function cercaSlotUltra(richiesta) {
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
                 distanza: distanzaKm, 
-                distanzaKm: distanzaKm, // <-- Garantito esplicito
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
                 is_pool: true,
@@ -343,7 +339,6 @@ export async function cercaSlotUltra(richiesta) {
             veicoli_pool_ids: veicoliDisponibiliIds,
             stato: 'in_attesa',
             distanza: distanzaKm,
-            distanzaKm: distanzaKm, // <-- Garantito esplicito
             distanzaTotaleRotte: distanzaKm,
             km_avvicinamento: kmAvvFallback,
             km_riposizionamento: kmRipFallback,

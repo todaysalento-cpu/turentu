@@ -85,52 +85,63 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         let polylineString = '';
         let pathGeohashes = [];
+        let distanzaKm = 0;
+
         try {
             console.log(`🗺️ [ROUTE] Richiesta geometria rotta per pending ${pending.id}...`);
             const routeData = await getRouteGeometry(coordOrig, coordDest); 
-            polylineString = routeData.polyline;
-            const coords = polyline.decode(polylineString);
-            const step = Math.max(1, Math.floor(coords.length / 10));
-            pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
-            console.log(`✅ [ROUTE] Geometria generata con successo. Lunghezza polyline: ${polylineString.length} caratteri`);
-        } catch (e) { 
-            console.warn(`⚠️ [ROUTE WARNING] Impossibile generare la geometria per il pending ${pending.id}:`, e); 
+            
+            polylineString = routeData?.polyline || '';
+            
+            // Estrazione e normalizzazione della distanza reale dal routing (o fallback su pending)
+            const distanzaRilevata = routeData?.distance ?? routeData?.distanza ?? pending.distanza ?? 0;
+            distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+
+            if (polylineString) {
+                const coords = polyline.decode(polylineString);
+                const step = Math.max(1, Math.floor(coords.length / 10));
+                pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
+                console.log(`✅ [ROUTE] Geometria generata. Lunghezza polyline: ${polylineString.length} caratteri, Distanza: ${distanzaKm} km`);
+            }
+        } catch (e) {  
+            console.warn(`⚠️ [ROUTE WARNING] Impossibile generare la geometria per il pending ${pending.id}:`, e);  
+            distanzaKm = Number(pending.distanza) || 0;
         }
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
 
-        // Inserimento corretto: Longitudine (X) prima, Latitudine (Y) dopo
+        // Inserimento con salvataggio esplicito della distanza su entrambe le colonne per massima compatibilità
         const res = await client.query(
           `INSERT INTO corse (
               veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, 
-              posti_totali, posti_disponibili, distanza, origine, destinazione, 
+              posti_totali, posti_disponibili, distanza, km_totali_percorso, origine, destinazione, 
               origine_address, destinazione_address, percorso_polyline, path_geohashes, created_at
            )
            VALUES (
               $1, $2, $3, $4, 'prenotabile', $5, 
-              $6, $6, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
+              $6, $6, $7, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
               $12, $13, $14, $15, NOW()
            ) RETURNING *`,
           [
-            veicolo.id,                                // $1
-            startDatetime,                             // $2
-            arrivoDatetime,                            // $3
+            veicolo.id,                          // $1
+            startDatetime,                       // $2
+            arrivoDatetime,                      // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,                    // $5
-            postiTotaliVeicolo,                        // $6
-            (pending.distanza ?? 0),                   // $7
-            coordOrig.lon,                             // $8  (longitudine origine - X)
-            coordOrig.lat,                             // $9  (latitudine origine - Y)
-            coordDest.lon,                             // $10 (longitudine destinazione - X)
-            coordDest.lat,                             // $11 (latitudine destinazione - Y)
-            (pending.origine_address ?? 'N/D'),        // $12
-            (pending.destinazione_address ?? 'N/D'),   // $13
-            polylineString,                            // $14
-            pathGeohashes                              // $15
+            `${durataMin} minutes`,              // $5
+            postiTotaliVeicolo,                  // $6
+            distanzaKm,                          // $7 (Distanza effettiva calcolata)
+            coordOrig.lon,                       // $8  (longitudine origine - X)
+            coordOrig.lat,                       // $9  (latitudine origine - Y)
+            coordDest.lon,                       // $10 (longitudine destinazione - X)
+            coordDest.lat,                       // $11 (latitudine destinazione - Y)
+            (pending.origine_address ?? 'N/D'),   // $12
+            (pending.destinazione_address ?? 'N/D'), // $13
+            polylineString,                      // $14
+            pathGeohashes                        // $15
           ]
         );
         corsa = res.rows[0];
-        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente nel database.`);
+        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente nel database con distanza: ${distanzaKm} km.`);
 
         const segmenti = { startIdx: pending.start_index_polyline ?? 0, endIdx: pending.end_index_polyline ?? 100 };
         const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, Number(pending.posti_richiesti ?? 1), segmenti, client);

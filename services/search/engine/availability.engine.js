@@ -30,9 +30,13 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
                 const line = turf.lineString(coordinates);
                 const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
 
-                if (snapped.properties.dist < tolleranzaKm) {
+                if (snapped.properties.dist <= tolleranzaKm) {
+                    // Utilizziamo i km totali della corsa normalizzati in precedenza, convertiti in metri, 
+                    // oppure la lunghezza effettiva della linea calcolata da Turf come fallback sicuro.
+                    const lunghezzaMetri = (Number(corsa.km_totali_percorso || 0) > 0 ? Number(corsa.km_totali_percorso) * 1000 : turf.length(line, { units: 'meters' }));
+
                     return {
-                        offset_metri: snapped.properties.location * turf.length(line, { units: 'meters' }),
+                        offset_metri: snapped.properties.location * lunghezzaMetri,
                         type: 'DYNAMIC',
                         dist: snapped.properties.dist
                     };

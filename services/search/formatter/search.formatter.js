@@ -129,8 +129,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                         distKmRichiesta, 
                         0, 
                         classeCorrente,
-                        Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),         // 👈 Passaggio km avvicinamento
-                        Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)   // 👈 Passaggio km riposizionamento
+                        Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),
+                        Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)
                     );
                     
                     if (!p) return null;
@@ -172,16 +172,20 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             // 2. LOGICA STANDARD (Corse reali trovate)
             const passeggeriGiaA1Bordo = Number(item.passeggeri_esistenti || item.posti_occupati || item.passeggeri_correnti || 0);
 
+            const kmAvvItem = Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0);
+            const kmRipItem = Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0);
+            const kmTotaliRotte = Number(item.distanzaTotaleRotte || item.km_totali || distKmItem);
+
             const p = await calcolaPrezzo(
                 item, 
                 postiUtenteRichiesti, 
                 tipoCoerente, 
                 distKmItem, 
-                item.distanzaTotaleRotte || distKmItem, 
+                kmTotaliRotte, 
                 passeggeriGiaA1Bordo, 
                 item.classe,
-                Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),         // 👈 Passaggio km avvicinamento
-                Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)   // 👈 Passaggio km riposizionamento
+                kmAvvItem,
+                kmRipItem
             ).catch(() => ({ prezzo: distKmItem * 0.50 }));
             
             if (!p) return [];

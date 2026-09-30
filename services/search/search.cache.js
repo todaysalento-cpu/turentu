@@ -77,6 +77,15 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     c.dest_lat = c.dest_lat || c.lat_arrivo || c.dest_latitudine;
     c.dest_lon = c.dest_lon || c.lon_arrivo || c.dest_longitudine || c.lng_arrivo;
 
+    // --- 📏 NORMALIZZAZIONE CHILOMETRI TOTALI PERCORSA ---
+    // Se la distanza totale arriva in metri (> 1000), la convertiamo in chilometri per evitare errori di calcolo nel pricing
+    let kmTotali = Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || 0);
+    if (kmTotali > 1000) {
+        kmTotali = kmTotali / 1000;
+    }
+    c.km_totali_percorso = kmTotali;
+    // ----------------------------------------------------
+
     if (c.percorso_polyline) {
         c.decodedCoords = polyline.decode(c.percorso_polyline);
     }

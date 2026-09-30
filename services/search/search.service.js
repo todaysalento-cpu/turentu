@@ -59,7 +59,7 @@ export async function cercaSlotUltra(richiesta) {
     let lat = Number(richiesta.coord?.lat ?? richiesta.lat);
     let lon = Number(richiesta.coord?.lon ?? richiesta.coord?.lng ?? richiesta.lon);
     let destLat = Number(richiesta.coordDest?.lat ?? richiesta.destLat);
-    let destLon = Number(richiesta.coordDest?.lon ?? richiesta.destLon ?? richiesta.destLng);
+    let destLon = Number(richiesta.coordDest?.lon ?? richiesta.coordDest?.lng ?? richiesta.destLon);
 
     // Orari standard richiesti dall'utente
     let orarioAndataUtente = new Date(richiesta.start_datetime || new Date());
@@ -101,7 +101,8 @@ export async function cercaSlotUltra(richiesta) {
     console.log(`🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} (Immediata: ${isImmediata})`);
 
     const info = await getDurataDistanza({ lat, lon }, { lat: destLat, lon: destLon });
-    const distanzaMetri = (info.distanzaKm || 1) * 1000;
+    const distanzaKm = info.distanzaKm || 1;
+    const distanzaMetri = distanzaKm * 1000;
 
     // --- 1. CORSE DA CACHE (Condivise) ---
     const hash = ngeohash.encode(lat, lon, GEOHASH_PRECISION_TRATTA);
@@ -154,8 +155,8 @@ export async function cercaSlotUltra(richiesta) {
         ...c, 
         tipo: 'condivisa', 
         is_pool: false, 
-        distanza: c.distanza || distanzaMetri, 
-        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaMetri)
+        distanza: Number(c.distanza || distanzaKm), 
+        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaKm)
     }));
 
     // --- 2. CORSE PRIVATE ---
@@ -205,7 +206,7 @@ export async function cercaSlotUltra(richiesta) {
             servizi: disp.servizi || {},
             posti_disponibili: cap,
             posti_totali: cap, 
-            distanza: distanzaMetri, 
+            distanza: distanzaKm, 
             km_avvicinamento: kmAvv,
             km_riposizionamento: kmRip,
             is_pool: false,
@@ -272,7 +273,7 @@ export async function cercaSlotUltra(richiesta) {
                 partenza_prevista: dir.partenza_prevista,
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
-                distanza: distanzaMetri, 
+                distanza: distanzaKm, 
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
                 is_pool: true,
@@ -337,8 +338,8 @@ export async function cercaSlotUltra(richiesta) {
             is_pool: true,
             veicoli_pool_ids: veicoliDisponibiliIds,
             stato: 'in_attesa',
-            distanza: distanzaMetri,
-            distanzaTotaleRotte: distanzaMetri,
+            distanza: distanzaKm,
+            distanzaTotaleRotte: distanzaKm,
             km_avvicinamento: kmAvvFallback,
             km_riposizionamento: kmRipFallback,
             messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`
@@ -347,6 +348,7 @@ export async function cercaSlotUltra(richiesta) {
 
     return await formatResults({ 
         ...richiesta, 
+        distanzaKm,
         distanzaMetri, 
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 
     }, risultatiFinali);

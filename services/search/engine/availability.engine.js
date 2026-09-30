@@ -69,7 +69,6 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId) {
  * MAIN ENGINE - FULLY INTEGRATED (UNIVERSAL MODE)
  */
 export async function filterDisponibilita(richiesta, corseCandidate, prenotazioniBatch, capacitaMap = new Map()) {
-    // Corretto ordine a [lon, lat] per coerenza con Turf e polyline
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     const TOLLERANZA_KM = 50.0;
@@ -83,153 +82,156 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     // Estrazione della data della richiesta (formato YYYY-MM-DD) per il filtro rigido giornaliero
     const dataRichiestaStr = new Date(richiesta.start_datetime || new Date()).toISOString().split('T')[0];
 
-    return {
-        corse: (await Promise.all(corseCandidate.map(async (c, index) => {
-            if (!c) return null;
-            c.classe = determinaClasse(Number(c.indice_efficienza || 0));
+    const promises = corseCandidate.map(async (c, index) => {
+        if (!c) return null;
+        c.classe = determinaClasse(Number(c.indice_efficienza || 0));
 
-            const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
-            const isProattivo = idString.startsWith('virtual_pop_');
-            
-            // --- 🛑 FILTRO RIGIDO: LA CORSA DEVE PARTIRE IL GIORNO DELLA RICHIESTA ---
-            if (!isProattivo && c.start_datetime) {
-                const dataCorsaStr = new Date(c.start_datetime).toISOString().split('T')[0];
-                if (dataCorsaStr !== dataRichiestaStr) {
-                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché parte il ${dataCorsaStr} ma la richiesta è per il ${dataRichiestaStr}.`);
-                    return null;
-                }
+        const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
+        const isProattivo = idString.startsWith('virtual_pop_');
+        
+        // --- 🛑 FILTRO RIGIDO: LA CORSA DEVE PARTIRE IL GIORNO DELLA RICHIESTA ---
+        if (!isProattivo && c.start_datetime) {
+            const dataCorsaStr = new Date(c.start_datetime).toISOString().split('T')[0];
+            if (dataCorsaStr !== dataRichiestaStr) {
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché parte il ${dataCorsaStr} ma la richiesta è per il ${dataRichiestaStr}.`);
+                return null;
             }
-            // -----------------------------------------------------------------------
+        }
+        // -----------------------------------------------------------------------
 
-            const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 0 };
-            const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 999 };
+        const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 0 };
+        const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id) : { ordine_sequenziale: 999 };
 
-            if (!isProattivo && (!startSnap || !endSnap)) {
-                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
+        if (!isProattivo && (!startSnap || !endSnap)) {
+            console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
+            return null;
+        }
+
+        // --- CALCOLO CHILOMETRI OPERATIVI (Avvicinamento e Riposizionamento Reali) ---
+        let kmAvvicinamento = 0;
+        let kmRiposizionamento = 0;
+
+        const veicoloIdRiferimento = c.veicolo_id;
+        let dispVeicolo = veicoloIdRiferimento && CacheStore?.veicoloToDisponibilita ? CacheStore.veicoloToDisponibilita.get(Number(veicoloIdRiferimento)) : null;
+
+        const latV = dispVeicolo ? (isImmediata ? (dispVeicolo.lat_live ?? dispVeicolo.lat_base) : dispVeicolo.lat_base) : c.lat_deposito;
+        const lonV = dispVeicolo ? (isImmediata ? (dispVeicolo.lon_live ?? dispVeicolo.lon_base) : dispVeicolo.lon_base) : c.lon_deposito;
+        const latBaseV = dispVeicolo ? dispVeicolo.lat_base : c.lat_deposito;
+        const lonBaseV = dispVeicolo ? dispVeicolo.lon_base : c.lon_deposito;
+
+        if (latV != null && lonV != null) {
+            try {
+                const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat: richiesta.coord.lat, lon: richiesta.coord.lon });
+                if (infoAvv?.distanzaKm) {
+                    kmAvvicinamento = infoAvv.distanzaKm;
+                } else {
+                    kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
+                }
+            } catch (e) {
+                kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
+            }
+        }
+
+        if (latBaseV != null && lonBaseV != null) {
+            try {
+                const infoRip = await getDurataDistanza({ lat: richiesta.coordDest.lat, lon: richiesta.coordDest.lon }, { lat: Number(latBaseV), lon: Number(lonBaseV) });
+                if (infoRip?.distanzaKm) {
+                    kmRiposizionamento = infoRip.distanzaKm;
+                } else {
+                    kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
+                }
+            } catch (e) {
+                kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
+            }
+        }
+
+        // --- LOGICA CONDIVISA ---
+        if (c.tipo_corsa === 'condivisa') {
+            const startOffset = Number(startSnap.offset_metri);
+            const endOffset = Number(endSnap.offset_metri);
+            
+            if (startOffset >= endOffset || (endOffset - startOffset) < 2000) {
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi (startOffset: ${startOffset}, endOffset: ${endOffset}, differenza: ${endOffset - startOffset} metri).`);
                 return null;
             }
 
-            // --- CALCOLO CHILOMETRI OPERATIVI (Avvicinamento e Riposizionamento Reali) ---
-            let kmAvvicinamento = 0;
-            let kmRiposizionamento = 0;
+            const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
+            const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
 
-            const veicoloIdRiferimento = c.veicolo_id;
-            let dispVeicolo = veicoloIdRiferimento && CacheStore?.veicoloToDisponibilita ? CacheStore.veicoloToDisponibilita.get(Number(veicoloIdRiferimento)) : null;
-
-            const latV = dispVeicolo ? (isImmediata ? (dispVeicolo.lat_live ?? dispVeicolo.lat_base) : dispVeicolo.lat_base) : c.lat_deposito;
-            const lonV = dispVeicolo ? (isImmediata ? (dispVeicolo.lon_live ?? dispVeicolo.lon_base) : dispVeicolo.lon_base) : c.lon_deposito;
-            const latBaseV = dispVeicolo ? dispVeicolo.lat_base : c.lat_deposito;
-            const lonBaseV = dispVeicolo ? dispVeicolo.lon_base : c.lon_deposito;
-
-            if (latV != null && lonV != null) {
-                try {
-                    const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat: richiesta.coord.lat, lon: richiesta.coord.lon });
-                    if (infoAvv?.distanzaKm) {
-                        kmAvvicinamento = infoAvv.distanzaKm;
-                    } else {
-                        kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
-                    }
-                } catch (e) {
-                    kmAvvicinamento = turf.distance(turf.point([Number(lonV), Number(latV)]), pStart, { units: 'kilometers' });
+            // Calcoliamo i passeggeri già presenti nel tratto richiesto
+            let postiOccupatiNelTratto = 0;
+            for (const p of prenotazioni) {
+                const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
+                const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
+                if (startOffset < pEndTratto && endOffset > pStartTratto) {
+                    postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                 }
             }
 
-            if (latBaseV != null && lonBaseV != null) {
-                try {
-                    const infoRip = await getDurataDistanza({ lat: richiesta.coordDest.lat, lon: richiesta.coordDest.lon }, { lat: Number(latBaseV), lon: Number(lonBaseV) });
-                    if (infoRip?.distanzaKm) {
-                        kmRiposizionamento = infoRip.distanzaKm;
-                    } else {
-                        kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
-                    }
-                } catch (e) {
-                    kmRiposizionamento = turf.distance(pEnd, turf.point([Number(lonBaseV), Number(latBaseV)]), { units: 'kilometers' });
-                }
+            if ((postiOccupatiNelTratto + Number(richiesta.posti_richiesti)) > capacitaTotale) {
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto.`);
+                return null;
             }
 
-            // --- LOGICA CONDIVISA ---
-            if (c.tipo_corsa === 'condivisa') {
-                const startOffset = Number(startSnap.offset_metri);
-                const endOffset = Number(endSnap.offset_metri);
-                
-                if (startOffset >= endOffset || (endOffset - startOffset) < 2000) {
-                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi (startOffset: ${startOffset}, endOffset: ${endOffset}, differenza: ${endOffset - startOffset} metri).`);
-                    return null;
-                }
-
-                const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
-                const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
-
-                // Calcoliamo i passeggeri già presenti nel tratto richiesto
-                let postiOccupatiNelTratto = 0;
-                for (const p of prenotazioni) {
-                    const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
-                    const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
-                    if (startOffset < pEndTratto && endOffset > pStartTratto) {
-                        postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
-                    }
-                }
-
-                if ((postiOccupatiNelTratto + Number(richiesta.posti_richiesti)) > capacitaTotale) {
-                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto.`);
-                    return null;
-                }
-
-                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto occupato da: ${postiOccupatiNelTratto} passeggeri.`);
-                return {
-                    ...c,
-                    km_avvicinamento: kmAvvicinamento,
-                    km_riposizionamento: kmRiposizionamento,
-                    passeggeri_correnti: postiOccupatiNelTratto
-                };
-            }
-
-            // --- LOGICA POP-BUS (Universale) ---
-            const baseResult = { 
-                ...c, 
-                veicoli_pool_ids: c.veicoli_pool_ids || [],
+            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto occupato da: ${postiOccupatiNelTratto} passeggeri.`);
+            return {
+                ...c,
                 km_avvicinamento: kmAvvicinamento,
-                km_riposizionamento: kmRiposizionamento
+                km_riposizionamento: kmRiposizionamento,
+                passeggeri_correnti: postiOccupatiNelTratto
             };
+        }
 
-            if (c.direttrice_id) {
-                if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) {
-                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ordine sequenziale non valido.`);
-                    return null;
-                }
-                
-                const capacitaTotale = capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0);
-                
-                const isAndataSaturata = await verificaSaturazioneSegmenti(
-                    c.direttrice_id, 
-                    startSnap.ordine_sequenziale, 
-                    endSnap.ordine_sequenziale, 
-                    Number(richiesta.posti_richiesti), 
+        // --- LOGICA POP-BUS (Universale) ---
+        const baseResult = { 
+            ...c, 
+            veicoli_pool_ids: c.veicoli_pool_ids || [],
+            km_avvicinamento: kmAvvicinamento,
+            km_riposizionamento: kmRiposizionamento
+        };
+
+        if (c.direttrice_id) {
+            if (startSnap.ordine_sequenziale >= endSnap.ordine_sequenziale) {
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ordine sequenziale non valido.`);
+                return null;
+            }
+            
+            const capacitaTotale = capacitaMap.get(c.direttrice_id) ?? Number(c.posti_totali || 0);
+            
+            const isAndataSaturata = await verificaSaturazioneSegmenti(
+                c.direttrice_id, 
+                startSnap.ordine_sequenziale, 
+                endSnap.ordine_sequenziale, 
+                Number(richiesta.posti_richiesti), 
+                capacitaTotale
+            );
+            if (isAndataSaturata) {
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): andata saturata.`);
+                return null;
+            }
+
+            if (richiesta.return_datetime || richiesta.include_ritorno) {
+                const isRitornoSaturato = await verificaSaturazioneRitorno(
+                    c.direttrice_id,
+                    Number(richiesta.posti_richiesti),
                     capacitaTotale
                 );
-                if (isAndataSaturata) {
-                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): andata saturata.`);
+                if (isRitornoSaturato) {
+                    console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ritorno saturato.`);
                     return null;
                 }
-
-                if (richiesta.return_datetime || richiesta.include_ritorno) {
-                    const isRitornoSaturato = await verificaSaturazioneRitorno(
-                        c.direttrice_id,
-                        Number(richiesta.posti_richiesti),
-                        capacitaTotale
-                    );
-                    if (isRitornoSaturato) {
-                        console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id} (Pop-Bus): ritorno saturato.`);
-                        return null;
-                    }
-                }
-
-                console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} (Pop-Bus) superata con successo!`);
-                return baseResult;
             }
 
-            return { ...baseResult, is_proattivo: true };
-        })).filter(Boolean)
+            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} (Pop-Bus) superata con successo!`);
+            return baseResult;
+        }
+
+        return { ...baseResult, is_proattivo: true };
+    });
+
+    const risultati = await Promise.all(promises);
+    return {
+        corse: risultati.filter(Boolean)
     };
 }
 

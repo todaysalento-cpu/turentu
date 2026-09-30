@@ -48,7 +48,7 @@ export const removeDisponibilita = async (disponibilitaId) => {
         }
         CacheStore.veicoloToDisponibilita.delete(Number(d.veicolo_id));
         CacheStore.disponibilitaCache.delete(id);
-        console.log(`🗑️ [CACHE DISPONIBILITÀ] Rimossa disponibilità ID: ${id} per Veicolo ID: ${d.veicolo_id}`);
+        console.log(`🗑️️ [CACHE DISPONIBILITÀ] Rimossa disponibilità ID: ${id} per Veicolo ID: ${d.veicolo_id}`);
     }
 };
 
@@ -77,13 +77,21 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     c.dest_lat = c.dest_lat || c.lat_arrivo || c.dest_latitudine;
     c.dest_lon = c.dest_lon || c.lon_arrivo || c.dest_longitudine || c.lng_arrivo;
 
-    // --- 📏 NORMALIZZAZIONE CHILOMETRI TOTALI CORSA ---
-    // Legge prioritariamente dalla colonna 'distanza' della tabella corse
-    let kmTotali = Number(c.distanza || c.km_totali_percorso || c.distanza_totale || c.km_totali || 0);
-    if (kmTotali > 1000) {
-        kmTotali = kmTotali / 1000;
-    }
-    c.km_totali_percorso = kmTotali;
+    // --- 📏 NORMALIZZAZIONE CHILOMETRI TOTALI CORSA (ROBUSTISSIMA) ---
+    let rawDistanza = Number(
+        c.km_totali_percorso || 
+        c.distanza_totale || 
+        c.distanza || 
+        c.km_totali || 
+        c.lunghezza || 
+        0
+    );
+
+    // Se il valore è in metri (> 1000), lo convertiamo in chilometri
+    let kmTotali = rawDistanza > 1000 ? rawDistanza / 1000 : rawDistanza;
+    
+    // Fallback di sicurezza nel caso in cui il valore risulti nullo o 0
+    c.km_totali_percorso = kmTotali > 0 ? kmTotali : 1;
     // ----------------------------------------------------
 
     if (c.percorso_polyline) {

@@ -65,7 +65,7 @@ export async function cercaSlotUltra(richiesta) {
     let orarioAndataUtente = new Date(richiesta.start_datetime || new Date());
     let orarioRitornoUtente = richiesta.return_datetime ? new Date(richiesta.return_datetime) : null;
 
-    // Controllo se la richiesta è immediata (adesso o entro i prossimi 30 minuti)
+    // Controllo se la ricerca è immediata (adesso o entro i prossimi 30 minuti)
     const adesso = new Date();
     const diffMinuti = (orarioAndataUtente.getTime() - adesso.getTime()) / (1000 * 60);
     const isImmediata = diffMinuti >= -5 && diffMinuti <= 30;
@@ -154,7 +154,8 @@ export async function cercaSlotUltra(richiesta) {
         ...c, 
         tipo: 'condivisa', 
         is_pool: false, 
-        distanza: c.distanza || distanzaMetri 
+        distanza: c.distanza || distanzaMetri, 
+        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaMetri)
     }));
 
     // --- 2. CORSE PRIVATE ---

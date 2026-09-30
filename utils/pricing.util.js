@@ -52,15 +52,6 @@ async function getDettaglioPool(veicoli_ids) {
 
 /**
  * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti.
- * @param {Object} corsa - Dati della corsa/veicolo
- * @param {Number} postiRichiesti - Posti desiderati dall'utente
- * @param {String} tipo - Tipologia di servizio (privata, condivisa, pop-bus)
- * @param {Number} kmUtente - Km della tratta effettiva dell'utente
- * @param {Number} kmTotali - Km totali della rotta principale
- * @param {Number} totPasseggeriCorrenti - Passeggeri già a bordo
- * @param {String} classe - Classe di servizio (SAVER, STANDARD, EXPRESS)
- * @param {Number} kmAvvicinamento - Km percorsi dal deposito/veicolo per raggiungere l'utente
- * @param {Number} kmRiposizionamento - Km percorsi dal punto di arrivo per rientrare
  */
 export async function calcolaPrezzo(
     corsa, 
@@ -96,7 +87,6 @@ export async function calcolaPrezzo(
             case 'standard': {
                 const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 const kmTotaliPrivato = safeKmUtente + avvicinamento + riposizionamento;
-                // Il prezzo privato scala anche in base ai posti richiesti (occupazione veicolo)
                 prezzoCalcolato = ((info.euro_km * kmTotaliPrivato) * multiplier) * postiUtente;
                 console.log(`🚗 [PRICING PRIVATA] Subtotale (per ${postiUtente} posti): ${prezzoCalcolato}`);
                 break;
@@ -119,12 +109,31 @@ export async function calcolaPrezzo(
                 if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti)) {
                     percentualiEsistenti = Array(passeggeriGiaPresenti).fill(1.0);
                 }
-                const sommaPercentuali = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0) + (percentualeUtente * postiUtente);
+                const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
+                const contributoUtentePesarato = percentualeUtente * postiUtente;
+                const sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
 
-                const quotaProporzionale = sommaPercentuali > 0 ? ((percentualeUtente * postiUtente) / sommaPercentuali) : 1.0;
+                const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
                 prezzoCalcolato = (costoTotaleMissione * quotaProporzionale) * multiplier;
 
-                console.log(`👥 [PRICING CONDIVISA PESATA] Costo Missione: ${costoTotaleMissione.toFixed(2)}€ | Posti utente: ${postiUtente} | Subtotale: ${prezzoCalcolato}`);
+                // --- 🔍 LOG DETTAGLIATI SPECIFICI PER CORSE CONDIVISE ---
+                console.log(`\n================ 👥 [DEBUG DETTAGLIATO PRICING CONDIVISA] ================`);
+                console.log(`🆔 Veicolo ID: ${corsa.veicolo_id || 'DEFAULT'} | Tariffa €/km: ${infoCond.euro_km}`);
+                console.log(`📏 Km Tratta Utente: ${safeKmUtente} km | Km Totali Corsa Originale: ${kmTotaliCorsaOriginale} km`);
+                console.log(`📊 Rapporto Tratta Utente / Corsa (Percentuale pura): ${(percentualeUtente * 100).toFixed(2)}%`);
+                console.log(`🚗 Km Avvicinamento Base: ${avvicinamento} km | Passeggeri già a bordo: ${passeggeriGiaPresenti}`);
+                console.log(`📉 Fattore Assorbimento applicato: ${fattoreAssorbimento} -> Avvicinamento Dinamico: ${kmAvvicinamentoDinamici} km`);
+                console.log(`🔄 Km Riposizionamento Dinamico: ${kmRiposizionamentoDinamici} km`);
+                console.log(`💰 Costo Totale Missione Autista: ${costoTotaleMissione.toFixed(4)} € (euro_km * [KmCorsa + AvvDin + RipDin])`);
+                console.log(`👥 Array Percentuali Passeggeri Esistenti:`, percentualiEsistenti);
+                console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
+                console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
+                console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
+                console.log(`⚖️ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
+                console.log(`✨ Moltiplicatore Classe (${classeKey}): ${multiplier}`);
+                console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota * Mult): ${prezzoCalcolato.toFixed(4)} €`);
+                console.log(`==========================================================================\n`);
+                
                 break;
             }
 
@@ -157,7 +166,6 @@ export async function calcolaPrezzo(
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
                     
-                    // Il prezzo unitario per singolo posto viene moltiplicato per i posti richiesti dall'utente
                     const prezzoUnitarioPerKm = (breakEvenTotale / targetPasseggeri) * (safeKmUtente / safeKmTotali);
                     prezzoCalcolato = (prezzoUnitarioPerKm * multiplier) * postiUtente;
                     

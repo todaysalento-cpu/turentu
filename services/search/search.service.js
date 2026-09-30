@@ -143,20 +143,27 @@ export async function cercaSlotUltra(richiesta) {
         );
     }
 
-    const { corse: corseValide } = await filterDisponibilita({ 
+    // Passiamo esplicitamente i metri di offset calcolati/stimati per la tratta richiesta
+    const requestWithMetrics = { 
         ...richiesta, 
         posti_richiesti: postiRichiesti,
-        return_datetime: orarioRitornoUtente || orarioEventoRitorno 
-    }, corseCandidate, prenotazioniBatch);
+        return_datetime: orarioRitornoUtente || orarioEventoRitorno,
+        start_index_polyline: Number(richiesta.start_index_polyline ?? 0),
+        end_index_polyline: Number(richiesta.end_index_polyline ?? distanzaMetri)
+    };
+
+    const { corse: corseValide } = await filterDisponibilita(requestWithMetrics, corseCandidate, prenotazioniBatch);
     
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
 
+    const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => ({ 
         ...c, 
         tipo: 'condivisa', 
         is_pool: false, 
-        distanza: Number(c.distanza || distanzaKm), 
-        km_totali_percorso: Number(c.distanza) || Number(c.km_totali_percorso) || Number(c.distanza_totale) || Number(c.km_totali) || distanzaKm
+        distanza: Number(c.distanza || distanzaCondivisaValida), 
+        distanzaKm: Number(c.distanzaKm || c.distanza || distanzaCondivisaValida),
+        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaCondivisaValida)
     }));
 
     // --- 2. CORSE PRIVATE ---
@@ -207,6 +214,7 @@ export async function cercaSlotUltra(richiesta) {
             posti_disponibili: cap,
             posti_totali: cap, 
             distanza: distanzaKm, 
+            distanzaKm: distanzaKm, 
             km_avvicinamento: kmAvv,
             km_riposizionamento: kmRip,
             is_pool: false,
@@ -274,6 +282,7 @@ export async function cercaSlotUltra(richiesta) {
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
                 distanza: distanzaKm, 
+                distanzaKm: distanzaKm, 
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
                 is_pool: true,
@@ -339,6 +348,7 @@ export async function cercaSlotUltra(richiesta) {
             veicoli_pool_ids: veicoliDisponibiliIds,
             stato: 'in_attesa',
             distanza: distanzaKm,
+            distanzaKm: distanzaKm, 
             distanzaTotaleRotte: distanzaKm,
             km_avvicinamento: kmAvvFallback,
             km_riposizionamento: kmRipFallback,

@@ -74,7 +74,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
 
     // 3. AGGIORNAMENTO CACHE
     const corsaAggiornata = await client.query(
-        `SELECT c., 
+        `SELECT c.*, 
         (SELECT MAX(occ) FROM (
             SELECT SUM(posti_richiesti) as occ 
             FROM prenotazioni 

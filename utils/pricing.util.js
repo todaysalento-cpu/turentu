@@ -95,41 +95,44 @@ export async function calcolaPrezzo(
             case 'condivisa': {
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 
+                // 1. I km della corsa originale e i km di servizio (avvicinamento/riposizionamento) appartengono alla missione base
                 const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(kmTotali) || safeKmUtente;
-                const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
-                const fattoreAssorbimento = passeggeriGiaPresenti > 0 ? 0.5 : 1.0;
-                const kmAvvicinamentoDinamici = avvicinamento * fattoreAssorbimento;
-                const kmRiposizionamentoDinamici = riposizionamento;
                 
-                const costoTotaleMissione = infoCond.euro_km * (kmTotaliCorsaOriginale + kmAvvicinamentoDinamici + kmRiposizionamentoDinamici);
+                // Il costo base della missione dell'autista include la corsa originale + avvicinamento + riposizionamento fissi
+                const costoMissioneAutista = infoCond.euro_km * (kmTotaliCorsaOriginale + avvicinamento + riposizionamento);
 
+                // 2. Percentuale della tratta del nuovo utente rispetto alla corsa originale
                 const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / kmTotaliCorsaOriginale));
-
-                let percentualiEsistenti = corsa.percentuali_passeggeri_attivi;
-                if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti)) {
-                    percentualiEsistenti = Array(passeggeriGiaPresenti).fill(1.0);
-                }
-                const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
                 const contributoUtentePesarato = percentualeUtente * postiUtente;
+
+                // 3. Recupero delle percentuali dei passeggeri già presenti (la corsa originale ha già il passeggero creatore/precedente)
+                let percentualiEsistenti = corsa.percentuali_passeggeri_attivi;
+                const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
+                
+                if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti) || percentualiEsistenti.length === 0) {
+                    // Se non ci sono array espliciti, assumiamo che il creatore originario copra la sua quota o 1.0 di default
+                    percentualiEsistenti = passeggeriGiaPresenti > 0 ? Array(passeggeriGiaPresenti).fill(1.0) : [1.0];
+                }
+
+                const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
                 const sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
 
+                // 4. Ripartizione proporzionale del costo missione totale in base al peso dei km e dei posti
                 const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
-                prezzoCalcolato = (costoTotaleMissione * quotaProporzionale) * multiplier;
+                prezzoCalcolato = (costoMissioneAutista * quotaProporzionale) * multiplier;
 
                 // --- 🔍 LOG DETTAGLIATI SPECIFICI PER CORSE CONDIVISE ---
                 console.log(`\n================ 👥 [DEBUG DETTAGLIATO PRICING CONDIVISA] ================`);
                 console.log(`🆔 Veicolo ID: ${corsa.veicolo_id || 'DEFAULT'} | Tariffa €/km: ${infoCond.euro_km}`);
                 console.log(`📏 Km Tratta Utente: ${safeKmUtente} km | Km Totali Corsa Originale: ${kmTotaliCorsaOriginale} km`);
                 console.log(`📊 Rapporto Tratta Utente / Corsa (Percentuale pura): ${(percentualeUtente * 100).toFixed(2)}%`);
-                console.log(`🚗 Km Avvicinamento Base: ${avvicinamento} km | Passeggeri già a bordo: ${passeggeriGiaPresenti}`);
-                console.log(`📉 Fattore Assorbimento applicato: ${fattoreAssorbimento} -> Avvicinamento Dinamico: ${kmAvvicinamentoDinamici} km`);
-                console.log(`🔄 Km Riposizionamento Dinamico: ${kmRiposizionamentoDinamici} km`);
-                console.log(`💰 Costo Totale Missione Autista: ${costoTotaleMissione.toFixed(4)} € (euro_km * [KmCorsa + AvvDin + RipDin])`);
+                console.log(`🚗 Km Avvicinamento Fissi: ${avvicinamento} km | 🔄 Km Riposizionamento Fissi: ${riposizionamento} km`);
+                console.log(`💰 Costo Totale Missione Autista (Fisso): ${costoMissioneAutista.toFixed(4)} € (euro_km * [KmCorsa + Avv + Rip])`);
                 console.log(`👥 Array Percentuali Passeggeri Esistenti:`, percentualiEsistenti);
                 console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
                 console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
-                console.log(`⚖️ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
+                console.log(`⚖️️ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
                 console.log(`✨ Moltiplicatore Classe (${classeKey}): ${multiplier}`);
                 console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota * Mult): ${prezzoCalcolato.toFixed(4)} €`);
                 console.log(`==========================================================================\n`);
@@ -156,7 +159,7 @@ export async function calcolaPrezzo(
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
                     if (poolFiltrato.length === 0) {
-                        console.log(`⚠️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}.`);
+                        console.log(`⚠️️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}.`);
                         prezzoCalcolato = null;
                         break;
                     }

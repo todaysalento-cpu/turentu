@@ -4,7 +4,7 @@ import { CacheManager } from '../../utils/cacheManager.js';
 /**
  * Prenota corsa con logica di segmentazione (Ridesharing Dinamico)
  * @param {Object} corsa - Dati della corsa
- * * @param {string} clienteId - ID del cliente
+ * @param {string} clienteId - ID del cliente
  * @param {number} postiRichiesti - Posti desiderati
  * @param {Object} segmenti - { startIdx: number, endIdx: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number }
  * @param {Object} client - Connessione al database (opzionale)
@@ -31,7 +31,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const checkRes = await client.query(
       `SELECT COALESCE(MAX(occupazione_totale), 0) as max_occ FROM (
          SELECT 
-           p.id,
+           p.id::text as id,
            (
              SELECT SUM(p2.posti_richiesti)
              FROM prenotazioni p2
@@ -46,7 +46,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
          
          -- Aggiungiamo anche un punto di controllo virtuale per la nuova prenotazione richiesta
          SELECT 
-           'nuova' as id,
+           'nuova'::text as id,
            (
              SELECT SUM(p2.posti_richiesti) + $4
              FROM prenotazioni p2

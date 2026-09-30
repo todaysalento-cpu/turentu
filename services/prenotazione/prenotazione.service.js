@@ -6,7 +6,7 @@ import { CacheManager } from '../../utils/cacheManager.js';
  * @param {Object} corsa - Dati della corsa
  * @param {string} clienteId - ID del cliente
  * @param {number} postiRichiesti - Posti desiderati
- * @param {Object} segmenti - { startIdx: number, endIdx: number } (Indici sulla polyline)
+ * @param {Object} segmenti - { startIdx: number, endIdx: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number }
  * @param {Object} client - Connessione al database (opzionale)
  */
 export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, client) {
@@ -44,8 +44,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       throw new Error('Posti insufficienti: il veicolo è pieno in una porzione del tragitto richiesto');
     }
 
-    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI
-    // Aggiunta colonna 'posti_prenotati' impostata pari a 'posti_richiesti' per soddisfare il NOT NULL constraint
+    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI E COORDINATE GEOGRAFICHE
     const prenRes = await client.query(
       `INSERT INTO prenotazioni (
           corsa_id, 
@@ -53,15 +52,29 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
           posti_richiesti, 
           posti_prenotati, 
           start_index_polyline, 
-          end_index_polyline
+          end_index_polyline,
+          lat_salita,
+          lon_salita,
+          lat_discesa,
+          lon_discesa
        ) 
-       VALUES ($1, $2, $3, $3, $4, $5) RETURNING *`,
-      [corsa.id, clienteId, postiRichiesti, segmenti.startIdx, segmenti.endIdx]
+       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        corsa.id, 
+        clienteId, 
+        postiRichiesti, 
+        segmenti.startIdx, 
+        segmenti.endIdx,
+        segmenti.latSalita ?? null,
+        segmenti.lonSalita ?? null,
+        segmenti.latDiscesa ?? null,
+        segmenti.lonDiscesa ?? null
+      ]
     );
 
     // 3. AGGIORNAMENTO CACHE
     const corsaAggiornata = await client.query(
-        `SELECT c.*, 
+        `SELECT c., 
         (SELECT MAX(occ) FROM (
             SELECT SUM(posti_richiesti) as occ 
             FROM prenotazioni 

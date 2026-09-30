@@ -107,9 +107,14 @@ router.post('/:id/accetta', async (req, res) => {
 
       console.log(`🚗 [ACCETTA] Analisi tipologia corsa -> isPopBus: ${isPopBus}, corsa_id presente: ${!!pRow.corsa_id}`);
 
+      // AGGIORNATO: Estrazione corretta di indici e coordinate puntuali salvati nella richiesta
       const segmenti = { 
-          startIdx: pRow.start_index_polyline ?? 0, 
-          endIdx: pRow.end_index_polyline ?? 100 
+          startIdx: Number(pRow.start_index_polyline ?? 0), 
+          endIdx: Number(pRow.end_index_polyline ?? 100),
+          latSalita: Number(pRow.origine_lat),
+          lonSalita: Number(pRow.origine_lon),
+          latDiscesa: Number(pRow.destinazione_lat),
+          lonDiscesa: Number(pRow.destinazione_lon)
       };
 
       let corsa;

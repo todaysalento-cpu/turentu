@@ -114,6 +114,17 @@ export async function calcolaPrezzo(
                 
                 const costoTotaleMissione = infoCond.euro_km * (kmTotaliCorsaOriginale + kmAvvicinamentoDinamici + kmRiposizionamentoDinamici);
 
+                // --- 🔍 LOG DI DEBUG DETTAGLIATO PER IL COSTO MISSIONE ---
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] --- INIZIO SCOMPOSIZIONE ---`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Veicolo ID: ${corsa.veicolo_id || 'DEFAULT'} | Tariffa €/km: ${infoCond.euro_km}`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Km Totali Percorso (Rotta): ${kmTotaliCorsaOriginale}`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Avvicinamento base: ${avvicinamento} km | Passeggeri già a bordo: ${passeggeriGiaPresenti} | Fattore assorbimento: ${fattoreAssorbimento}`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Avvicinamento dinamico calcolato: ${kmAvvicinamentoDinamici} km`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Riposizionamento dinamico calcolato: ${kmRiposizionamentoDinamici} km`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Somma Km totali missione (Tratta + Avv.dinamico + Rip.dinamico): ${(kmTotaliCorsaOriginale + kmAvvicinamentoDinamici + kmRiposizionamentoDinamici)}`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] Costo Totale Missione (euro_km * km_totali): ${costoTotaleMissione.toFixed(4)} €`);
+                console.log(`🔍 [DEBUG MISSIONE CONDIVISA] --- FINE SCOMPOSIZIONE ---`);
+
                 // 3. Percentuale di tratta del nuovo utente rispetto all'intera corsa originale
                 const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / kmTotaliCorsaOriginale));
 

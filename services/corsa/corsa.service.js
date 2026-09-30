@@ -19,11 +19,11 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
     
     const res = await client.query(`
         INSERT INTO corse (
-            direttrice_id, autistaId, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
+            direttrice_id, autista_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
             origine, destinazione
         ) VALUES ($1, $2, 'popbus', 'confermata', $3, $4, $4, 
-            ST_SetSRID(ST_MakePoint($5,$6),4326), 
-            ST_SetSRID(ST_MakePoint($7,$8),4326))
+                ST_SetSRID(ST_MakePoint($5,$6),4326), 
+                ST_SetSRID(ST_MakePoint($7,$8),4326))
         RETURNING *`, 
         [direttriceId, autistaId, d.partenza_prevista, d.posti_totali, 
          d.origine_lon, d.origine_lat, d.destinazione_lon, d.destinazione_lat]
@@ -79,13 +79,13 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         // Controllo di sicurezza: impedisce coordinate a 0,0
         if (coordOrig.lat === 0 || coordOrig.lon === 0 || coordDest.lat === 0 || coordDest.lon === 0) {
-            console.error(`❌ [CREATE CORSA ERRORE] Coordinate non valide per il pending ${pending.id}`);
+            console.error(`❌ [CREATE CORSA ERRORE] Coordinate non valide per il pending ${pending.id}: Origine(${coordOrig.lat}, ${coordOrig.lon}), Destinazione(${coordDest.lat}, ${coordDest.lon})`);
             throw new Error(`Coordinate di origine o destinazione non valide per il pending ${pending.id}`);
         }
 
         let polylineString = '';
         let pathGeohashes = [];
-        let distanzaKm = 0;
+        let distanzaKm = Number(pending.distanza) || 0;
 
         try {
             console.log(`🗺️ [ROUTE] Richiesta geometria rotta per pending ${pending.id}...`);
@@ -93,8 +93,10 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             
             polylineString = routeData?.polyline || '';
             
-            const distanzaRilevata = routeData?.distance ?? routeData?.distanza ?? pending.distanza ?? 0;
-            distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+            const distanzaRilevata = routeData?.distance ?? routeData?.distanza;
+            if (distanzaRilevata) {
+                distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+            }
 
             if (polylineString) {
                 const coords = polyline.decode(polylineString);
@@ -104,23 +106,21 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             }
         } catch (e) {  
             console.warn(`⚠️️ [ROUTE WARNING] Impossibile generare la geometria per il pending ${pending.id}:`, e);  
-            distanzaKm = Number(pending.distanza) || 0;
         }
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
 
-        // Inserimento corsa
         const res = await client.query(
           `INSERT INTO corse (
              veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, 
-             posti_totali, posti_disponibili, distanza, km_totali_percorso, origine, destinazione, 
+             posti_totali, posti_disponibili, distanza, origine, destinazione, 
              origine_address, destinazione_address, percorso_polyline, path_geohashes, created_at
-            )
-            VALUES (
+           )
+           VALUES (
              $1, $2, $3, $4, 'prenotabile', $5, 
-             $6, $6, $7, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
+             $6, $6, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
              $12, $13, $14, $15, NOW()
-            ) RETURNING *`,
+           ) RETURNING *`,
           [
             veicolo.id,                          // $1
             startDatetime,                       // $2
@@ -133,7 +133,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             coordOrig.lat,                       // $9
             coordDest.lon,                       // $10
             coordDest.lat,                       // $11
-            (pending.origine_address ?? 'N/D'),   // $12
+            (pending.origine_address ?? 'N/D'),    // $12
             (pending.destinazione_address ?? 'N/D'), // $13
             polylineString,                      // $14
             pathGeohashes                        // $15
@@ -142,22 +142,8 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         corsa = res.rows[0];
         console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente nel database con distanza: ${distanzaKm} km.`);
 
-        // --- GESTIONE SEGMENTI IN METRI (Aggiornato per supportare la logica estesa) ---
-        const startOffsetMetri = Number(pending.start_index_polyline ?? pending.calculated_start_offset ?? 0);
-        const endOffsetMetri = Number(pending.end_index_polyline ?? pending.calculated_end_offset ?? (distanzaKm * 1000));
-
-        const segmenti = { 
-            startIdx: startOffsetMetri, 
-            endIdx: endOffsetMetri 
-        };
-
-        const prenotazione = await prenotazioneService.prenotaCorsa(
-            corsa, 
-            pending.cliente_id ?? pending.clienteId, 
-            Number(pending.posti_richiesti ?? 1), 
-            segmenti, 
-            client
-        );
+        const segmenti = { startIdx: pending.start_index_polyline ?? 0, endIdx: pending.end_index_polyline ?? 100 };
+        const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, Number(pending.posti_richiesti ?? 1), segmenti, client);
         
         await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
     }

@@ -174,19 +174,24 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             const kmAvvItem = Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0);
             const kmRipItem = Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0);
-            const kmTotaliRotte = Number(item.distanzaTotaleRotte || item.km_totali || distKmItem);
+            
+            // 🔥 CORRETTO: Tratta effettiva richiesta dall'utente
+            const kmTrattaUtente = distKmItem; 
+
+            // 🔥 CORRETTO: Distanza complessiva dell'intera corsa dell'autista
+            const kmTotaliRotte = Number(item.km_totali_percorso || item.km_totali_rotta || item.distanza_totale_corsa || item.distanzaTotaleRotte || distKmItem);
 
             const p = await calcolaPrezzo(
                 item, 
                 postiUtenteRichiesti, 
                 tipoCoerente, 
-                distKmItem, 
-                kmTotaliRotte, 
+                kmTrattaUtente,     // <-- Km specifici dell'utente
+                kmTotaliRotte,      // <-- Km totali della missione dell'autista
                 passeggeriGiaA1Bordo, 
                 item.classe,
                 kmAvvItem,
                 kmRipItem
-            ).catch(() => ({ prezzo: distKmItem * 0.50 }));
+            ).catch(() => ({ prezzo: kmTrattaUtente * 0.50 }));
             
             if (!p) return [];
 

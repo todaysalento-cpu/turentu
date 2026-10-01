@@ -105,12 +105,11 @@ export async function calcolaPrezzo(
                 const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / kmTotaliCorsaOriginale));
                 const contributoUtentePesarato = percentualeUtente * postiUtente;
 
-                // 3. Recupero delle percentuali dei passeggeri già presenti (la corsa originale ha già il passeggero creatore/precedente)
-                let percentualiEsistenti = corsa.percentuali_passeggeri_attivi;
+                // 3. Recupero corretto delle percentuali dei passeggeri già presenti (allineato con il filtro disponibilità)
+                let percentualiEsistenti = corsa.percentuali_passeggeri_esistenti || corsa.percentuali_passeggeri_attivi;
                 const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
                 
                 if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti) || percentualiEsistenti.length === 0) {
-                    // Se non ci sono array espliciti, assumiamo che il creatore originario copra la sua quota o 1.0 di default
                     percentualiEsistenti = passeggeriGiaPresenti > 0 ? Array(passeggeriGiaPresenti).fill(1.0) : [1.0];
                 }
 
@@ -132,7 +131,7 @@ export async function calcolaPrezzo(
                 console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
                 console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
-                console.log(`⚖️️ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
+                console.log(`⚖ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
                 console.log(`✨ Moltiplicatore Classe (${classeKey}): ${multiplier}`);
                 console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota * Mult): ${prezzoCalcolato.toFixed(4)} €`);
                 console.log(`==========================================================================\n`);
@@ -159,7 +158,7 @@ export async function calcolaPrezzo(
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
                     
                     if (poolFiltrato.length === 0) {
-                        console.log(`⚠️️ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}.`);
+                        console.log(`⚠ [PRICING POPBUS] Nessun veicolo idoneo per l'indice della classe ${classeKey}.`);
                         prezzoCalcolato = null;
                         break;
                     }
@@ -179,7 +178,7 @@ export async function calcolaPrezzo(
 
             default: {
                 prezzoCalcolato = ((0.50 * (safeKmUtente + avvicinamento + riposizionamento)) * multiplier) * postiUtente;
-                console.log(`⚠️ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
+                console.log(`⚠️️ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
             }
         }
     } catch (err) {

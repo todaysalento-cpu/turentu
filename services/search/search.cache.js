@@ -1,7 +1,6 @@
 import { pool } from '../../db/db.js';
 import ngeohash from 'ngeohash';
 import polyline from '@mapbox/polyline';
-import * as turf from '@turf/turf';
 import { redisClient } from '../../redis.js';
 
 const SYNC_TTL_MS = 60000;
@@ -78,43 +77,22 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     c.dest_lat = c.dest_lat || c.lat_arrivo || c.dest_latitudine;
     c.dest_lon = c.dest_lon || c.lon_arrivo || c.dest_longitudine || c.lng_arrivo;
 
-    // --- 📏 NORMALIZZAZIONE DEFINITIVA CHILOMETRI TRAMITE GEOMETRIA REALE ---
-    let kmTotali = 0;
+    // --- 📏 NORMALIZZAZIONE DISTANZA STRADALE REALE ---
+    let rawDistanza = Number(
+        c.km_totali_percorso || 
+        c.distanza_totale || 
+        c.distanza || 
+        c.km_totali || 
+        c.lunghezza || 
+        0
+    );
 
-    if (c.percorso_polyline) {
-        try {
-            const decoded = polyline.decode(c.percorso_polyline);
-            if (decoded && decoded.length > 1) {
-                // polyline.decode restituisce [lat, lon], Turf richiede [lon, lat]
-                const coordinates = decoded.map(pt => [pt[1], pt[0]]); 
-                const line = turf.lineString(coordinates);
-                const distanzaRealeKm = turf.length(line, { units: 'kilometers' });
-                if (distanzaRealeKm > 0) {
-                    kmTotali = distanzaRealeKm;
-                }
-            }
-        } catch (e) {
-            console.warn(`⚠️ [CORSA ${c.id}] Errore calcolo distanza da polyline:`, e.message);
-        }
-    }
+    // Se il DB restituisce i metri (valori > 100), li convertiamo in km, altrimenti sono già in km
+    let kmTotali = rawDistanza > 100 ? rawDistanza / 1000 : rawDistanza;
 
-    // Se per qualche motivo la polyline non è disponibile o fallisce, usiamo i campi del DB normalizzati
-    if (kmTotali <= 0) {
-        let rawDistanza = Number(
-            c.km_totali_percorso || 
-            c.distanza_totale || 
-            c.distanza || 
-            c.km_totali || 
-            c.lunghezza || 
-            0
-        );
-        // Se il DB restituisce i metri (> 10000), li convertiamo in km, altrimenti sono già km
-        kmTotali = rawDistanza > 10000 ? rawDistanza / 1000 : rawDistanza;
-    }
-
-    // Salvataggio pulito e coerente in chilometri e metri
+    // Salvataggio pulito e coerente in chilometri e metri per i calcoli interni
     c.km_totali_percorso = kmTotali > 0 ? kmTotali : 1;
-    c.distanza = c.km_totali_percorso * 1000; // Salvataggio sicuro in metri per i calcoli interni
+    c.distanza = c.km_totali_percorso * 1000; 
 
     if (c.percorso_polyline) {
         try {

@@ -83,12 +83,43 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             throw new Error(`Coordinate di origine o destinazione non valide per il pending ${pending.id}`);
         }
 
+        // --- 🚗 CALCOLO OBBLIGATORIO TRAMITE PERCORSO STRADALE (getRouteGeometry) ---
+        let kmAvvicinamento = 0;
+        let kmRiposizionamento = 0;
+
+        try {
+            const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
+            const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
+
+            if (latBaseV && lonBaseV) {
+                // 1. Percorso stradale per Avvicinamento (Base veicolo -> Origine corsa)
+                console.log(`🛣️ [ROUTING STRADALE] Calcolo avvicinamento da Base (${latBaseV}, ${lonBaseV}) a Origine (${coordOrig.lat}, ${coordOrig.lon})`);
+                const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
+                const distAvv = routeAvv?.distance ?? routeAvv?.distanza;
+                if (distAvv) {
+                    kmAvvicinamento = distAvv > 100 ? distAvv / 1000 : distAvv;
+                }
+
+                // 2. Percorso stradale per Riposizionamento (Destinazione corsa -> Base veicolo)
+                console.log(`🛣️ [ROUTING STRADALE] Calcolo riposizionamento da Destinazione (${coordDest.lat}, ${coordDest.lon}) a Base (${latBaseV}, ${lonBaseV})`);
+                const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
+                const distRip = routeRip?.distance ?? routeRip?.distanza;
+                if (distRip) {
+                    kmRiposizionamento = distRip > 100 ? distRip / 1000 : distRip;
+                }
+            }
+            console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);
+        } catch (e) {
+            console.warn(`⚠ [ROUTING WARNING] Errore durante il calcolo stradale di avvicinamento/riposizionamento:`, e);
+        }
+        // -----------------------------------------------------------------------------------------
+
         let polylineString = '';
         let pathGeohashes = [];
         let distanzaKm = Number(pending.distanza) || 0;
 
         try {
-            console.log(`🗺️ [ROUTE] Richiesta geometria rotta per pending ${pending.id}...`);
+            console.log(`🗺️️ [ROUTE] Richiesta geometria rotta stradale principale per pending ${pending.id}...`);
             const routeData = await getRouteGeometry(coordOrig, coordDest); 
             
             polylineString = routeData?.polyline || '';
@@ -102,10 +133,10 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 const coords = polyline.decode(polylineString);
                 const step = Math.max(1, Math.floor(coords.length / 10));
                 pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
-                console.log(`✅ [ROUTE] Geometria generata. Lunghezza polyline: ${polylineString.length} caratteri, Distanza: ${distanzaKm} km`);
+                console.log(`✅ [ROUTE] Geometria stradale generata. Lunghezza polyline: ${polylineString.length} caratteri, Distanza: ${distanzaKm} km`);
             }
         } catch (e) {  
-            console.warn(`⚠️️ [ROUTE WARNING] Impossibile generare la geometria per il pending ${pending.id}:`, e);  
+            console.warn(`⚠ [ROUTE WARNING] Impossibile generare la geometria stradale per il pending ${pending.id}:`, e);  
         }
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
@@ -114,33 +145,36 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
           `INSERT INTO corse (
              veicolo_id, start_datetime, arrivo_datetime, tipo_corsa, stato, durata, 
              posti_totali, posti_disponibili, distanza, origine, destinazione, 
-             origine_address, destinazione_address, percorso_polyline, path_geohashes, created_at
+             origine_address, destinazione_address, percorso_polyline, path_geohashes, 
+             km_avvicinamento, km_riposizionamento, created_at
            )
            VALUES (
              $1, $2, $3, $4, 'prenotabile', $5, 
              $6, $6, $7, ST_SetSRID(ST_MakePoint($8,$9),4326), ST_SetSRID(ST_MakePoint($10,$11),4326), 
-             $12, $13, $14, $15, NOW()
+             $12, $13, $14, $15, $16, $17, NOW()
            ) RETURNING *`,
           [
-            veicolo.id,                          // $1
-            startDatetime,                       // $2
-            arrivoDatetime,                      // $3
+            veicolo.id,                            // $1
+            startDatetime,                         // $2
+            arrivoDatetime,                        // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,              // $5
-            postiTotaliVeicolo,                  // $6
-            distanzaKm,                          // $7
-            coordOrig.lon,                       // $8
-            coordOrig.lat,                       // $9
-            coordDest.lon,                       // $10
-            coordDest.lat,                       // $11
+            `${durataMin} minutes`,                // $5
+            postiTotaliVeicolo,                    // $6
+            distanzaKm,                            // $7
+            coordOrig.lon,                         // $8
+            coordOrig.lat,                         // $9
+            coordDest.lon,                         // $10
+            coordDest.lat,                         // $11
             (pending.origine_address ?? 'N/D'),    // $12
             (pending.destinazione_address ?? 'N/D'), // $13
-            polylineString,                      // $14
-            pathGeohashes                        // $15
+            polylineString,                        // $14
+            pathGeohashes,                         // $15
+            kmAvvicinamento,                       // $16
+            kmRiposizionamento                     // $17
           ]
         );
         corsa = res.rows[0];
-        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente nel database con distanza: ${distanzaKm} km.`);
+        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente con Avv Stradale: ${kmAvvicinamento}km, Rip Stradale: ${kmRiposizionamento}km.`);
 
         const segmenti = { startIdx: pending.start_index_polyline ?? 0, endIdx: pending.end_index_polyline ?? 100 };
         const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, Number(pending.posti_richiesti ?? 1), segmenti, client);

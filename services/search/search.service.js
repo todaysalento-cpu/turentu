@@ -157,9 +157,8 @@ export async function cercaSlotUltra(richiesta) {
 
     const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => {
-        const kmCorsaDb = Number(c.km_corsa || c.distanza || 0);
-        const distKmNormalizzata = kmCorsaDb > 0 ? kmCorsaDb : distanzaCondivisaValida;
-        const kmUtenteTratta = Number(c.km_utente || distKmNormalizzata);
+        const kmUtenteTratta = Number(c.km_utente || c.distanza || distanzaCondivisaValida);
+        const kmTotaliPercorso = Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta);
 
         return { 
             ...c, 
@@ -167,7 +166,8 @@ export async function cercaSlotUltra(richiesta) {
             is_pool: false, 
             distanza: kmUtenteTratta * 1000, 
             distanzaKm: kmUtenteTratta,
-            km_totali_percorso: Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta)
+            km_utente: kmUtenteTratta,
+            km_totali_percorso: kmTotaliPercorso
         };
     });
 

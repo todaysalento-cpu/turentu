@@ -63,14 +63,18 @@ export async function getRouteGeometry(origine, destinazione) {
       throw new Error("Polyline assente nella risposta");
     }
 
+    const distanzaMetri = route.legs[0].distance.value;
+
     return {
       polyline: route.overview_polyline.points,
-      distanza: route.legs[0].distance.value,
+      distanzaKm: distanzaMetri / 1000, // Coerente in KM per evitare errori di scala
+      distanzaMetri: distanzaMetri,     // Disponibile anche in metri se necessario
+      distanza: distanzaMetri / 1000,   // Retrocompatibilità per codice esistente che legge .distanza
       durata: route.legs[0].duration.value
     };
   } catch (e) {
     console.error("💥 Errore critico getRouteGeometry:", e.message);
-    throw e; // Rilancia l'errore per fermare lo script di migrazione
+    throw e; // Rilancia l'errore per fermare lo script/chiamata
   }
 }
 

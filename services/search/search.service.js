@@ -157,14 +157,20 @@ export async function cercaSlotUltra(richiesta) {
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
 
     const distanzaCondivisaValida = Number(distanzaKm);
-    const risultatiCondivise = corseValide.map(c => ({ 
-        ...c, 
-        tipo: 'condivisa', 
-        is_pool: false, 
-        distanza: Number(c.distanza || distanzaCondivisaValida), 
-        distanzaKm: Number(c.distanzaKm || c.distanza || distanzaCondivisaValida),
-        km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distanzaCondivisaValida)
-    }));
+    const risultatiCondivise = corseValide.map(c => {
+        // Normalizzazione sicura della distanza dal DB (se > 100 si intende in metri, convertiamo in km, altrimenti gestiamo i km)
+        const distDb = Number(c.distanza || 0);
+        const distKmNormalizzata = distDb > 100 ? (distDb / 1000) : (distDb > 0 ? distDb : distanzaCondivisaValida);
+
+        return { 
+            ...c, 
+            tipo: 'condivisa', 
+            is_pool: false, 
+            distanza: distDb > 0 ? distDb : (distanzaCondivisaValida * 1000), 
+            distanzaKm: distKmNormalizzata,
+            km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distKmNormalizzata)
+        };
+    });
 
     // --- 2. CORSE PRIVATE ---
     console.log(`🚗 [DEBUG PRIVATI] Totale veicoli presenti in CacheStore.veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
@@ -213,7 +219,7 @@ export async function cercaSlotUltra(richiesta) {
             servizi: disp.servizi || {},
             posti_disponibili: cap,
             posti_totali: cap, 
-            distanza: distanzaKm, 
+            distanza: distanzaMetri, 
             distanzaKm: distanzaKm, 
             km_avvicinamento: kmAvv,
             km_riposizionamento: kmRip,
@@ -281,7 +287,7 @@ export async function cercaSlotUltra(richiesta) {
                 partenza_prevista: dir.partenza_prevista,
                 posti_disponibili: disponibili, 
                 posti_totali: capacita, 
-                distanza: distanzaKm, 
+                distanza: distanzaMetri, 
                 distanzaKm: distanzaKm, 
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
@@ -296,7 +302,7 @@ export async function cercaSlotUltra(richiesta) {
     console.log(`📊 [SearchEngine] Risultati finali prima del fallback: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
     if (risultatiPool.length === 0) {
-        console.log(`ℹ️ [DEBUG FALLBACK] Nessun pool attivo trovato. Inserimento card virtuale di fallback (virtual_pop_pending).`);
+        console.log(`ℹ️️ [DEBUG FALLBACK] Nessun pool attivo trovato. Inserimento card virtuale di fallback (virtual_pop_pending).`);
         
         const veicoliDisponibiliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true);
@@ -347,7 +353,7 @@ export async function cercaSlotUltra(richiesta) {
             is_pool: true,
             veicoli_pool_ids: veicoliDisponibiliIds,
             stato: 'in_attesa',
-            distanza: distanzaKm,
+            distanza: distanzaMetri,
             distanzaKm: distanzaKm, 
             distanzaTotaleRotte: distanzaKm,
             km_avvicinamento: kmAvvFallback,

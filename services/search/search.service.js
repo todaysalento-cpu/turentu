@@ -157,7 +157,17 @@ export async function cercaSlotUltra(richiesta) {
 
     const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => {
-        const kmUtenteTratta = Number(c.km_utente || c.distanza || distanzaCondivisaValida);
+        const offsetMetri = (c.calculated_end_offset !== undefined && c.calculated_start_offset !== undefined)
+            ? (c.calculated_end_offset - c.calculated_start_offset)
+            : null;
+
+        let kmUtenteTratta = offsetMetri !== null ? (offsetMetri / 1000) : Number(c.km_utente || c.distanza || distanzaCondivisaValida);
+        
+        // Controllo di sicurezza: se il valore supera i 5000, si tratta quasi certamente di metri grezzi non convertiti
+        if (kmUtenteTratta > 5000) {
+            kmUtenteTratta = kmUtenteTratta / 1000;
+        }
+
         const kmTotaliPercorso = Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta);
 
         return { 

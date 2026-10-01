@@ -77,8 +77,8 @@ export const upsertCorsa = async (c, indicizzare = false) => {
     c.dest_lat = c.dest_lat || c.lat_arrivo || c.dest_latitudine;
     c.dest_lon = c.dest_lon || c.lon_arrivo || c.dest_longitudine || c.lng_arrivo;
 
-    // --- 📏 NORMALIZZAZIONE DISTANZA STRADALE REALE ---
-    let rawDistanza = Number(
+    // --- 📏 PRESA DEL DATO PURA (Senza nessuna normalizzazione o divisione) ---
+    const rawDistanza = Number(
         c.km_totali_percorso || 
         c.distanza_totale || 
         c.distanza || 
@@ -87,12 +87,8 @@ export const upsertCorsa = async (c, indicizzare = false) => {
         0
     );
 
-    // Se il DB restituisce i metri (valori > 100), li convertiamo in km, altrimenti sono già in km
-    let kmTotali = rawDistanza > 100 ? rawDistanza / 1000 : rawDistanza;
-
-    // Salvataggio pulito e coerente in chilometri e metri per i calcoli interni
-    c.km_totali_percorso = kmTotali > 0 ? kmTotali : 1;
-    c.distanza = c.km_totali_percorso * 1000; 
+    c.km_totali_percorso = rawDistanza;
+    c.distanza = rawDistanza;
 
     if (c.percorso_polyline) {
         try {

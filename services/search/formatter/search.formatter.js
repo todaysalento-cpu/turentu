@@ -171,11 +171,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             // 2. LOGICA STANDARD (Corse reali trovate)
             const passeggeriGiaA1Bordo = Number(item.passeggeri_esistenti || item.posti_occupati || item.passeggeri_correnti || 0);
 
-            const kmAvvItem = Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0);
-            const kmRipItem = Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0);
+            const kmAvvItem = Number(item.km_avvicinamento ?? richiesta.km_avvicinamento ?? 0);
+            const kmRipItem = Number(item.km_riposizionamento ?? richiesta.km_riposizionamento ?? 0);
             
-            const kmTrattaUtente = distKmItem; 
-            const kmTotaliRotte = Number(item.km_totali_percorso || item.km_totali_rotta || item.distanza_totale_corsa || item.distanzaTotaleRotte || distKmItem);
+            // Mappatura corretta dai campi reali del DB
+            const kmTrattaUtente = Number(item.km_corsa || item.distanza || distKmItem); 
+            const kmTotaliRotte = Number(
+                item.km_totali_percorso || 
+                item.km_totali_rotta || 
+                item.distanza_totale_corsa || 
+                item.distanzaTotaleRotte || 
+                (kmTrattaUtente + kmAvvItem + kmRipItem)
+            );
 
             const p = await calcolaPrezzo(
                 item, 

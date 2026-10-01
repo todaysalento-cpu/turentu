@@ -22,8 +22,8 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
             direttrice_id, autista_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
             origine, destinazione
         ) VALUES ($1, $2, 'popbus', 'confermata', $3, $4, $4, 
-                ST_SetSRID(ST_MakePoint($5,$6),4326), 
-                ST_SetSRID(ST_MakePoint($7,$8),4326))
+            ST_SetSRID(ST_MakePoint($5,$6),4326), 
+            ST_SetSRID(ST_MakePoint($7,$8),4326))
         RETURNING *`, 
         [direttriceId, autistaId, d.partenza_prevista, d.posti_totali, 
          d.origine_lon, d.origine_lat, d.destinazione_lon, d.destinazione_lat]
@@ -95,17 +95,15 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 // 1. Percorso stradale per Avvicinamento (Base veicolo -> Origine corsa)
                 console.log(`🛣️ [ROUTING STRADALE] Calcolo avvicinamento da Base (${latBaseV}, ${lonBaseV}) a Origine (${coordOrig.lat}, ${coordOrig.lon})`);
                 const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
-                const distAvv = routeAvv?.distance ?? routeAvv?.distanza;
-                if (distAvv) {
-                    kmAvvicinamento = distAvv > 100 ? distAvv / 1000 : distAvv;
+                if (routeAvv?.distanzaKm) {
+                    kmAvvicinamento = routeAvv.distanzaKm;
                 }
 
                 // 2. Percorso stradale per Riposizionamento (Destinazione corsa -> Base veicolo)
                 console.log(`🛣️ [ROUTING STRADALE] Calcolo riposizionamento da Destinazione (${coordDest.lat}, ${coordDest.lon}) a Base (${latBaseV}, ${lonBaseV})`);
                 const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
-                const distRip = routeRip?.distance ?? routeRip?.distanza;
-                if (distRip) {
-                    kmRiposizionamento = distRip > 100 ? distRip / 1000 : distRip;
+                if (routeRip?.distanzaKm) {
+                    kmRiposizionamento = routeRip.distanzaKm;
                 }
             }
             console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);
@@ -119,14 +117,14 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         let distanzaKm = Number(pending.distanza) || 0;
 
         try {
-            console.log(`🗺️️ [ROUTE] Richiesta geometria rotta stradale principale per pending ${pending.id}...`);
+            console.log(`🗺 [ROUTE] Richiesta geometria rotta stradale principale per pending ${pending.id}...`);
             const routeData = await getRouteGeometry(coordOrig, coordDest); 
             
             polylineString = routeData?.polyline || '';
             
-            const distanzaRilevata = routeData?.distance ?? routeData?.distanza;
-            if (distanzaRilevata) {
-                distanzaKm = distanzaRilevata > 100 ? distanzaRilevata / 1000 : distanzaRilevata;
+            // Lettura diretta e sicura della distanza in km pulita
+            if (routeData?.distanzaKm) {
+                distanzaKm = routeData.distanzaKm;
             }
 
             if (polylineString) {

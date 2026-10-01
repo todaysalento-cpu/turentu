@@ -177,7 +177,9 @@ export async function cercaSlotUltra(richiesta) {
             distanza: kmUtenteTratta * 1000, 
             distanzaKm: kmUtenteTratta,
             km_utente: kmUtenteTratta,
-            km_totali_percorso: kmTotaliPercorso
+            km_totali_percorso: kmTotaliPercorso,
+            startOffset: c.calculated_start_offset,
+            endOffset: c.calculated_end_offset
         };
     });
 

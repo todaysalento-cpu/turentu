@@ -19,7 +19,7 @@ function determinaClasse(indice) {
 function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV, lonBaseV) {
     const isAnchor = corsa.tipo_corsa === 'condivisa';
 
-    if (isAnchor) {
+    if (isAnchor || corsa.percorso_polyline) {
         if (corsa.percorso_polyline) {
             try {
                 const decoded = polyline.decode(corsa.percorso_polyline);
@@ -37,7 +37,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                     const lunghezzaMetri = turf.length(line, { units: 'meters' });
                     const offsetMetri = snapped.properties.location * lunghezzaMetri;
                     
-                    console.log(`📍 [SNAP CONDIVISA] Corsa ${corsaId}: Distanza snap = ${snapped.properties.dist.toFixed(3)} km | Offset calcolato = ${offsetMetri.toFixed(2)} m (Lunghezza totale polyline: ${lunghezzaMetri.toFixed(2)} m)`);
+                    console.log(`📍 [SNAP GEO] Corsa ${corsaId}: Distanza snap = ${snapped.properties.dist.toFixed(3)} km | Offset calcolato = ${offsetMetri.toFixed(2)} m (Lunghezza totale polyline: ${lunghezzaMetri.toFixed(2)} m)`);
 
                     return {
                         offset_metri: offsetMetri,
@@ -53,18 +53,20 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
         } else {
             console.log(`⚠ [SNAP FALLITO] Corsa ${corsaId}: percorso_polyline mancante.`);
         }
-        return null;
+        if (isAnchor) return null;
     }
 
     const nodi = corsa.nodi_sequenza || [];
     let nearest = null;
     let min = tolleranzaKm;
+    let nearestIndex = 0;
 
-    for (const n of nodi) {
+    for (let i = 0; i < nodi.length; i++) {
+        const n = nodi[i];
         const d = turf.distance(point, turf.point([n.lon, n.lat]), { units: 'kilometers' });
         if (d < min) {
             min = d;
-            nearest = { ...n, type: 'STATIC', dist: d };
+            nearest = { ...n, type: 'STATIC', dist: d, indice_nodo: i };
         }
     }
     if (!nearest) {
@@ -145,8 +147,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
         }
 
-        const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0 };
-        const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999 };
+        const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0, offset_metri: 0 };
+        const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999, offset_metri: Number(c.lunghezza_metri_totali || 1000) };
 
         if (!isProattivo && (!startSnap || !endSnap)) {
             console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
@@ -173,34 +175,25 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
             let postiOccupatiNelTratto = 0;
             const percentualiEsistentiArray = [];
-            const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1; // In metri o km a seconda dello standard, verifichiamo la proporzione
+            const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1;
 
             for (const p of prenotazioni) {
                 const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
                 const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
 
-                console.log(`   ➡️ Analisi prenotazione ID ${p.id}: start=${pStartTratto}, end=${pEndTratto}, posti=${p.posti_richiesti}`);
-
                 if (startOffset < pEndTratto && endOffset > pStartTratto) {
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                 }
 
-                // Calcolo della percentuale di occupazione della singola prenotazione esistente rispetto alla corsa originale
-                // Nota: se start_index_polyline ed end_index_polyline sono in metri sulla polyline totale:
                 const lunghezzaTrattaPaz = Math.max(0, pEndTratto - pStartTratto);
-                // Se la polyline totale è espressa in metri totali o span 0-100, rapportiamola correttamente:
-                // Se i valori sono in metri puri lungo la polyline:
                 let percPaz = lunghezzaTrattaPaz / (c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000 || 100);
-                // Fall tuttavia sicurezza nel caso i valori siano 0-100 percentuali o simili:
                 if (pEndTratto <= 100 && pStartTratto === 0) {
                     percPaz = (pEndTratto - pStartTratto) / 100;
                 }
-                percPaz = Math.min(1.0, Math.max(0.01, percPaz)); // Evitiamo percentuali zero o assurde
+                percPaz = Math.min(1.0, Math.max(0.01, percPaz));
 
                 percentualiEsistentiArray.push(percPaz);
             }
-
-            console.log(`📊 [PERCENTUALI ESISTENTI CALCOLATE] Corsa ID ${c.id}:`, percentualiEsistentiArray);
 
             if ((postiOccupatiNelTratto + Number(richiesta.posti_richiesti)) > capacitaTotale) {
                 console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto globale (Occupati: ${postiOccupatiNelTratto}, Richiesti: ${richiesta.posti_richiesti}, Capacità: ${capacitaTotale}).`);
@@ -218,16 +211,35 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 calculated_start_offset: startOffset,
                 calculated_end_offset: endOffset,
                 km_utente: kmUtenteTratta,
-                percentuali_passeggeri_esistenti: percentualiEsistentiArray // <--- Passato correttamente al pricing!
+                percentuali_passeggeri_esistenti: percentualiEsistentiArray
             };
         }
 
         // --- LOGICA POP-BUS ---
+        let startOffsetPop = Number(startSnap.offset_metri || 0);
+        let endOffsetPop = Number(endSnap.offset_metri || 0);
+
+        if (!startOffsetPop && c.percorso_polyline) {
+            try {
+                const decoded = polyline.decode(c.percorso_polyline);
+                const line = turf.lineString(decoded.map(pt => [pt[1], pt[0]]));
+                const lenM = turf.length(line, { units: 'meters' });
+                startOffsetPop = 0;
+                endOffsetPop = lenM;
+            } catch (e) {
+                startOffsetPop = 0;
+                endOffsetPop = 1000;
+            }
+        }
+
         const baseResult = { 
             ...c, 
             veicoli_pool_ids: c.veicoli_pool_ids || [],
             km_avvicinamento: kmAvvicinamento,
-            km_riposizionamento: kmRiposizionamento
+            km_riposizionamento: kmRiposizionamento,
+            calculated_start_offset: startOffsetPop,
+            calculated_end_offset: endOffsetPop,
+            km_utente: Math.max(0.1, (endOffsetPop - startOffsetPop) / 1000)
         };
 
         if (c.direttrice_id) {

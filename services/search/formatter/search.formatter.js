@@ -220,7 +220,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
                 messaggio: item.messaggio || null,
-                servizi: parseServizi(item.servizi)
+                servizi: parseServizi(item.servizi),
+                startOffset: item.startOffset ?? null,
+                endOffset: item.endOffset ?? null
             }];
         } catch (err) {
             console.error(`💥 [FORMAT] Errore su ID ${item?.id}:`, err);

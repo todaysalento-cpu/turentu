@@ -113,18 +113,8 @@ export async function cercaSlotUltra(richiesta) {
         const c = CacheStore.corseCache.get(Number(id));
         if (!c) return null;
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
-        
-        console.log(`🔍 [DEBUG SNAP] Corsa ID ${c.id}:`);
-        console.log(`   - Origine richiesta utente: ${lat}, ${lon}`);
-        console.log(`   - Destinazione richiesta utente: ${destLat}, ${destLon}`);
-        console.log(`   - Dati Corsa DB (Origine): ${c.origine_lat || 'N/A'}, ${c.origine_lon || 'N/A'}`);
-        console.log(`   - Dati Corsa DB (Destinazione): ${c.dest_lat || 'N/A'}, ${c.dest_lon || 'N/A'}`);
-        console.log(`   - Geohashes Corsa:`, c.path_geohashes || c.geohashes || 'Non presenti');
-
         return c;
     }).filter(Boolean);
-
-    console.log(`🔎 [DEBUG CONDIVISE] Trovate ${corsaResults.flat().length} chiavi totali su Redis. Corse uniche candidate estratte dalla cache: ${corseCandidate.length}`);
 
     // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache
     const corsaIds = corseCandidate.map(c => Number(c.id)).filter(Boolean);
@@ -143,7 +133,6 @@ export async function cercaSlotUltra(richiesta) {
         );
     }
 
-    // Passiamo esplicitamente i metri di offset calcolati/stimati per la tratta richiesta
     const requestWithMetrics = { 
         ...richiesta, 
         posti_richiesti: postiRichiesti,
@@ -158,22 +147,21 @@ export async function cercaSlotUltra(richiesta) {
 
     const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => {
-        // Normalizzazione sicura della distanza dal DB (se > 100 si intende in metri, convertiamo in km, altrimenti gestiamo i km)
-        const distDb = Number(c.distanza || 0);
-        const distKmNormalizzata = distDb > 100 ? (distDb / 1000) : (distDb > 0 ? distDb : distanzaCondivisaValida);
+        // Leggiamo direttamente km_corsa salvato correttamente in decimali nel DB
+        const kmCorsaDb = Number(c.km_corsa || c.distanza || 0);
+        const distKmNormalizzata = kmCorsaDb > 0 ? kmCorsaDb : distanzaCondivisaValida;
 
         return { 
             ...c, 
             tipo: 'condivisa', 
             is_pool: false, 
-            distanza: distDb > 0 ? distDb : (distanzaCondivisaValida * 1000), 
+            distanza: kmCorsaDb > 0 ? (kmCorsaDb * 1000) : (distanzaCondivisaValida * 1000), 
             distanzaKm: distKmNormalizzata,
-            km_totali_percorso: Number(c.km_totali_percorso || c.distanza_totale || c.km_totali || distKmNormalizzata)
+            km_totali_percorso: Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || distKmNormalizzata)
         };
     });
 
     // --- 2. CORSE PRIVATE ---
-    console.log(`🚗 [DEBUG PRIVATI] Totale veicoli presenti in CacheStore.veicoloToDisponibilita: ${CacheStore.veicoloToDisponibilita.size}`);
     const veicoliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries());
 
     const risultatiPrivati = (await Promise.all(veicoliEntries.map(async ([veicoloId, disp]) => {
@@ -248,8 +236,6 @@ export async function cercaSlotUltra(richiesta) {
         direttrici.forEach(d => direttriciAttivateSet.set(d.id, d));
     }
 
-    console.log(`🚌 [DEBUG POOL] Direttrici virtuali trovate nel DB nel range orario: ${direttriciAttivateSet.size}`);
-
     const risultatiPool = (await Promise.all(Array.from(direttriciAttivateSet.values()).map(async (dir) => {
         const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
         const capacita = await getCapacitaDirettrice(dir.id);
@@ -299,11 +285,8 @@ export async function cercaSlotUltra(richiesta) {
     }))).filter(Boolean);
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
-    console.log(`📊 [SearchEngine] Risultati finali prima del fallback: Condivise=${risultatiCondivise.length}, Private=${risultatiPrivati.length}, Pool=${risultatiPool.length}`);
 
     if (risultatiPool.length === 0) {
-        console.log(`ℹ️️ [DEBUG FALLBACK] Nessun pool attivo trovato. Inserimento card virtuale di fallback (virtual_pop_pending).`);
-        
         const veicoliDisponibiliEntries = Array.from(CacheStore.veicoloToDisponibilita.entries())
             .filter(([_, disp]) => disp.disponibile === true);
         

@@ -117,7 +117,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         }
         // -----------------------------------------------------------------------
 
-        // --- CALCOLO CHILOMETRI OPERATIVI & POSIZIONI (Spostato prima dello snap per le condivise) ---
+        // --- CALCOLO CHILOMETRI OPERATIVI & POSIZIONI ---
         let kmAvvicinamento = 0;
         let kmRiposizionamento = 0;
 
@@ -155,7 +155,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
         }
 
-        // Ora passiamo latV, lonV, latBaseV, lonBaseV affinché lo snap consideri l'intera linea estesa
         const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0 };
         const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999 };
 
@@ -164,12 +163,12 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             return null;
         }
 
-        // --- LOGICA CONDIVISA (Estesa su Avvicinamento + Tratta + Riposizionamento) ---
+        // --- LOGICA CONDIVISA ---
         if (c.tipo_corsa === 'condivisa') {
             const startOffset = Number(startSnap.offset_metri);
             const endOffset = Number(endSnap.offset_metri);
             
-            if (startOffset >= endOffset || (endOffset - startOffset) < 500) { // Minimo 500 metri di tratta utile
+            if (startOffset >= endOffset || (endOffset - startOffset) < 500) { 
                 console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi o tratto troppo corto (start: ${startOffset}, end: ${endOffset}).`);
                 return null;
             }
@@ -177,7 +176,6 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
             const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
 
-            // Calcoliamo i passeggeri già presenti nel tratto globale richiesto
             let postiOccupatiNelTratto = 0;
             for (const p of prenotazioni) {
                 const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
@@ -203,7 +201,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             };
         }
 
-        // --- LOGICA POP-BUS (Universale) ---
+        // --- LOGICA POP-BUS ---
         const baseResult = { 
             ...c, 
             veicoli_pool_ids: c.veicoli_pool_ids || [],

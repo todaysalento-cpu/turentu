@@ -190,14 +190,17 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return null;
             }
 
-            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto globale occupato da: ${postiOccupatiNelTratto} passeggeri.`);
+            const kmUtenteTratta = (endOffset - startOffset) / 1000;
+
+            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta} km.`);
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,
                 km_riposizionamento: kmRiposizionamento,
                 passeggeri_correnti: postiOccupatiNelTratto,
                 calculated_start_offset: startOffset,
-                calculated_end_offset: endOffset
+                calculated_end_offset: endOffset,
+                km_utente: kmUtenteTratta
             };
         }
 

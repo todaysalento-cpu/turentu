@@ -119,6 +119,7 @@ export async function cercaSlotUltra(richiesta) {
     // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache
     const corsaIds = corseCandidate.map(c => Number(c.id)).filter(Boolean);
     let prenotazioniBatch = [];
+    const capacitaMap = new Map();
     
     if (corsaIds.length > 0) {
         const { rows: allPrenotazioni } = await pool.query(
@@ -131,33 +132,42 @@ export async function cercaSlotUltra(richiesta) {
         prenotazioniBatch = corseCandidate.map(c => 
             allPrenotazioni.filter(p => Number(p.corsa_id) === Number(c.id))
         );
+
+        // Popoliamo la mappa delle capacità totali per ciascuna corsa condivisa
+        for (const c of corseCandidate) {
+            const cap = c.veicolo_id ? await getCapacitaDirettrice(c.veicolo_id, true) : Number(c.posti_totali || 0);
+            capacitaMap.set(c.id, cap);
+        }
     }
 
     const requestWithMetrics = { 
         ...richiesta, 
+        coord: { lat, lon },
+        coordDest: { lat: destLat, lon: destLon },
         posti_richiesti: postiRichiesti,
         return_datetime: orarioRitornoUtente || orarioEventoRitorno,
+        start_datetime: orarioAndataUtente.toISOString(),
         start_index_polyline: Number(richiesta.start_index_polyline ?? 0),
         end_index_polyline: Number(richiesta.end_index_polyline ?? distanzaMetri)
     };
 
-    const { corse: corseValide } = await filterDisponibilita(requestWithMetrics, corseCandidate, prenotazioniBatch);
+    const { corse: corseValide } = await filterDisponibilita(requestWithMetrics, corseCandidate, prenotazioniBatch, capacitaMap);
     
     console.log(`🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`);
 
     const distanzaCondivisaValida = Number(distanzaKm);
     const risultatiCondivise = corseValide.map(c => {
-        // Leggiamo direttamente km_corsa salvato correttamente in decimali nel DB
         const kmCorsaDb = Number(c.km_corsa || c.distanza || 0);
         const distKmNormalizzata = kmCorsaDb > 0 ? kmCorsaDb : distanzaCondivisaValida;
+        const kmUtenteTratta = Number(c.km_utente || distKmNormalizzata);
 
         return { 
             ...c, 
             tipo: 'condivisa', 
             is_pool: false, 
-            distanza: kmCorsaDb > 0 ? (kmCorsaDb * 1000) : (distanzaCondivisaValida * 1000), 
-            distanzaKm: distKmNormalizzata,
-            km_totali_percorso: Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || distKmNormalizzata)
+            distanza: kmUtenteTratta * 1000, 
+            distanzaKm: kmUtenteTratta,
+            km_totali_percorso: Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta)
         };
     });
 
@@ -347,6 +357,8 @@ export async function cercaSlotUltra(richiesta) {
 
     return await formatResults({ 
         ...richiesta, 
+        coord: { lat, lon },
+        coordDest: { lat: destLat, lon: destLon },
         distanzaKm,
         distanzaMetri, 
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 

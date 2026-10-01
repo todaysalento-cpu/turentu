@@ -108,7 +108,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const modelloVal = item.modello || item.veicolo?.modello || '';
 
             let distMetriItem = distMetriRichiesta;
-            if (item.is_pool && item.distanza) {
+            if (item.distanza) {
                 distMetriItem = item.distanza;
             }
             const distKmItem = distMetriItem / 1000;
@@ -154,7 +154,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                         distanza_metri: distMetriRichiesta,
                         durata_minuti: Math.round(durataMinutiRichiesta),
                         prezzo: prezzoVal,
-                        prezzo_display: `~ ${prezzoVal}€`,
+                        prezzo_display: `${prezzoVal}€`,
                         posti_necessari_break_even: p.targetPasseggeri || 1,
                         messaggio: item.messaggio || null,
                         postiDisponibili: 0,
@@ -174,8 +174,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const kmAvvItem = Number(item.km_avvicinamento ?? richiesta.km_avvicinamento ?? 0);
             const kmRipItem = Number(item.km_riposizionamento ?? richiesta.km_riposizionamento ?? 0);
             
-            // Mappatura corretta dai campi reali del DB
-            const kmTrattaUtente = Number(item.km_corsa || item.distanza || distKmItem); 
+            const kmTrattaUtente = Number(item.distanzaKm || item.km_utente || (item.distanza ? item.distanza / 1000 : distKmItem)); 
             const kmTotaliRotte = Number(
                 item.km_totali_percorso || 
                 item.km_totali_rotta || 
@@ -191,7 +190,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 kmTrattaUtente, 
                 kmTotaliRotte, 
                 passeggeriGiaA1Bordo, 
-                item.classe,
+                item.classe || 'STANDARD',
                 kmAvvItem,
                 kmRipItem
             ).catch(() => ({ prezzo: kmTrattaUtente * 0.50 }));
@@ -216,8 +215,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 distanza_metri: distMetriItem,
                 durata_minuti: Math.round(durataMinutiItem),
                 prezzo: prezzoVal,
-                prezzo_display: prezzoVal.toString(),
-                postiDisponibili: item.posti_disponibili || 0,
+                prezzo_display: `${prezzoVal}€`,
+                postiDisponibili: item.posti_disponibili ?? item.posti_totali ?? 0,
                 postiTotali: Number(item.posti_totali || 8),
                 is_pool: !!item.is_pool,
                 messaggio: item.messaggio || null,

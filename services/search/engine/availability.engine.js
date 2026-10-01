@@ -14,7 +14,7 @@ function determinaClasse(indice) {
 }
 
 /**
- * SNAP LOGIC ESTESA (Avvicinamento + Tratta Centrale + Riposizionamento)
+ * SNAP LOGIC CORRETTA (Sulla tratta principale della corsa)
  */
 function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV, lonBaseV) {
     const isAnchor = corsa.tipo_corsa === 'condivisa';
@@ -25,26 +25,12 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                 const decoded = polyline.decode(corsa.percorso_polyline);
                 const coordinatesPrincipali = decoded.map(c => [c[1], c[0]]); // [lon, lat]
                 
-                const coordinateCompletate = [];
-
-                // 1. Aggiungiamo l'avvicinamento all'inizio se disponibile
-                if (latV != null && lonV != null) {
-                    coordinateCompletate.push([Number(lonV), Number(latV)]);
-                }
-
-                // 2. Aggiungiamo la polilinea principale della corsa
-                coordinateCompletate.push(...coordinatesPrincipali);
-
-                // 3. Aggiungiamo il riposizionamento finale alla base se disponibile
-                if (latBaseV != null && lonBaseV != null) {
-                    coordinateCompletate.push([Number(lonBaseV), Number(latBaseV)]);
-                }
-
-                if (coordinateCompletate.length < 2) {
+                if (coordinatesPrincipali.length < 2) {
                     return null;
                 }
                 
-                const line = turf.lineString(coordinateCompletate);
+                // Creiamo la linea basata ESCLUSIVAMENTE sulla corsa principale
+                const line = turf.lineString(coordinatesPrincipali);
                 const snapped = turf.nearestPointOnLine(line, point, { units: 'kilometers' });
 
                 if (snapped.properties.dist <= tolleranzaKm) {
@@ -56,7 +42,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                         dist: snapped.properties.dist
                     };
                 } else {
-                    console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso esteso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
+                    console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
                 console.error(`⚠ [SNAP ERROR] Corsa ${corsaId}:`, e);

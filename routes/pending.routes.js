@@ -87,7 +87,8 @@ router.post('/:id/accetta', async (req, res) => {
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
-       ST_X(destinazione::geometry) AS destinazione_lon, ST_Y(destinazione::geometry) AS destinazione_lat`,
+       ST_X(destinazione::geometry) AS destinazione_lon, ST_Y(destinazione::geometry) AS destinazione_lat,
+       start_offset, end_offset`,
       [id]
     );
 
@@ -107,10 +108,12 @@ router.post('/:id/accetta', async (req, res) => {
 
       console.log(`🚗 [ACCETTA] Analisi tipologia corsa -> isPopBus: ${isPopBus}, corsa_id presente: ${!!pRow.corsa_id}`);
 
-      // AGGIORNATO: Estrazione corretta di indici e coordinate puntuali salvati nella richiesta
+      // AGGIORNATO: Inclusi start_offset ed end_offset per evitare offset a zero o NaN
       const segmenti = { 
           startIdx: Number(pRow.start_index_polyline ?? 0), 
           endIdx: Number(pRow.end_index_polyline ?? 100),
+          start_offset: Number(pRow.start_offset ?? 0),
+          end_offset: Number(pRow.end_offset ?? 0),
           latSalita: Number(pRow.origine_lat),
           lonSalita: Number(pRow.origine_lon),
           latDiscesa: Number(pRow.destinazione_lat),
@@ -167,7 +170,7 @@ router.post('/:id/accetta', async (req, res) => {
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
       if (!prenotazioneEffettuata) {
-          console.log(`🎟️ [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
+          console.log(`🎟️️ [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
           await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
       }
 

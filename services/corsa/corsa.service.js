@@ -77,40 +77,30 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         console.log(`📍 [CREATE CORSA] Pending ID ${pending.id} - Origine estratta:`, coordOrig);
         console.log(`🏁 [CREATE CORSA] Pending ID ${pending.id} - Destinazione estratta:`, coordDest);
 
-        // Controllo di sicurezza: impedisce coordinate a 0,0
         if (coordOrig.lat === 0 || coordOrig.lon === 0 || coordDest.lat === 0 || coordDest.lon === 0) {
-            console.error(`❌ [CREATE CORSA ERRORE] Coordinate non valide per il pending ${pending.id}: Origine(${coordOrig.lat}, ${coordOrig.lon}), Destinazione(${coordDest.lat}, ${coordDest.lon})`);
+            console.error(`❌ [CREATE CORSA ERRORE] Coordinate non valide per il pending ${pending.id}`);
             throw new Error(`Coordinate di origine o destinazione non valide per il pending ${pending.id}`);
         }
 
-        // --- 🚗 CALCOLO OBBLIGATORIO TRAMITE PERCORSO STRADALE (getRouteGeometry) ---
         let kmAvvicinamento = 0;
         let kmRiposizionamento = 0;
 
         try {
+            // Gestione flessibile delle proprietà del veicolo (supporta sia posti_totali che posti)
             const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
             const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
 
             if (latBaseV && lonBaseV) {
-                // 1. Percorso stradale per Avvicinamento (Base veicolo -> Origine corsa)
-                console.log(`🛣️ [ROUTING STRADALE] Calcolo avvicinamento da Base (${latBaseV}, ${lonBaseV}) a Origine (${coordOrig.lat}, ${coordOrig.lon})`);
                 const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
-                if (routeAvv?.distanzaKm) {
-                    kmAvvicinamento = routeAvv.distanzaKm;
-                }
+                if (routeAvv?.distanzaKm) kmAvvicinamento = routeAvv.distanzaKm;
 
-                // 2. Percorso stradale per Riposizionamento (Destinazione corsa -> Base veicolo)
-                console.log(`🛣️ [ROUTING STRADALE] Calcolo riposizionamento da Destinazione (${coordDest.lat}, ${coordDest.lon}) a Base (${latBaseV}, ${lonBaseV})`);
                 const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
-                if (routeRip?.distanzaKm) {
-                    kmRiposizionamento = routeRip.distanzaKm;
-                }
+                if (routeRip?.distanzaKm) kmRiposizionamento = routeRip.distanzaKm;
             }
             console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);
         } catch (e) {
-            console.warn(`⚠ [ROUTING WARNING] Errore durante il calcolo stradale di avvicinamento/riposizionamento:`, e);
+            console.warn(`⚠ [ROUTING WARNING] Errore calcolo avvicinamento/riposizionamento:`, e);
         }
-        // -----------------------------------------------------------------------------------------
 
         let polylineString = '';
         let pathGeohashes = [];
@@ -121,8 +111,6 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             const routeData = await getRouteGeometry(coordOrig, coordDest); 
             
             polylineString = routeData?.polyline || '';
-            
-            // Lettura diretta e sicura della distanza in km pulita
             if (routeData?.distanzaKm) {
                 distanzaKm = routeData.distanzaKm;
             }
@@ -131,13 +119,15 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 const coords = polyline.decode(polylineString);
                 const step = Math.max(1, Math.floor(coords.length / 10));
                 pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
-                console.log(`✅ [ROUTE] Geometria stradale generata. Lunghezza polyline: ${polylineString.length} caratteri, Distanza: ${distanzaKm} km`);
+                console.log(`✅ [ROUTE] Geometria generata. Distanza: ${distanzaKm} km`);
             }
         } catch (e) {  
-            console.warn(`⚠ [ROUTE WARNING] Impossibile generare la geometria stradale per il pending ${pending.id}:`, e);  
+            console.warn(`⚠ [ROUTE WARNING] Impossibile generare geometria per pending ${pending.id}:`, e);  
         }
 
-        const postiTotaliVeicolo = Number(veicolo?.posti_totali) || 4;
+        // Supporta sia posti_totali che posti generici passati dall'oggetto veicolo
+        const postiTotaliVeicolo = Number(veicolo?.posti_totali ?? veicolo?.posti ?? 4);
+        const veicoloId = veicolo?.id ?? pending.veicolo_id;
 
         const res = await client.query(
           `INSERT INTO corse (
@@ -152,34 +142,39 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
              $12, $13, $14, $15, $16, $17, NOW()
            ) RETURNING *`,
           [
-            veicolo.id,                            // $1
-            startDatetime,                         // $2
-            arrivoDatetime,                        // $3
+            veicoloId,                           // $1
+            startDatetime,                       // $2
+            arrivoDatetime,                      // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,                // $5
-            postiTotaliVeicolo,                    // $6
-            distanzaKm,                            // $7
-            coordOrig.lon,                         // $8
-            coordOrig.lat,                         // $9
-            coordDest.lon,                         // $10
-            coordDest.lat,                         // $11
+            `${durataMin} minutes`,              // $5
+            postiTotaliVeicolo,                  // $6
+            distanzaKm,                          // $7
+            coordOrig.lon,                       // $8
+            coordOrig.lat,                       // $9
+            coordDest.lon,                       // $10
+            coordDest.lat,                       // $11
             (pending.origine_address ?? 'N/D'),    // $12
             (pending.destinazione_address ?? 'N/D'), // $13
-            polylineString,                        // $14
-            pathGeohashes,                         // $15
-            kmAvvicinamento,                       // $16
-            kmRiposizionamento                     // $17
+            polylineString,                      // $14
+            pathGeohashes,                       // $15
+            kmAvvicinamento,                     // $16
+            kmRiposizionamento                   // $17
           ]
         );
         corsa = res.rows[0];
-        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente con Avv Stradale: ${kmAvvicinamento}km, Rip Stradale: ${kmRiposizionamento}km.`);
+        console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente.`);
 
-        // Gestione flessibile: supporta sia i metri d'offset (startOffset/endOffset) che gli indici di polyline
-        const segmenti = { 
-            startIdx: pending.start_index_polyline ?? 0, 
+        // --- GESTIONE SICURA DEGLI OFFSET IN METRI ---
+        const distanzaMetriTotali = distanzaKm * 1000;
+        const startOffsetVal = Number(pending.start_offset ?? pending.startOffset ?? 0);
+        // Se end_offset manca, usiamo l'intera distanza in metri della corsa calcolata
+        const endOffsetVal = Number(pending.end_offset ?? pending.endOffset ?? (distanzaMetriTotali > 0 ? distanzaMetriTotali : 1000));
+
+        const segmenti = {  
+            startIdx: pending.start_index_polyline ?? 0,  
             endIdx: pending.end_index_polyline ?? 100,
-            startOffset: pending.start_offset ?? pending.startOffset ?? null,
-            endOffset: pending.end_offset ?? pending.endOffset ?? null
+            startOffset: startOffsetVal,
+            endOffset: endOffsetVal
         };
 
         const prenotazione = await prenotazioneService.prenotaCorsa(
@@ -193,7 +188,6 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
     }
 
-    // --- AGGIORNAMENTO CACHE ---
     CacheManager.corsa.update(corsa);
     upsertCorsa(corsa);
 

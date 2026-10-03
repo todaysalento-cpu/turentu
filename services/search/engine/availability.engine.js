@@ -45,7 +45,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                         dist: snapped.properties.dist
                     };
                 } else {
-                    console.log(`⚠️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
+                    console.log(`⚠️️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
                 console.error(`⚠ [SNAP ERROR] Corsa ${corsaId}:`, e);
@@ -202,16 +202,31 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
 
-            // Calcolo orario di partenza dinamico basato sullo startOffset rispetto alla partenza originale
+            // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO (ORIGINE INTERMEDIA) ---
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
+            console.log(`🕒 [ORARIO DINAMICO - START] Corsa ID ${c.id} | Partenza originale corsa: ${oraPartenzaUtente} | startOffset: ${startOffset.toFixed(2)}m`);
+
             if (startOffset > 0 && c.lunghezza_metri_totali && c.partenza_prevista) {
                 const dPartenzaOriginale = new Date(c.partenza_prevista);
                 if (!isNaN(dPartenzaOriginale.getTime())) {
                     const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
-                    const frazionePercorso = Math.min(1, startOffset / Number(c.lunghezza_metri_totali));
+                    const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali);
+                    
+                    const frazionePercorso = Math.min(1, startOffset / lunghezzaTotaleMetri);
                     const ritardoMs = durataTotaleMs * frazionePercorso;
-                    oraPartenzaUtente = new Date(dPartenzaOriginale.getTime() + ritardoMs).toISOString();
+                    
+                    console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Durata totale corsa (ms): ${durataTotaleMs} | Lunghezza totale (m): ${lunghezzaTotaleMetri}`);
+                    console.log(`⏱️️ [ORARIO DINAMICO - DETTAGLI] Frazione percorso completata prima dell'imbarco: ${(frazionePercorso * 100).toFixed(2)}%`);
+                    console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Ritardo calcolato per raggiungere il punto d'imbarco (ms): ${ritardoMs.toFixed(0)} (~${(ritardoMs / 60000).toFixed(1)} minuti)`);
+
+                    const nuovoTimestamp = dPartenzaOriginale.getTime() + ritardoMs;
+                    oraPartenzaUtente = new Date(nuovoTimestamp).toISOString();
+                    console.log(`✅ [ORARIO DINAMICO - FINALE] Orario di partenza calcolato per l'utente: ${oraPartenzaUtente}`);
+                } else {
+                    console.log(`⚠️ [ORARIO DINAMICO - WARNING] Impossibile parsare 'partenza_prevista': ${c.partenza_prevista}`);
                 }
+            } else {
+                console.log(`ℹ️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine della corsa (startOffset = 0 o dati mancanti). Orario invariato: ${oraPartenzaUtente}`);
             }
 
             console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km.`);

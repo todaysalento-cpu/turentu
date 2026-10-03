@@ -14,7 +14,7 @@ function determinaClasse(indice) {
 }
 
 /**
- * SNAP LOGIC CORRETTA (Sulla tratta principale della corsa con Turf.js)
+ * SNAP LOGIC CORRETTA (Sulla tratta principale della corsa)
  */
 function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV, lonBaseV) {
     const isAnchor = corsa.tipo_corsa === 'condivisa';
@@ -35,23 +35,17 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
 
                 if (snapped.properties.dist <= tolleranzaKm) {
                     const lunghezzaMetri = turf.length(line, { units: 'meters' });
-                    
-                    let frazione = Number(snapped.properties.location || 0);
-                    if (frazione > 1) {
-                        frazione = Math.min(1, frazione / lunghezzaMetri);
-                    }
-                    const offsetMetri = frazione * lunghezzaMetri;
+                    const offsetMetri = snapped.properties.location * lunghezzaMetri;
                     
                     console.log(`📍 [SNAP GEO] Corsa ${corsaId}: Distanza snap = ${snapped.properties.dist.toFixed(3)} km | Offset calcolato = ${offsetMetri.toFixed(2)} m (Lunghezza totale polyline: ${lunghezzaMetri.toFixed(2)} m)`);
 
                     return {
                         offset_metri: offsetMetri,
-                        lunghezza_polyline_metri: lunghezzaMetri,
                         type: 'DYNAMIC',
                         dist: snapped.properties.dist
                     };
                 } else {
-                    console.log(`⚠ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
+                    console.log(`⚠️️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
                 console.error(`⚠ [SNAP ERROR] Corsa ${corsaId}:`, e);
@@ -65,6 +59,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
     const nodi = corsa.nodi_sequenza || [];
     let nearest = null;
     let min = tolleranzaKm;
+    let nearestIndex = 0;
 
     for (let i = 0; i < nodi.length; i++) {
         const n = nodi[i];
@@ -181,18 +176,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             let postiOccupatiNelTratto = 0;
             const percentualiEsistentiArray = [];
             const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1;
-            const lunghezzaTotaleMetri = Number(startSnap.lunghezza_polyline_metri || c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
 
             for (const p of prenotazioni) {
-                const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? 0);
-                const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? 0);
+                const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
+                const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
 
                 if (startOffset < pEndTratto && endOffset > pStartTratto) {
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                 }
 
                 const lunghezzaTrattaPaz = Math.max(0, pEndTratto - pStartTratto);
-                let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
+                let percPaz = lunghezzaTrattaPaz / (c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000 || 100);
+                if (pEndTratto <= 100 && pStartTratto === 0) {
+                    percPaz = (pEndTratto - pStartTratto) / 100;
+                }
                 percPaz = Math.min(1.0, Math.max(0.01, percPaz));
 
                 percentualiEsistentiArray.push(percPaz);
@@ -209,16 +206,17 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
             console.log(`🕒 [ORARIO DINAMICO - START] Corsa ID ${c.id} | Partenza originale corsa: ${oraPartenzaUtente} | startOffset: ${startOffset.toFixed(2)}m`);
 
-            if (startOffset > 0 && lunghezzaTotaleMetri > 0 && c.partenza_prevista) {
+            if (startOffset > 0 && c.lunghezza_metri_totali && c.partenza_prevista) {
                 const dPartenzaOriginale = new Date(c.partenza_prevista);
                 if (!isNaN(dPartenzaOriginale.getTime())) {
                     const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
+                    const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali);
                     
                     const frazionePercorso = Math.min(1, startOffset / lunghezzaTotaleMetri);
                     const ritardoMs = durataTotaleMs * frazionePercorso;
                     
                     console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Durata totale corsa (ms): ${durataTotaleMs} | Lunghezza totale (m): ${lunghezzaTotaleMetri}`);
-                    console.log(`⏱ [ORARIO DINAMICO - DETTAGLI] Frazione percorso completata prima dell'imbarco: ${(frazionePercorso * 100).toFixed(2)}%`);
+                    console.log(`⏱️️ [ORARIO DINAMICO - DETTAGLI] Frazione percorso completata prima dell'imbarco: ${(frazionePercorso * 100).toFixed(2)}%`);
                     console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Ritardo calcolato per raggiungere il punto d'imbarco (ms): ${ritardoMs.toFixed(0)} (~${(ritardoMs / 60000).toFixed(1)} minuti)`);
 
                     const nuovoTimestamp = dPartenzaOriginale.getTime() + ritardoMs;

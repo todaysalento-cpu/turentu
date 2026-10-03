@@ -202,16 +202,31 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
 
+            // Calcolo orario di partenza dinamico basato sullo startOffset rispetto alla partenza originale
+            let oraPartenzaUtente = c.partenza_prevista || c.partenza;
+            if (startOffset > 0 && c.lunghezza_metri_totali && c.partenza_prevista) {
+                const dPartenzaOriginale = new Date(c.partenza_prevista);
+                if (!isNaN(dPartenzaOriginale.getTime())) {
+                    const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
+                    const frazionePercorso = Math.min(1, startOffset / Number(c.lunghezza_metri_totali));
+                    const ritardoMs = durataTotaleMs * frazionePercorso;
+                    oraPartenzaUtente = new Date(dPartenzaOriginale.getTime() + ritardoMs).toISOString();
+                }
+            }
+
             console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km.`);
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,
                 km_riposizionamento: kmRiposizionamento,
                 passeggeri_correnti: postiOccupatiNelTratto,
+                startOffset: startOffset,
+                endOffset: endOffset,
                 calculated_start_offset: startOffset,
                 calculated_end_offset: endOffset,
                 km_utente: kmUtenteTratta,
-                percentuali_passeggeri_esistenti: percentualiEsistentiArray
+                percentuali_passeggeri_esistenti: percentualiEsistentiArray,
+                partenza_effettiva: oraPartenzaUtente
             };
         }
 
@@ -237,6 +252,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             veicoli_pool_ids: c.veicoli_pool_ids || [],
             km_avvicinamento: kmAvvicinamento,
             km_riposizionamento: kmRiposizionamento,
+            startOffset: startOffsetPop,
+            endOffset: endOffsetPop,
             calculated_start_offset: startOffsetPop,
             calculated_end_offset: endOffsetPop,
             km_utente: Math.max(0.1, (endOffsetPop - startOffsetPop) / 1000)

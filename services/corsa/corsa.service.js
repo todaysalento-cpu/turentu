@@ -174,8 +174,21 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         corsa = res.rows[0];
         console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente con Avv Stradale: ${kmAvvicinamento}km, Rip Stradale: ${kmRiposizionamento}km.`);
 
-        const segmenti = { startIdx: pending.start_index_polyline ?? 0, endIdx: pending.end_index_polyline ?? 100 };
-        const prenotazione = await prenotazioneService.prenotaCorsa(corsa, pending.cliente_id ?? pending.clienteId, Number(pending.posti_richiesti ?? 1), segmenti, client);
+        // Gestione flessibile: supporta sia i metri d'offset (startOffset/endOffset) che gli indici di polyline
+        const segmenti = { 
+            startIdx: pending.start_index_polyline ?? 0, 
+            endIdx: pending.end_index_polyline ?? 100,
+            startOffset: pending.start_offset ?? pending.startOffset ?? null,
+            endOffset: pending.end_offset ?? pending.endOffset ?? null
+        };
+
+        const prenotazione = await prenotazioneService.prenotaCorsa(
+            corsa, 
+            pending.cliente_id ?? pending.clienteId, 
+            Number(pending.posti_richiesti ?? 1), 
+            segmenti, 
+            client
+        );
         
         await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
     }

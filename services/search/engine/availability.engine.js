@@ -181,8 +181,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
 
             for (const p of prenotazioni) {
-                const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
-                const pEndTratto = Number(p.end_index_polyline ?? p.endOffset ?? 0);
+                const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? 0);
+                const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? 0);
 
                 if (startOffset < pEndTratto && endOffset > pStartTratto) {
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);

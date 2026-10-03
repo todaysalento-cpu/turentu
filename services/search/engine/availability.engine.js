@@ -35,7 +35,6 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
 
                 if (snapped.properties.dist <= tolleranzaKm) {
                     const lunghezzaMetri = turf.length(line, { units: 'meters' });
-                    // CORRETTO: snapped.properties.location è in km, lo convertiamo in metri moltiplicandolo per 1000
                     const offsetMetri = Math.min(lunghezzaMetri, snapped.properties.location * 1000);
                     
                     console.log(`📍 [SNAP GEO] Corsa ${corsaId}: Distanza snap = ${snapped.properties.dist.toFixed(3)} km | Offset calcolato = ${offsetMetri.toFixed(2)} m (Lunghezza totale polyline: ${lunghezzaMetri.toFixed(2)} m)`);
@@ -177,6 +176,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             let postiOccupatiNelTratto = 0;
             const percentualiEsistentiArray = [];
             const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1;
+            
+            // Lunghezza totale di sicurezza (priorità a c.lunghezza_metri_totali, fallback sui km originali)
+            const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
 
             for (const p of prenotazioni) {
                 const pStartTratto = Number(p.start_index_polyline ?? p.startOffset ?? 0);
@@ -186,11 +188,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                 }
 
+                // Calcolo percentuale basato sui metri reali (senza glitch legati a soglie fisse)
                 const lunghezzaTrattaPaz = Math.max(0, pEndTratto - pStartTratto);
-                let percPaz = lunghezzaTrattaPaz / (c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000 || 100);
-                if (pEndTratto <= 100 && pStartTratto === 0) {
-                    percPaz = (pEndTratto - pStartTratto) / 100;
-                }
+                let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
                 percPaz = Math.min(1.0, Math.max(0.01, percPaz));
 
                 percentualiEsistentiArray.push(percPaz);
@@ -207,11 +207,10 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
             console.log(`🕒 [ORARIO DINAMICO - START] Corsa ID ${c.id} | Partenza originale corsa: ${oraPartenzaUtente} | startOffset: ${startOffset.toFixed(2)}m`);
 
-            if (startOffset > 0 && c.lunghezza_metri_totali && c.partenza_prevista) {
+            if (startOffset > 0 && lunghezzaTotaleMetri > 0 && c.partenza_prevista) {
                 const dPartenzaOriginale = new Date(c.partenza_prevista);
                 if (!isNaN(dPartenzaOriginale.getTime())) {
                     const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
-                    const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali);
                     
                     const frazionePercorso = Math.min(1, startOffset / lunghezzaTotaleMetri);
                     const ritardoMs = durataTotaleMs * frazionePercorso;
@@ -227,7 +226,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     console.log(`⚠️ [ORARIO DINAMICO - WARNING] Impossibile parsare 'partenza_prevista': ${c.partenza_prevista}`);
                 }
             } else {
-                console.log(`ℹ️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine della corsa (startOffset = 0 o dati mancanti). Orario invariato: ${oraPartenzaUtente}`);
+                console.log(`ℹ️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine o dati mancanti (lunghezzaTotale: ${lunghezzaTotaleMetri}). Orario invariato: ${oraPartenzaUtente}`);
             }
 
             console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km.`);

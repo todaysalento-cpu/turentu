@@ -198,6 +198,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             if (!p) return [];
 
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
+            const oraPartenzaEffettiva = item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO;
 
             return [{
                 id: itemId || `slot_${item.veicolo_id}`,
@@ -209,8 +210,8 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 modello: modelloVal,
                 localitaOrigine,
                 localitaDestinazione,
-                oraPartenza: item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO,
-                oraArrivo: determinaArrivoReale(item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO, durataMinutiItem),
+                oraPartenza: oraPartenzaEffettiva,
+                oraArrivo: determinaArrivoReale(oraPartenzaEffettiva, durataMinutiItem),
                 oraRitorno: oraRitornoISO,
                 distanza_metri: distMetriItem,
                 durata_minuti: Math.round(durataMinutiItem),
@@ -221,8 +222,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 is_pool: !!item.is_pool,
                 messaggio: item.messaggio || null,
                 servizi: parseServizi(item.servizi),
-                startOffset: item.startOffset ?? null,
-                endOffset: item.endOffset ?? null
+                // 📍 Preservati i metri di offset sulla polilinea per la prenotazione e il tracciamento
+                startOffset: item.startOffset ?? item.calculated_start_offset ?? null,
+                endOffset: item.endOffset ?? item.calculated_end_offset ?? null
             }];
         } catch (err) {
             console.error(`💥 [FORMAT] Errore su ID ${item?.id}:`, err);

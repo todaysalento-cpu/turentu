@@ -179,7 +179,9 @@ export async function cercaSlotUltra(richiesta) {
             km_utente: kmUtenteTratta,
             km_totali_percorso: kmTotaliPercorso,
             startOffset: c.calculated_start_offset,
-            endOffset: c.calculated_end_offset
+            endOffset: c.calculated_end_offset,
+            // 🕒 Mappatura della partenza effettiva calcolata dinamicamente dal motore di disponibilità
+            partenza_prevista: c.partenza_effettiva || c.partenza_prevista || c.partenza
         };
     });
 

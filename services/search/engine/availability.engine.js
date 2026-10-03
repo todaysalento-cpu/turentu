@@ -35,7 +35,8 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
 
                 if (snapped.properties.dist <= tolleranzaKm) {
                     const lunghezzaMetri = turf.length(line, { units: 'meters' });
-                    const offsetMetri = snapped.properties.location * lunghezzaMetri;
+                    // CORRETTO: snapped.properties.location è in km, lo convertiamo in metri moltiplicandolo per 1000
+                    const offsetMetri = Math.min(lunghezzaMetri, snapped.properties.location * 1000);
                     
                     console.log(`📍 [SNAP GEO] Corsa ${corsaId}: Distanza snap = ${snapped.properties.dist.toFixed(3)} km | Offset calcolato = ${offsetMetri.toFixed(2)} m (Lunghezza totale polyline: ${lunghezzaMetri.toFixed(2)} m)`);
 
@@ -45,7 +46,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                         dist: snapped.properties.dist
                     };
                 } else {
-                    console.log(`⚠️️ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
+                    console.log(`⚠ [SNAP FALLITO] Corsa ${corsaId}: Distanza dal percorso di ${snapped.properties.dist.toFixed(2)} km superiore alla tolleranza (${tolleranzaKm} km)`);
                 }
             } catch (e) {
                 console.error(`⚠ [SNAP ERROR] Corsa ${corsaId}:`, e);
@@ -216,7 +217,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     const ritardoMs = durataTotaleMs * frazionePercorso;
                     
                     console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Durata totale corsa (ms): ${durataTotaleMs} | Lunghezza totale (m): ${lunghezzaTotaleMetri}`);
-                    console.log(`⏱️️ [ORARIO DINAMICO - DETTAGLI] Frazione percorso completata prima dell'imbarco: ${(frazionePercorso * 100).toFixed(2)}%`);
+                    console.log(`⏱ [ORARIO DINAMICO - DETTAGLI] Frazione percorso completata prima dell'imbarco: ${(frazionePercorso * 100).toFixed(2)}%`);
                     console.log(`⏱️ [ORARIO DINAMICO - DETTAGLI] Ritardo calcolato per raggiungere il punto d'imbarco (ms): ${ritardoMs.toFixed(0)} (~${(ritardoMs / 60000).toFixed(1)} minuti)`);
 
                     const nuovoTimestamp = dPartenzaOriginale.getTime() + ritardoMs;

@@ -42,7 +42,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
         : kmTotaliCorsaOriginale
     );
 
-    console.log(`⚙️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m | kmUtente: ${kmUtente}km`);
+    console.log(`⚙️️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m | kmUtente: ${kmUtente}km`);
 
     // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE
     const checkRes = await client.query(
@@ -101,14 +101,14 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
        ) 
        VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
-        corsa.id,                     // $1
-        clienteId,                    // $2
-        postiRichiesti,               // $3
-        startIdx,                     // $4
-        endIdx,                       // $5
-        startOffset,                  // $6
-        endOffset,                    // $7
-        kmUtente,                     // $8  <-- KM UTENTE SALVATI DIRETTAMENTE
+        corsa.id,                   // $1
+        clienteId,                  // $2
+        postiRichiesti,             // $3
+        startIdx,                   // $4
+        endIdx,                     // $5
+        startOffset,                // $6
+        endOffset,                  // $7
+        kmUtente,                   // $8  <-- KM UTENTE SALVATI DIRETTAMENTE
         segmenti.latSalita ?? null,   // $9
         segmenti.lonSalita ?? null,   // $10
         segmenti.latDiscesa ?? null,  // $11
@@ -118,6 +118,18 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
 
     const prenotazioneInserita = prenRes.rows[0];
     console.log(`✅ [PRENOTA CORSA - SUCCESS] Prenotazione creata con ID ${prenotazioneInserita.id}. Km utente salvati: ${prenotazioneInserita.km_utente}`);
+
+    // 🔄 2B. AGGIORNA I CONTEGGI NELLA TABELLA CORSE
+    await client.query(
+      `UPDATE corse 
+       SET posti_prenotati = (
+           SELECT COALESCE(SUM(posti_richiesti), 0) 
+           FROM prenotazioni 
+           WHERE corsa_id = $1
+       )
+       WHERE id = $1`,
+      [corsa.id]
+    );
 
     // 3. AGGIORNAMENTO CACHE
     const corsaAggiornata = await client.query(

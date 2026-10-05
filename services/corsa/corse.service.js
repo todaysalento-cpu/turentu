@@ -185,7 +185,8 @@ export async function toggleCorsa(corsa_id, action) {
             tuttePrenotazioniRes.rows.length,
             corsa.classe || 'STANDARD',
             corsa.km_avvicinamento || 0,
-            corsa.km_riposizionamento || 0
+            corsa.km_riposizionamento || 0,
+            false // 👈 [FIX CHIAVE] SPECIFICHIAMO CHE NON È UN NUOVO UTENTE, MA LA CATTURA DI FINE CORSA
           );
           
           console.log(`🔍 [PREZZO RISOLTO] Valore grezzo restituito:`, JSON.stringify(prezzoRisolto));

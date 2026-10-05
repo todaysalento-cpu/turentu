@@ -116,9 +116,9 @@ export async function calcolaPrezzo(
                 const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
                 const sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
 
-                // 4. Ripartizione proporzionale del costo missione totale in base al peso dei km e dei posti
+                // 4. Ripartizione proporzionale del costo missione totale (SENZA applicare il moltiplicatore di classe)
                 const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
-                prezzoCalcolato = (costoMissioneAutista * quotaProporzionale) * multiplier;
+                prezzoCalcolato = costoMissioneAutista * quotaProporzionale;
 
                 // --- 🔍 LOG DETTAGLIATI SPECIFICI PER CORSE CONDIVISE ---
                 console.log(`\n================ 👥 [DEBUG DETTAGLIATO PRICING CONDIVISA] ================`);
@@ -132,8 +132,8 @@ export async function calcolaPrezzo(
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
                 console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
                 console.log(`⚖ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
-                console.log(`✨ Moltiplicatore Classe (${classeKey}): ${multiplier}`);
-                console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota * Mult): ${prezzoCalcolato.toFixed(4)} €`);
+                console.log(`✨ Moltiplicatore Classe: ESCLUSO PER LE CORSE CONDIVISE`);
+                console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota): ${prezzoCalcolato.toFixed(4)} €`);
                 console.log(`==========================================================================\n`);
                 
                 break;
@@ -178,7 +178,7 @@ export async function calcolaPrezzo(
 
             default: {
                 prezzoCalcolato = ((0.50 * (safeKmUtente + avvicinamento + riposizionamento)) * multiplier) * postiUtente;
-                console.log(`⚠️️ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
+                console.log(`⚠ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
             }
         }
     } catch (err) {

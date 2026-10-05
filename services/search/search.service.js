@@ -170,7 +170,7 @@ export async function cercaSlotUltra(richiesta) {
 
         const kmTotaliPercorso = Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta);
 
-        return { 
+        const slotRisultato = { 
             ...c, 
             tipo: 'condivisa', 
             is_pool: false, 
@@ -178,11 +178,24 @@ export async function cercaSlotUltra(richiesta) {
             distanzaKm: kmUtenteTratta,
             km_utente: kmUtenteTratta,
             km_totali_percorso: kmTotaliPercorso,
-            startOffset: c.calculated_start_offset,
-            endOffset: c.calculated_end_offset,
+            start_offset: c.calculated_start_offset ?? 0,
+            end_offset: c.calculated_end_offset ?? (kmUtenteTratta * 1000),
+            startOffset: c.calculated_start_offset ?? 0,
+            endOffset: c.calculated_end_offset ?? (kmUtenteTratta * 1000),
+            start_index_polyline: c.calculated_start_index_polyline ?? 0,
+            end_index_polyline: c.calculated_end_index_polyline ?? 100,
             // 🕒 Mappatura della partenza effettiva calcolata dinamicamente dal motore di disponibilità
             partenza_prevista: c.partenza_effettiva || c.partenza_prevista || c.partenza
         };
+
+        console.log(`📍 [SEARCH ENGINE MAPPING] Corsa condivisa ID [${c.id}] formattata con offset:`, {
+            start_offset: slotRisultato.start_offset,
+            end_offset: slotRisultato.end_offset,
+            start_index_polyline: slotRisultato.start_index_polyline,
+            end_index_polyline: slotRisultato.end_index_polyline
+        });
+
+        return slotRisultato;
     });
 
     // --- 2. CORSE PRIVATE ---
@@ -221,7 +234,7 @@ export async function cercaSlotUltra(richiesta) {
             } catch (err) {}
         }
 
-        return {
+        const slotPrivato = {
             id: `priv_${veicoloId}`, 
             tipo: 'privata', 
             veicolo_id: veicoloId, 
@@ -236,8 +249,19 @@ export async function cercaSlotUltra(richiesta) {
             km_avvicinamento: kmAvv,
             km_riposizionamento: kmRip,
             is_pool: false,
-            is_privato: true
+            is_privato: true,
+            start_offset: 0,
+            end_offset: distanzaMetri,
+            start_index_polyline: 0,
+            end_index_polyline: 100
         };
+
+        console.log(`🚗 [SEARCH ENGINE MAPPING] Corsa privata ID [${slotPrivato.id}] generata con offset:`, {
+            start_offset: slotPrivato.start_offset,
+            end_offset: slotPrivato.end_offset
+        });
+
+        return slotPrivato;
     }))).filter(Boolean);
 
     // --- 3. POP-BUS ---
@@ -287,7 +311,7 @@ export async function cercaSlotUltra(richiesta) {
                 }
             }
 
-            return { 
+            const slotPool = { 
                 id: `pop_${dir.id}`, 
                 tipo: 'pop-bus', 
                 direttrice_id: dir.id, 
@@ -302,8 +326,19 @@ export async function cercaSlotUltra(richiesta) {
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
                 is_pool: true,
-                include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno
+                include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno,
+                start_offset: 0,
+                end_offset: distanzaMetri,
+                start_index_polyline: 0,
+                end_index_polyline: 100
             };
+
+            console.log(`🚌 [SEARCH ENGINE MAPPING] Corsa Pop-Bus ID [${slotPool.id}] generata con offset:`, {
+                start_offset: slotPool.start_offset,
+                end_offset: slotPool.end_offset
+            });
+
+            return slotPool;
         }
         return null;
     }))).filter(Boolean);
@@ -365,9 +400,15 @@ export async function cercaSlotUltra(richiesta) {
             distanzaTotaleRotte: distanzaKm,
             km_avvicinamento: kmAvvFallback,
             km_riposizionamento: kmRipFallback,
+            start_offset: 0,
+            end_offset: distanzaMetri,
+            start_index_polyline: 0,
+            end_index_polyline: 100,
             messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`
         });
     }
+
+    console.log(`📦 [SEARCH ENGINE] Totale risultati finali generati: ${risultatiFinali.length}`);
 
     return await formatResults({ 
         ...richiesta, 

@@ -116,7 +116,7 @@ export async function cercaSlotUltra(richiesta) {
         return c;
     }).filter(Boolean);
 
-    // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache (inclusi start_offset ed end_offset)
+    // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache
     const corsaIds = corseCandidate.map(c => Number(c.id)).filter(Boolean);
     let prenotazioniBatch = [];
     const capacitaMap = new Map();
@@ -163,12 +163,16 @@ export async function cercaSlotUltra(richiesta) {
 
         let kmUtenteTratta = offsetMetri !== null ? (offsetMetri / 1000) : Number(c.km_utente || c.distanza || distanzaCondivisaValida);
         
-        // Controllo di sicurezza: se il valore supera i 5000, si tratta quasi certamente di metri grezzi non convertiti
         if (kmUtenteTratta > 5000) {
             kmUtenteTratta = kmUtenteTratta / 1000;
         }
 
         const kmTotaliPercorso = Number(c.km_totali_percorso || c.km_totali_rotta || c.distanza_totale_corsa || c.distanzaTotaleRotte || kmUtenteTratta);
+
+        const startOffsetVal = c.calculated_start_offset ?? 0;
+        const endOffsetVal = c.calculated_end_offset ?? (kmUtenteTratta * 1000);
+        const startIndexPoly = c.calculated_start_index_polyline ?? 0;
+        const endIndexPoly = c.calculated_end_index_polyline ?? 100;
 
         const slotRisultato = { 
             ...c, 
@@ -178,13 +182,12 @@ export async function cercaSlotUltra(richiesta) {
             distanzaKm: kmUtenteTratta,
             km_utente: kmUtenteTratta,
             km_totali_percorso: kmTotaliPercorso,
-            start_offset: c.calculated_start_offset ?? 0,
-            end_offset: c.calculated_end_offset ?? (kmUtenteTratta * 1000),
-            startOffset: c.calculated_start_offset ?? 0,
-            endOffset: c.calculated_end_offset ?? (kmUtenteTratta * 1000),
-            start_index_polyline: c.calculated_start_index_polyline ?? 0,
-            end_index_polyline: c.calculated_end_index_polyline ?? 100,
-            // 🕒 Mappatura della partenza effettiva calcolata dinamicamente dal motore di disponibilità
+            start_offset: startOffsetVal,
+            end_offset: endOffsetVal,
+            startOffset: startOffsetVal,
+            endOffset: endOffsetVal,
+            start_index_polyline: startIndexPoly,
+            end_index_polyline: endIndexPoly,
             partenza_prevista: c.partenza_effettiva || c.partenza_prevista || c.partenza
         };
 
@@ -252,6 +255,8 @@ export async function cercaSlotUltra(richiesta) {
             is_privato: true,
             start_offset: 0,
             end_offset: distanzaMetri,
+            startOffset: 0,
+            endOffset: distanzaMetri,
             start_index_polyline: 0,
             end_index_polyline: 100
         };
@@ -329,6 +334,8 @@ export async function cercaSlotUltra(richiesta) {
                 include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno,
                 start_offset: 0,
                 end_offset: distanzaMetri,
+                startOffset: 0,
+                endOffset: distanzaMetri,
                 start_index_polyline: 0,
                 end_index_polyline: 100
             };
@@ -402,6 +409,8 @@ export async function cercaSlotUltra(richiesta) {
             km_riposizionamento: kmRipFallback,
             start_offset: 0,
             end_offset: distanzaMetri,
+            startOffset: 0,
+            endOffset: distanzaMetri,
             start_index_polyline: 0,
             end_index_polyline: 100,
             messaggio: `Nessun pool attivo trovato, opzioni virtuali pronte per la selezione.`

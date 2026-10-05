@@ -180,8 +180,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
 
             for (const p of prenotazioni) {
-                const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? 0);
-                const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? lunghezzaTotaleMetri);
+                // 🛠️ CORRETTO: Fallback coerenti e separati per inizio e fine tratta del passeggero esistente
+                const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? p.start_metri ?? 0);
+                const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? p.end_metri ?? lunghezzaTotaleMetri);
 
                 if (startOffset < pEndTratto && endOffset > pStartTratto) {
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
@@ -190,7 +191,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 // Calcolo percentuale pulito e normalizzato basato sui metri reali della tratta del passeggero esistente
                 const lunghezzaTrattaPaz = Math.max(100, pEndTratto - pStartTratto);
                 let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
-                percPaz = Math.min(1.0, Math.max(0.05, percPaz));
+                percPaz = Math.min(1.0, Math.max(0.0, percPaz));
 
                 percentualiEsistentiArray.push(percPaz);
             }

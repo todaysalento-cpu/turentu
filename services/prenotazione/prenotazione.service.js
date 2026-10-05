@@ -6,7 +6,7 @@ import { CacheManager } from '../../utils/cacheManager.js';
  * @param {Object} corsa - Dati della corsa
  * @param {string} clienteId - ID del cliente
  * @param {number} postiRichiesti - Posti desiderati
- * @param {Object} segmenti - { startIdx: number, endIdx: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number }
+ * @param {Object} segmenti - { startIdx: number, endIdx: number, startOffset: number, endOffset: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number }
  * @param {Object} client - Connessione al database (opzionale)
  */
 export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, client) {
@@ -25,6 +25,10 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
 
     const startIdx = Number(segmenti.startIdx ?? 0);
     const endIdx = Number(segmenti.endIdx ?? 0);
+    
+    // Estrazione in sicurezza dei metri di offset (con fallback a 0 o valori stimati)
+    const startOffset = Number(segmenti.startOffset ?? segmenti.start_offset ?? 0);
+    const endOffset = Number(segmenti.endOffset ?? segmenti.end_offset ?? 0);
 
     // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE (Event-based / Sweep-line o controllo intervalli)
     // Controlla il picco di occupazione sovrapponendo l'intervallo [startIdx, endIdx] con le prenotazioni esistenti.
@@ -65,7 +69,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       throw new Error(`Posti insufficienti: il veicolo supererebbe la capienza massima (${occupazioneMassimaRilevata}/${corsa.posti_totali}) in una porzione del tragitto richiesto.`);
     }
 
-    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI E COORDINATE GEOGRAFICHE
+    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI, OFFSET E COORDINATE GEOGRAFICHE
     const prenRes = await client.query(
       `INSERT INTO prenotazioni (
           corsa_id, 
@@ -74,22 +78,26 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
           posti_prenotati, 
           start_index_polyline, 
           end_index_polyline,
+          start_offset,
+          end_offset,
           lat_salita,
           lon_salita,
           lat_discesa,
           lon_discesa
        ) 
-       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
-        corsa.id, 
-        clienteId, 
-        postiRichiesti, 
-        startIdx, 
-        endIdx,
-        segmenti.latSalita ?? null,
-        segmenti.lonSalita ?? null,
-        segmenti.latDiscesa ?? null,
-        segmenti.lonDiscesa ?? null
+        corsa.id,                     // $1
+        clienteId,                    // $2
+        postiRichiesti,               // $3
+        startIdx,                     // $4
+        endIdx,                       // $5
+        startOffset,                  // $6
+        endOffset,                    // $7
+        segmenti.latSalita ?? null,   // $8
+        segmenti.lonSalita ?? null,   // $9
+        segmenti.latDiscesa ?? null,  // $10
+        segmenti.lonDiscesa ?? null   // $11
       ]
     );
 

@@ -136,13 +136,24 @@ export async function toggleCorsa(corsa_id, action) {
       const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
       const lunghezzaTotaleMetri = Number(corsa.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
 
-      // Ricostruzione pulita dell'array delle percentuali dei passeggeri esistenti
+      // Ricostruzione pulita e sicura dell'array delle percentuali dei passeggeri esistenti (gestendo Math.abs per i ritorni)
       const percentualiEsistenti = tuttePrenotazioniRes.rows.map(p => {
-        const pStart = Number(p.start_offset ?? 0);
-        const pEnd = Number(p.end_offset ?? lunghezzaTotaleMetri);
-        const lunghezzaTrattaPaz = Math.max(100, pEnd - pStart);
-        let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
-        return Math.min(1.0, Math.max(0.0, percPaz));
+        const pStart = Number(p.start_offset);
+        const pEnd = Number(p.end_offset);
+        
+        let kmUtentePaz = Number(p.km_utente);
+        if (!kmUtentePaz || isNaN(kmUtentePaz) || kmUtentePaz <= 0) {
+          if (!isNaN(pStart) && !isNaN(pEnd)) {
+            let diffMetri = Math.abs(pEnd - pStart);
+            if (diffMetri > 1000000) diffMetri = diffMetri / 1000;
+            kmUtentePaz = diffMetri / 1000;
+          } else {
+            kmUtentePaz = kmTotaliCorsaOriginale;
+          }
+        }
+        
+        let percPaz = kmUtentePaz / kmTotaliCorsaOriginale;
+        return Math.min(1.0, Math.max(0.001, percPaz));
       });
 
       console.log(`📊 [CAPTURE FLOW] Array percentuali passeggeri esistenti ricostruito:`, percentualiEsistenti);
@@ -159,11 +170,18 @@ export async function toggleCorsa(corsa_id, action) {
             : 'standard';
 
           // Determinazione dei km specifici della tratta del singolo passeggero
-          const kmUtente = Number(pren.km_utente) || (
-            (pren.start_offset != null && pren.end_offset != null) 
-              ? Math.max(0.1, (Number(pren.end_offset) - Number(pren.start_offset)) / 1000)
-              : kmTotaliCorsaOriginale
-          );
+          let kmUtente = Number(pren.km_utente);
+          if (!kmUtente || isNaN(kmUtente) || kmUtente <= 0) {
+            if (pren.start_offset != null && pren.end_offset != null) {
+              let diffMetri = Math.abs(Number(pren.end_offset) - Number(pren.start_offset));
+              if (diffMetri > 1000000) diffMetri = diffMetri / 1000;
+              kmUtente = diffMetri / 1000;
+            } else {
+              kmUtente = kmTotaliCorsaOriginale;
+            }
+          }
+          kmUtente = Math.min(kmUtente, kmTotaliCorsaOriginale);
+          kmUtente = Math.max(0.1, kmUtente);
 
           console.log(`\n--------------------------------------------------`);
           console.log(`🔍 [CALCOLO PREZZO PASSAGGERO] Pagamento ID: ${pren.pagamento_id} | Prenotazione ID: ${pren.prenotazione_id}`);
@@ -186,7 +204,7 @@ export async function toggleCorsa(corsa_id, action) {
             corsa.classe || 'STANDARD',
             corsa.km_avvicinamento || 0,
             corsa.km_riposizionamento || 0,
-            false // 👈 [FIX CHIAVE] SPECIFICHIAMO CHE NON È UN NUOVO UTENTE, MA LA CATTURA DI FINE CORSA
+            false // 👈 SPECIFICHIAMO CHE NON È UN NUOVO UTENTE, MA LA CATTURA DI FINE CORSA
           );
           
           console.log(`🔍 [PREZZO RISOLTO] Valore grezzo restituito:`, JSON.stringify(prezzoRisolto));
@@ -217,21 +235,25 @@ export async function toggleCorsa(corsa_id, action) {
             }
 
             const amountInCents = Math.round(importoFinale * 100);
-            console.log(`🔢 [STRIPE CAPTURE PREP] Importo finale da catturare in centesimi: ${amountInCents}`);
+            
+            // 🛡️ SICUREZZA STRIPE: non puoi catturare più di quanto autorizzato originariamente
+            const finalAmountToCapture = Math.min(amountInCents, pi.amount);
+            console.log(`🔢 [STRIPE CAPTURE PREP] Importo finale da catturare (limitato al massimo autorizzato): ${finalAmountToCapture} centesimi`);
 
-            if (pi.status === 'requires_capture' && amountInCents >= 1) {
-              console.log(`🚀 [STRIPE CAPTURE EXECUTE] Tentativo di cattura Stripe per ${amountInCents} centesimi...`);
+            if (pi.status === 'requires_capture' && finalAmountToCapture >= 1) {
+              console.log(`🚀 [STRIPE CAPTURE EXECUTE] Tentativo di cattura Stripe per ${finalAmountToCapture} centesimi...`);
               await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
-                amount_to_capture: amountInCents 
+                amount_to_capture: finalAmountToCapture 
               });
               
+              const importoEffettivoEuro = finalAmountToCapture / 100;
               await client.query(
                 `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
-                [importoFinale, pren.pagamento_id]
+                [importoEffettivoEuro, pren.pagamento_id]
               );
               console.log(`✅ [STRIPE CAPTURE SUCCESS] Pagamento ${pren.pagamento_id} catturato con successo e DB aggiornato a 'pagato'.`);
             } else {
-              console.warn(`⚠️ [STRIPE CAPTURE WARNING] Impossibile catturare il pagamento ${pren.pagamento_id}. Motivo -> Stato PI: '${pi.status}' (richiesto 'requires_capture'), Importo in centesimi: ${amountInCents} (richiesto >= 1).`);
+              console.warn(`⚠️ [STRIPE CAPTURE WARNING] Impossibile catturare il pagamento ${pren.pagamento_id}. Motivo -> Stato PI: '${pi.status}' (richiesto 'requires_capture'), Importo in centesimi: ${finalAmountToCapture} (richiesto >= 1).`);
             }
           }
         } catch (err) {

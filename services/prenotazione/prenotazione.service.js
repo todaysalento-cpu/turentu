@@ -6,7 +6,7 @@ import { CacheManager } from '../../utils/cacheManager.js';
  * @param {Object} corsa - Dati della corsa
  * @param {string} clienteId - ID del cliente
  * @param {number} postiRichiesti - Posti desiderati
- * @param {Object} segmenti - { startIdx: number, endIdx: number, startOffset: number, endOffset: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number }
+ * @param {Object} segmenti - { startIdx: number, endIdx: number, startOffset: number, endOffset: number, latSalita: number, lonSalita: number, latDiscesa: number, lonDiscesa: number, kmUtente: number (opzionale) }
  * @param {Object} client - Connessione al database (opzionale)
  */
 export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, client) {
@@ -29,14 +29,22 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const startIdx = Number(segmenti.startIdx ?? 0);
     const endIdx = Number(segmenti.endIdx ?? 0);
     
-    // Estrazione in sicurezza dei metri di offset (con fallback a 0 o valori stimati)
+    // Estrazione in sicurezza dei metri di offset
     const startOffset = Number(segmenti.startOffset ?? segmenti.start_offset ?? 0);
     const endOffset = Number(segmenti.endOffset ?? segmenti.end_offset ?? 0);
 
-    console.log(`⚙️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m`);
+    // Calcolo o recupero dei km utente per questa specifica tratta
+    const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
+    
+    const kmUtente = Number(segmenti.kmUtente ?? segmenti.km_utente) || (
+      (startOffset >= 0 && endOffset > startOffset) 
+        ? Math.max(0.1, (endOffset - startOffset) / 1000)
+        : kmTotaliCorsaOriginale
+    );
 
-    // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE (Event-based / Sweep-line o controllo intervalli)
-    // Controlla il picco di occupazione sovrapponendo l'intervallo [startIdx, endIdx] con le prenotazioni esistenti.
+    console.log(`⚙️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m | kmUtente: ${kmUtente}km`);
+
+    // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE
     const checkRes = await client.query(
       `SELECT COALESCE(MAX(occupazione_totale), 0) as max_occ FROM (
          SELECT 
@@ -53,7 +61,6 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
          
          UNION
          
-         -- Aggiungiamo anche un punto di controllo virtuale per la nuova prenotazione richiesta
          SELECT 
            'nuova'::text as id,
            (
@@ -69,53 +76,48 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
 
     const occupazioneMassimaRilevata = Number(checkRes.rows[0]?.max_occ || 0);
     
-    // Verifica finale rispetto alla capacità totale del veicolo
     if (occupazioneMassimaRilevata > corsa.posti_totali) {
       throw new Error(`Posti insufficienti: il veicolo supererebbe la capienza massima (${occupazioneMassimaRilevata}/${corsa.posti_totali}) in una porzione del tragitto richiesto.`);
     }
 
-    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI, OFFSET E COORDINATE GEOGRAFICHE
-    console.log(`💾 [PRENOTA CORSA - SQL] Salvataggio nel DB con start_offset=${startOffset} e end_offset=${endOffset}...`);
+    // 2. INSERISCI PRENOTAZIONE CON SEGMENTI, OFFSET, KM UTENTE E COORDINATE GEOGRAFICHE
+    console.log(`💾 [PRENOTA CORSA - SQL] Salvataggio nel DB con km_utente=${kmUtente}...`);
 
     const prenRes = await client.query(
       `INSERT INTO prenotazioni (
-          corsa_id, 
-          cliente_id, 
-          posti_richiesti, 
-          posti_prenotati, 
-          start_index_polyline, 
-          end_index_polyline,
-          start_offset,
-          end_offset,
-          lat_salita,
-          lon_salita,
-          lat_discesa,
-          lon_discesa
+         corsa_id, 
+         cliente_id, 
+         posti_richiesti, 
+         posti_prenotati, 
+         start_index_polyline, 
+         end_index_polyline,
+         start_offset,
+         end_offset,
+         km_utente,
+         lat_salita,
+         lon_salita,
+         lat_discesa,
+         lon_discesa
        ) 
-       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
-        corsa.id,                   // $1
-        clienteId,                  // $2
-        postiRichiesti,             // $3
-        startIdx,                   // $4
-        endIdx,                     // $5
-        startOffset,                // $6
-        endOffset,                  // $7
-        segmenti.latSalita ?? null,   // $8
-        segmenti.lonSalita ?? null,   // $9
-        segmenti.latDiscesa ?? null,  // $10
-        segmenti.lonDiscesa ?? null   // $11
+        corsa.id,                     // $1
+        clienteId,                    // $2
+        postiRichiesti,               // $3
+        startIdx,                     // $4
+        endIdx,                       // $5
+        startOffset,                  // $6
+        endOffset,                    // $7
+        kmUtente,                     // $8  <-- KM UTENTE SALVATI DIRETTAMENTE
+        segmenti.latSalita ?? null,   // $9
+        segmenti.lonSalita ?? null,   // $10
+        segmenti.latDiscesa ?? null,  // $11
+        segmenti.lonDiscesa ?? null   // $12
       ]
     );
 
     const prenotazioneInserita = prenRes.rows[0];
-    console.log(`✅ [PRENOTA CORSA - SUCCESS] Prenotazione creata con ID ${prenotazioneInserita.id}. Dati salvati a DB:`, {
-        id: prenotazioneInserita.id,
-        start_offset: prenotazioneInserita.start_offset,
-        end_offset: prenotazioneInserita.end_offset,
-        start_index_polyline: prenotazioneInserita.start_index_polyline,
-        end_index_polyline: prenotazioneInserita.end_index_polyline
-    });
+    console.log(`✅ [PRENOTA CORSA - SUCCESS] Prenotazione creata con ID ${prenotazioneInserita.id}. Km utente salvati: ${prenotazioneInserita.km_utente}`);
 
     // 3. AGGIORNAMENTO CACHE
     const corsaAggiornata = await client.query(

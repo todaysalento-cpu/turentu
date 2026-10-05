@@ -116,14 +116,14 @@ export async function cercaSlotUltra(richiesta) {
         return c;
     }).filter(Boolean);
 
-    // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache
+    // Recupera le prenotazioni dal DB per tutte le corse candidate trovate in cache (inclusi start_offset ed end_offset)
     const corsaIds = corseCandidate.map(c => Number(c.id)).filter(Boolean);
     let prenotazioniBatch = [];
     const capacitaMap = new Map();
     
     if (corsaIds.length > 0) {
         const { rows: allPrenotazioni } = await pool.query(
-            `SELECT corsa_id, posti_richiesti, start_index_polyline, end_index_polyline 
+            `SELECT corsa_id, posti_richiesti, start_offset, end_offset, start_index_polyline, end_index_polyline 
              FROM prenotazioni 
              WHERE corsa_id = ANY($1::int[])`,
             [corsaIds]

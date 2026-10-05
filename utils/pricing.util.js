@@ -94,6 +94,17 @@ export async function calcolaPrezzo(
             }
 
             case 'condivisa': {
+                console.log(`\n================ 🔍 [DEBUG CAPTURE/PRICING INIZIO] ================`);
+                console.log(`📌 Parametri ricevuti -> isNuovoUtente: ${isNuovoUtente} | totPasseggeriCorrenti: ${totPasseggeriCorrenti}`);
+                console.log(`📦 Oggetto corsa grezzo ricevuto:`, JSON.stringify({
+                    veicolo_id: corsa.veicolo_id,
+                    km_totali_percorso: corsa.km_totali_percorso,
+                    passeggeri_esistenti: corsa.passeggeri_esistenti,
+                    posti_occupati: corsa.posti_occupati,
+                    ha_percentuali_esistenti: !!corsa.percentuali_passeggeri_esistenti,
+                    ha_percentuali_attivi: !!corsa.percentuali_passeggeri_attivi
+                }));
+
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 
                 // 1. I km della corsa originale e i km di servizio appartengono alla missione base
@@ -110,19 +121,37 @@ export async function calcolaPrezzo(
                 let percentualiEsistenti = corsa.percentuali_passeggeri_esistenti || corsa.percentuali_passeggeri_attivi;
                 const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
                 
+                console.log(`📋 [CHECK ARRAY] percentualiEsistenti grezzo:`, percentualiEsistenti);
+                console.log(`🔢 passeggeriGiaPresenti calcolati:`, passeggeriGiaPresenti);
+
                 if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti) || percentualiEsistenti.length === 0) {
+                    console.log(`⚠️ [FALLBACK ATTIVATO] L'array delle percentuali era vuoto o non valido! Applicando fallback...`);
                     percentualiEsistenti = passeggeriGiaPresenti > 0 ? Array(passeggeriGiaPresenti).fill(1.0) : [percentualeUtente];
+                    console.log(`⚠️ [FALLBACK RISULTATO] Array post-fallback:`, percentualiEsistenti);
                 }
 
-                const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
+                const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => {
+                    const val = Number(curr);
+                    if (isNaN(val)) {
+                        console.error(`❌ [CRASH POTENZIALE] Trovato valore non numerico nell'array delle percentuali:`, curr);
+                    }
+                    return acc + (isNaN(val) ? 0 : val);
+                }, 0);
+
                 let sommaPercentualiTotale = 0;
 
                 if (isNuovoUtente) {
                     // FASE SEARCH/PREVENTIVO: Aggiungiamo il nuovo utente al gruppo esistente
                     sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
+                    console.log(`➕ [MODALITÀ SEARCH] Somma Totale = Somma Esistenti (${sommaPercentualiEsistenti}) + Contributo Utente (${contributoUtentePesarato}) = ${sommaPercentualiTotale}`);
                 } else {
                     // FASE CAPTURE/CHIUSURA CORSA: L'array percentualiEsistenti rappresenta già TUTTI i passeggeri della corsa.
                     sommaPercentualiTotale = sommaPercentualiEsistenti > 0 ? sommaPercentualiEsistenti : contributoUtentePesarato;
+                    console.log(`🔒 [MODALITÀ CAPTURE] Somma Totale presa dall'array esistente: ${sommaPercentualiTotale}`);
+                }
+
+                if (sommaPercentualiTotale <= 0) {
+                    console.error(`🚨 [CRASH GRAVE] sommaPercentualiTotale è zero o negativa (${sommaPercentualiTotale})! Rischio divisione per zero.`);
                 }
 
                 // 4. Ripartizione proporzionale rigorosa
@@ -136,7 +165,7 @@ export async function calcolaPrezzo(
                 console.log(`📊 Rapporto Tratta Utente / Corsa (Percentuale pura): ${(percentualeUtente * 100).toFixed(2)}%`);
                 console.log(`🚗 Km Avvicinamento Fissi: ${avvicinamento} km | 🔄 Km Riposizionamento Fissi: ${riposizionamento} km`);
                 console.log(`💰 Costo Totale Missione Autista (Fisso): ${costoMissioneAutista.toFixed(4)} €`);
-                console.log(`👥 Array Percentuali Passeggeri:`, percentualiEsistenti);
+                console.log(`👥 Array Percentuali Passeggeri Finale:`, percentualiEsistenti);
                 console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
                 console.log(`Σ Somma Percentuali Totale (Denominatore [isNuovoUtente: ${isNuovoUtente}]): ${sommaPercentualiTotale.toFixed(4)}`);

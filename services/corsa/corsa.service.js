@@ -86,7 +86,6 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         let kmRiposizionamento = 0;
 
         try {
-            // Gestione flessibile delle proprietà del veicolo (supporta sia posti_totali che posti)
             const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
             const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
 
@@ -125,7 +124,6 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             console.warn(`⚠ [ROUTE WARNING] Impossibile generare geometria per pending ${pending.id}:`, e);  
         }
 
-        // Supporta sia posti_totali che posti generici passati dall'oggetto veicolo
         const postiTotaliVeicolo = Number(veicolo?.posti_totali ?? veicolo?.posti ?? 4);
         const veicoloId = veicolo?.id ?? pending.veicolo_id;
 
@@ -142,37 +140,50 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
              $12, $13, $14, $15, $16, $17, NOW()
            ) RETURNING *`,
           [
-            veicoloId,                           // $1
-            startDatetime,                       // $2
-            arrivoDatetime,                      // $3
+            veicoloId,                             // $1
+            startDatetime,                         // $2
+            arrivoDatetime,                        // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,              // $5
-            postiTotaliVeicolo,                  // $6
-            distanzaKm,                          // $7
-            coordOrig.lon,                       // $8
-            coordOrig.lat,                       // $9
-            coordDest.lon,                       // $10
-            coordDest.lat,                       // $11
+            `${durataMin} minutes`,                // $5
+            postiTotaliVeicolo,                    // $6
+            distanzaKm,                            // $7
+            coordOrig.lon,                         // $8
+            coordOrig.lat,                         // $9
+            coordDest.lon,                         // $10
+            coordDest.lat,                         // $11
             (pending.origine_address ?? 'N/D'),    // $12
             (pending.destinazione_address ?? 'N/D'), // $13
-            polylineString,                      // $14
-            pathGeohashes,                       // $15
-            kmAvvicinamento,                     // $16
-            kmRiposizionamento                   // $17
+            polylineString,                        // $14
+            pathGeohashes,                         // $15
+            kmAvvicinamento,                       // $16
+            kmRiposizionamento                     // $17
           ]
         );
         corsa = res.rows[0];
         console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente.`);
 
-        // --- GESTIONE SICURA DEGLI OFFSET IN METRI ---
+        // --- GESTIONE E LOGGING DEGLI OFFSET E INDICI ---
         const distanzaMetriTotali = distanzaKm * 1000;
         const startOffsetVal = Number(pending.start_offset ?? pending.startOffset ?? 0);
-        // Se end_offset manca, usiamo l'intera distanza in metri della corsa calcolata
         const endOffsetVal = Number(pending.end_offset ?? pending.endOffset ?? (distanzaMetriTotali > 0 ? distanzaMetriTotali : 1000));
 
+        const startIdxVal = Number(pending.start_index_polyline ?? pending.startIndexPolyline ?? 0);
+        const endIdxVal = Number(pending.end_index_polyline ?? pending.endIndexPolyline ?? 100);
+
+        console.log(`🔍 [DEBUG SEGMENTI] Pending ID ${pending.id}:`, {
+            start_offset_db: pending.start_offset,
+            start_offset_resolved: startOffsetVal,
+            end_offset_db: pending.end_offset,
+            end_offset_resolved: endOffsetVal,
+            start_index_db: pending.start_index_polyline,
+            start_index_resolved: startIdxVal,
+            end_index_db: pending.end_index_polyline,
+            end_index_resolved: endIdxVal
+        });
+
         const segmenti = {  
-            startIdx: pending.start_index_polyline ?? 0,  
-            endIdx: pending.end_index_polyline ?? 100,
+            startIdx: startIdxVal,  
+            endIdx: endIdxVal,
             startOffset: startOffsetVal,
             endOffset: endOffsetVal
         };
@@ -185,6 +196,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             client
         );
         
+        console.log(`✅ [DB] Prenotazione ID ${prenotazione?.id} creata con successo per la corsa ${corsa.id}.`);
         await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
     }
 
@@ -196,7 +208,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');
-    console.error(`❌ [ERROR] Fallimento in createCorsaFromPending:`, err);
+    console.error(`❌ [ERROR] Fallimento in createCorsaFromPending per pending ID ${pending?.id}:`, err);
     throw err;
   } finally {
     if (localClient) client.release();

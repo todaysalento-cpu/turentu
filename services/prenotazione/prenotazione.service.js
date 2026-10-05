@@ -38,8 +38,8 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     
     let kmCalc = null;
     if (startOffset >= 0 && endOffset >= 0 && startOffset !== endOffset) {
+      // Gli offset sono in metri, li convertiamo direttamente in chilometri
       let diffMetri = Math.abs(endOffset - startOffset);
-      if (diffMetri > 1000000) diffMetri = diffMetri / 1000; // Sicurezza per eventuali metri già in km
       kmCalc = diffMetri / 1000;
     }
 

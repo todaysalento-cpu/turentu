@@ -111,7 +111,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
           start_node_id, end_node_id, classe, origine_address, destinazione_address
         )
-          VALUES (
+         VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
@@ -143,22 +143,30 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const distanza = slot.distanzaKm || 0;
       const durata = slot.durata_minuti || 0;
 
+      // Estrazione offset ed indici polyline dallo slot (con supporto a diverse nomenclature)
+      const startOffset = slot.startOffset ?? slot.start_offset ?? null;
+      const endOffset = slot.endOffset ?? slot.end_offset ?? null;
+      const startIndexPolyline = slot.start_index_polyline ?? slot.startIndexPolyline ?? 0;
+      const endIndexPolyline = slot.end_index_polyline ?? slot.endIndexPolyline ?? 100;
+
       // Estraiamo l'ID della corsa dallo slot se si sta agganciando a una corsa condivisa esistente
       const corsaIdToSave = (slot.id && !isNaN(Number(slot.id))) ? Number(slot.id) : (slot.corsa_id || null);
 
-      console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}, corsa_id: ${corsaIdToSave}`);
+      console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}, corsa_id: ${corsaIdToSave}, start_offset: ${startOffset}, end_offset: ${endOffset}`);
 
       const result = await client.query(
         `INSERT INTO pending (
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
           distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id,
-          origine_address, destinazione_address, corsa_id
+          origine_address, destinazione_address, corsa_id,
+          start_offset, end_offset, start_index_polyline, end_index_polyline
         )
-          VALUES (
+         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
-          'pending', $14, $15, $16, $17, $18
+          'pending', $14, $15, $16, $17, $18,
+          $19, $20, $21, $22
         ) RETURNING *`,
         [
           slot.veicolo_id,
@@ -178,7 +186,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           requestId,
           origineAddress,
           destinazioneAddress,
-          corsaIdToSave
+          corsaIdToSave,
+          startOffset,
+          endOffset,
+          startIndexPolyline,
+          endIndexPolyline
         ]
       );
 

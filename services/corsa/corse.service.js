@@ -104,79 +104,142 @@ export async function toggleCorsa(corsa_id, action) {
     await removeCorsa(corsa_id);
 
     if (action === 'end') {
+      console.log(`\n🚀 [CAPTURE FLOW START] Chiusura corsa ID: ${corsa_id} in corso...`);
+
+      // 1. Recupero dei pagamenti e delle informazioni di tratta per ogni passeggero della corsa
       const prenRes = await client.query(
-        `SELECT p.id AS pagamento_id, p.stripe_payment_intent, p.prenotazione_id, pr.posti_richiesti, pr.cliente_id
+        `SELECT 
+          p.id AS pagamento_id, 
+          p.stripe_payment_intent, 
+          p.prenotazione_id, 
+          pr.posti_richiesti, 
+          pr.cliente_id,
+          pr.start_offset,
+          pr.end_offset,
+          pr.km_utente
          FROM public.pagamenti p 
          JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
          WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
         [corsa_id]
       );
 
+      console.log(`📋 [CAPTURE FLOW] Trovate ${prenRes.rows.length} autorizzazioni di pagamento da elaborare.`);
+
+      // 2. Recupero di tutte le prenotazioni per ricostruire l'array delle percentuali dei passeggeri attivi
+      const tuttePrenotazioniRes = await client.query(
+        `SELECT posti_richiesti, km_utente, start_offset, end_offset 
+         FROM public.prenotazioni 
+         WHERE corsa_id = $1`,
+        [corsa_id]
+      );
+
+      const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
+      const lunghezzaTotaleMetri = Number(corsa.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
+
+      // Ricostruzione pulita dell'array delle percentuali dei passeggeri esistenti
+      const percentualiEsistenti = tuttePrenotazioniRes.rows.map(p => {
+        const pStart = Number(p.start_offset ?? 0);
+        const pEnd = Number(p.end_offset ?? lunghezzaTotaleMetri);
+        const lunghezzaTrattaPaz = Math.max(100, pEnd - pStart);
+        let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
+        return Math.min(1.0, Math.max(0.0, percPaz));
+      });
+
+      console.log(`📊 [CAPTURE FLOW] Array percentuali passeggeri esistenti ricostruito:`, percentualiEsistenti);
+
       for (const pren of prenRes.rows) {
-        if (!pren.stripe_payment_intent) continue;
+        if (!pren.stripe_payment_intent) {
+          console.warn(`⚠️ [CAPTURE SKIP] Pagamento ID ${pren.pagamento_id} saltato: stripe_payment_intent mancante o vuoto.`);
+          continue;
+        }
 
         try {
           const tipoPricing = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(corsa.tipo_corsa)
             ? corsa.tipo_corsa
             : 'standard';
 
-          const kmTotali = Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
-          const kmUtente = kmTotali;
+          // Determinazione dei km specifici della tratta del singolo passeggero
+          const kmUtente = Number(pren.km_utente) || (
+            (pren.start_offset != null && pren.end_offset != null) 
+              ? Math.max(0.1, (Number(pren.end_offset) - Number(pren.start_offset)) / 1000)
+              : kmTotaliCorsaOriginale
+          );
 
-          console.log(`🔍 [CALCOLO PREZZO] Corsa ID: ${corsa.id}, Posti: ${pren.posti_richiesti}, Tipo: ${tipoPricing}, Km: ${kmTotali}`);
+          console.log(`\n--------------------------------------------------`);
+          console.log(`🔍 [CALCOLO PREZZO PASSAGGERO] Pagamento ID: ${pren.pagamento_id} | Prenotazione ID: ${pren.prenotazione_id}`);
+          console.log(`🚗 Corsa ID: ${corsa.id} | Posti: ${pren.posti_richiesti} | Tipo: ${tipoPricing} | Km Tratta Utente: ${kmUtente}`);
           
+          // Arricchimento dell'oggetto corsa con i dati condivisi necessari al pricing
+          const corsaPerPricing = {
+            ...corsa,
+            percentuali_passeggeri_esistenti: percentualiEsistenti,
+            km_totali_percorso: kmTotaliCorsaOriginale
+          };
+
           const prezzoRisolto = await calcolaPrezzo(
-            corsa,
+            corsaPerPricing,
             pren.posti_richiesti,
             tipoPricing,
             kmUtente,
-            kmTotali
+            kmTotaliCorsaOriginale,
+            tuttePrenotazioniRes.rows.length,
+            corsa.classe || 'STANDARD',
+            corsa.km_avvicinamento || 0,
+            corsa.km_riposizionamento || 0
           );
           
-          console.log(`🔍 [PREZZO RISOLTO] Valore grezzo:`, JSON.stringify(prezzoRisolto));
+          console.log(`🔍 [PREZZO RISOLTO] Valore grezzo restituito:`, JSON.stringify(prezzoRisolto));
           
           let rawPrezzo = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
             ? (prezzoRisolto.prezzo ?? prezzoRisolto.importo ?? 0) 
             : prezzoRisolto;
           
           let importoFinale = (!isNaN(Number(rawPrezzo)) && Number(rawPrezzo) > 0) ? Number(rawPrezzo) : 0;
-          console.log(`💰 [IMPORTO FINALE] Calcolato: €${importoFinale}`);
+          console.log(`💰 [IMPORTO FINALE] Importo calcolato validato: €${importoFinale}`);
           
           if (pren.stripe_payment_intent.startsWith('wallet_')) {
-            console.log(`👛 [WALLET] Rilevato pagamento via wallet per la prenotazione ${pren.prenotazione_id}. Importo finale: €${importoFinale}`);
+            console.log(`👛 [WALLET CAPTURE] Rilevato pagamento via wallet. Aggiornamento diretto a 'pagato' per €${importoFinale}`);
             
             await client.query(
               `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
               [importoFinale, pren.pagamento_id]
             );
+            console.log(`✅ [WALLET SUCCESS] Pagamento ${pren.pagamento_id} aggiornato con successo.`);
           } else {
+            console.log(`💳 [STRIPE FETCH] Recupero PaymentIntent remoto: ${pren.stripe_payment_intent}`);
             const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
+            console.log(`💳 [STRIPE STATUS] PI ID: ${pi.id} | Stato PI: ${pi.status} | Importo Originario PI: ${pi.amount} centesimi (€${pi.amount / 100})`);
             
             if (importoFinale <= 0 && pi.amount > 0) {
               importoFinale = pi.amount / 100;
-              console.log(`⚠️ [FALLBACK STRIPE] Usato importo originario del PI: €${importoFinale}`);
+              console.log(`⚠️ [STRIPE FALLBACK] Importo calcolato <= 0. Usato importo originario del PaymentIntent: €${importoFinale}`);
             }
 
             const amountInCents = Math.round(importoFinale * 100);
+            console.log(`🔢 [STRIPE CAPTURE PREP] Importo finale da catturare in centesimi: ${amountInCents}`);
 
             if (pi.status === 'requires_capture' && amountInCents >= 1) {
+              console.log(`🚀 [STRIPE CAPTURE EXECUTE] Tentativo di cattura Stripe per ${amountInCents} centesimi...`);
               await stripe.paymentIntents.capture(pren.stripe_payment_intent, { 
                 amount_to_capture: amountInCents 
               });
+              
               await client.query(
                 `UPDATE public.pagamenti SET stato = 'pagato', importo = $1 WHERE id = $2`, 
                 [importoFinale, pren.pagamento_id]
               );
-              console.log(`✅ [STRIPE CAPTURE] Pagamento ${pren.pagamento_id} catturato con successo per ${amountInCents} centesimi.`);
+              console.log(`✅ [STRIPE CAPTURE SUCCESS] Pagamento ${pren.pagamento_id} catturato con successo e DB aggiornato a 'pagato'.`);
             } else {
-              console.warn(`⚠️ Impossibile catturare il pagamento ${pren.pagamento_id}: importo (${amountInCents}) o stato PI non valido (${pi.status}).`);
+              console.warn(`⚠️ [STRIPE CAPTURE WARNING] Impossibile catturare il pagamento ${pren.pagamento_id}. Motivo -> Stato PI: '${pi.status}' (richiesto 'requires_capture'), Importo in centesimi: ${amountInCents} (richiesto >= 1).`);
             }
           }
         } catch (err) {
-          console.error(`❌ Errore pagamento ${pren.pagamento_id}:`, err);
+          console.error(`❌ [CAPTURE ERROR] Errore critico durante l'elaborazione del pagamento ${pren.pagamento_id}:`, err);
           await client.query(`UPDATE public.pagamenti SET stato = 'pendente' WHERE id = $1`, [pren.pagamento_id]);
+          console.log(`🔄 [DB ROLLBACK STATE] Pagamento ${pren.pagamento_id} impostato sullo stato 'pendente'.`);
         }
       }
+      console.log(`🏁 [CAPTURE FLOW END] Elaborazione pagamenti di fine corsa completata.\n--------------------------------------------------`);
     }
 
     await client.query('COMMIT');

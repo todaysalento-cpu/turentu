@@ -127,36 +127,43 @@ export async function toggleCorsa(corsa_id, action) {
 
       // 2. Recupero di tutte le prenotazioni per ricostruire l'array delle percentuali dei passeggeri attivi
       const tuttePrenotazioniRes = await client.query(
-        `SELECT posti_richiesti, km_utente, start_offset, end_offset 
+        `SELECT id, posti_richiesti, km_utente, start_offset, end_offset 
          FROM public.prenotazioni 
          WHERE corsa_id = $1`,
         [corsa_id]
       );
 
       const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
-      const lunghezzaTotaleMetri = Number(corsa.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
+      console.log(`📏 [CAPTURE DEBUG] Km totali corsa originale stimati/letti: ${kmTotaliCorsaOriginale}`);
 
-      // Ricostruzione pulita e sicura dell'array delle percentuali dei passeggeri esistenti (gestendo Math.abs per i ritorni)
-      const percentualiEsistenti = tuttePrenotazioniRes.rows.map(p => {
+      // Ricostruzione pulita e sicura dell'array delle percentuali dei passeggeri esistenti (ponderate anche per i posti)
+      const percentualiEsistenti = tuttePrenotazioniRes.rows.map((p, idx) => {
         const pStart = Number(p.start_offset);
         const pEnd = Number(p.end_offset);
+        const postiPaz = Number(p.posti_richiesti) || 1;
         
         let kmUtentePaz = Number(p.km_utente);
+        console.log(`  👉 [PREN MAP #${idx+1}] ID Prenotazione: ${p.id} | km_utente nel DB: ${p.km_utente} | start_offset: ${p.start_offset} | end_offset: ${p.end_offset} | Posti: ${postiPaz}`);
+
         if (!kmUtentePaz || isNaN(kmUtentePaz) || kmUtentePaz <= 0) {
           if (!isNaN(pStart) && !isNaN(pEnd)) {
             let diffMetri = Math.abs(pEnd - pStart);
             if (diffMetri > 1000000) diffMetri = diffMetri / 1000;
             kmUtentePaz = diffMetri / 1000;
+            console.log(`     ⚠️ [FALLBACK OFFSET] km_utente calcolato da offset in metri: ${diffMetri}m -> ${kmUtentePaz}km`);
           } else {
             kmUtentePaz = kmTotaliCorsaOriginale;
+            console.log(`     ⚠️ [FALLBACK TOTALI] Nessun offset valido, impostato a km totali corsa: ${kmUtentePaz}km`);
           }
         }
         
-        let percPaz = kmUtentePaz / kmTotaliCorsaOriginale;
-        return Math.min(1.0, Math.max(0.001, percPaz));
+        let percPaz = (kmUtentePaz / kmTotaliCorsaOriginale) * postiPaz;
+        const finalPerc = Math.min(postiPaz, Math.max(0.001, percPaz));
+        console.log(`     ✅ [PERCENTUALE CALCOLATA] kmUtentePaz: ${kmUtentePaz} | percPaz ponderata: ${finalPerc}`);
+        return finalPerc;
       });
 
-      console.log(`📊 [CAPTURE FLOW] Array percentuali passeggeri esistenti ricostruito:`, percentualiEsistenti);
+      console.log(`📊 [CAPTURE FLOW] Array percentuali passeggeri esistenti ricostruito con successo:`, percentualiEsistenti);
 
       for (const pren of prenRes.rows) {
         if (!pren.stripe_payment_intent) {
@@ -185,7 +192,7 @@ export async function toggleCorsa(corsa_id, action) {
 
           console.log(`\n--------------------------------------------------`);
           console.log(`🔍 [CALCOLO PREZZO PASSAGGERO] Pagamento ID: ${pren.pagamento_id} | Prenotazione ID: ${pren.prenotazione_id}`);
-          console.log(`🚗 Corsa ID: ${corsa.id} | Posti: ${pren.posti_richiesti} | Tipo: ${tipoPricing} | Km Tratta Utente: ${kmUtente}`);
+          console.log(`🚗 Corsa ID: ${corsa.id} | Posti: ${pren.posti_richiesti} | Tipo: ${tipoPricing} | Km Tratta Utente Validati: ${kmUtente}`);
           
           // Arricchimento dell'oggetto corsa con i dati condivisi necessari al pricing
           const corsaPerPricing = {
@@ -207,7 +214,7 @@ export async function toggleCorsa(corsa_id, action) {
             false // 👈 SPECIFICHIAMO CHE NON È UN NUOVO UTENTE, MA LA CATTURA DI FINE CORSA
           );
           
-          console.log(`🔍 [PREZZO RISOLTO] Valore grezzo restituito:`, JSON.stringify(prezzoRisolto));
+          console.log(`🔍 [PREZZO RISOLTO] Valore grezzo restituito dal pricing:`, JSON.stringify(prezzoRisolto));
           
           let rawPrezzo = typeof prezzoRisolto === 'object' && prezzoRisolto !== null 
             ? (prezzoRisolto.prezzo ?? prezzoRisolto.importo ?? 0) 
@@ -227,18 +234,18 @@ export async function toggleCorsa(corsa_id, action) {
           } else {
             console.log(`💳 [STRIPE FETCH] Recupero PaymentIntent remoto: ${pren.stripe_payment_intent}`);
             const pi = await stripe.paymentIntents.retrieve(pren.stripe_payment_intent);
-            console.log(`💳 [STRIPE STATUS] PI ID: ${pi.id} | Stato PI: ${pi.status} | Importo Originario PI: ${pi.amount} centesimi (€${pi.amount / 100})`);
+            console.log(`💳 [STRIPE STATUS] PI ID: ${pi.id} | Stato PI: ${pi.status} | Importo Originario PI autorizzato: ${pi.amount} centesimi (€${pi.amount / 100})`);
             
             if (importoFinale <= 0 && pi.amount > 0) {
               importoFinale = pi.amount / 100;
-              console.log(`⚠️ [STRIPE FALLBACK] Importo calcolato <= 0. Usato importo originario del PaymentIntent: €${importoFinale}`);
+              console.log(`⚠️️ [STRIPE FALLBACK] Importo calcolato <= 0. Usato importo originario del PaymentIntent: €${importoFinale}`);
             }
 
             const amountInCents = Math.round(importoFinale * 100);
             
             // 🛡️ SICUREZZA STRIPE: non puoi catturare più di quanto autorizzato originariamente
             const finalAmountToCapture = Math.min(amountInCents, pi.amount);
-            console.log(`🔢 [STRIPE CAPTURE PREP] Importo finale da catturare (limitato al massimo autorizzato): ${finalAmountToCapture} centesimi`);
+            console.log(`🔢 [STRIPE CAPTURE PREP] Importo calcolato in centesimi: ${amountInCents} | Importo massimo autorizzato: ${pi.amount} | Importo finale effettivo da catturare: ${finalAmountToCapture} centesimi`);
 
             if (pi.status === 'requires_capture' && finalAmountToCapture >= 1) {
               console.log(`🚀 [STRIPE CAPTURE EXECUTE] Tentativo di cattura Stripe per ${finalAmountToCapture} centesimi...`);

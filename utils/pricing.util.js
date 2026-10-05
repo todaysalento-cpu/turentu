@@ -154,7 +154,7 @@ export async function calcolaPrezzo(
                     console.error(`🚨 [CRASH GRAVE] sommaPercentualiTotale è zero o negativa (${sommaPercentualiTotale})! Rischio divisione per zero.`);
                 }
 
-                // 4. Ripartizione proporzionale rigorosa
+                // 4. Ripartizione proporzionale rigorosa (mantiene la stessa identica formula del search)
                 const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
                 prezzoCalcolato = costoMissioneAutista * quotaProporzionale;
 

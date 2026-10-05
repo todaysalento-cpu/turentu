@@ -23,7 +23,7 @@ export async function getTariffe(veicolo_id) {
         }
         return TARIFF_DEFAULT;
     } catch (err) {
-        console.error(`⚠️ [PRICING] Errore DB per veicolo ${veicolo_id}:`, err);
+        console.error(`⚠️️ [PRICING] Errore DB per veicolo ${veicolo_id}:`, err);
         return TARIFF_DEFAULT;
     }
 }
@@ -62,7 +62,8 @@ export async function calcolaPrezzo(
     totPasseggeriCorrenti = 0, 
     classe = 'STANDARD',
     kmAvvicinamento = 0,
-    kmRiposizionamento = 0
+    kmRiposizionamento = 0,
+    isNuovoUtente = true
 ) {
     const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
     const postiUtente = Math.max(1, Number(postiRichiesti || 1));
@@ -95,31 +96,37 @@ export async function calcolaPrezzo(
             case 'condivisa': {
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 
-                // 1. I km della corsa originale e i km di servizio (avvicinamento/riposizionamento) appartengono alla missione base
+                // 1. I km della corsa originale e i km di servizio appartengono alla missione base
                 const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(kmTotali) || safeKmUtente;
                 
                 // Il costo base della missione dell'autista include la corsa originale + avvicinamento + riposizionamento fissi
                 const costoMissioneAutista = infoCond.euro_km * (kmTotaliCorsaOriginale + avvicinamento + riposizionamento);
 
-                // 2. Percentuale della tratta del nuovo utente rispetto alla corsa originale
+                // 2. Percentuale della tratta del passeggero rispetto alla corsa originale
                 const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / kmTotaliCorsaOriginale));
                 const contributoUtentePesarato = percentualeUtente * postiUtente;
 
-                // 3. Recupero corretto delle percentuali dei passeggeri già presenti
+                // 3. Recupero delle percentuali dei passeggeri
                 let percentualiEsistenti = corsa.percentuali_passeggeri_esistenti || corsa.percentuali_passeggeri_attivi;
                 const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
                 
                 if (!percentualiEsistenti || !Array.isArray(percentualiEsistenti) || percentualiEsistenti.length === 0) {
-                    percentualiEsistenti = passeggeriGiaPresenti > 0 ? Array(passeggeriGiaPresenti).fill(1.0) : [1.0];
+                    percentualiEsistenti = passeggeriGiaPresenti > 0 ? Array(passeggeriGiaPresenti).fill(1.0) : [percentualeUtente];
                 }
 
                 const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
-                const sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
+                let sommaPercentualiTotale = 0;
 
-                // 4. Ripartizione proporzionale rigorosa per garantire che la somma copra il costo missione
-                // Se c'è un solo passeggero complessivo, paga in base alla sua percentuale di tratta rispetto al costo totale.
-                // Se ci sono più passeggeri, il costo viene distribuito proporzionalmente ai km percorsi e ai posti occupati.
-                const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / Math.max(sommaPercentualiTotale, 1.0)) : percentualeUtente;
+                if (isNuovoUtente) {
+                    // FASE SEARCH/PREVENTIVO: Aggiungiamo il nuovo utente al gruppo esistente
+                    sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
+                } else {
+                    // FASE CAPTURE/CHIUSURA CORSA: L'array percentualiEsistenti rappresenta già TUTTI i passeggeri della corsa.
+                    sommaPercentualiTotale = sommaPercentualiEsistenti > 0 ? sommaPercentualiEsistenti : contributoUtentePesarato;
+                }
+
+                // 4. Ripartizione proporzionale rigorosa
+                const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
                 prezzoCalcolato = costoMissioneAutista * quotaProporzionale;
 
                 // --- 🔍 LOG DETTAGLIATI SPECIFICI PER CORSE CONDIVISE ---
@@ -128,11 +135,11 @@ export async function calcolaPrezzo(
                 console.log(`📏 Km Tratta Utente: ${safeKmUtente} km | Km Totali Corsa Originale: ${kmTotaliCorsaOriginale} km`);
                 console.log(`📊 Rapporto Tratta Utente / Corsa (Percentuale pura): ${(percentualeUtente * 100).toFixed(2)}%`);
                 console.log(`🚗 Km Avvicinamento Fissi: ${avvicinamento} km | 🔄 Km Riposizionamento Fissi: ${riposizionamento} km`);
-                console.log(`💰 Costo Totale Missione Autista (Fisso): ${costoMissioneAutista.toFixed(4)} € (euro_km * [KmCorsa + Avv + Rip])`);
-                console.log(`👥 Array Percentuali Passeggeri Esistenti:`, percentualiEsistenti);
+                console.log(`💰 Costo Totale Missione Autista (Fisso): ${costoMissioneAutista.toFixed(4)} €`);
+                console.log(`👥 Array Percentuali Passeggeri:`, percentualiEsistenti);
                 console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
-                console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
+                console.log(`Σ Somma Percentuali Totale (Denominatore [isNuovoUtente: ${isNuovoUtente}]): ${sommaPercentualiTotale.toFixed(4)}`);
                 console.log(`⚖ Quota Proporzionale spettante: ${(quotaProporzionale * 100).toFixed(4)}%`);
                 console.log(`✨ Moltiplicatore Classe: ESCLUSO PER LE CORSE CONDIVISE`);
                 console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota): ${prezzoCalcolato.toFixed(4)} €`);

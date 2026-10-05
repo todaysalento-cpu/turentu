@@ -202,6 +202,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
 
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
+            const postiLiberiEffettivi = Math.max(0, capacitaTotale - postiOccupatiNelTratto);
 
             // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO (ORIGINE INTERMEDIA) ---
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
@@ -225,12 +226,15 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 console.log(`ℹ️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine o dati mancanti. Orario invariato: ${oraPartenzaUtente}`);
             }
 
-            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km.`);
+            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km. Posti liberi nel tratto: ${postiLiberiEffettivi}/${capacitaTotale}`);
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,
                 km_riposizionamento: kmRiposizionamento,
                 passeggeri_correnti: postiOccupatiNelTratto,
+                postiDisponibili: postiLiberiEffettivi,
+                posti_disponibili: postiLiberiEffettivi,
+                posti_totali: capacitaTotale,
                 startOffset: startOffset,
                 endOffset: endOffset,
                 calculated_start_offset: startOffset,

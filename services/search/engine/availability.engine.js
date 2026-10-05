@@ -154,17 +154,22 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             return null;
         }
 
-        // --- LOGICA CONDIVISA ---
+        // --- LOGICA CONDIVISA (BIDIREZIONALE / CORSA SINGOLA) ---
         if (c.tipo_corsa === 'condivisa') {
-            const startOffset = Number(startSnap.offset_metri);
-            const endOffset = Number(endSnap.offset_metri);
+            const startOffsetRaw = Number(startSnap.offset_metri);
+            const endOffsetRaw = Number(endSnap.offset_metri);
             
-            console.log(`👥 [CHECK CONDIVISA] Corsa ID ${c.id} | Start Offset: ${startOffset.toFixed(2)}m | End Offset: ${endOffset.toFixed(2)}m`);
+            console.log(`👥 [CHECK CONDIVISA] Corsa ID ${c.id} | Start Offset: ${startOffsetRaw.toFixed(2)}m | End Offset: ${endOffsetRaw.toFixed(2)}m`);
 
-            if (startOffset >= endOffset || (endOffset - startOffset) < 500) {  
-                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi o tratto troppo corto (start: ${startOffset}, end: ${endOffset}).`);
+            const distanzaTrattaMetri = Math.abs(endOffsetRaw - startOffsetRaw);
+            if (distanzaTrattaMetri < 500) {  
+                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: tratto troppo corto (${distanzaTrattaMetri.toFixed(2)}m).`);
                 return null;
             }
+
+            const startOffset = Math.min(startOffsetRaw, endOffsetRaw);
+            const endOffset = Math.max(startOffsetRaw, endOffsetRaw);
+            const isVersoRitorno = startOffsetRaw > endOffsetRaw;
 
             // Recupero prenotazioni batch per questa specifica corsa all'indice corrente
             const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
@@ -176,20 +181,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const percentualiEsistentiArray = [];
             const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1;
             
-            // Lunghezza totale di sicurezza in metri
             const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
 
             for (const p of prenotazioni) {
-                // 🛠️ CORRETTO: Fallback coerenti e separati per inizio e fine tratta del passeggero esistente
                 const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? p.start_metri ?? 0);
                 const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? p.end_metri ?? lunghezzaTotaleMetri);
 
-                if (startOffset < pEndTratto && endOffset > pStartTratto) {
+                const pMin = Math.min(pStartTratto, pEndTratto);
+                const pMax = Math.max(pStartTratto, pEndTratto);
+
+                if (startOffset < pMax && endOffset > pMin) {
                     postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
                 }
 
-                // Calcolo percentuale pulito e normalizzato basato sui metri reali della tratta del passeggero esistente
-                const lunghezzaTrattaPaz = Math.max(100, pEndTratto - pStartTratto);
+                const lunghezzaTrattaPaz = Math.max(100, pMax - pMin);
                 let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
                 percPaz = Math.min(1.0, Math.max(0.0, percPaz));
 
@@ -201,19 +206,19 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 return null;
             }
 
-            const kmUtenteTratta = (endOffset - startOffset) / 1000;
+            const kmUtenteTratta = distanzaTrattaMetri / 1000;
             const postiLiberiEffettivi = Math.max(0, capacitaTotale - postiOccupatiNelTratto);
 
-            // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO (ORIGINE INTERMEDIA) ---
+            // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO (ORIGINE INTERMEDIA / RITORNO) ---
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
-            console.log(`🕒 [ORARIO DINAMICO - START] Corsa ID ${c.id} | Partenza originale corsa: ${oraPartenzaUtente} | startOffset: ${startOffset.toFixed(2)}m`);
+            console.log(`🕒 [ORARIO DINAMICO - START] Corsa ID ${c.id} | Partenza originale corsa: ${oraPartenzaUtente} | Verso Ritorno: ${isVersoRitorno}`);
 
             if (startOffset > 0 && lunghezzaTotaleMetri > 0 && c.partenza_prevista) {
                 const dPartenzaOriginale = new Date(c.partenza_prevista);
                 if (!isNaN(dPartenzaOriginale.getTime())) {
                     const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
-                    
-                    const frazionePercorso = Math.min(1, startOffset / lunghezzaTotaleMetri);
+                    const offsetRiferimento = isVersoRitorno ? startOffsetRaw : startOffset;
+                    const frazionePercorso = Math.min(1, offsetRiferimento / lunghezzaTotaleMetri);
                     const ritardoMs = durataTotaleMs * frazionePercorso;
                     
                     const nuovoTimestamp = dPartenzaOriginale.getTime() + ritardoMs;
@@ -223,10 +228,10 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     console.log(`⚠️ [ORARIO DINAMICO - WARNING] Impossibile parsare 'partenza_prevista': ${c.partenza_prevista}`);
                 }
             } else {
-                console.log(`ℹ️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine o dati mancanti. Orario invariato: ${oraPartenzaUtente}`);
+                console.log(`ℹ️️ [ORARIO DINAMICO - INFO] L'utente parte dall'origine o dati mancanti. Orario invariato: ${oraPartenzaUtente}`);
             }
 
-            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente pulito: ${kmUtenteTratta.toFixed(3)} km. Posti liberi nel tratto: ${postiLiberiEffettivi}/${capacitaTotale}`);
+            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} (Condivisa - ${isVersoRitorno ? 'Ritorno' : 'Andata'}) superata con successo! Tratto: ${kmUtenteTratta.toFixed(3)} km.`);
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,
@@ -235,13 +240,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 postiDisponibili: postiLiberiEffettivi,
                 posti_disponibili: postiLiberiEffettivi,
                 posti_totali: capacitaTotale,
-                startOffset: startOffset,
-                endOffset: endOffset,
-                calculated_start_offset: startOffset,
-                calculated_end_offset: endOffset,
+                startOffset: startOffsetRaw,
+                endOffset: endOffsetRaw,
+                calculated_start_offset: startOffsetRaw,
+                calculated_end_offset: endOffsetRaw,
                 km_utente: kmUtenteTratta,
                 percentuali_passeggeri_esistenti: percentualiEsistentiArray,
-                partenza_effettiva: oraPartenzaUtente
+                partenza_effettiva: oraPartenzaUtente,
+                verso_ritorno: isVersoRitorno
             };
         }
 

@@ -23,12 +23,17 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       throw new Error("Parametri di prenotazione mancanti o invalidi");
     }
 
+    // 🔍 LOG INIZIALE DEI SEGMENTI RICEVUTI
+    console.log(`📥 [PRENOTA CORSA - START] Corsa ${corsa.id} | Segmenti grezzi ricevuti:`, segmenti);
+
     const startIdx = Number(segmenti.startIdx ?? 0);
     const endIdx = Number(segmenti.endIdx ?? 0);
     
     // Estrazione in sicurezza dei metri di offset (con fallback a 0 o valori stimati)
     const startOffset = Number(segmenti.startOffset ?? segmenti.start_offset ?? 0);
     const endOffset = Number(segmenti.endOffset ?? segmenti.end_offset ?? 0);
+
+    console.log(`⚙️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m`);
 
     // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE (Event-based / Sweep-line o controllo intervalli)
     // Controlla il picco di occupazione sovrapponendo l'intervallo [startIdx, endIdx] con le prenotazioni esistenti.
@@ -70,6 +75,8 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     }
 
     // 2. INSERISCI PRENOTAZIONE CON SEGMENTI, OFFSET E COORDINATE GEOGRAFICHE
+    console.log(`💾 [PRENOTA CORSA - SQL] Salvataggio nel DB con start_offset=${startOffset} e end_offset=${endOffset}...`);
+
     const prenRes = await client.query(
       `INSERT INTO prenotazioni (
           corsa_id, 
@@ -87,19 +94,28 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
        ) 
        VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
-        corsa.id,                     // $1
-        clienteId,                    // $2
-        postiRichiesti,               // $3
-        startIdx,                     // $4
-        endIdx,                       // $5
-        startOffset,                  // $6
-        endOffset,                    // $7
+        corsa.id,                   // $1
+        clienteId,                  // $2
+        postiRichiesti,             // $3
+        startIdx,                   // $4
+        endIdx,                     // $5
+        startOffset,                // $6
+        endOffset,                  // $7
         segmenti.latSalita ?? null,   // $8
         segmenti.lonSalita ?? null,   // $9
         segmenti.latDiscesa ?? null,  // $10
         segmenti.lonDiscesa ?? null   // $11
       ]
     );
+
+    const prenotazioneInserita = prenRes.rows[0];
+    console.log(`✅ [PRENOTA CORSA - SUCCESS] Prenotazione creata con ID ${prenotazioneInserita.id}. Dati salvati a DB:`, {
+        id: prenotazioneInserita.id,
+        start_offset: prenotazioneInserita.start_offset,
+        end_offset: prenotazioneInserita.end_offset,
+        start_index_polyline: prenotazioneInserita.start_index_polyline,
+        end_index_polyline: prenotazioneInserita.end_index_polyline
+    });
 
     // 3. AGGIORNAMENTO CACHE
     const corsaAggiornata = await client.query(
@@ -117,11 +133,11 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     CacheManager.corsa.update(corsaAggiornata.rows[0]);
 
     if (localClient) await client.query('COMMIT');
-    return prenRes.rows[0];
+    return prenotazioneInserita;
 
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');
-    console.error('Errore prenotazione dinamica:', err.message);
+    console.error(`❌ [ERROR] Errore prenotazione dinamica per la corsa ${corsa?.id}:`, err.message);
     throw err;
   } finally {
     if (localClient) client.release();

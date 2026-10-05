@@ -33,16 +33,23 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const startOffset = Number(segmenti.startOffset ?? segmenti.start_offset ?? 0);
     const endOffset = Number(segmenti.endOffset ?? segmenti.end_offset ?? 0);
 
-    // Calcolo o recupero dei km utente per questa specifica tratta
+    // Calcolo o recupero dei km utente per questa specifica tratta (gestendo correttamente i ritorni con Math.abs)
     const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(corsa.km) || Number(corsa.distanza) || Number(corsa.chilometri) || 10;
     
+    let kmCalc = null;
+    if (startOffset >= 0 && endOffset >= 0 && startOffset !== endOffset) {
+      let diffMetri = Math.abs(endOffset - startOffset);
+      if (diffMetri > 1000000) diffMetri = diffMetri / 1000; // Sicurezza per eventuali metri già in km
+      kmCalc = diffMetri / 1000;
+    }
+
     const kmUtente = Number(segmenti.kmUtente ?? segmenti.km_utente) || (
-      (startOffset >= 0 && endOffset > startOffset) 
-        ? Math.max(0.1, (endOffset - startOffset) / 1000)
+      kmCalc !== null && !isNaN(kmCalc) && kmCalc > 0 
+        ? Math.max(0.1, kmCalc) 
         : kmTotaliCorsaOriginale
     );
 
-    console.log(`⚙️️ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m | kmUtente: ${kmUtente}km`);
+    console.log(`⚙ [PRENOTA CORSA - PARSED] Corsa ${corsa.id} -> startIdx: ${startIdx}, endIdx: ${endIdx} | startOffset: ${startOffset}m, endOffset: ${endOffset}m | kmUtente calcolato: ${kmUtente}km`);
 
     // 1. VERIFICA DINAMICA CORRETTA PER SOVRAPPOSIZIONE TRATTE
     const checkRes = await client.query(
@@ -101,14 +108,14 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
        ) 
        VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
-        corsa.id,                   // $1
-        clienteId,                  // $2
-        postiRichiesti,             // $3
-        startIdx,                   // $4
-        endIdx,                     // $5
-        startOffset,                // $6
-        endOffset,                  // $7
-        kmUtente,                   // $8  <-- KM UTENTE SALVATI DIRETTAMENTE
+        corsa.id,                 // $1
+        clienteId,                // $2
+        postiRichiesti,           // $3
+        startIdx,                 // $4
+        endIdx,                   // $5
+        startOffset,              // $6
+        endOffset,                // $7
+        kmUtente,                 // $8  <-- KM UTENTE CORRETTAMENTE SALVATI
         segmenti.latSalita ?? null,   // $9
         segmenti.lonSalita ?? null,   // $10
         segmenti.latDiscesa ?? null,  // $11

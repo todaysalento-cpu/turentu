@@ -105,7 +105,7 @@ export async function calcolaPrezzo(
                 const percentualeUtente = Math.min(1.0, Math.max(0.0, safeKmUtente / kmTotaliCorsaOriginale));
                 const contributoUtentePesarato = percentualeUtente * postiUtente;
 
-                // 3. Recupero corretto delle percentuali dei passeggeri già presenti (allineato con il filtro disponibilità)
+                // 3. Recupero corretto delle percentuali dei passeggeri già presenti
                 let percentualiEsistenti = corsa.percentuali_passeggeri_esistenti || corsa.percentuali_passeggeri_attivi;
                 const passeggeriGiaPresenti = Number(totPasseggeriCorrenti || corsa.passeggeri_esistenti || corsa.posti_occupati || 0);
                 
@@ -116,8 +116,10 @@ export async function calcolaPrezzo(
                 const sommaPercentualiEsistenti = percentualiEsistenti.reduce((acc, curr) => acc + curr, 0);
                 const sommaPercentualiTotale = sommaPercentualiEsistenti + contributoUtentePesarato;
 
-                // 4. Ripartizione proporzionale del costo missione totale (SENZA applicare il moltiplicatore di classe)
-                const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / sommaPercentualiTotale) : 1.0;
+                // 4. Ripartizione proporzionale rigorosa per garantire che la somma copra il costo missione
+                // Se c'è un solo passeggero complessivo, paga in base alla sua percentuale di tratta rispetto al costo totale.
+                // Se ci sono più passeggeri, il costo viene distribuito proporzionalmente ai km percorsi e ai posti occupati.
+                const quotaProporzionale = sommaPercentualiTotale > 0 ? (contributoUtentePesarato / Math.max(sommaPercentualiTotale, 1.0)) : percentualeUtente;
                 prezzoCalcolato = costoMissioneAutista * quotaProporzionale;
 
                 // --- 🔍 LOG DETTAGLIATI SPECIFICI PER CORSE CONDIVISE ---
@@ -131,7 +133,7 @@ export async function calcolaPrezzo(
                 console.log(`➕ Somma Percentuali Esistenti: ${sommaPercentualiEsistenti.toFixed(4)}`);
                 console.log(`🧑‍🤝‍🧑 Posti richiesti dall'utente: ${postiUtente} -> Contributo ponderato utente: ${contributoUtentePesarato.toFixed(4)}`);
                 console.log(`Σ Somma Percentuali Totale (Esistenti + Nuovo Utente): ${sommaPercentualiTotale.toFixed(4)}`);
-                console.log(`⚖ Quota Proporzionale spettante (${contributoUtentePesarato.toFixed(4)} / ${sommaPercentualiTotale.toFixed(4)}): ${(quotaProporzionale * 100).toFixed(4)}%`);
+                console.log(`⚖ Quota Proporzionale spettante: ${(quotaProporzionale * 100).toFixed(4)}%`);
                 console.log(`✨ Moltiplicatore Classe: ESCLUSO PER LE CORSE CONDIVISE`);
                 console.log(`🧮 Subtotale Finale Condivisa (Costo Missione * Quota): ${prezzoCalcolato.toFixed(4)} €`);
                 console.log(`==========================================================================\n`);

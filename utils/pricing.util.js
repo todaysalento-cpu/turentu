@@ -23,7 +23,7 @@ export async function getTariffe(veicolo_id) {
         }
         return TARIFF_DEFAULT;
     } catch (err) {
-        console.error(`⚠️️ [PRICING] Errore DB per veicolo ${veicolo_id}:`, err);
+        console.error(`⚠ [PRICING] Errore DB per veicolo ${veicolo_id}:`, err);
         return TARIFF_DEFAULT;
     }
 }
@@ -73,11 +73,11 @@ export async function calcolaPrezzo(
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione e normalizzazione dei chilometri operativi
+    // Estrazione e normalizzazione dei chilometri operativi (Math.abs garantisce che la distanza sia sempre positiva)
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
-    const safeKmUtente = Number(kmUtente) || 0;
-    const safeKmTotali = Number(kmTotali) || safeKmUtente || 1;
+    const safeKmUtente = Math.abs(Number(kmUtente) || 0);
+    const safeKmTotali = Math.max(0.1, Number(kmTotali) || safeKmUtente || 1);
     const kmComplessiviOperativi = safeKmTotali + avvicinamento + riposizionamento;
 
     console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Totali: ${safeKmTotali}`);
@@ -97,7 +97,7 @@ export async function calcolaPrezzo(
                 const infoCond = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
                 
                 // 1. I km della corsa originale e i km di servizio appartengono alla missione base
-                const kmTotaliCorsaOriginale = Number(corsa.km_totali_percorso) || Number(kmTotali) || safeKmUtente;
+                const kmTotaliCorsaOriginale = Math.max(0.1, Number(corsa.km_totali_percorso) || Number(kmTotali) || safeKmUtente);
                 
                 // Il costo base della missione dell'autista include la corsa originale + avvicinamento + riposizionamento fissi
                 const costoMissioneAutista = infoCond.euro_km * (kmTotaliCorsaOriginale + avvicinamento + riposizionamento);

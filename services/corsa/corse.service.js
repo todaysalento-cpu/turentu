@@ -32,7 +32,23 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
         v.modello AS veicolo,
         COALESCE(NULLIF(c.origine_address, 'N/D'), NULLIF(c.origine_address, ''), 'Non specificato') AS origine_address,
         COALESCE(NULLIF(c.destinazione_address, 'N/D'), NULLIF(c.destinazione_address, ''), 'Non specificato') AS destinazione_address,
-        COALESCE(SUM(p.posti_richiesti), 0) AS posti_prenotati
+        COALESCE(SUM(p.posti_richiesti), 0) AS posti_prenotati,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', p.id,
+              'cliente_id', p.cliente_id,
+              'posti_richiesti', p.posti_richiesti,
+              'start_offset', p.start_offset,
+              'end_offset', p.end_offset,
+              'km_utente', p.km_utente,
+              'lat_salita', p.lat_salita,
+              'lon_salita', p.lon_salita,
+              'lat_discesa', p.lat_discesa,
+              'lon_discesa', p.lon_discesa
+            )
+          ) FILTER (WHERE p.id IS NOT NULL), '[]'
+        ) AS prenotazioni
       FROM public.corse c 
       JOIN public.veicolo v ON c.veicolo_id = v.id 
       LEFT JOIN public.prenotazioni p ON p.corsa_id = c.id
@@ -47,14 +63,15 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
       params.push(status);
     }
     
-    query += ` GROUP BY c.id, v.id ORDER BY c.start_datetime DESC`;
+    query += ` GROUP BY c.id, v.id, v.driver_id, v.modello ORDER BY c.start_datetime DESC`;
     
     const res = await client.query(query, params);
     
     return res.rows.map(c => ({ 
       ...c, 
       durataMinuti: parseDurataMinuti(c.durata),
-      posti_prenotati: Number(c.posti_prenotati)
+      posti_prenotati: Number(c.posti_prenotati),
+      prenotazioni: Array.isArray(c.prenotazioni) ? c.prenotazioni : []
     }));
   } finally { 
     client.release(); 
@@ -238,7 +255,7 @@ export async function toggleCorsa(corsa_id, action) {
             
             if (importoFinale <= 0 && pi.amount > 0) {
               importoFinale = pi.amount / 100;
-              console.log(`⚠️️ [STRIPE FALLBACK] Importo calcolato <= 0. Usato importo originario del PaymentIntent: €${importoFinale}`);
+              console.log(`⚠ [STRIPE FALLBACK] Importo calcolato <= 0. Usato importo originario del PaymentIntent: €${importoFinale}`);
             }
 
             const amountInCents = Math.round(importoFinale * 100);

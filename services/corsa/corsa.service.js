@@ -140,23 +140,23 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
              $12, $13, $14, $15, $16, $17, NOW()
            ) RETURNING *`,
           [
-            veicoloId,                             // $1
-            startDatetime,                         // $2
-            arrivoDatetime,                        // $3
+            veicoloId,                            // $1
+            startDatetime,                        // $2
+            arrivoDatetime,                       // $3
             (pending.tipo_corsa === 'privata' ? 'privata' : 'condivisa'), // $4
-            `${durataMin} minutes`,                // $5
-            postiTotaliVeicolo,                    // $6
-            distanzaKm,                            // $7
-            coordOrig.lon,                         // $8
-            coordOrig.lat,                         // $9
-            coordDest.lon,                         // $10
-            coordDest.lat,                         // $11
+            `${durataMin} minutes`,               // $5
+            postiTotaliVeicolo,                   // $6
+            distanzaKm,                           // $7
+            coordOrig.lon,                        // $8
+            coordOrig.lat,                        // $9
+            coordDest.lon,                        // $10
+            coordDest.lat,                        // $11
             (pending.origine_address ?? 'N/D'),    // $12
             (pending.destinazione_address ?? 'N/D'), // $13
-            polylineString,                        // $14
-            pathGeohashes,                         // $15
-            kmAvvicinamento,                       // $16
-            kmRiposizionamento                     // $17
+            polylineString,                       // $14
+            pathGeohashes,                        // $15
+            kmAvvicinamento,                      // $16
+            kmRiposizionamento                    // $17
           ]
         );
         corsa = res.rows[0];
@@ -181,11 +181,16 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             end_index_resolved: endIdxVal
         });
 
+        // Inserite le coordinate di salita e discesa per evitare valori NULL nel DB
         const segmenti = {  
             startIdx: startIdxVal,  
             endIdx: endIdxVal,
             startOffset: startOffsetVal,
-            endOffset: endOffsetVal
+            endOffset: endOffsetVal,
+            latSalita: coordOrig.lat,   // <-- AGGIUNTO
+            lonSalita: coordOrig.lon,   // <-- AGGIUNTO
+            latDiscesa: coordDest.lat,  // <-- AGGIUNTO
+            lonDiscesa: coordDest.lon   // <-- AGGIUNTO
         };
 
         const prenotazione = await prenotazioneService.prenotaCorsa(

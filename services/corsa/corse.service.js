@@ -45,7 +45,9 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
               'lat_salita', p.lat_salita,
               'lon_salita', p.lon_salita,
               'lat_discesa', p.lat_discesa,
-              'lon_discesa', p.lon_discesa
+              'lon_discesa', p.lon_discesa,
+              'start_index_polyline', p.start_index_polyline,
+              'end_index_polyline', p.end_index_polyline
             )
           ) FILTER (WHERE p.id IS NOT NULL), '[]'
         ) AS prenotazioni

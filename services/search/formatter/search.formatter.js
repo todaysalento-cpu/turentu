@@ -116,10 +116,18 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
             // 1. LOGICA VIRTUAL / PENDING (POP-BUS PENDING / PROATTIVO)
             if (itemId.startsWith('virtual_pop_')) {
+                console.log(`📊 [DEBUG BREAK-EVEN VIRTUAL] Analisi direttrice virtuale ID: ${itemId}`);
+                console.log(`👉 [DEBUG BREAK-EVEN VIRTUAL] Posti utente richiesti: ${postiUtenteRichiesti}, Distanza Km: ${distKmRichiesta}`);
+
                 const poolSicuro = (item.veicoli_pool_ids && item.veicoli_pool_ids.length > 0) ? item.veicoli_pool_ids : [];
                 const classiDisponibili = ['SAVER', 'STANDARD', 'EXPRESS'];
 
                 const opzioniPopBusMappe = await Promise.all(classiDisponibili.map(async (classeCorrente) => {
+                    const kmAvv = Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0);
+                    const kmRip = Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0);
+
+                    console.log(`🔎 [DEBUG BREAK-EVEN VIRTUAL] Calcolo prezzo per Classe: ${classeCorrente} | Pool ID:`, poolSicuro, `| kmAvv: ${kmAvv}, kmRip: ${kmRip}`);
+
                     const p = await calcolaPrezzo(
                         { ...item, veicoli_pool_ids: poolSicuro }, 
                         postiUtenteRichiesti, 
@@ -128,11 +136,20 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                         distKmRichiesta, 
                         0, 
                         classeCorrente,
-                        Number(item.km_avvicinamento || richiesta.km_avvicinamento || 0),
-                        Number(item.km_riposizionamento || richiesta.km_riposizionamento || 0)
+                        kmAvv,
+                        kmRip
                     );
                     
-                    if (!p) return null;
+                    if (!p) {
+                        console.warn(`⚠️ [DEBUG BREAK-EVEN VIRTUAL] calcolaPrezzo ha restituito null per la classe ${classeCorrente}`);
+                        return null;
+                    }
+
+                    console.log(`✅ [DEBUG BREAK-EVEN VIRTUAL] Risultato calcolaPrezzo (${classeCorrente}):`, {
+                        prezzo: p.prezzo,
+                        targetPasseggeri (Break-Even): p.targetPasseggeri,
+                        dettagliGrezzi: p
+                    });
 
                     const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 5));
 
@@ -168,7 +185,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 return opzioniPopBusMappe.filter(opzione => opzione !== null);
             }
 
-            // 2. LOGICA STANDARD (Corse reali trovate)
+            // 2. LOGICA STANDARD (Corse reali trovate, inclusi Pop-Bus attivi)
             const passeggeriGiaA1Bordo = Number(item.passeggeri_esistenti || item.posti_occupati || item.passeggeri_correnti || 0);
 
             const kmAvvItem = Number(item.km_avvicinamento ?? richiesta.km_avvicinamento ?? 0);
@@ -183,6 +200,11 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 (kmTrattaUtente + kmAvvItem + kmRipItem)
             );
 
+            if (tipoCoerente === 'pop-bus') {
+                console.log(`📊 [DEBUG BREAK-EVEN REAL] Analisi Pop-Bus reale ID: ${itemId}`);
+                console.log(`👉 [DEBUG BREAK-EVEN REAL] Parametri: postiUtente=${postiUtenteRichiesti}, kmTratta=${kmTrattaUtente}, kmTotali=${kmTotaliRotte}, passeggeriA1Bordo=${passeggeriGiaA1Bordo}, classe=${item.classe || 'STANDARD'}`);
+            }
+
             const p = await calcolaPrezzo(
                 item, 
                 postiUtenteRichiesti, 
@@ -193,9 +215,27 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 item.classe || 'STANDARD',
                 kmAvvItem,
                 kmRipItem
-            ).catch(() => ({ prezzo: kmTrattaUtente * 0.50 }));
+            ).catch((err) => {
+                if (tipoCoerente === 'pop-bus') {
+                    console.error(`💥 [DEBUG BREAK-EVEN REAL] Errore in calcolaPrezzo per pop-bus reale:`, err);
+                }
+                return ({ prezzo: kmTrattaUtente * 0.50 });
+            });
             
-            if (!p) return [];
+            if (!p) {
+                if (tipoCoerente === 'pop-bus') {
+                    console.warn(`⚠️ [DEBUG BREAK-EVEN REAL] calcolaPrezzo ha restituito null per pop-bus reale ID: ${itemId}`);
+                }
+                return [];
+            }
+
+            if (tipoCoerente === 'pop-bus') {
+                console.log(`✅ [DEBUG BREAK-EVEN REAL] Risultato calcolaPrezzo (Pop-Bus reale):`, {
+                    prezzo: p.prezzo,
+                    targetPasseggeri (Break-Even): p.targetPasseggeri,
+                    dettagliGrezzi: p
+                });
+            }
 
             const prezzoVal = Math.max(1, Math.ceil(Number(p.prezzo) || 1));
             const oraPartenzaEffettiva = item.partenza_prevista ? getSafeISO(item.partenza_prevista) : oraPartenzaISO;
@@ -222,7 +262,6 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 is_pool: !!item.is_pool,
                 messaggio: item.messaggio || null,
                 servizi: parseServizi(item.servizi),
-                // 📍 Preservati i metri di offset sulla polilinea per la prenotazione e il tracciamento
                 startOffset: item.startOffset ?? item.calculated_start_offset ?? null,
                 endOffset: item.endOffset ?? item.calculated_end_offset ?? null
             }];

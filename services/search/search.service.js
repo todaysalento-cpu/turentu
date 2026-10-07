@@ -425,6 +425,7 @@ export async function cercaSlotUltra(richiesta) {
         coordDest: { lat: destLat, lon: destLon },
         distanzaKm,
         distanzaMetri, 
+        posti_richiesti: postiRichiesti, // <-- Corretto qui!
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 
     }, risultatiFinali);
 }

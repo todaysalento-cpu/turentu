@@ -58,6 +58,10 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
     `, [autistaId]);
 
     console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive con dettagli completi.`);
+    
+    // 🔍 LOG DI DEBUG GREZZO: Stampa l'intero oggetto restituito dal DB per analisi puntuale
+    console.log("📦 [DEBUG OFFERTA DB RAW]:", JSON.stringify(result.rows, null, 2));
+
     res.json({ offerte: result.rows });
   } catch (err) {
     console.error("❌ [GET OFFERTE] Errore nel recupero offerte PopBus:", err);

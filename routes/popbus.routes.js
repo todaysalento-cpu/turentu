@@ -9,7 +9,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // ==========================================
-// NUOVA ROTTA: GET Offerte PopBus attive per un veicolo
+// ROTTA: GET Offerte PopBus attive per un veicolo
 // ==========================================
 router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
   const client = await pool.connect();
@@ -21,7 +21,7 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
       SELECT 
         o.id, 
         o.direttrice_id, 
-        o.veicolo_id, 
+        d.veicolo_id, 
         o.stato, 
         o.expires_at,
         d.tipo_servizio as classe, 
@@ -31,7 +31,7 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
       FROM offerte_autisti o
       JOIN direttrici_virtuali d ON o.direttrice_id = d.id
       LEFT JOIN segmenti s ON s.direttrice_id = d.id
-      WHERE o.veicolo_id = $1 
+      WHERE d.veicolo_id = $1 
         AND o.stato = 'inviata' 
         AND o.expires_at > NOW()
     `, [veicolo_id]);
@@ -92,7 +92,6 @@ router.post('/:offerta_id/accetta', async (req, res) => {
     // 5. Notifiche (Post-Commit)
     const io = getIO();
     
-    // CORRETTO: Uso della room 'autista_${autistaId}' coerente con il frontend
     const targetRoom = `autista_${autistaId}`;
     console.log(`📡 [ACCETTA] Invio evento socket 'nuova_corsa_popbus' alla room '${targetRoom}'`);
     io.to(targetRoom).emit('nuova_corsa_popbus', corsa);

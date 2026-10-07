@@ -50,7 +50,7 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
         throw new Error(`Impossibile determinare il veicolo per la creazione della corsa PopBus (Direttrice ${direttriceId}, Autista ${autistaId}).`);
     }
 
-    // 3. Inserimento della corsa (senza autista_id, passando esclusivamente per veicolo_id)
+    // 3. Inserimento della corsa
     const res = await client.query(`
         INSERT INTO corse (
             veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
@@ -72,11 +72,11 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
 
     const corsa = res.rows[0];
     
-    // 4. Aggiornamento delle richieste PopBus collegate
+    // 4. Aggiornamento delle richieste PopBus collegate (aggiornando direttamente in base alla direttrice se presente nella tabella richieste, o via pending)
     await client.query(`
         UPDATE richieste_pop_bus 
         SET stato = 'confermata', corsa_id = $1 
-        WHERE id IN (SELECT richiesta_id FROM direttrici_richieste WHERE direttrice_id = $2)`, 
+        WHERE direttrice_id = $2`, 
         [corsa.id, direttriceId]);
     
     console.log(`✅ [POPBUS] Corsa ID ${corsa.id} creata con successo.`);
@@ -135,7 +135,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
                 if (routeAvv?.distanzaKm) kmAvvicinamento = routeAvv.distanzaKm;
 
-                const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
+                const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: latBaseV });
                 if (routeRip?.distanzaKm) kmRiposizionamento = routeRip.distanzaKm;
             }
             console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);

@@ -290,29 +290,12 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
+          -- 💰 RICAVO REALE BASATO SUL PREZZO DELLE RICHIESTE POP BUS
           (
-            SELECT COALESCE(SUM(
-              (COALESCE(s_sub.posti_occupati, 0) + COALESCE(mr_posti_sub.posti_ritorno, 0)) * 2.50
-            ), (COALESCE(s.posti_occupati, 0) + COALESCE(mr_posti.posti_ritorno, 0)) * 2.50)
-            FROM segmenti s_sub
-            LEFT JOIN (
-              SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
-              FROM missioni_ritorno m
-              JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
-              WHERE r.stato IN ('in_attesa', 'in_lavorazione')
-              GROUP BY m.segmento_id
-            ) mr_posti_sub ON mr_posti_sub.segmento_id = s_sub.id
-            WHERE s_sub.direttrice_id = s.direttrice_id
-              AND s_sub.ordine_sequenziale >= (
-                SELECT MIN(s_in.ordine_sequenziale) FROM segmenti s_in 
-                WHERE s_in.direttrice_id = s.direttrice_id 
-                  AND s_in.start_node_id >= s.start_node_id
-              )
-              AND s_sub.ordine_sequenziale <= (
-                SELECT MAX(s_in.ordine_sequenziale) FROM segmenti s_in 
-                WHERE s_in.direttrice_id = s.direttrice_id 
-                  AND s_in.end_node_id <= s.end_node_id
-              )
+            SELECT COALESCE(SUM(r_sub.prezzo), 0)
+            FROM richieste_pop_bus r_sub
+            WHERE r_sub.direttrice_id = s.direttrice_id
+              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -322,13 +305,6 @@ export async function processaProposteDinamiche() {
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        LEFT JOIN (
-          SELECT m.segmento_id, SUM(r.posti_richiesti) as posti_ritorno
-          FROM missioni_ritorno m
-          JOIN richieste_pop_bus r ON r.direttrice_id = m.direttrice_id
-          WHERE r.stato IN ('in_attesa', 'in_lavorazione')
-          GROUP BY m.segmento_id
-        ) mr_posti ON mr_posti.segmento_id = s.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
       ),
       min_soglia_pool AS (

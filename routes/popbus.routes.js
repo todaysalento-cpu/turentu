@@ -53,8 +53,11 @@ router.post('/:offerta_id/accetta', async (req, res) => {
 
     // 5. Notifiche (Post-Commit)
     const io = getIO();
-    console.log(`📡 [ACCETTA] Invio evento socket 'nuova_corsa_popbus' alla room 'driver_${autistaId}'`);
-    io.to(`driver_${autistaId}`).emit('nuova_corsa_popbus', corsa);
+    
+    // CORRETTO: Uso della room 'autista_${autistaId}' coerente con il frontend
+    const targetRoom = `autista_${autistaId}`;
+    console.log(`📡 [ACCETTA] Invio evento socket 'nuova_corsa_popbus' alla room '${targetRoom}'`);
+    io.to(targetRoom).emit('nuova_corsa_popbus', corsa);
     
     // Notifica tutti i clienti coinvolti nella direttrice
     const { rows: clienti } = await client.query(`

@@ -8,29 +8,73 @@ import { upsertCorsa } from '../search/search.cache.js';
 
 // --- FUNZIONE DI SUPPORTO PER POPBUS ---
 export async function createCorsaFromDirettrice(direttriceId, autistaId, client) {
-    console.log(`🚌 [POPBUS] Creazione corsa da direttrice ID: ${direttriceId}`);
+    console.log(`🚌 [POPBUS] Creazione corsa da direttrice ID: ${direttriceId} per autista ID: ${autistaId}`);
+    
+    // 1. Recupero della direttrice virtuale (contenitore logico)
     const dirRes = await client.query(`
-        SELECT d.*, v.posti_totali 
-        FROM direttrici_virtuali d
-        JOIN veicolo v ON v.id = d.veicolo_id 
-        WHERE d.id = $1`, [direttriceId]);
+        SELECT * FROM direttrici_virtuali WHERE id = $1`, [direttriceId]);
     
     const d = dirRes.rows[0];
-    
+    if (!d) {
+        throw new Error(`Direttrice virtuale con ID ${direttriceId} non trovata nel database.`);
+    }
+
+    // 2. Ricerca sicura del veicolo (tramite l'autista loggato o dai segmenti attivi della tratta)
+    let veicoloIdFinal = null;
+    let postiTotaliFinal = 4; // Fallback di sicurezza
+
+    const veicoloRes = await client.query(`
+        SELECT id, posti_totali FROM veicolo WHERE driver_id = $1 LIMIT 1`, 
+        [autistaId]
+    );
+
+    if (veicoloRes.rows.length > 0) {
+        veicoloIdFinal = veicoloRes.rows[0].id;
+        postiTotaliFinal = veicoloRes.rows[0].posti_totali || 4;
+    } else {
+        // Fallback sui segmenti attivi della direttrice
+        const segVeicoloRes = await client.query(`
+            SELECT v.id, v.posti_totali 
+            FROM segmenti s
+            JOIN veicolo v ON v.id = s.veicolo_id
+            WHERE s.direttrice_id = $1 AND s.stato = 'attivo'
+            LIMIT 1`, [direttriceId]
+        );
+        if (segVeicoloRes.rows.length > 0) {
+            veicoloIdFinal = segVeicoloRes.rows[0].id;
+            postiTotaliFinal = segVeicoloRes.rows[0].posti_totali || 4;
+        }
+    }
+
+    if (!veicoloIdFinal) {
+        throw new Error(`Impossibile determinare il veicolo per la creazione della corsa PopBus (Direttrice ${direttriceId}, Autista ${autistaId}).`);
+    }
+
+    // 3. Inserimento della corsa associandola correttamente
     const res = await client.query(`
         INSERT INTO corse (
-            direttrice_id, autista_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
+            direttrice_id, autista_id, veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
             origine, destinazione
-        ) VALUES ($1, $2, 'popbus', 'confermata', $3, $4, $4, 
-            ST_SetSRID(ST_MakePoint($5,$6),4326), 
-            ST_SetSRID(ST_MakePoint($7,$8),4326))
+        ) VALUES ($1, $2, $3, 'popbus', 'confermata', $4, $5, $5, 
+            ST_SetSRID(ST_MakePoint($6,$7),4326), 
+            ST_SetSRID(ST_MakePoint($8,$9),4326))
         RETURNING *`, 
-        [direttriceId, autistaId, d.partenza_prevista, d.posti_totali, 
-         d.origine_lon, d.origine_lat, d.destinazione_lon, d.destinazione_lat]
+        [
+            direttriceId, 
+            autistaId, 
+            veicoloIdFinal, 
+            d.partenza_prevista, 
+            postiTotaliFinal, 
+            d.origine_lon ?? 0, 
+            d.origine_lat ?? 0, 
+            d.destinazione_lon ?? 0, 
+            d.destinazione_lat ?? 0
+        ]
     );
 
     const corsa = res.rows[0];
     
+    // 4. Aggiornamento delle richieste PopBus collegate
     await client.query(`
         UPDATE richieste_pop_bus 
         SET stato = 'confermata', corsa_id = $1 
@@ -170,27 +214,15 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         const startIdxVal = Number(pending.start_index_polyline ?? pending.startIndexPolyline ?? 0);
         const endIdxVal = Number(pending.end_index_polyline ?? pending.endIndexPolyline ?? 100);
 
-        console.log(`🔍 [DEBUG SEGMENTI] Pending ID ${pending.id}:`, {
-            start_offset_db: pending.start_offset,
-            start_offset_resolved: startOffsetVal,
-            end_offset_db: pending.end_offset,
-            end_offset_resolved: endOffsetVal,
-            start_index_db: pending.start_index_polyline,
-            start_index_resolved: startIdxVal,
-            end_index_db: pending.end_index_polyline,
-            end_index_resolved: endIdxVal
-        });
-
-        // Inserite le coordinate di salita e discesa per evitare valori NULL nel DB
         const segmenti = {  
             startIdx: startIdxVal,  
             endIdx: endIdxVal,
             startOffset: startOffsetVal,
             endOffset: endOffsetVal,
-            latSalita: coordOrig.lat,   // <-- AGGIUNTO
-            lonSalita: coordOrig.lon,   // <-- AGGIUNTO
-            latDiscesa: coordDest.lat,  // <-- AGGIUNTO
-            lonDiscesa: coordDest.lon   // <-- AGGIUNTO
+            latSalita: coordOrig.lat,   
+            lonSalita: coordOrig.lon,   
+            latDiscesa: coordDest.lat,  
+            lonDiscesa: coordDest.lon   
         };
 
         const prenotazione = await prenotazioneService.prenotaCorsa(

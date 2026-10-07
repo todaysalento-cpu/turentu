@@ -260,7 +260,6 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA & VALIDAZIONE CAPIENZA FLOTTA
     console.log('💰 [WORKER] Fase 2: Calcolo economico e verifica capienza flotta...');
 
-    // 🔍 LOG DI DIAGNOSI: Ispeziona i dati grezzi prima del filtro di attivazione
     const { rows: debugValoriGrezzi } = await client.query(`
       SELECT 
         s.id as segmento_id,
@@ -359,18 +358,6 @@ export async function processaProposteDinamiche() {
         JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
         JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
       ),
-      -- 🔍 SELECT INTERMEDIA PER LOG DI CONTROLLO ECONOMICO
-      debug_verifica AS (
-        SELECT 
-          segmento_id,
-          ricavo_attuale,
-          soglia_attivazione_minima,
-          posti_occupati,
-          capacita_veicolo,
-          (ricavo_attuale >= COALESCE(soglia_attivazione_minima, 0)) as passa_soglia_economica,
-          (posti_occupati <= capacita_veicolo) as passa_controllo_capienza
-        FROM calcolo_orari
-      ),
       update_segmenti AS (
         UPDATE segmenti s
         SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
@@ -390,7 +377,6 @@ export async function processaProposteDinamiche() {
       SELECT id, direttrice_id, stato FROM update_segmenti
     `, [segmentiCoinvoltiIds]);
 
-    // 🔍 STAMPA DEI DETTAGLI DI VALUTAZIONE ECONOMICA E CAPIENZA
     const { rows: debugEsiti } = await client.query(`
       SELECT 
         s.id as segmento_id,

@@ -109,13 +109,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-          start_node_id, end_node_id, classe, origine_address, destinazione_address
+          start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13
         ) RETURNING *`,
         [
           clienteId,
@@ -127,7 +127,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           nodeRes.rows[0].end,
           slot.classe || 'STANDARD',
           origineAddress,
-          destinazioneAddress
+          destinazioneAddress,
+          prezzo // <--- PREZZO REALE SALVATO DIRETTAMENTE
         ]
       );
 

@@ -27,9 +27,11 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         o.stato, 
         o.expires_at,
         d.tipo_servizio as classe, 
+        d.partenza_prevista,
+        d.distanza_totale_km,
         s.posti_occupati as posti_richiesti,
-        d.origine as origine_address, 
-        d.destinazione as destinazione_address
+        s.start_node_id,
+        s.end_node_id
       FROM offerte_autisti o
       JOIN direttrici_virtuali d ON o.direttrice_id = d.id
       LEFT JOIN segmenti s ON s.direttrice_id = d.id

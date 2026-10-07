@@ -23,6 +23,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     // 2. Recupero metadati (servizio e posti occupati)
     const { rows: meta } = await client.query(`
       SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
+      SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
       FROM direttrici_virtuali d
       JOIN segmenti s ON s.direttrice_id = d.id
       WHERE d.id = $1
@@ -33,8 +34,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     // --- 🔍 DIAGNOSTICA INTERNA PER CAPIRE PERCHÉ FALLISCE IL MATCHING ---
     console.log(`🔎 [DISPATCH DIAGNOSTIC] Esecuzione query di ispezione flotte/autisti disponibili nel DB...`);
     try {
-      // Verifica quanti autisti/veicoli/driver esistono in assoluto nel DB per capire se le tabelle sono vuote
-      const { rows: testTotaliAutisti } = await client.query(`SELECT COUNT(*) as tot FROM veicolo`); // o la tabella driver/utenti che usate
+      const { rows: testTotaliAutisti } = await client.query(`SELECT COUNT(*) as tot FROM veicolo`);
       console.log(`🔎 [DISPATCH DIAGNOSTIC] Totale record nella tabella 'veicolo':`, testTotaliAutisti[0]?.tot);
     } catch (e) {
       console.log(`🔎 [DISPATCH DIAGNOSTIC] Tabella veicolo non interrogabile con questo nome o errore:`, e.message);
@@ -52,21 +52,24 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
 
     console.log(`🚚 [DISPATCH DEBUG] Trovati ${destinatari.length} destinatari/autisti idonei per il dispatch.`);
 
-    const payloadProposta = {
-      direttrice_id: t.direttrice_id,
-      classe: meta[0]?.tipo_servizio || 'urbano',
-      posti_richiesti: meta[0]?.posti_occupati || 0
-    };
-
     // 4. Invio notifiche via Socket.io ai driver in linea
     if (destinatari.length === 0) {
       console.warn(`⚠️ [DISPATCH WARNING] Nessun destinatario trovato a cui inviare la proposta per la direttrice ${t.direttrice_id}.`);
-      console.warn(`💡 [SUGGERIMENTO DEBUG] Controlla dentro 'fleetMatchingService.js' la query che filtra i driver: probabilmente richiede uno stato specifico (es. 'disponibile'), una classe veicolo compatibile con '${meta[0]?.tipo_servizio}' o una posizione geografica vicina al nodo ${meta[0]?.start_node_id}.`);
     }
 
     for (const dest of destinatari) {
       if (dest.driver_id) {
-        const roomName = `driver_${dest.driver_id}`;
+        // CORRETTO: Usiamo 'autista_' per allinearci a socket.js (es. autista_2 anziché driver_2)
+        const roomName = `autista_${dest.driver_id}`;
+        
+        // Includiamo anche veicolo_id nel payload utile per il frontend
+        const payloadProposta = {
+          direttrice_id: t.direttrice_id,
+          veicolo_id: dest.veicolo_id,
+          classe: meta[0]?.tipo_servizio || 'urbano',
+          posti_richiesti: meta[0]?.posti_occupati || 0
+        };
+
         console.log(`📡 [SOCKET] Invio evento 'nuova_proposta_popbus' alla room '${roomName}' (Payload:`, payloadProposta, `)`);
         
         getIO().to(roomName).emit('nuova_proposta_popbus', payloadProposta);

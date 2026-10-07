@@ -239,7 +239,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
     upsertCorsa(corsa);
 
     if (localClient) await client.query('COMMIT');
-    return { corsa };
+    return corsa; // Restituisce direttamente l'oggetto corsa
 
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');

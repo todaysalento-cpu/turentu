@@ -147,7 +147,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
 
                     console.log(`✅ [DEBUG BREAK-EVEN VIRTUAL] Risultato calcolaPrezzo (${classeCorrente}):`, {
                         prezzo: p.prezzo,
-                        targetPasseggeri (Break-Even): p.targetPasseggeri,
+                        'targetPasseggeri (Break-Even)': p.targetPasseggeri,
                         dettagliGrezzi: p
                     });
 
@@ -232,7 +232,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             if (tipoCoerente === 'pop-bus') {
                 console.log(`✅ [DEBUG BREAK-EVEN REAL] Risultato calcolaPrezzo (Pop-Bus reale):`, {
                     prezzo: p.prezzo,
-                    targetPasseggeri (Break-Even): p.targetPasseggeri,
+                    'targetPasseggeri (Break-Even)': p.targetPasseggeri,
                     dettagliGrezzi: p
                 });
             }

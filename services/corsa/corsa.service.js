@@ -50,17 +50,16 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
         throw new Error(`Impossibile determinare il veicolo per la creazione della corsa PopBus (Direttrice ${direttriceId}, Autista ${autistaId}).`);
     }
 
-    // 3. Inserimento della corsa associandola correttamente
+    // 3. Inserimento della corsa con tipo_corsa 'riempimento' e stato 'prenotabile' (senza direttrice_id)
     const res = await client.query(`
         INSERT INTO corse (
-            direttrice_id, autista_id, veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
+            autista_id, veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
             origine, destinazione
-        ) VALUES ($1, $2, $3, 'popbus', 'confermata', $4, $5, $5, 
-            ST_SetSRID(ST_MakePoint($6,$7),4326), 
-            ST_SetSRID(ST_MakePoint($8,$9),4326))
+        ) VALUES ($1, $2, 'riempimento', 'prenotabile', $3, $4, $4, 
+            ST_SetSRID(ST_MakePoint($5,$6),4326), 
+            ST_SetSRID(ST_MakePoint($7,$8),4326))
         RETURNING *`, 
         [
-            direttriceId, 
             autistaId, 
             veicoloIdFinal, 
             d.partenza_prevista, 

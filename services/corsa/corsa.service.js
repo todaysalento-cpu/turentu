@@ -248,4 +248,3 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
   } finally {
     if (localClient) client.release();
   }
-}

@@ -9,34 +9,36 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // ==========================================
-// ROTTA: GET Offerte PopBus attive per un veicolo
+// ROTTA: GET Offerte PopBus attive per l'autista loggato
 // ==========================================
 router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
   const client = await pool.connect();
   try {
     const { veicolo_id } = req.params;
-    console.log(`🔎 [GET OFFERTE] Recupero offerte PopBus attive per veicolo ID: ${veicolo_id}`);
+    const autistaId = req.user.id;
+
+    console.log(`🔎 [GET OFFERTE] Recupero offerte PopBus attive per autista ID: ${autistaId} (Veicolo richiesto: ${veicolo_id})`);
 
     const result = await client.query(`
       SELECT 
         o.id, 
         o.direttrice_id, 
-        d.veicolo_id, 
+        o.autista_id,
         o.stato, 
         o.expires_at,
         d.tipo_servizio as classe, 
         s.posti_occupati as posti_richiesti,
-        d.origine_address, 
-        d.destinazione_address
+        d.origine as origine_address, 
+        d.destinazione as destinazione_address
       FROM offerte_autisti o
       JOIN direttrici_virtuali d ON o.direttrice_id = d.id
       LEFT JOIN segmenti s ON s.direttrice_id = d.id
-      WHERE d.veicolo_id = $1 
+      WHERE o.autista_id = $1 
         AND o.stato = 'inviata' 
         AND o.expires_at > NOW()
-    `, [veicolo_id]);
+    `, [autistaId]);
 
-    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive per il veicolo ${veicolo_id}`);
+    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive.`);
     res.json({ offerte: result.rows });
   } catch (err) {
     console.error("❌ [GET OFFERTE] Errore nel recupero offerte PopBus:", err);
@@ -46,7 +48,9 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
   }
 });
 
-// POST Accetta offerta PopBus
+// ==========================================
+// POST: Accetta offerta PopBus
+// ==========================================
 router.post('/:offerta_id/accetta', async (req, res) => {
   const client = await pool.connect();
   try {

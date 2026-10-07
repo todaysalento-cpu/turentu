@@ -23,6 +23,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     // 2. Recupero metadati (servizio e posti occupati)
     const { rows: meta } = await client.query(`
       SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
+      SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
       FROM direttrici_virtuali d
       JOIN segmenti s ON s.direttrice_id = d.id
       WHERE d.id = $1
@@ -59,15 +60,17 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     for (const dest of destinatari) {
       if (dest.driver_id && dest.veicolo_id) {
         
-        // Salvataggio dell'offerta nel DB con scadenza a 10 minuti
+        console.log(`💾 [DISPATCH] Tentativo di inserimento offerta per autista ID: ${dest.driver_id} (Veicolo: ${dest.veicolo_id}) sulla direttrice ${t.direttrice_id}`);
+
+        // Salvataggio dell'offerta nel DB associata all'autista (autista_id)
         const offertaRes = await client.query(`
-          INSERT INTO offerte_autisti (direttrice_id, veicolo_id, stato, expires_at, created_at)
+          INSERT INTO offerte_autisti (direttrice_id, autista_id, stato, expires_at, created_at)
           VALUES ($1, $2, 'inviata', NOW() + INTERVAL '10 minutes', NOW())
           RETURNING id
-        `, [t.direttrice_id, dest.veicolo_id]);
+        `, [t.direttrice_id, dest.driver_id]);
 
         const offertaId = offertaRes.rows[0].id;
-        console.log(`💾 [DISPATCH] Creata offerta_autisti ID ${offertaId} per veicolo ${dest.veicolo_id}`);
+        console.log(`💾 [DISPATCH] ✅ Offerta_autisti creata con successo - ID: ${offertaId} associata all'autista ${dest.driver_id}`);
 
         // Usiamo 'autista_' per allinearci a socket.js (es. autista_2)
         const roomName = `autista_${dest.driver_id}`;
@@ -81,7 +84,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
           posti_richiesti: meta[0]?.posti_occupati || 0
         };
 
-        console.log(`📡 [SOCKET] Invio evento 'nuova_proposta_popbus' alla room '${roomName}' (Payload:`, payloadProposta, `)`);
+        console.log(`📡 [SOCKET] Invio evento 'nuova_proposta_popbus' alla room '${roomName}' con payload:`, payloadProposta);
         
         getIO().to(roomName).emit('nuova_proposta_popbus', payloadProposta);
       } else {

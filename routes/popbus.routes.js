@@ -144,9 +144,9 @@ router.post('/:offerta_id/accetta', async (req, res) => {
     await client.query(`UPDATE offerte_autisti SET stato = 'accettata' WHERE id = $1`, [offertaId]);
     await client.query(`UPDATE offerte_autisti SET stato = 'scaduta' WHERE direttrice_id = $1 AND id != $2`, [direttrice_id, offertaId]);
 
-    // 3. Creazione Corsa Aggregata
+    // 3. Creazione Corsa Aggregata (Assegnazione diretta dell'oggetto restituito)
     console.log(`🚗 [ACCETTA] Creazione corsa da direttrice ${direttrice_id}...`);
-    const { corsa } = await createCorsaFromDirettrice(direttrice_id, autistaId, client);
+    const corsa = await createCorsaFromDirettrice(direttrice_id, autistaId, client);
     console.log(`✨ [ACCETTA] Corsa creata con successo. ID Corsa: ${corsa?.id}`);
 
     // 4. Update finale direttrice

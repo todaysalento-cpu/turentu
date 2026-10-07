@@ -15,7 +15,7 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
       NULL::numeric as distanza_km
     FROM veicolo v
     LEFT JOIN tariffe t ON t.veicolo_id = v.id
-    WHERE v.servizi::text ILIKE '%' || $1 || '%'
+    WHERE (v.servizi::text ILIKE '%' || $1 || '%' OR v.servizi IS NULL OR v.servizi::text = '[]')
   `;
 
   const { rows } = await client.query(query, [tipoServizio]);
@@ -43,16 +43,20 @@ export async function getDestinatariDispatching(direttriceId, client = pool) {
   const { rows: infoDir } = await client.query(`SELECT id, tipo_servizio, start_node_id FROM direttrici_virtuali WHERE id = $1`, [direttriceId]);
   console.log(`🚚 [MATCHING DEBUG] Info direttrice recuperate dal DB:`, infoDir[0]);
 
-  // 2. Ispeziona i veicoli presenti nel DB (senza colonne inesistenti)
+  // 2. Ispeziona i veicoli presenti nel DB
   const { rows: tuttiVeicoli } = await client.query(`SELECT id, driver_id, servizi FROM veicolo`);
   console.log(`🚚 [MATCHING DEBUG] Stato attuale di TUTTI i veicoli nel DB (${tuttiVeicoli.length} totali):`, tuttiVeicoli);
 
-  // 3. Query di dispatching pulita
+  // 3. Query di dispatching con fallback per servizi vuoti/null
   const query = `
     SELECT DISTINCT v.driver_id, v.id as veicolo_id
     FROM direttrici_virtuali d
     JOIN segmenti s ON s.direttrice_id = d.id
-    JOIN veicolo v ON v.servizi::text ILIKE '%' || d.tipo_servizio || '%'
+    JOIN veicolo v ON (
+      v.servizi::text ILIKE '%' || d.tipo_servizio || '%' 
+      OR v.servizi IS NULL 
+      OR v.servizi::text = '[]'
+    )
     WHERE d.id = $1 
       AND v.driver_id IS NOT NULL
   `;

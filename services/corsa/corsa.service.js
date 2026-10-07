@@ -72,10 +72,10 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
 
     const corsa = res.rows[0];
     
-    // 4. Aggiornamento delle richieste PopBus collegate (usando 'accettata' per rispettare il vincolo di controllo)
+    // 4. Aggiornamento delle richieste PopBus collegate (usando 'convertita' come richiesto dal check_stato_valido)
     await client.query(`
         UPDATE richieste_pop_bus 
-        SET stato = 'accettata', corsa_id = $1 
+        SET stato = 'convertita', corsa_id = $1 
         WHERE direttrice_id = $2`, 
         [corsa.id, direttriceId]);
     

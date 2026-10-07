@@ -5,6 +5,8 @@ import { pool } from '../../db/db.js';
  * a prescindere dalla distanza o includendo la distanza come semplice metadato.
  */
 export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio, maxDistanzaKm = 50, client = pool) {
+  console.log(`🔎 [MATCHING DEBUG] Ricerca veicoli compatibili -> NodeId: ${startNodeId}, Servizio: '${tipoServizio}', MaxDistanza: ${maxDistanzaKm}km`);
+  
   const query = `
     SELECT 
       v.id as veicolo_id,
@@ -19,8 +21,6 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
     JOIN nodi_direttrice n ON n.id = $1
     LEFT JOIN tariffe t ON t.veicolo_id = v.id
     WHERE v.servizi::text ILIKE '%' || $2 || '%'
-      -- Se vuoi mantenere un filtro di sicurezza molto ampio (es. 50km) per evitare veicoli dall'altra parte del mondo, 
-      -- oppure puoi rimuovere del tutto la riga ST_DWithin se la flotta è circoscritta.
       AND (v.posizione_corrente IS NULL OR ST_DWithin(n.posizione::geography, v.posizione_corrente::geography, $3 * 1000))
     ORDER BY distanza_km ASC NULLS LAST
   `;
@@ -28,6 +28,7 @@ export async function getVeicoliCompatibiliPerSegmento(startNodeId, tipoServizio
   const values = [startNodeId, tipoServizio, maxDistanzaKm];
   const { rows } = await client.query(query, values);
   
+  console.log(`🔎 [MATCHING DEBUG] Veicoli trovati dopo il filtro: ${rows.length}`, rows);
   return rows;
 }
 
@@ -46,6 +47,15 @@ export async function getMigliorVeicoloPerSoglia(startNodeId, tipoServizio, clie
  * rimuovendo i vincoli rigidi di raggio ristretto.
  */
 export async function getDestinatariDispatching(direttriceId, client = pool) {
+  console.log(`🚚 [MATCHING DEBUG] Avvio getDestinatariDispatching per Direttrice ID: ${direttriceId}`);
+
+  // Prima facciamo un check per vedere che tipo di servizio ha la direttrice e quanti veicoli totali esistono
+  const { rows: infoDir } = await client.query(`SELECT id, tipo_servizio, start_node_id FROM direttrici_virtuali WHERE id = $1`, [direttriceId]);
+  console.log(`🚚 [MATCHING DEBUG] Info direttrice recuperate dal DB:`, infoDir[0]);
+
+  const { rows: tuttiVeicoli } = await client.query(`SELECT id, driver_id, servizi, posizione_corrente IS NOT NULL as ha_posizione FROM veicolo`);
+  console.log(`🚚 [MATCHING DEBUG] Stato attuale di TUTTI i veicoli nel DB (${tuttiVeicoli.length} totali):`, tuttiVeicoli);
+
   const query = `
     SELECT DISTINCT v.driver_id, v.id as veicolo_id
     FROM direttrici_virtuali d
@@ -56,5 +66,7 @@ export async function getDestinatariDispatching(direttriceId, client = pool) {
   `;
   
   const { rows } = await client.query(query, [direttriceId]);
+  console.log(`🚚 [MATCHING DEBUG] Destinatari finali trovati con la query di dispatch: ${rows.length}`, rows);
+  
   return rows;
 }

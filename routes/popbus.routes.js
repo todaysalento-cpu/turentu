@@ -46,7 +46,8 @@ router.post('/:offerta_id/accetta', async (req, res) => {
 
     // 5. Notifiche (Post-Commit)
     const io = getIO();
-    io.to(`autista_${autistaId}`).emit('nuova_corsa_popbus', corsa);
+    // ✅ Corretto da 'autista_' a 'driver_' per allinearsi con la room del client
+    io.to(`driver_${autistaId}`).emit('nuova_corsa_popbus', corsa);
     
     // Notifica tutti i clienti coinvolti nella direttrice
     const { rows: clienti } = await client.query(`

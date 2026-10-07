@@ -162,7 +162,6 @@ export async function processaProposteDinamiche() {
         }
 
         if (!c.is_composta) {
-          // 🛡️ [CORRETTO] Aggiunto controllo rigoroso per evitare ripescaggi multipli
           const updateRes = await client.query(`
             UPDATE richieste_pop_bus
             SET direttrice_id = $1, stato = 'in_lavorazione'
@@ -260,7 +259,24 @@ export async function processaProposteDinamiche() {
 
     // 2. CALCOLO ATTIVAZIONE ECONOMICA & VALIDAZIONE CAPIENZA FLOTTA
     console.log('💰 [WORKER] Fase 2: Calcolo economico e verifica capienza flotta...');
-    
+
+    // 🔍 LOG DI DIAGNOSI: Ispeziona i dati grezzi prima del filtro di attivazione
+    const { rows: debugValoriGrezzi } = await client.query(`
+      SELECT 
+        s.id as segmento_id,
+        s.direttrice_id,
+        s.posti_occupati,
+        COALESCE(v.posti_totali, 50) as capacita_veicolo,
+        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento
+      FROM segmenti s
+      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+      JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+      LEFT JOIN veicolo v ON dv.veicolo_id = v.id
+      WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
+    `, [segmentiCoinvoltiIds]);
+    console.log(`📊 [DEBUG ATTIVAZIONE] Parametri fisici dei segmenti in esame:`, debugValoriGrezzi);
+      
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -343,6 +359,18 @@ export async function processaProposteDinamiche() {
         JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
         JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
       ),
+      -- 🔍 SELECT INTERMEDIA PER LOG DI CONTROLLO ECONOMICO
+      debug_verifica AS (
+        SELECT 
+          segmento_id,
+          ricavo_attuale,
+          soglia_attivazione_minima,
+          posti_occupati,
+          capacita_veicolo,
+          (ricavo_attuale >= COALESCE(soglia_attivazione_minima, 0)) as passa_soglia_economica,
+          (posti_occupati <= capacita_veicolo) as passa_controllo_capienza
+        FROM calcolo_orari
+      ),
       update_segmenti AS (
         UPDATE segmenti s
         SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
@@ -362,16 +390,29 @@ export async function processaProposteDinamiche() {
       SELECT id, direttrice_id, stato FROM update_segmenti
     `, [segmentiCoinvoltiIds]);
 
+    // 🔍 STAMPA DEI DETTAGLI DI VALUTAZIONE ECONOMICA E CAPIENZA
+    const { rows: debugEsiti } = await client.query(`
+      SELECT 
+        s.id as segmento_id,
+        s.posti_occupati,
+        COALESCE(v.posti_totali, 50) as capacita_veicolo,
+        s.ricavo_stimato
+      FROM segmenti s
+      JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+      LEFT JOIN veicolo v ON dv.veicolo_id = v.id
+      WHERE s.id = ANY($1::int[])
+    `, [segmentiCoinvoltiIds]);
+    
+    console.log(`💡 [DEBUG ATTIVAZIONE] Esito controllo per ogni segmento valutato:`, debugEsiti);
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`, segmentiAttivati);
 
     // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
-    // 🛡️ [CORRETTO] Controllo su 'in_formazione' anziché 'in_attesa' per evitare loop ed errori
     const upgradeRes = await client.query(`
       UPDATE richieste_pop_bus r
       SET direttrice_id = d_target.id
       FROM direttrici_virtuali d_source
       JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-            AND d_source.end_node_id = d_target.end_node_id
+          AND d_source.end_node_id = d_target.end_node_id
       WHERE r.direttrice_id = d_source.id
         AND d_source.stato = 'in_formazione'
         AND d_target.stato = 'attivo'

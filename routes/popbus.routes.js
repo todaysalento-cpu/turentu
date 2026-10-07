@@ -144,13 +144,13 @@ router.post('/:offerta_id/accetta', async (req, res) => {
     await client.query(`UPDATE offerte_autisti SET stato = 'accettata' WHERE id = $1`, [offertaId]);
     await client.query(`UPDATE offerte_autisti SET stato = 'scaduta' WHERE direttrice_id = $1 AND id != $2`, [direttrice_id, offertaId]);
 
-    // 3. Creazione Corsa Aggregata (Assegnazione diretta dell'oggetto restituito)
+    // 3. Creazione Corsa Aggregata
     console.log(`🚗 [ACCETTA] Creazione corsa da direttrice ${direttrice_id}...`);
     const corsa = await createCorsaFromDirettrice(direttrice_id, autistaId, client);
     console.log(`✨ [ACCETTA] Corsa creata con successo. ID Corsa: ${corsa?.id}`);
 
-    // 4. Update finale direttrice
-    await client.query(`UPDATE direttrici_virtuali SET stato = 'confermata', corsa_id = $1 WHERE id = $2`, [corsa.id, direttrice_id]);
+    // 4. Update finale direttrice (aggiorna solo lo stato senza la colonna inesistente corsa_id)
+    await client.query(`UPDATE direttrici_virtuali SET stato = 'confermata' WHERE id = $1`, [direttrice_id]);
 
     await client.query('COMMIT');
     console.log(`💾 [ACCETTA] Transazione completata (COMMIT) con successo.`);

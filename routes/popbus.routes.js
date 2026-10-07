@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { createCorsaFromDirettrice } from '../services/corsa/corsa.service.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
+import { getLocalitaSafe } from '../utils/maps.util.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -34,16 +35,14 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         -- Prezzo reale proveniente dal ricavo stimato del segmento
         COALESCE(s.ricavo_stimato, 0) as prezzo,
         
-        -- 🌍 Estrazione dinamica e sicura dei nomi dei nodi (fallback automatico sulle coordinate se vuoti)
-        COALESCE(
-          NULLIF(n_start.nome_nodo, ''), 
-          'Località (' || ROUND(ST_Y(n_start.posizione::geometry)::numeric, 4) || ', ' || ROUND(ST_X(n_start.posizione::geometry)::numeric, 4) || ')'
-        ) AS origine_address,
+        -- Estrazione dei nomi dei nodi salvati e delle coordinate per il reverse geocoding di fallback
+        n_start.nome_nodo as start_nome_db,
+        ST_Y(n_start.posizione::geometry) AS start_lat,
+        ST_X(n_start.posizione::geometry) AS start_lon,
         
-        COALESCE(
-          NULLIF(n_end.nome_nodo, ''), 
-          'Località (' || ROUND(ST_Y(n_end.posizione::geometry)::numeric, 4) || ', ' || ROUND(ST_X(n_end.posizione::geometry)::numeric, 4) || ')'
-        ) AS destinazione_address,
+        n_end.nome_nodo as end_nome_db,
+        ST_Y(n_end.posizione::geometry) AS end_lat,
+        ST_X(n_end.posizione::geometry) AS end_lon,
         
         COALESCE(s.start_node_id, d.start_node_id) as start_node_id,
         COALESCE(s.end_node_id, d.end_node_id) as end_node_id
@@ -57,12 +56,52 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         AND o.expires_at > NOW()
     `, [autistaId]);
 
-    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive con dettagli completi.`);
-    
-    // 🔍 LOG DI DEBUG GREZZO: Stampa l'intero oggetto restituito dal DB per analisi puntuale
-    console.log("📦 [DEBUG OFFERTA DB RAW]:", JSON.stringify(result.rows, null, 2));
+    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte grezze dal DB. Conversione località in corso...`);
 
-    res.json({ offerte: result.rows });
+    // 🌍 Elaborazione e conversione dinamica delle coordinate in località reali (con supporto cache)
+    const offerteArricchite = await Promise.all(result.rows.map(async (row) => {
+      // 1. Origine
+      let origine_address = row.start_nome_db;
+      if (!origine_address || origine_address.trim() === '') {
+        if (row.start_lat && row.start_lon) {
+          origine_address = await getLocalitaSafe({ lat: row.start_lat, lon: row.start_lon });
+        } else {
+          origine_address = "Località Sconosciuta";
+        }
+      }
+
+      // 2. Destinazione
+      let destinazione_address = row.end_nome_db;
+      if (!destinazione_address || destinazione_address.trim() === '') {
+        if (row.end_lat && row.end_lon) {
+          destinazione_address = await getLocalitaSafe({ lat: row.end_lat, lon: row.end_lon });
+        } else {
+          destinazione_address = "Località Sconosciuta";
+        }
+      }
+
+      return {
+        id: row.id,
+        direttrice_id: row.direttrice_id,
+        autista_id: row.autista_id,
+        stato: row.stato,
+        expires_at: row.expires_at,
+        classe: row.classe,
+        orario: row.orario,
+        distanza_totale_km: row.distanza_totale_km,
+        posti_richiesti: row.posti_richiesti,
+        prezzo: row.prezzo,
+        origine_address,
+        destinazione_address,
+        start_node_id: row.start_node_id,
+        end_node_id: row.end_node_id
+      };
+    }));
+
+    console.log(`🔎 [GET OFFERTE] Offerte elaborate con successo.`);
+    console.log("📦 [DEBUG OFFERTA ARRICCHITA]:", JSON.stringify(offerteArricchite, null, 2));
+
+    res.json({ offerte: offerteArricchite });
   } catch (err) {
     console.error("❌ [GET OFFERTE] Errore nel recupero offerte PopBus:", err);
     res.status(500).json({ error: err.message });

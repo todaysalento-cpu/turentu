@@ -51,18 +51,30 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
 
     console.log(`🚚 [DISPATCH DEBUG] Trovati ${destinatari.length} destinatari/autisti idonei per il dispatch.`);
 
-    // 4. Invio notifiche via Socket.io ai driver in linea
+    // 4. Salvataggio nel DB (offerte_autisti) e invio notifiche via Socket.io
     if (destinatari.length === 0) {
       console.warn(`⚠️ [DISPATCH WARNING] Nessun destinatario trovato a cui inviare la proposta per la direttrice ${t.direttrice_id}.`);
     }
 
     for (const dest of destinatari) {
-      if (dest.driver_id) {
+      if (dest.driver_id && dest.veicolo_id) {
+        
+        // Salvataggio dell'offerta nel DB con scadenza a 10 minuti
+        const offertaRes = await client.query(`
+          INSERT INTO offerte_autisti (direttrice_id, veicolo_id, stato, expires_at, created_at)
+          VALUES ($1, $2, 'inviata', NOW() + INTERVAL '10 minutes', NOW())
+          RETURNING id
+        `, [t.direttrice_id, dest.veicolo_id]);
+
+        const offertaId = offertaRes.rows[0].id;
+        console.log(`💾 [DISPATCH] Creata offerta_autisti ID ${offertaId} per veicolo ${dest.veicolo_id}`);
+
         // Usiamo 'autista_' per allinearci a socket.js (es. autista_2)
         const roomName = `autista_${dest.driver_id}`;
         
-        // Includiamo anche veicolo_id nel payload utile per il frontend
+        // Payload completo con l'ID dell'offerta salvata
         const payloadProposta = {
+          id: offertaId, // ID fondamentale per accettare l'offerta
           direttrice_id: t.direttrice_id,
           veicolo_id: dest.veicolo_id,
           classe: meta[0]?.tipo_servizio || 'urbano',
@@ -73,7 +85,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
         
         getIO().to(roomName).emit('nuova_proposta_popbus', payloadProposta);
       } else {
-        console.warn(`⚠️ [DISPATCH WARNING] Trovato record destinatario senza driver_id valido:`, dest);
+        console.warn(`⚠️ [DISPATCH WARNING] Trovato record destinatario senza driver_id o veicolo_id valido:`, dest);
       }
     }
   }

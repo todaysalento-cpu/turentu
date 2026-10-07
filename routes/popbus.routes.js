@@ -8,6 +8,44 @@ import { notifyUser } from '../services/notifications/notification.service.js';
 const router = express.Router();
 router.use(authMiddleware);
 
+// ==========================================
+// NUOVA ROTTA: GET Offerte PopBus attive per un veicolo
+// ==========================================
+router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { veicolo_id } = req.params;
+    console.log(`🔎 [GET OFFERTE] Recupero offerte PopBus attive per veicolo ID: ${veicolo_id}`);
+
+    const result = await client.query(`
+      SELECT 
+        o.id, 
+        o.direttrice_id, 
+        o.veicolo_id, 
+        o.stato, 
+        o.expires_at,
+        d.tipo_servizio as classe, 
+        s.posti_occupati as posti_richiesti,
+        d.origine_address, 
+        d.destinazione_address
+      FROM offerte_autisti o
+      JOIN direttrici_virtuali d ON o.direttrice_id = d.id
+      LEFT JOIN segmenti s ON s.direttrice_id = d.id
+      WHERE o.veicolo_id = $1 
+        AND o.stato = 'inviata' 
+        AND o.expires_at > NOW()
+    `, [veicolo_id]);
+
+    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive per il veicolo ${veicolo_id}`);
+    res.json({ offerte: result.rows });
+  } catch (err) {
+    console.error("❌ [GET OFFERTE] Errore nel recupero offerte PopBus:", err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // POST Accetta offerta PopBus
 router.post('/:offerta_id/accetta', async (req, res) => {
   const client = await pool.connect();

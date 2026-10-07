@@ -27,20 +27,28 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         o.stato, 
         o.expires_at,
         d.tipo_servizio as classe, 
-        d.partenza_prevista,
+        -- Orario calcolato dal segmento o fallback sulla partenza prevista della direttrice
+        COALESCE(s.start_datetime, d.partenza_prevista) as orario,
         d.distanza_totale_km,
         s.posti_occupati as posti_richiesti,
-        s.start_node_id,
-        s.end_node_id
+        -- Prezzo reale proveniente dal ricavo stimato del segmento
+        COALESCE(s.ricavo_stimato, 0) as prezzo,
+        -- Nomi dei nodi di origine e destinazione dalla tabella 'nodi_direttrice'
+        n_start.nome AS origine_address,
+        n_end.nome AS destinazione_address,
+        COALESCE(s.start_node_id, d.start_node_id) as start_node_id,
+        COALESCE(s.end_node_id, d.end_node_id) as end_node_id
       FROM offerte_autisti o
       JOIN direttrici_virtuali d ON o.direttrice_id = d.id
-      LEFT JOIN segmenti s ON s.direttrice_id = d.id
+      LEFT JOIN segmenti s ON s.direttrice_id = d.id AND s.stato = 'attivo'
+      LEFT JOIN nodi_direttrice n_start ON COALESCE(s.start_node_id, d.start_node_id) = n_start.id
+      LEFT JOIN nodi_direttrice n_end ON COALESCE(s.end_node_id, d.end_node_id) = n_end.id
       WHERE o.autista_id = $1 
         AND o.stato = 'inviata' 
         AND o.expires_at > NOW()
     `, [autistaId]);
 
-    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive.`);
+    console.log(`🔎 [GET OFFERTE] Trovate ${result.rows.length} offerte attive con dettagli completi.`);
     res.json({ offerte: result.rows });
   } catch (err) {
     console.error("❌ [GET OFFERTE] Errore nel recupero offerte PopBus:", err);

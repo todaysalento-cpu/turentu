@@ -23,7 +23,6 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     // 2. Recupero metadati (servizio e posti occupati)
     const { rows: meta } = await client.query(`
       SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
-      SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
       FROM direttrici_virtuali d
       JOIN segmenti s ON s.direttrice_id = d.id
       WHERE d.id = $1
@@ -59,7 +58,7 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
 
     for (const dest of destinatari) {
       if (dest.driver_id) {
-        // CORRETTO: Usiamo 'autista_' per allinearci a socket.js (es. autista_2 anziché driver_2)
+        // Usiamo 'autista_' per allinearci a socket.js (es. autista_2)
         const roomName = `autista_${dest.driver_id}`;
         
         // Includiamo anche veicolo_id nel payload utile per il frontend

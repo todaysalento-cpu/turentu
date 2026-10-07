@@ -33,9 +33,18 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         s.posti_occupati as posti_richiesti,
         -- Prezzo reale proveniente dal ricavo stimato del segmento
         COALESCE(s.ricavo_stimato, 0) as prezzo,
-        -- Nomi dei nodi di origine e destinazione dalla tabella 'nodi_direttrice' (colonna 'nome_nodo')
-        n_start.nome_nodo AS origine_address,
-        n_end.nome_nodo AS destinazione_address,
+        
+        -- 🌍 Estrazione dinamica e sicura dei nomi dei nodi (fallback automatico sulle coordinate se vuoti)
+        COALESCE(
+          NULLIF(n_start.nome_nodo, ''), 
+          'Località (' || ROUND(ST_Y(n_start.posizione::geometry)::numeric, 4) || ', ' || ROUND(ST_X(n_start.posizione::geometry)::numeric, 4) || ')'
+        ) AS origine_address,
+        
+        COALESCE(
+          NULLIF(n_end.nome_nodo, ''), 
+          'Località (' || ROUND(ST_Y(n_end.posizione::geometry)::numeric, 4) || ', ' || ROUND(ST_X(n_end.posizione::geometry)::numeric, 4) || ')'
+        ) AS destinazione_address,
+        
         COALESCE(s.start_node_id, d.start_node_id) as start_node_id,
         COALESCE(s.end_node_id, d.end_node_id) as end_node_id
       FROM offerte_autisti o

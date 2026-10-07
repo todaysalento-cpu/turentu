@@ -35,6 +35,7 @@ export async function getMigliorVeicoloPerSoglia(startNodeId, tipoServizio, clie
 
 /**
  * Restituisce l'elenco di tutti i potenziali destinatari per il dispatching della direttrice.
+ * Utilizza DISTINCT ON (v.driver_id) per garantire che ogni autista riceva una sola proposta (un unico veicolo).
  */
 export async function getDestinatariDispatching(direttriceId, client = pool) {
   console.log(`🚚 [MATCHING DEBUG] Avvio getDestinatariDispatching per Direttrice ID: ${direttriceId}`);
@@ -47,9 +48,9 @@ export async function getDestinatariDispatching(direttriceId, client = pool) {
   const { rows: tuttiVeicoli } = await client.query(`SELECT id, driver_id, servizi FROM veicolo`);
   console.log(`🚚 [MATCHING DEBUG] Stato attuale di TUTTI i veicoli nel DB (${tuttiVeicoli.length} totali):`, tuttiVeicoli);
 
-  // 3. Query di dispatching con fallback per servizi vuoti/null
+  // 3. Query di dispatching ottimizzata con DISTINCT ON per deduplicare gli autisti
   const query = `
-    SELECT DISTINCT v.driver_id, v.id as veicolo_id
+    SELECT DISTINCT ON (v.driver_id) v.driver_id, v.id as veicolo_id
     FROM direttrici_virtuali d
     JOIN segmenti s ON s.direttrice_id = d.id
     JOIN veicolo v ON (
@@ -59,10 +60,11 @@ export async function getDestinatariDispatching(direttriceId, client = pool) {
     )
     WHERE d.id = $1 
       AND v.driver_id IS NOT NULL
+    ORDER BY v.driver_id, v.id
   `;
   
   const { rows } = await client.query(query, [direttriceId]);
-  console.log(`🚚 [MATCHING DEBUG] Destinatari finali trovati con la query di dispatch: ${rows.length}`, rows);
+  console.log(`🚚 [MATCHING DEBUG] Destinatari unici finali trovati con la query di dispatch: ${rows.length}`, rows);
   
   return rows;
 }

@@ -1,0 +1,70 @@
+import { pool } from '../db/db.js';
+import { processaProposteDinamiche } from '../services/popbus/matching.worker.js';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { initSocket } from '../socket.js'; // Importa la funzione che inizializza il socket nel tuo progetto
+
+async function testCompatibilitaOrariaTransito() {
+  const client = await pool.connect();
+  
+  // Inizializziamo un server HTTP e Socket.io fittizi per evitare l'errore di inizializzazione
+  const httpServer = createServer();
+  const io = new Server(httpServer);
+  initSocket(httpServer); // Inizializza il modulo socket del progetto
+
+  try {
+    await client.query('BEGIN');
+    
+    console.log('🧹 Pulizia dati di test precedenti...');
+    await client.query("DELETE FROM richieste_pop_bus");
+    await client.query("DELETE FROM segmenti");
+    await client.query("DELETE FROM direttrici_virtuali");
+
+    console.log('🏗️ Creazione direttrice e segmento di riferimento...');
+    const { rows: dirRes } = await client.query(`
+      INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
+      VALUES ('in_formazione', '2026-06-01 10:00:00', 1, 2, 'STANDARD_media')
+      RETURNING id
+    `);
+    const direttriceEsistenteId = dirRes[0].id;
+
+    await client.query(`
+      INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale, tempo_stimato)
+      VALUES ($1, 1, 2, 5, 'attivo', 1, 20)
+    `, [direttriceEsistenteId]);
+
+    console.log('📥 Inserimento nuova richiesta compatibile (transito stimato alle 10:20, richiesta alle 10:30)...');
+    await client.query(`
+      INSERT INTO richieste_pop_bus (start_node_id, end_node_id, start_datetime, posti_richiesti, stato, prezzo)
+      VALUES (2, 3, '2026-06-01 10:30:00', 2, 'in_attesa', 15.00)
+    `);
+
+    await client.query('COMMIT');
+    console.log('✅ Setup di test completato.');
+
+    console.log('🔄 Esecuzione worker processaProposteDinamiche()...');
+    await processaProposteDinamiche();
+
+    const { rows: direttriciFinali } = await client.query('SELECT id, start_node_id, end_node_id, partenza_prevista FROM direttrici_virtuali');
+    console.log('📌 Direttrici presenti nel DB dopo l\'elaborazione:', direttriciFinali);
+
+    const { rows: richiesteAggiornate } = await client.query('SELECT id, start_node_id, end_node_id, direttrice_id, stato FROM richieste_pop_bus');
+    console.log('📌 Stato richieste:', richiesteAggiornate);
+
+    if (direttriciFinali.length === 1 && direttriciFinali[0].id === direttriceEsistenteId) {
+      console.log('🎉 TEST SUPERATO: La richiesta è stata agganciata correttamente alla direttrice esistente basandosi sul transito!');
+    } else {
+      console.log('⚠️ TEST FALLITO: È stata creata una nuova direttrice o la gestione non è quella attesa.');
+    }
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Errore durante il test:', err);
+  } finally {
+    client.release();
+    httpServer.close();
+    process.exit();
+  }
+}
+
+testCompatibilitaOrariaTransito();

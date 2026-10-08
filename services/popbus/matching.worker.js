@@ -3,7 +3,7 @@ import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
-  console.log('🔄 [WORKER] Avvio cluster pop-bus con compatibilità spaziale e temporale e ricavi gerarchici...');
+  console.log('🔄 [WORKER] Avvio cluster pop-bus con compatibilità spaziale e temporale (transito nodo) e ricavi gerarchici basati sui veicoli disponibili...');
 
   try {
     await client.query('BEGIN');
@@ -25,9 +25,8 @@ export async function processaProposteDinamiche() {
       GROUP BY r.start_node_id, r.end_node_id, slot_orario
     `);
 
-    // DEBUG: Stampa le richieste in attesa trovate all'inizio
     const { rows: reqInAttesaIniziali } = await client.query(`SELECT id, start_node_id, end_node_id, posti_richiesti, direttrice_id FROM richieste_pop_bus WHERE stato = 'in_attesa'`);
-    console.log(`🔎 [DEBUG DUPLICAZIONE] Richieste totali in stato 'in_attesa' prima del clustering: ${reqInAttesaIniziali.length}`, reqInAttesaIniziali);
+    console.log(`🔎 [DEBUG DUPLICAZIONE] Richieste totali in stato 'in_attesa' prima del clustering: ${reqInAttesaIniziali.length}`);
     console.log(`📊 [WORKER] Clusters base grezzi trovati dalla query: ${clustersBase.length}`);
 
     const clusterMap = new Map();
@@ -56,7 +55,7 @@ export async function processaProposteDinamiche() {
       });
     });
 
-    // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA (vincolata alla stessa fascia di percorrenza)
+    // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA
     console.log('🔗 [WORKER] Fase 1B: Avvio chiusura transitiva multi-tratta...');
     let addedNew = true;
     let iterazioneTransitiva = 0;
@@ -91,7 +90,6 @@ export async function processaProposteDinamiche() {
                   is_composta: true
                 });
                 addedNew = true;
-                console.log(`🔗 [WORKER-ITER:${iterazioneTransitiva}] Tratta transitiva [${t1.fascia_percorrenza}] generata: ${startNode} -> ${endNode} (Posti: ${postiComplessivi})`);
               }
             }
           }
@@ -131,26 +129,43 @@ export async function processaProposteDinamiche() {
       const endAssoluto = clusterFinale.end_node_id;
 
       const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
-
-      console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
-      console.log(`    Asse Principale Candidato: Node ${startAssoluto} -> Node ${endAssoluto}`);
-      console.log(`    Nodi coinvolti ordinati:`, nodiOrdinati);
-
-      // 🔍 VERIFICA DI COMPATIBILITÀ CON UNA DIRETTRICE ESISTENTE
-      const { rows: esistenti } = await client.query(`
-        SELECT id, start_node_id, end_node_id, stato
-        FROM direttrici_virtuali
-        WHERE partenza_prevista = $1
-          AND tipo_servizio = $2
-          AND stato IN ('in_formazione', 'attivo')
-        ORDER BY id ASC
-        LIMIT 1
-      `, [info.slot_orario, `STANDARD_${info.fascia_percorrenza}`]);
-
-      let direttriceId;
-
       const minNodoCorrente = nodiOrdinati[0];
       const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
+
+      // VERIFICA DI COMPATIBILITÀ BASATA SULL'ORARIO DI TRANSITO DAL NODO
+      const { rows: esistenti } = await client.query(`
+        WITH segmenti_cumulativi AS (
+          SELECT 
+            dv.id as direttrice_id,
+            dv.partenza_prevista,
+            s.start_node_id,
+            s.end_node_id,
+            s.ordine_sequenziale,
+            COALESCE(s.tempo_stimato, 0) as tempo_stimato,
+            dv.partenza_prevista + (
+              SUM(COALESCE(s.tempo_stimato, 0)) OVER (
+                PARTITION BY dv.id 
+                ORDER BY s.ordine_sequenziale 
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+              ) - COALESCE(s.tempo_stimato, 0)
+            ) * INTERVAL '1 minute' as orario_transito_nodo
+          FROM direttrici_virtuali dv
+          JOIN segmenti s ON s.direttrice_id = dv.id
+          WHERE dv.tipo_servizio = $2
+            AND dv.stato IN ('in_formazione', 'attivo')
+        )
+        SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato
+        FROM direttrici_virtuali dv
+        JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
+        WHERE dv.tipo_servizio = $2
+          AND dv.stato IN ('in_formazione', 'attivo')
+          AND (sc.start_node_id = $1 OR sc.end_node_id = $1)
+          AND ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) <= 2400
+        ORDER BY dv.id ASC
+        LIMIT 1
+      `, [minNodoCorrente, `STANDARD_${info.fascia_percorrenza}`, info.slot_orario]);
+
+      let direttriceId;
 
       if (esistenti.length > 0) {
         const dirEsistente = esistenti[0];
@@ -164,8 +179,6 @@ export async function processaProposteDinamiche() {
           SET start_node_id = $1, end_node_id = $2
           WHERE id = $3
         `, [nuovoStart, nuovoEnd, direttriceId]);
-
-        console.log(`    ♻️ Riusata direttrice esistente ID: ${direttriceId} ed estesi i confini a: ${nuovoStart} -> ${nuovoEnd}`);
       } else {
         const { rows: dir } = await client.query(`
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
@@ -174,7 +187,6 @@ export async function processaProposteDinamiche() {
         `, [info.slot_orario, minNodoCorrente, maxNodoCorrente, `STANDARD_${info.fascia_percorrenza}`]);
 
         direttriceId = dir[0].id;
-        console.log(`    ✅ Nuova direttrice creata con ID: ${direttriceId} (Confini: ${minNodoCorrente} -> ${maxNodoCorrente})`);
       }
 
       const segmentiDaCreare = new Map();
@@ -192,7 +204,7 @@ export async function processaProposteDinamiche() {
         }
 
         if (!c.is_composta) {
-          const updateRes = await client.query(`
+          await client.query(`
             UPDATE richieste_pop_bus
             SET direttrice_id = $1, stato = 'in_lavorazione'
             WHERE stato = 'in_attesa'
@@ -201,8 +213,6 @@ export async function processaProposteDinamiche() {
               AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM start_datetime) / 3600) * 3600) = $4
               AND direttrice_id IS NULL
           `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
-          
-          console.log(`    🔍 [DEBUG DUPLICAZIONE] Agganciate ${updateRes.rowCount} richieste alla direttrice ${direttriceId} per tratta ${c.start_node_id}->${c.end_node_id}`);
         }
       }
 
@@ -229,7 +239,6 @@ export async function processaProposteDinamiche() {
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
-          console.log(`    ℹ️ Segmento 'in_attesa' esistente trovato: ${sNode} -> ${eNode} (ID: ${segmentoId})`);
           await client.query(`
             UPDATE segmenti 
             SET posti_occupati = GREATEST(posti_occupati, $1) 
@@ -242,7 +251,6 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Creato nuovo segmento 'in_attesa' (parallelo/aggiuntivo): ${sNode} -> ${eNode} (ID: ${segmentoId}) con posti: ${postiTotaliSub}`);
         }
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -277,32 +285,29 @@ export async function processaProposteDinamiche() {
       }
     }
 
-    console.log(`📋 [WORKER] ID segmenti totali coinvolti da valutare:`, segmentiCoinvoltiIds);
-
     if (segmentiCoinvoltiIds.length === 0) {
-      console.log('ℹ️ [WORKER] Nessun segmento da valutare in questa esecuzione.');
       await client.query('COMMIT');
       return;
     }
 
-    // 2. CALCOLO ATTIVAZIONE ECONOMICA & VALIDAZIONE CAPIENZA FLOTTA
-    console.log('💰 [WORKER] Fase 2: Calcolo economico gerarchico e verifica capienza flotta...');
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
           s.id as segmento_id,
           s.direttrice_id,
+          s.start_node_id,
+          s.end_node_id,
           s.tempo_stimato,
           s.ordine_sequenziale,
           s.posti_occupati,
-          COALESCE(v.posti_totali, 50) as capacita_veicolo,
           (
             ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
-          -- 💰 RICAVO GERARCHICO: Include richieste dirette sul segmento + quelle dei sotto-segmenti inclusi
           (
             SELECT COALESCE(SUM(r_sub.prezzo), 0)
             FROM richieste_pop_bus r_sub
@@ -319,28 +324,48 @@ export async function processaProposteDinamiche() {
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
         JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
         JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-        LEFT JOIN veicolo v ON dv.veicolo_id = v.id
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
       ),
-      min_soglia_pool AS (
-        SELECT rs.segmento_id, MIN(t.euro_km) as min_euro_km
+      veicoli_disponibili_pool AS (
+        SELECT 
+          rs.segmento_id,
+          COALESCE(v.posti_totali, 50) as capacita_veicolo,
+          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
         FROM ricavi_segmento rs
+        JOIN nodi_direttrice n_partenza ON n_partenza.id = rs.start_node_id
+        JOIN veicolo v ON true
+        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
         CROSS JOIN tariffe t
-        WHERE t.euro_km > 0
-        GROUP BY rs.segmento_id
+        WHERE v.id NOT IN (
+          SELECT veicolo_id FROM direttrici_virtuali 
+          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+        )
+      ),
+      parametri_pool_ottimali AS (
+        SELECT 
+          segmento_id,
+          MIN(euro_km_veicolo) as min_euro_km,
+          MAX(capacita_veicolo) as capacita_veicolo
+        FROM veicoli_disponibili_pool
+        GROUP BY segmento_id
       ),
       costo_attivazione AS (
-        SELECT rs.*, COALESCE(m.min_euro_km, 0.50) as euro_km_selezionato
+        SELECT 
+          rs.*, 
+          COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
+          COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
         FROM ricavi_segmento rs
-        LEFT JOIN min_soglia_pool m ON rs.segmento_id = m.segmento_id
+        LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
       ),
       calcolo_orari AS (
         SELECT 
           ca.segmento_id, 
           ca.direttrice_id,
+          ca.start_node_id,
+          ca.end_node_id,
           d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
             PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
           ) * INTERVAL '1 minute') as calculated_start,
@@ -352,22 +377,70 @@ export async function processaProposteDinamiche() {
         JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
         JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
       ),
+      segmenti_filtrati AS (
+        SELECT co.*
+        FROM calcolo_orari co
+        WHERE co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
+          AND co.posti_occupati <= co.capacita_veicolo
+          AND NOT EXISTS (
+            SELECT 1 
+            FROM calcolo_orari padre
+            WHERE padre.direttrice_id = co.direttrice_id
+              AND (padre.end_node_id - padre.start_node_id) > (co.end_node_id - co.start_node_id)
+              AND padre.start_node_id <= co.start_node_id
+              AND padre.end_node_id >= co.end_node_id
+              AND padre.ricavo_attuale >= COALESCE(padre.soglia_attivazione_minima, 0)
+              AND padre.posti_occupati <= padre.capacita_veicolo
+          )
+      ),
       update_segmenti AS (
         UPDATE segmenti s
-        SET start_datetime = co.calculated_start, stato = 'attivo', ricavo_stimato = co.ricavo_attuale
-        FROM calcolo_orari co
-        WHERE s.id = co.segmento_id
-          AND co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
-          AND co.posti_occupati <= co.capacita_veicolo
-        RETURNING s.id, s.direttrice_id, s.stato
+        SET start_datetime = sf.calculated_start, stato = 'attivo', ricavo_stimato = sf.ricavo_attuale
+        FROM segmenti_filtrati sf
+        WHERE s.id = sf.segmento_id
+        RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id
       )
-      SELECT id, direttrice_id, stato FROM update_segmenti
+      SELECT id, direttrice_id, stato, start_node_id FROM update_segmenti
     `, [segmentiCoinvoltiIds]);
 
-    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`, segmentiAttivati);
+    console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
-    // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
-    const upgradeRes = await client.query(`
+    // 🚗 2B. ASSEGNAZIONE DEL VEICOLO BASATA SUL NODO DI PARTENZA DEL SEGMENTO
+    for (const seg of segmentiAttivati) {
+      const { rows: dirCheck } = await client.query(
+        `SELECT veicolo_id FROM direttrici_virtuali WHERE id = $1`,
+        [seg.direttrice_id]
+      );
+
+      if (dirCheck.length > 0 && !dirCheck[0].veicolo_id) {
+        const { rows: veicoliLiberi } = await client.query(`
+          SELECT v.id 
+          FROM veicolo v
+          JOIN disponibilita_veicolo d ON v.id = d.veicolo_id
+          CROSS JOIN nodi_direttrice n_partenza
+          WHERE n_partenza.id = $1
+            AND v.id NOT IN (
+              SELECT veicolo_id FROM direttrici_virtuali 
+              WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+            )
+          ORDER BY ST_Distance(COALESCE(d.coord, n_partenza.posizione)::geography, n_partenza.posizione::geography) ASC
+          LIMIT 1
+        `, [seg.start_node_id]);
+
+        if (veicoliLiberi.length > 0) {
+          const veicoloIdAssegnato = veicoliLiberi[0].id;
+          await client.query(`
+            UPDATE direttrici_virtuali 
+            SET veicolo_id = $1, stato = 'attivo'
+            WHERE id = $2
+          `, [veicoloIdAssegnato, seg.direttrice_id]);
+          console.log(`🚌 [WORKER] Assegnato veicolo ID ${veicoloIdAssegnato} alla direttrice ${seg.direttrice_id}`);
+        }
+      }
+    }
+
+    // 3. AUTO-UPGRADE
+    await client.query(`
       UPDATE richieste_pop_bus r
       SET direttrice_id = d_target.id
       FROM direttrici_virtuali d_source
@@ -377,13 +450,9 @@ export async function processaProposteDinamiche() {
         AND d_source.stato = 'in_formazione'
         AND d_target.stato = 'attivo'
         AND d_source.id <> d_target.id
-      RETURNING r.id, r.direttrice_id as nuova_direttrice_id
     `);
-    
-    console.log(`🔄 [DEBUG DUPLICAZIONE] Auto-upgrade eseguito su ${upgradeRes.rowCount} richieste:`, upgradeRes.rows);
 
-    // 4. DELEGATED DISPATCH (Passaggio dei segmenti attivati)
-    console.log(`📤 [WORKER] Avvio dispatch delegato per i segmenti attivi...`);
+    // 4. DELEGATED DISPATCH
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);
 
     await client.query('COMMIT');

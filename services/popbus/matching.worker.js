@@ -366,31 +366,6 @@ export async function processaProposteDinamiche() {
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`, segmentiAttivati);
 
-    // 🟢 FASE 2.5: GESTIONE DELLE MISSIONI DI RITORNO DEI SOTTO-SEGMENTI
-    if (segmentiAttivati.length > 0) {
-      console.log('🔄 [WORKER] Fase 2.5: Marcatura come assorbite delle missioni di ritorno dei sotto-segmenti...');
-
-      for (const segAttivo of segmentiAttivati) {
-        await client.query(`
-          UPDATE missioni_ritorno mr_sub
-          SET stato = 'assorbita'
-          FROM segmenti s_madre
-          JOIN segmenti s_sub ON s_sub.direttrice_id = s_madre.direttrice_id
-          JOIN nodi_direttrice n_ms ON s_madre.start_node_id = n_ms.id
-          JOIN nodi_direttrice n_me ON s_madre.end_node_id = n_me.id
-          JOIN nodi_direttrice n_ss ON s_sub.start_node_id = n_ss.id
-          JOIN nodi_direttrice n_se ON s_sub.end_node_id = n_se.id
-          WHERE s_madre.id = $1
-            AND mr_sub.segmento_id = s_sub.id
-            AND n_ss.id >= n_ms.id
-            AND n_se.id <= n_me.id
-            AND s_sub.id <> s_madre.id
-            AND mr_sub.stato = 'in_attesa'
-        `, [segAttivo.id]);
-      }
-      console.log('✅ [WORKER] Fase 2.5 completata.');
-    }
-
     // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
     const upgradeRes = await client.query(`
       UPDATE richieste_pop_bus r

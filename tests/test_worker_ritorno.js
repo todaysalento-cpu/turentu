@@ -4,8 +4,8 @@ import { setupSocket } from '../socket.js';
 import { processaProposteDinamiche } from '../services/popbus/matching.worker.js';
 import { pool } from '../db/db.js';
 
-test('Test di integrazione: gestione segmenti contenuti e sovrapposti', async () => {
-  console.log('🏁 [TEST INTEGRATION] Avvio test segmenti contenuti/sovrapposti...');
+test('Test di integrazione: separazione per fascia e gestione richieste ampie/contenute', async () => {
+  console.log('🏁 [TEST INTEGRATION] Avvio test separazione fasce e segmenti...');
 
   try {
     const mockIo = { to: () => ({ emit: () => {} }), use: () => {}, on: () => {} };
@@ -15,7 +15,7 @@ test('Test di integrazione: gestione segmenti contenuti e sovrapposti', async ()
   const client = await pool.connect();
   
   try {
-    // 1. Inseriamo nodi sequenziali (301 -> 302 -> 303 -> 304)
+    // 1. Inseriamo nodi sequenziali (301 -> 302 -> 303 -> 304) con distanza idonea a testare le fasce
     await client.query(`
       INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
       (301, ST_SetSRID(ST_MakePoint(12.40, 41.80), 4326), 0),
@@ -48,8 +48,8 @@ test('Test di integrazione: gestione segmenti contenuti e sovrapposti', async ()
 
     const direttriceIdFase1 = segmentiFase1[0].direttrice_id;
 
-    // 3. Inseriamo una seconda richiesta più ampia che CONTIENE la prima: 301 -> 304 (richiesta da 4 posti)
-    console.log('📥 [TEST INTEGRATION] Inserimento richiesta contenitrice più ampia (301->304)...');
+    // 3. Inseriamo una seconda richiesta più ampia: 301 -> 304 (richiesta da 4 posti)
+    console.log('📥 [TEST INTEGRATION] Inserimento richiesta più ampia (301->304)...');
     await client.query(`
       INSERT INTO richieste_pop_bus (id, start_node_id, end_node_id, posti_richiesti, start_datetime, stato, prezzo)
       VALUES (99921, 301, 304, 4, '2026-06-01 11:00:00+02', 'in_attesa', 25.00)
@@ -59,7 +59,7 @@ test('Test di integrazione: gestione segmenti contenuti e sovrapposti', async ()
     // Eseguiamo nuovamente il worker
     await processaProposteDinamiche();
 
-    // 4. Verifichiamo come il sistema gestisce la sovrapposizione/contenimento
+    // 4. Verifichiamo che il sistema mantenga la separazione corretta creando due direttrici distinte
     const { rows: tuttiSegmenti } = await client.query(`
       SELECT id, direttrice_id, start_node_id, end_node_id, stato, posti_occupati 
       FROM segmenti 
@@ -69,18 +69,30 @@ test('Test di integrazione: gestione segmenti contenuti e sovrapposti', async ()
 
     console.log('📊 [TEST INTEGRATION] Segmenti dopo la richiesta contenitrice:', tuttiSegmenti);
 
-    // Asserzioni strutturali per verificare la presenza dei sotto-segmenti e del segmento madre esteso
-    assert.ok(tuttiSegmenti.length >= 2, 'Devono essere presenti più segmenti per coprire la sovrapposizione');
+    assert.strictEqual(tuttiSegmenti.length, 2, 'Devono essere presenti entrambi i segmenti separati');
     
     const { rows: direttriciFinali } = await client.query(`
-      SELECT id, start_node_id, end_node_id, stato FROM direttrici_virtuali WHERE id = $1
-    `, [direttriceIdFase1]);
+      SELECT id, start_node_id, end_node_id, tipo_servizio, stato 
+      FROM direttrici_virtuali 
+      WHERE partenza_prevista = '2026-06-01 11:00:00+02'
+      ORDER BY id ASC
+    `);
 
-    assert.ok(direttriciFinali.length > 0, 'La direttrice principale deve esistere');
-    assert.strictEqual(direttriciFinali[0].start_node_id, 301, 'La direttrice deve estendere il nodo iniziale a 301');
-    assert.strictEqual(direttriciFinali[0].end_node_id, 304, 'La direttrice deve estendere il nodo finale a 304');
+    console.log('📊 [TEST INTEGRATION] Direttrici presenti dopo la seconda richiesta:', direttriciFinali);
 
-    console.log('✅ [TEST INTEGRATION] Test sui segmenti contenuti completato con successo!');
+    assert.ok(direttriciFinali.length >= 2, 'Devono essere presenti almeno due direttrici distinte per rispettare la separazione delle fasce/tratte');
+    
+    const direttriceOriginale = direttriciFinali.find(d => d.id === direttriceIdFase1);
+    assert.ok(direttriceOriginale, 'La direttrice originale deve continuare a esistere');
+    assert.strictEqual(direttriceOriginale.start_node_id, 302, 'La direttrice originale mantiene il suo start');
+    assert.strictEqual(direttriceOriginale.end_node_id, 303, 'La direttrice originale mantiene il suo end');
+
+    const nuovaDirettrice = direttriciFinali.find(d => d.id !== direttriceIdFase1);
+    assert.ok(nuovaDirettrice, 'Deve essere stata creata una nuova direttrice per la richiesta più ampia');
+    assert.strictEqual(nuovaDirettrice.start_node_id, 301, 'La nuova direttrice parte da 301');
+    assert.strictEqual(nuovaDirettrice.end_node_id, 304, 'La nuova direttrice arriva a 304');
+
+    console.log('✅ [TEST INTEGRATION] Test di separazione corretto completato con successo!');
 
   } catch (error) {
     console.error('❌ [TEST INTEGRATION ERROR]', error);

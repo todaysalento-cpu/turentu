@@ -19,7 +19,50 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
         throw new Error(`Direttrice virtuale con ID ${direttriceId} non trovata nel database.`);
     }
 
-    // 2. Ricerca sicura del veicolo (tramite l'autista loggato o dai segmenti attivi della tratta)
+    // 2. Recupero delle richieste PopBus collegate a questa direttrice
+    const reqsRes = await client.query(`
+        SELECT * FROM richieste_pop_bus WHERE direttrice_id = $1`, [direttriceId]
+    );
+    const richieste = reqsRes.rows;
+
+    // Calcolo posti prenotati totali
+    const postiPrenotatiTotali = richieste.reduce((acc, r) => acc + (Number(r.posti_richiesti) || 1), 0);
+
+    // Determina indirizzi e coordinate
+    let origineAddress = 'N/D';
+    let destinazioneAddress = 'N/D';
+    const coordOrig = { lat: Number(d.origine_lat || 0), lon: Number(d.origine_lon || 0) };
+    const coordDest = { lat: Number(d.destinazione_lat || 0), lon: Number(d.destinazione_lon || 0) };
+
+    if (richieste.length > 0) {
+        if (richieste[0].origine_address) origineAddress = richieste[0].origine_address;
+        if (richieste[richieste.length - 1].destinazione_address) destinazioneAddress = richieste[richieste.length - 1].destinazione_address;
+    }
+
+    // Costruisci fermate_pianificate
+    const fermatePianificate = [];
+    for (const r of richieste) {
+        if (r.origine) {
+            fermatePianificate.push({
+                tipo: 'ritiro',
+                cliente_id: r.cliente_id,
+                indirizzo: r.origine_address || 'N/D',
+                lat: coordOrig.lat,
+                lon: coordOrig.lon
+            });
+        }
+        if (r.destinazione) {
+            fermatePianificate.push({
+                tipo: 'rilascio',
+                cliente_id: r.cliente_id,
+                indirizzo: r.destinazione_address || 'N/D',
+                lat: coordDest.lat,
+                lon: coordDest.lon
+            });
+        }
+    }
+
+    // 3. Ricerca sicura del veicolo
     let veicoloIdFinal = null;
     let postiTotaliFinal = 4; // Fallback di sicurezza
 
@@ -32,7 +75,6 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
         veicoloIdFinal = veicoloRes.rows[0].id;
         postiTotaliFinal = veicoloRes.rows[0].posti_totali || 4;
     } else {
-        // Fallback sui segmenti attivi della direttrice
         const segVeicoloRes = await client.query(`
             SELECT v.id, v.posti_totali 
             FROM segmenti s
@@ -50,29 +92,62 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
         throw new Error(`Impossibile determinare il veicolo per la creazione della corsa PopBus (Direttrice ${direttriceId}, Autista ${autistaId}).`);
     }
 
-    // 3. Inserimento della corsa
+    const postiDisponibiliFinal = Math.max(0, postiTotaliFinal - postiPrenotatiTotali);
+    let distanzaKm = Number(d.distanza_totale_km || 0);
+
+    // Generazione geometria e distanza se mancanti
+    let polylineString = '';
+    let pathGeohashes = [];
+    try {
+        if (coordOrig.lat && coordOrig.lon && coordDest.lat && coordDest.lon) {
+            const routeData = await getRouteGeometry(coordOrig, coordDest);
+            polylineString = routeData?.polyline || '';
+            if (routeData?.distanzaKm && distanzaKm === 0) {
+                distanzaKm = routeData.distanzaKm;
+            }
+            if (polylineString) {
+                const coords = polyline.decode(polylineString);
+                const step = Math.max(1, Math.floor(coords.length / 10));
+                pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
+            }
+        }
+    } catch (e) {
+        console.warn(`⚠ [POPBUS ROUTE WARNING] Impossibile generare geometria per direttrice ${direttriceId}:`, e);
+    }
+
+    // 4. Inserimento della corsa con tutti i campi valorizzati
     const res = await client.query(`
         INSERT INTO corse (
-            veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili,
-            origine, destinazione
-        ) VALUES ($1, 'riempimento', 'prenotabile', $2, $3, $3, 
-            ST_SetSRID(ST_MakePoint($4,$5),4326), 
-            ST_SetSRID(ST_MakePoint($6,$7),4326))
-        RETURNING *`, 
+            veicolo_id, tipo_corsa, stato, start_datetime, posti_totali, posti_disponibili, posti_prenotati,
+            origine, destinazione, origine_address, destinazione_address, distanza,
+            fermate_pianificate, percorso_polyline, path_geohashes, created_at
+        ) VALUES ($1, 'riempimento', 'prenotabile', $2, $3, $4, $5,
+            ST_SetSRID(ST_MakePoint($6,$7),4326), 
+            ST_SetSRID(ST_MakePoint($8,$9),4326),
+            $10, $11, $12, $13::jsonb, $14, $15, NOW()
+        ) RETURNING *`, 
         [
-            veicoloIdFinal, 
-            d.partenza_prevista, 
-            postiTotaliFinal, 
-            d.origine_lon ?? 0, 
-            d.origine_lat ?? 0, 
-            d.destinazione_lon ?? 0, 
-            d.destinazione_lat ?? 0
+            veicoloIdFinal,
+            d.partenza_prevista,
+            postiTotaliFinal,
+            postiDisponibiliFinal,
+            postiPrenotatiTotali,
+            coordOrig.lon,
+            coordOrig.lat,
+            coordDest.lon,
+            coordDest.lat,
+            origineAddress,
+            destinazioneAddress,
+            distanzaKm,
+            JSON.stringify(fermatePianificate),
+            polylineString,
+            pathGeohashes
         ]
     );
 
     const corsa = res.rows[0];
     
-    // 4. Aggiornamento delle richieste PopBus collegate (usando 'convertita' come richiesto dal check_stato_valido)
+    // 5. Aggiornamento delle richieste PopBus collegate
     await client.query(`
         UPDATE richieste_pop_bus 
         SET stato = 'convertita', corsa_id = $1 
@@ -239,7 +314,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
     upsertCorsa(corsa);
 
     if (localClient) await client.query('COMMIT');
-    return corsa; // Restituisce direttamente l'oggetto corsa
+    return corsa;
 
   } catch (err) {
     if (localClient) await client.query('ROLLBACK');

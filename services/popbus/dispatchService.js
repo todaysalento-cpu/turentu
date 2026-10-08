@@ -5,7 +5,9 @@ import { pool } from '../../db/db.js';
 export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
   console.log(`🚚 [DISPATCH DEBUG] Avvio processo di dispatch per ${tratteAttivate.length} segmenti attivati.`);
 
-  // Estrae gli ID unici delle direttrici da processare
+  if (!tratteAttivate || tratteAttivate.length === 0) return 0;
+
+  // Estrae gli ID unici delle direttrici dai segmenti attivati
   const activeDirIds = [...new Map(tratteAttivate.map(t => [t.direttrice_id, t])).values()];
   console.log(`🚚 [DISPATCH DEBUG] Direttrici uniche unificate da dispatchare:`, activeDirIds.map(t => t.direttrice_id));
 
@@ -13,24 +15,27 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
     console.log(`\n----------------------------------------`);
     console.log(`🚚 [DISPATCH DEBUG] Elaborazione Direttrice ID: ${t.direttrice_id}`);
 
-    // 1. Aggiornamento stato direttrice
+    // 1. Aggiornamento stato della direttrice (o dei segmenti)
     await client.query(
       `UPDATE direttrici_virtuali SET stato = 'in_attesa_autista' WHERE id = $1`, 
       [t.direttrice_id]
     );
     console.log(`🚚 [DISPATCH DEBUG] Stato direttrice ${t.direttrice_id} aggiornato a 'in_attesa_autista'.`);
     
-    // 2. Recupero metadati (servizio e posti occupati)
+    // 2. Recupero metadati (servizio e posti occupati del segmento/direttrice)
     const { rows: meta } = await client.query(`
-      SELECT d.tipo_servizio, s.posti_occupati, d.start_node_id, d.end_node_id, d.partenza_prevista
+      SELECT d.tipo_servizio, s.posti_occupati, s.id as segmento_id, d.start_node_id, d.end_node_id, d.partenza_prevista
       FROM direttrici_virtuali d
       JOIN segmenti s ON s.direttrice_id = d.id
-      WHERE d.id = $1
+      WHERE d.id = $1 AND s.stato = 'attivo'
+      LIMIT 1
     `, [t.direttrice_id]);
     
     console.log(`🚚 [DISPATCH DEBUG] Metadati completi recuperati per direttrice ${t.direttrice_id}:`, meta[0] || 'Nessun metadato trovato');
 
-    // --- 🔍 DIAGNOSTICA INTERNA PER CAPIRE PERCHÉ FALLISCE IL MATCHING ---
+    if (meta.length === 0) continue;
+
+    // --- 🔍 DIAGNOSTICA INTERNA ---
     console.log(`🔎 [DISPATCH DIAGNOSTIC] Esecuzione query di ispezione flotte/autisti disponibili nel DB...`);
     try {
       const { rows: testTotaliAutisti } = await client.query(`SELECT COUNT(*) as tot FROM veicolo`);
@@ -51,17 +56,18 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
 
     console.log(`🚚 [DISPATCH DEBUG] Trovati ${destinatari.length} destinatari/autisti idonei per il dispatch.`);
 
-    // 4. Salvataggio nel DB (offerte_autisti) e invio notifiche via Socket.io
     if (destinatari.length === 0) {
       console.warn(`⚠️ [DISPATCH WARNING] Nessun destinatario trovato a cui inviare la proposta per la direttrice ${t.direttrice_id}.`);
     }
 
+    // 4. Salvataggio nel DB (offerte_autisti) e invio notifiche via Socket.io
     for (const dest of destinatari) {
       if (dest.driver_id && dest.veicolo_id) {
         
         console.log(`💾 [DISPATCH] Tentativo di inserimento offerta per autista ID: ${dest.driver_id} (Veicolo: ${dest.veicolo_id}) sulla direttrice ${t.direttrice_id}`);
 
-        // Salvataggio dell'offerta nel DB associata all'autista (autista_id)
+        // Salvataggio dell'offerta nel DB. Se la tua tabella 'offerte_autisti' ha una colonna 'segmento_id', 
+        // puoi includerla (altrimenti mantieni solo direttrice_id e autista_id).
         const offertaRes = await client.query(`
           INSERT INTO offerte_autisti (direttrice_id, autista_id, stato, expires_at, created_at)
           VALUES ($1, $2, 'inviata', NOW() + INTERVAL '10 minutes', NOW())
@@ -71,13 +77,12 @@ export async function dispatchDirettriciAttive(tratteAttivate, client = pool) {
         const offertaId = offertaRes.rows[0].id;
         console.log(`💾 [DISPATCH] ✅ Offerta_autisti creata con successo - ID: ${offertaId} associata all'autista ${dest.driver_id}`);
 
-        // Usiamo 'autista_' per allinearci a socket.js (es. autista_2)
         const roomName = `autista_${dest.driver_id}`;
         
-        // Payload completo con l'ID dell'offerta salvata
         const payloadProposta = {
-          id: offertaId, // ID fondamentale per accettare l'offerta
+          id: offertaId, 
           direttrice_id: t.direttrice_id,
+          segmento_id: meta[0].segmento_id,
           veicolo_id: dest.veicolo_id,
           classe: meta[0]?.tipo_servizio || 'urbano',
           posti_richiesti: meta[0]?.posti_occupati || 0

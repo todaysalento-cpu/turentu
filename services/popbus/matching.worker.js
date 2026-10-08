@@ -3,7 +3,7 @@ import { dispatchDirettriciAttive } from './dispatchService.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
-  console.log('🔄 [WORKER] Avvio cluster pop-bus con separazione per sola fascia di percorrenza (bassa, media, alta)...');
+  console.log('🔄 [WORKER] Avvio cluster pop-bus con compatibilità spaziale e temporale e ricavi gerarchici...');
 
   try {
     await client.query('BEGIN');
@@ -133,19 +133,49 @@ export async function processaProposteDinamiche() {
       const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
 
       console.log(`\n--- Elaborazione Direttrice [Fascia: ${info.fascia_percorrenza.toUpperCase()}] per Slot: ${mapKey} ---`);
-      console.log(`    Asse Principale: Node ${startAssoluto} -> Node ${endAssoluto}`);
+      console.log(`    Asse Principale Candidato: Node ${startAssoluto} -> Node ${endAssoluto}`);
       console.log(`    Nodi coinvolti ordinati:`, nodiOrdinati);
 
-      const { rows: dir } = await client.query(`
-        INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
-        VALUES ('in_formazione', $1, $2, $3, $4)
-        ON CONFLICT (start_node_id, end_node_id, partenza_prevista)
-        DO UPDATE SET tipo_servizio = EXCLUDED.tipo_servizio
-        RETURNING id
-      `, [info.slot_orario, startAssoluto, endAssoluto, `STANDARD_${info.fascia_percorrenza}`]);
+      // 🔍 VERIFICA DI COMPATIBILITÀ CON UNA DIRETTRICE ESISTENTE
+      const { rows: esistenti } = await client.query(`
+        SELECT id, start_node_id, end_node_id, stato
+        FROM direttrici_virtuali
+        WHERE partenza_prevista = $1
+          AND tipo_servizio = $2
+          AND stato IN ('in_formazione', 'attivo')
+        ORDER BY id ASC
+        LIMIT 1
+      `, [info.slot_orario, `STANDARD_${info.fascia_percorrenza}`]);
 
-      const direttriceId = dir[0].id;
-      console.log(`    ✅ Direttrice creata/aggiornata con ID: ${direttriceId}`);
+      let direttriceId;
+
+      const minNodoCorrente = nodiOrdinati[0];
+      const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
+
+      if (esistenti.length > 0) {
+        const dirEsistente = esistenti[0];
+        direttriceId = dirEsistente.id;
+
+        const nuovoStart = Math.min(dirEsistente.start_node_id, minNodoCorrente);
+        const nuovoEnd = Math.max(dirEsistente.end_node_id, maxNodoCorrente);
+
+        await client.query(`
+          UPDATE direttrici_virtuali
+          SET start_node_id = $1, end_node_id = $2
+          WHERE id = $3
+        `, [nuovoStart, nuovoEnd, direttriceId]);
+
+        console.log(`    ♻️ Riusata direttrice esistente ID: ${direttriceId} ed estesi i confini a: ${nuovoStart} -> ${nuovoEnd}`);
+      } else {
+        const { rows: dir } = await client.query(`
+          INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
+          VALUES ('in_formazione', $1, $2, $3, $4)
+          RETURNING id
+        `, [info.slot_orario, minNodoCorrente, maxNodoCorrente, `STANDARD_${info.fascia_percorrenza}`]);
+
+        direttriceId = dir[0].id;
+        console.log(`    ✅ Nuova direttrice creata con ID: ${direttriceId} (Confini: ${minNodoCorrente} -> ${maxNodoCorrente})`);
+      }
 
       const segmentiDaCreare = new Map();
 
@@ -192,21 +222,19 @@ export async function processaProposteDinamiche() {
 
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 
-          WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
+          WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
           LIMIT 1
         `, [direttriceId, sNode, eNode]);
 
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
-          console.log(`    ℹ️ Segmento esistente trovato: ${sNode} -> ${eNode} (ID: ${segmentoId}, Stato: ${existingSeg[0].stato})`);
-          if (existingSeg[0].stato === 'in_attesa') {
-            await client.query(`
-              UPDATE segmenti 
-              SET posti_occupati = GREATEST(posti_occupati, $1) 
-              WHERE id = $2
-            `, [postiTotaliSub, segmentoId]);
-          }
+          console.log(`    ℹ️ Segmento 'in_attesa' esistente trovato: ${sNode} -> ${eNode} (ID: ${segmentoId})`);
+          await client.query(`
+            UPDATE segmenti 
+            SET posti_occupati = GREATEST(posti_occupati, $1) 
+            WHERE id = $2
+          `, [postiTotaliSub, segmentoId]);
         } else {
           const { rows: newSeg } = await client.query(`
             INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
@@ -214,7 +242,7 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
-          console.log(`    ✅ Creato segmento 'in_attesa': ${sNode} -> ${eNode} (ID: ${segmentoId}) con posti: ${postiTotaliSub}`);
+          console.log(`    ✅ Creato nuovo segmento 'in_attesa' (parallelo/aggiuntivo): ${sNode} -> ${eNode} (ID: ${segmentoId}) con posti: ${postiTotaliSub}`);
         }
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -258,24 +286,8 @@ export async function processaProposteDinamiche() {
     }
 
     // 2. CALCOLO ATTIVAZIONE ECONOMICA & VALIDAZIONE CAPIENZA FLOTTA
-    console.log('💰 [WORKER] Fase 2: Calcolo economico e verifica capienza flotta...');
+    console.log('💰 [WORKER] Fase 2: Calcolo economico gerarchico e verifica capienza flotta...');
 
-    const { rows: debugValoriGrezzi } = await client.query(`
-      SELECT 
-        s.id as segmento_id,
-        s.direttrice_id,
-        s.posti_occupati,
-        COALESCE(v.posti_totali, 50) as capacita_veicolo,
-        (ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as km_segmento
-      FROM segmenti s
-      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-      JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-      LEFT JOIN veicolo v ON dv.veicolo_id = v.id
-      WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
-    `, [segmentiCoinvoltiIds]);
-    console.log(`📊 [DEBUG ATTIVAZIONE] Parametri fisici dei segmenti in esame:`, debugValoriGrezzi);
-      
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -290,12 +302,18 @@ export async function processaProposteDinamiche() {
             COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
             COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
           ) as km_segmento,
-          -- 💰 RICAVO REALE BASATO SUL PREZZO DELLE RICHIESTE POP BUS
+          -- 💰 RICAVO GERARCHICO: Include richieste dirette sul segmento + quelle dei sotto-segmenti inclusi
           (
             SELECT COALESCE(SUM(r_sub.prezzo), 0)
             FROM richieste_pop_bus r_sub
+            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
+            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+            JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
+            JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start.id >= s_start.id
+              AND r_end.id <= s_end.id
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -342,39 +360,44 @@ export async function processaProposteDinamiche() {
           AND co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
           AND co.posti_occupati <= co.capacita_veicolo
         RETURNING s.id, s.direttrice_id, s.stato
-      ),
-      update_direttrici AS (
-        UPDATE direttrici_virtuali dv
-        SET stato = 'attivo'
-        FROM update_segmenti us
-        WHERE dv.id = us.direttrice_id AND dv.stato = 'in_formazione'
-        RETURNING dv.id
       )
       SELECT id, direttrice_id, stato FROM update_segmenti
     `, [segmentiCoinvoltiIds]);
 
-    const { rows: debugEsiti } = await client.query(`
-      SELECT 
-        s.id as segmento_id,
-        s.posti_occupati,
-        COALESCE(v.posti_totali, 50) as capacita_veicolo,
-        s.ricavo_stimato
-      FROM segmenti s
-      JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-      LEFT JOIN veicolo v ON dv.veicolo_id = v.id
-      WHERE s.id = ANY($1::int[])
-    `, [segmentiCoinvoltiIds]);
-    
-    console.log(`💡 [DEBUG ATTIVAZIONE] Esito controllo per ogni segmento valutato:`, debugEsiti);
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`, segmentiAttivati);
+
+    // 🟢 FASE 2.5: GESTIONE DELLE MISSIONI DI RITORNO DEI SOTTO-SEGMENTI
+    if (segmentiAttivati.length > 0) {
+      console.log('🔄 [WORKER] Fase 2.5: Marcatura come assorbite delle missioni di ritorno dei sotto-segmenti...');
+
+      for (const segAttivo of segmentiAttivati) {
+        await client.query(`
+          UPDATE missioni_ritorno mr_sub
+          SET stato = 'assorbita'
+          FROM segmenti s_madre
+          JOIN segmenti s_sub ON s_sub.direttrice_id = s_madre.direttrice_id
+          JOIN nodi_direttrice n_ms ON s_madre.start_node_id = n_ms.id
+          JOIN nodi_direttrice n_me ON s_madre.end_node_id = n_me.id
+          JOIN nodi_direttrice n_ss ON s_sub.start_node_id = n_ss.id
+          JOIN nodi_direttrice n_se ON s_sub.end_node_id = n_se.id
+          WHERE s_madre.id = $1
+            AND mr_sub.segmento_id = s_sub.id
+            AND n_ss.id >= n_ms.id
+            AND n_se.id <= n_me.id
+            AND s_sub.id <> s_madre.id
+            AND mr_sub.stato = 'in_attesa'
+        `, [segAttivo.id]);
+      }
+      console.log('✅ [WORKER] Fase 2.5 completata.');
+    }
 
     // 3. AUTO-UPGRADE (Spostamento richieste sulla direttrice attiva definitiva)
     const upgradeRes = await client.query(`
       UPDATE richieste_pop_bus r
       SET direttrice_id = d_target.id
       FROM direttrici_virtuali d_source
-      JOIN direttrici_virtuali d_target ON d_source.start_node_id = d_target.start_node_id
-          AND d_source.end_node_id = d_target.end_node_id
+      JOIN direttrici_virtuali d_target ON d_source.partenza_prevista = d_target.partenza_prevista
+          AND d_target.tipo_servizio = d_source.tipo_servizio
       WHERE r.direttrice_id = d_source.id
         AND d_source.stato = 'in_formazione'
         AND d_target.stato = 'attivo'
@@ -384,7 +407,7 @@ export async function processaProposteDinamiche() {
     
     console.log(`🔄 [DEBUG DUPLICAZIONE] Auto-upgrade eseguito su ${upgradeRes.rowCount} richieste:`, upgradeRes.rows);
 
-    // 4. DELEGATED DISPATCH
+    // 4. DELEGATED DISPATCH (Passaggio dei segmenti attivati)
     console.log(`📤 [WORKER] Avvio dispatch delegato per i segmenti attivi...`);
     const countAttive = await dispatchDirettriciAttive(segmentiAttivati, client);
 

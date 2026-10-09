@@ -318,7 +318,7 @@ export async function processaProposteDinamiche() {
 
     for (const segId of segmentiCoinvoltiIds) {
       const { rows: reqIncluse } = await client.query(`
-        SELECT r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id
+        SELECT DISTINCT ON (r.id) r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id
         FROM segmenti s
         JOIN richieste_pop_bus r ON r.direttrice_id = s.direttrice_id
         JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r.start_node_id

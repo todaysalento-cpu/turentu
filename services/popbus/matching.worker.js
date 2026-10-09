@@ -171,7 +171,6 @@ export async function processaProposteDinamiche() {
         const dirEsistente = esistenti[0];
         direttriceId = dirEsistente.id;
 
-        // CORRETTO: Uso dei nodi estremi ordinati anziché Math.min/max sugli ID grezzi
         const nuovoStart = nodiOrdinati[0];
         const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
 
@@ -214,15 +213,6 @@ export async function processaProposteDinamiche() {
               AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM start_datetime) / 3600) * 3600) = $4
               AND direttrice_id IS NULL
           `, [direttriceId, c.start_node_id, c.end_node_id, c.slot_orario]);
-        }
-      }
-
-      for (const c of info.clustersInclusi) {
-        const directKey = `${c.start_node_id}_${c.end_node_id}`;
-        if (!segmentiDaCreare.has(directKey)) {
-          segmentiDaCreare.set(directKey, c.posti_totali);
-        } else {
-          segmentiDaCreare.set(directKey, Math.max(segmentiDaCreare.get(directKey), c.posti_totali));
         }
       }
 

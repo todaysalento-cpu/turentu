@@ -306,6 +306,8 @@ export async function processaProposteDinamiche() {
           segmentiCoinvoltiIds.push(Number(segmentoId));
         }
 
+        const capolineaFinaleId = Number(nodiOrdinati[nodiOrdinati.length - 1]);
+
         await client.query(`
           INSERT INTO missioni_ritorno (
             segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
@@ -330,7 +332,7 @@ export async function processaProposteDinamiche() {
           DO UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
-        `, [segmentoId, direttriceId, eNode, nodiOrdinati[nodiOrdinati.length - 1], info.slot_orario, info.fascia_percorrenza]);
+        `, [Number(segmentoId), Number(direttriceId), Number(eNode), capolineaFinaleId, info.slot_orario, info.fascia_percorrenza]);
       }
     }
 

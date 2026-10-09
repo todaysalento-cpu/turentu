@@ -129,6 +129,8 @@ export async function processaProposteDinamiche() {
       const endAssoluto = clusterFinale.end_node_id;
 
       const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
+      console.log(`🗺️ [DEBUG SEQUENZA NODI] Slot: ${info.slot_orario}, Fascia: ${info.fascia_percorrenza} ➔ Nodi Ordinati Percorso: [${nodiOrdinati.join(' ➔ ')}]`);
+
       const minNodoCorrente = nodiOrdinati[0];
       const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
 
@@ -179,6 +181,7 @@ export async function processaProposteDinamiche() {
           SET start_node_id = $1, end_node_id = $2
           WHERE id = $3
         `, [nuovoStart, nuovoEnd, direttriceId]);
+        console.log(`🚌 [DIRETTRICE] Aggiornata esistente ID: ${direttriceId} con nuovi estremi [${nuovoStart} ➔ ${nuovoEnd}]`);
       } else {
         const { rows: dir } = await client.query(`
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
@@ -189,6 +192,7 @@ export async function processaProposteDinamiche() {
         `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], `STANDARD_${info.fascia_percorrenza}`]);
 
         direttriceId = dir[0].id;
+        console.log(`🚌 [DIRETTRICE] Creata nuova direttrice ID: ${direttriceId} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}]`);
       }
 
       const segmentiDaCreare = new Map();
@@ -222,6 +226,8 @@ export async function processaProposteDinamiche() {
       for (const [subKey, postiTotaliSub] of segmentiDaCreare.entries()) {
         const [sNode, eNode] = subKey.split('_').map(Number);
         ordineSeq++;
+
+        console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}, Posti accumulati: ${postiTotaliSub}`);
 
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 

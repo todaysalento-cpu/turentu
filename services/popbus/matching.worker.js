@@ -321,7 +321,10 @@ export async function processaProposteDinamiche() {
             segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
           )
           VALUES (
-            ${sIdNum}, ${dIdNum}, ${eNodeNum}, ${capolineaFinaleId}, 
+            ${sIdNum}, 
+            ${dIdNum}, 
+            ${eNodeNum}, 
+            ${capolineaFinaleId}, 
             ('${slotIso}'::timestamptz + ${intervalSql}), 
             'in_attesa',
             ${maxAttesaVal}

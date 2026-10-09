@@ -183,6 +183,8 @@ export async function processaProposteDinamiche() {
         const { rows: dir } = await client.query(`
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
           VALUES ('in_formazione', $1, $2, $3, $4)
+          ON CONFLICT (start_node_id, end_node_id, partenza_prevista) 
+          DO UPDATE SET stato = EXCLUDED.stato
           RETURNING id
         `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], `STANDARD_${info.fascia_percorrenza}`]);
 

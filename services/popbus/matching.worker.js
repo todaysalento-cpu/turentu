@@ -300,7 +300,6 @@ export async function processaProposteDinamiche() {
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
-          // Aggiorna anche il tempo stimato se la tratta è esistente ma ricalcolata
           await client.query(`UPDATE segmenti SET tempo_stimato = $1 WHERE id = $2`, [tempoStimatoMinuti, segmentoId]);
           console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         } else {
@@ -313,7 +312,7 @@ export async function processaProposteDinamiche() {
           console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         }
 
-        // Calcolo e aggiornamento dinamico della somma reale dei posti occupati sul segmento
+        // Calcolo posti occupati (mantenendo la copertura logica dei passeggeri a bordo)
         await client.query(`
           UPDATE segmenti s
           SET posti_occupati = (
@@ -373,30 +372,10 @@ export async function processaProposteDinamiche() {
       return;
     }
 
-    // INTERPOLAZIONE SICURA DELLA LISTA ID PER EVITARE L'ERRORE 42P18
     const idsListSql = segmentiCoinvoltiIds.join(',');
 
-    // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
-    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
-
-    for (const segId of segmentiCoinvoltiIds) {
-      const { rows: reqIncluse } = await client.query(`
-        SELECT DISTINCT ON (r.id) r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id
-        FROM segmenti s
-        JOIN richieste_pop_bus r ON r.direttrice_id = s.direttrice_id
-        JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r.start_node_id
-        JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r.end_node_id
-        WHERE s.id = $1
-          AND r.stato IN ('in_attesa', 'in_lavorazione')
-          AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-          AND r_end_seg.ordine_sequenziale <= (
-            SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-            WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r.end_node_id
-          )
-      `, [segId]);
-
-      console.log(`🔎 [DETTAGLIO RICAVI] Richieste incluse nel Segmento ID ${segId}:`, reqIncluse);
-    }
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA (Ristretto ai segmenti interamente inclusi)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti interamente inclusi...');
 
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
@@ -405,6 +384,7 @@ export async function processaProposteDinamiche() {
           s.direttrice_id,
           s.start_node_id,
           s.end_node_id,
+          s.ordine_sequenziale,
           s.posti_occupati,
           (
             ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
@@ -418,11 +398,9 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+              -- Condizione rigorosa: la richiesta deve ricadere INTERAMENTE all'interno del singolo segmento (ordine_sequenziale exact match o intervallo locale)
               AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-              )
+              AND r_end_seg.ordine_sequenziale <= s.ordine_sequenziale + 1
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -459,22 +437,7 @@ export async function processaProposteDinamiche() {
         rs.direttrice_id,
         rs.start_node_id,
         rs.end_node_id,
-        GREATEST(
-          rs.ricavo_attuale,
-          (
-            SELECT COALESCE(SUM(r_sub.prezzo), 0)
-            FROM richieste_pop_bus r_sub
-            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = rs.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = rs.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-            WHERE r_sub.direttrice_id = rs.direttrice_id
-              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start_seg.ordine_sequenziale >= (SELECT sub_s.ordine_sequenziale FROM segmenti sub_s WHERE sub_s.id = rs.segmento_id)
-              AND r_end_seg.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = rs.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-              )
-          )
-        ) as ricavo_attuale,
+        rs.ricavo_attuale,
         rs.km_segmento,
         COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
         (COALESCE(ppo.min_euro_km, 0.50) * rs.km_segmento) as soglia_attivazione_minima,
@@ -528,10 +491,7 @@ export async function processaProposteDinamiche() {
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
               AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-              )
+              AND r_end_seg.ordine_sequenziale <= s.ordine_sequenziale + 1
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -542,33 +502,12 @@ export async function processaProposteDinamiche() {
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
       ),
-      ricavi_gerarchici AS (
-        SELECT 
-          rs.*,
-          GREATEST(
-            rs.ricavo_attuale,
-            (
-              SELECT COALESCE(SUM(r_sub.prezzo), 0)
-              FROM richieste_pop_bus r_sub
-              JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = rs.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-              JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = rs.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-              WHERE r_sub.direttrice_id = rs.direttrice_id
-                AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-                AND r_start_seg.ordine_sequenziale >= rs.ordine_sequenziale
-                AND r_end_seg.ordine_sequenziale <= (
-                  SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                  WHERE sub_s.direttrice_id = rs.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-                )
-            )
-          ) as ricavo_aggregato
-        FROM ricavi_segmento rs
-      ),
       veicoli_disponibili_pool AS (
         SELECT 
           rs.segmento_id,
           COALESCE(v.posti_totali, 50) as capacita_veicolo,
           COALESCE(t.euro_km, 0.50) as euro_km_veicolo
-        FROM ricavi_gerarchici rs
+        FROM ricavi_segmento rs
         JOIN nodi_direttrice n_partenza ON n_partenza.id = rs.start_node_id
         JOIN veicolo v ON true
         JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
@@ -596,10 +535,10 @@ export async function processaProposteDinamiche() {
           rs.ordine_sequenziale,
           rs.posti_occupati,
           rs.km_segmento,
-          rs.ricavo_aggregato as ricavo_attuale,
+          rs.ricavo_attuale as ricavo_aggregato,
           COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
           COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
-        FROM ricavi_gerarchici rs
+        FROM ricavi_segmento rs
         LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
       ),
       calcolo_orari AS (
@@ -612,7 +551,7 @@ export async function processaProposteDinamiche() {
           d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
             PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
           ) * INTERVAL '1 minute') as calculated_start,
-          ca.ricavo_attuale,
+          ca.ricavo_aggregato as ricavo_attuale,
           ca.posti_occupati,
           ca.capacita_veicolo,
           (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima

@@ -205,8 +205,14 @@ export async function processaProposteDinamiche() {
       const segmentiDaCreare = new Map();
 
       for (const c of info.clustersInclusi) {
-        const idxStart = nodiOrdinati.indexOf(c.start_node_id);
-        const idxEnd = nodiOrdinati.indexOf(c.end_node_id);
+        const idx1 = nodiOrdinati.indexOf(c.start_node_id);
+        const idx2 = nodiOrdinati.indexOf(c.end_node_id);
+        
+        // CORRETTO: Gestisce correttamente sia l'andata che il ritorno/verso inverso
+        const idxStart = Math.min(idx1, idx2);
+        const idxEnd = Math.max(idx1, idx2);
+
+        console.log(`🔎 [CLUSTER PROCESSING] Tratta richiesta [${c.start_node_id} ➔ ${c.end_node_id}] ➔ Indici array: [${idxStart} ... ${idxEnd}]`);
 
         for (let i = idxStart; i < idxEnd; i++) {
           const sId = nodiOrdinati[i];
@@ -229,6 +235,8 @@ export async function processaProposteDinamiche() {
         }
       }
 
+      console.log(`📊 [SEGMENTI MAP] Trovati ${segmentiDaCreare.size} sotto-segmenti unici da creare/aggiornare per la direttrice ${direttriceId}`);
+
       let ordineSeq = 0;
       for (const [subKey, postiTotaliSub] of segmentiDaCreare.entries()) {
         const [sNode, eNode] = subKey.split('_').map(Number);
@@ -250,6 +258,7 @@ export async function processaProposteDinamiche() {
             SET posti_occupati = GREATEST(posti_occupati, $1) 
             WHERE id = $2
           `, [postiTotaliSub, segmentoId]);
+          console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId}`);
         } else {
           const { rows: newSeg } = await client.query(`
             INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
@@ -257,6 +266,7 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
+          console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId}`);
         }
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -292,6 +302,7 @@ export async function processaProposteDinamiche() {
     }
 
     if (segmentiCoinvoltiIds.length === 0) {
+      console.log('⚠️ [WORKER] Nessun segmento coinvolto in questo giro. Commit e fine.');
       await client.query('COMMIT');
       return;
     }
@@ -299,7 +310,6 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
-    // 🔍 [DIAGNOSTICA ESTESA] Estrazione, calcolo e log dettagliato per ogni parametro della soglia di attivazione
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 

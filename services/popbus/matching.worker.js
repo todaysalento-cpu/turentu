@@ -293,7 +293,7 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
-    // 🔍 [DIAGNOSTICA AGGIUNTA] Estrazione e stampa dei parametri di calcolo soglia per ciascun segmento
+    // 🔍 [DIAGNOSTICA AGGIUNTA] Estrazione e stampa dei parametri di calcolo soglia per ciascun segmento (con aggregazione ricavi gerarchica flessibile)
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -354,7 +354,22 @@ export async function processaProposteDinamiche() {
         rs.direttrice_id,
         rs.start_node_id,
         rs.end_node_id,
-        rs.ricavo_attuale,
+        GREATEST(
+          rs.ricavo_attuale,
+          (
+            SELECT COALESCE(SUM(r_sub.prezzo), 0)
+            FROM richieste_pop_bus r_sub
+            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
+            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+            JOIN segmenti sub_s ON sub_s.direttrice_id = rs.direttrice_id
+            JOIN nodi_direttrice sub_s_start ON sub_s.start_node_id = sub_s_start.id
+            JOIN nodi_direttrice sub_s_end ON sub_s.end_node_id = sub_s_end.id
+            WHERE r_sub.direttrice_id = rs.direttrice_id
+              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start.id >= rs.start_node_id
+              AND r_end.id <= rs.end_node_id
+          )
+        ) as ricavo_attuale,
         rs.km_segmento,
         COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
         (COALESCE(ppo.min_euro_km, 0.50) * rs.km_segmento) as soglia_attivazione_minima,
@@ -417,12 +432,30 @@ export async function processaProposteDinamiche() {
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
       ),
+      ricavi_gerarchici AS (
+        SELECT 
+          rs.*,
+          GREATEST(
+            rs.ricavo_attuale,
+            (
+              SELECT COALESCE(SUM(r_sub.prezzo), 0)
+              FROM richieste_pop_bus r_sub
+              JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
+              JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+              WHERE r_sub.direttrice_id = rs.direttrice_id
+                AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+                AND r_start.id >= rs.start_node_id
+                AND r_end.id <= rs.end_node_id
+            )
+          ) as ricavo_aggregato
+        FROM ricavi_segmento rs
+      ),
       veicoli_disponibili_pool AS (
         SELECT 
           rs.segmento_id,
           COALESCE(v.posti_totali, 50) as capacita_veicolo,
           COALESCE(t.euro_km, 0.50) as euro_km_veicolo
-        FROM ricavi_segmento rs
+        FROM ricavi_gerarchici rs
         JOIN nodi_direttrice n_partenza ON n_partenza.id = rs.start_node_id
         JOIN veicolo v ON true
         JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
@@ -442,10 +475,18 @@ export async function processaProposteDinamiche() {
       ),
       costo_attivazione AS (
         SELECT 
-          rs.*, 
+          rs.segmento_id,
+          rs.direttrice_id,
+          rs.start_node_id,
+          rs.end_node_id,
+          rs.tempo_stimato,
+          rs.ordine_sequenziale,
+          rs.posti_occupati,
+          rs.km_segmento,
+          rs.ricavo_aggregato as ricavo_attuale,
           COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
           COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
-        FROM ricavi_segmento rs
+        FROM ricavi_gerarchici rs
         LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
       ),
       calcolo_orari AS (

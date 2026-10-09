@@ -293,6 +293,94 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
+    // 🔍 [DIAGNOSTICA AGGIUNTA] Estrazione e stampa dei parametri di calcolo soglia per ciascun segmento
+    const { rows: debugMetrics } = await client.query(`
+      WITH ricavi_segmento AS (
+        SELECT 
+          s.id as segmento_id,
+          s.direttrice_id,
+          s.start_node_id,
+          s.end_node_id,
+          s.posti_occupati,
+          (
+            ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
+            COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
+            COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
+          ) as km_segmento,
+          (
+            SELECT COALESCE(SUM(r_sub.prezzo), 0)
+            FROM richieste_pop_bus r_sub
+            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
+            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+            JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
+            JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
+            WHERE r_sub.direttrice_id = s.direttrice_id
+              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start.id >= s_start.id
+              AND r_end.id <= s_end.id
+          ) as ricavo_attuale
+        FROM segmenti s
+        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+        LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
+        LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
+        LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
+        WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
+      ),
+      veicoli_disponibili_pool AS (
+        SELECT 
+          rs.segmento_id,
+          COALESCE(v.posti_totali, 50) as capacita_veicolo,
+          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
+        FROM ricavi_segmento rs
+        JOIN veicolo v ON true
+        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
+        CROSS JOIN tariffe t
+        WHERE v.id NOT IN (
+          SELECT veicolo_id FROM direttrici_virtuali 
+          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+        )
+      ),
+      parametri_pool_ottimali AS (
+        SELECT 
+          segmento_id,
+          MIN(euro_km_veicolo) as min_euro_km,
+          MAX(capacita_veicolo) as capacita_veicolo
+        FROM veicoli_disponibili_pool
+        GROUP BY segmento_id
+      )
+      SELECT 
+        rs.segmento_id,
+        rs.direttrice_id,
+        rs.start_node_id,
+        rs.end_node_id,
+        rs.ricavo_attuale,
+        rs.km_segmento,
+        COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
+        (COALESCE(ppo.min_euro_km, 0.50) * rs.km_segmento) as soglia_attivazione_minima,
+        rs.posti_occupati,
+        COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
+      FROM ricavi_segmento rs
+      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
+    `, [segmentiCoinvoltiIds]);
+
+    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE] Risultati analisi segmenti candidati:');
+    debugMetrics.forEach(m => {
+      const ricavo = Number(m.ricavo_attuale);
+      const soglia = Number(m.soglia_attivazione_minima);
+      const superato = ricavo >= soglia;
+      const posti = Number(m.posti_occupati);
+      const cap = Number(m.capacita_veicolo);
+      const capOk = posti <= cap;
+
+      console.log(`  • Segmento ID: ${m.segmento_id} | Direttrice: ${m.direttrice_id} [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
+      console.log(`    - Km calcolati (tratta + missioni): ${Number(m.km_segmento).toFixed(2)} km`);
+      console.log(`    - Costo/km selezionato dal pool: €${Number(m.euro_km_selezionato).toFixed(2)}`);
+      console.log(`    - Soglia minima attivazione (€/km * km): €${soglia.toFixed(2)}`);
+      console.log(`    - Ricavo attuale generato: €${ricavo.toFixed(2)} ➔ [Soglia Superata? ${superato ? '✅ SI' : '❌ NO'}]`);
+      console.log(`    - Posti occupati: ${posti} / Capacità veicolo: ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
+    });
+
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 

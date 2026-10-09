@@ -133,6 +133,9 @@ export async function processaProposteDinamiche() {
 
       const minNodoCorrente = nodiOrdinati[0];
       const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
+      const tipoServizioTarget = `STANDARD_${info.fascia_percorrenza}`;
+
+      console.log(`🔍 [VERIFICA COMPATIBILITÀ] Controllo direttrice esistente per Servizio: ${tipoServizioTarget}, Nodo Iniziale: ${minNodoCorrente}, Slot Orario: ${info.slot_orario}`);
 
       // VERIFICA DI COMPATIBILITÀ BASATA SULL'ORARIO DI TRANSITO DAL NODO
       const { rows: esistenti } = await client.query(`
@@ -156,7 +159,7 @@ export async function processaProposteDinamiche() {
           WHERE dv.tipo_servizio = $2
             AND dv.stato IN ('in_formazione', 'attivo')
         )
-        SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato
+        SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_transito_nodo
         FROM direttrici_virtuali dv
         JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
         WHERE dv.tipo_servizio = $2
@@ -165,13 +168,15 @@ export async function processaProposteDinamiche() {
           AND ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) <= 2400
         ORDER BY dv.id ASC
         LIMIT 1
-      `, [minNodoCorrente, `STANDARD_${info.fascia_percorrenza}`, info.slot_orario]);
+      `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
 
       let direttriceId;
 
       if (esistenti.length > 0) {
         const dirEsistente = esistenti[0];
         direttriceId = dirEsistente.id;
+
+        console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice compatibile esistente ID: ${direttriceId} (Stato: ${dirEsistente.stato}, Tratta: ${dirEsistente.start_node_id}➔${dirEsistente.end_node_id}, Orario transito nodo: ${dirEsistente.orario_transito_nodo})`);
 
         const nuovoStart = nodiOrdinati[0];
         const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
@@ -181,18 +186,20 @@ export async function processaProposteDinamiche() {
           SET start_node_id = $1, end_node_id = $2
           WHERE id = $3
         `, [nuovoStart, nuovoEnd, direttriceId]);
-        console.log(`🚌 [DIRETTRICE] Aggiornata esistente ID: ${direttriceId} con nuovi estremi [${nuovoStart} ➔ ${nuovoEnd}]`);
+        console.log(`🚌 [DIRETTRICE] Aggiornati estremi direttrice ID ${direttriceId} a [${nuovoStart} ➔ ${nuovoEnd}]`);
       } else {
+        console.log(`⚠️ [COMPATIBILITÀ NON TROVATA] Nessuna direttrice esistente compatibile nello slot temporale di ±40 min per il nodo ${minNodoCorrente}. Creazione nuova direttrice...`);
+
         const { rows: dir } = await client.query(`
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
           VALUES ('in_formazione', $1, $2, $3, $4)
           ON CONFLICT (start_node_id, end_node_id, partenza_prevista) 
           DO UPDATE SET stato = EXCLUDED.stato
           RETURNING id
-        `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], `STANDARD_${info.fascia_percorrenza}`]);
+        `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], tipoServizioTarget]);
 
         direttriceId = dir[0].id;
-        console.log(`🚌 [DIRETTRICE] Creata nuova direttrice ID: ${direttriceId} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}]`);
+        console.log(`🚌 [DIRETTRICE] Creata nuova direttrice ID: ${direttriceId} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}] con slot ${info.slot_orario}`);
       }
 
       const segmentiDaCreare = new Map();

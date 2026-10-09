@@ -306,6 +306,9 @@ export async function processaProposteDinamiche() {
           segmentiCoinvoltiIds.push(Number(segmentoId));
         }
 
+        const sIdNum = Number(segmentoId);
+        const dIdNum = Number(direttriceId);
+        const eNodeNum = Number(eNode);
         const capolineaFinaleId = Number(nodiOrdinati[nodiOrdinati.length - 1]);
 
         await client.query(`
@@ -313,18 +316,18 @@ export async function processaProposteDinamiche() {
             segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
           )
           VALUES (
-            $1::int, $2::int, $3::int, $4::int, 
-            ($5::timestamptz + 
+            ${sIdNum}, ${dIdNum}, ${eNodeNum}, ${capolineaFinaleId}, 
+            ($1::timestamptz + 
               CASE 
-                WHEN $6 = 'alta' THEN INTERVAL '30 minutes'
-                WHEN $6 = 'media' THEN INTERVAL '20 minutes'
+                WHEN $2 = 'alta' THEN INTERVAL '30 minutes'
+                WHEN $2 = 'media' THEN INTERVAL '20 minutes'
                 ELSE INTERVAL '10 minutes'
               END
             ), 
             'in_attesa',
             CASE 
-              WHEN $6 = 'alta' THEN 40
-              WHEN $6 = 'media' THEN 25
+              WHEN $2 = 'alta' THEN 40
+              WHEN $2 = 'media' THEN 25
               ELSE 15
             END
           )
@@ -332,7 +335,7 @@ export async function processaProposteDinamiche() {
           DO UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
-        `, [Number(segmentoId), Number(direttriceId), Number(eNode), capolineaFinaleId, info.slot_orario, info.fascia_percorrenza]);
+        `, [info.slot_orario, info.fascia_percorrenza]);
       }
     }
 

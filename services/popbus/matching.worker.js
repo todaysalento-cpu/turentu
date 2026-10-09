@@ -1,5 +1,6 @@
 import { pool } from '../../db/db.js';
 import { dispatchDirettriciAttive } from './dispatchService.js';
+import { getRouteGeometry } from '../../utils/maps.util.js';
 
 export async function processaProposteDinamiche() {
   const client = await pool.connect();
@@ -267,6 +268,29 @@ export async function processaProposteDinamiche() {
 
         console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}`);
 
+        // Recupero coordinate dei nodi per Google Maps
+        const { rows: coordNodes } = await client.query(`
+          SELECT id, ST_Y(posizione::geometry) as lat, ST_X(posizione::geometry) as lon
+          FROM nodi_direttrice
+          WHERE id IN ($1, $2)
+        `, [sNode, eNode]);
+
+        const startNodeData = coordNodes.find(n => n.id === sNode);
+        const endNodeData = coordNodes.find(n => n.id === eNode);
+
+        let tempoStimatoMinuti = 10; // Fallback di default
+        if (startNodeData && endNodeData) {
+          try {
+            const routeInfo = await getRouteGeometry(
+              { lat: startNodeData.lat, lon: startNodeData.lon },
+              { lat: endNodeData.lat, lon: endNodeData.lon }
+            );
+            tempoStimatoMinuti = Math.max(1, Math.ceil(routeInfo.durata / 60));
+          } catch (mapsErr) {
+            console.warn(`⚠️ [MAPS WARNING] Impossibile calcolare il tempo con Google Maps per [${sNode} ➔ ${eNode}], uso default 10 min: ${mapsErr.message}`);
+          }
+        }
+
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 
           WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
@@ -276,15 +300,17 @@ export async function processaProposteDinamiche() {
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
-          console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId}`);
+          // Aggiorna anche il tempo stimato se la tratta è esistente ma ricalcolata
+          await client.query(`UPDATE segmenti SET tempo_stimato = $1 WHERE id = $2`, [tempoStimatoMinuti, segmentoId]);
+          console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         } else {
           const { rows: newSeg } = await client.query(`
-            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-            VALUES ($1, $2, $3, 0, 'in_attesa', $4)
+            INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale, tempo_stimato)
+            VALUES ($1, $2, $3, 0, 'in_attesa', $4, $5)
             RETURNING id
-          `, [direttriceId, sNode, eNode, ordineSeq]);
+          `, [direttriceId, sNode, eNode, ordineSeq, tempoStimatoMinuti]);
           segmentoId = newSeg[0].id;
-          console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId}`);
+          console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         }
 
         // Calcolo e aggiornamento dinamico della somma reale dei posti occupati sul segmento

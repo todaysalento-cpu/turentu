@@ -144,7 +144,7 @@ export async function processaProposteDinamiche() {
 
       console.log(`🔍 [VERIFICA COMPATIBILITÀ] Controllo direttrice esistente per Servizio: ${tipoServizioTarget}, Nodo Iniziale: ${minNodoCorrente}, Slot Orario: ${info.slot_orario}`);
 
-      // 🔍 LOG DI DIAGNOSTICA PRE-VERIFICA: Stampiamo tutte le direttrici attive/in_formazione dello stesso tipo per capire cosa sta confrontando il sistema
+      // 🔍 LOG DI DIAGNOSTICA PRE-VERIFICA
       const { rows: direttriciCandidate } = await client.query(`
         SELECT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, dv.partenza_prevista
         FROM direttrici_virtuali dv
@@ -311,7 +311,7 @@ export async function processaProposteDinamiche() {
             segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
           )
           VALUES (
-            $1, $2, $3, $4, 
+            $1::int, $2::int, $3::int, $4::int, 
             ($5::timestamptz + 
               CASE 
                 WHEN $6 = 'alta' THEN INTERVAL '30 minutes'

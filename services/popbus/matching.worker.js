@@ -178,15 +178,16 @@ export async function processaProposteDinamiche() {
 
         console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice compatibile esistente ID: ${direttriceId} (Stato: ${dirEsistente.stato}, Tratta: ${dirEsistente.start_node_id}➔${dirEsistente.end_node_id}, Orario transito nodo: ${dirEsistente.orario_transito_nodo})`);
 
-        const nuovoStart = nodiOrdinati[0];
-        const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
+        // ESPANSIONE SICURA DEGLI ESTREMI (Evita il troncamento di tratte più lunghe già presenti)
+        const nuovoStart = Math.min(dirEsistente.start_node_id, nodiOrdinati[0]);
+        const nuovoEnd = Math.max(dirEsistente.end_node_id, nodiOrdinati[nodiOrdinati.length - 1]);
 
         await client.query(`
           UPDATE direttrici_virtuali
           SET start_node_id = $1, end_node_id = $2
           WHERE id = $3
         `, [nuovoStart, nuovoEnd, direttriceId]);
-        console.log(`🚌 [DIRETTRICE] Aggiornati estremi direttrice ID ${direttriceId} a [${nuovoStart} ➔ ${nuovoEnd}]`);
+        console.log(`🚌 [DIRETTRICE] Espansi estremi direttrice ID ${direttriceId} a [${nuovoStart} ➔ ${nuovoEnd}]`);
       } else {
         console.log(`⚠️ [COMPATIBILITÀ NON TROVATA] Nessuna direttrice esistente compatibile nello slot temporale di ±40 min per il nodo ${minNodoCorrente}. Creazione nuova direttrice...`);
 
@@ -208,7 +209,6 @@ export async function processaProposteDinamiche() {
         const idx1 = nodiOrdinati.indexOf(c.start_node_id);
         const idx2 = nodiOrdinati.indexOf(c.end_node_id);
         
-        // CORRETTO: Gestisce correttamente sia l'andata che il ritorno/verso inverso
         const idxStart = Math.min(idx1, idx2);
         const idxEnd = Math.max(idx1, idx2);
 

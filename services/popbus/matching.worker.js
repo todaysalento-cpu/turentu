@@ -122,14 +122,21 @@ export async function processaProposteDinamiche() {
     const segmentiCoinvoltiIds = [];
 
     for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
-      const clusterIniziale = info.clustersInclusi.reduce((prev, curr) => prev.start_node_id < curr.start_node_id ? prev : curr);
-      const clusterFinale = info.clustersInclusi.reduce((prev, curr) => prev.end_node_id > curr.end_node_id ? prev : curr);
-      
-      const startAssoluto = clusterIniziale.start_node_id;
-      const endAssoluto = clusterFinale.end_node_id;
+      const nodiIdsArray = Array.from(info.nodi);
 
-      const nodiOrdinati = Array.from(info.nodi).sort((a, b) => a - b);
-      console.log(`🗺️ [DEBUG SEQUENZA NODI] Slot: ${info.slot_orario}, Fascia: ${info.fascia_percorrenza} ➔ Nodi Ordinati Percorso: [${nodiOrdinati.join(' ➔ ')}]`);
+      // 🛠️ FIX GEOGRAFICO: Ordinamento basato sulla distanza rispetto al primo nodo o sulla posizione lineare geografica
+      const { rows: nodiOrdinatiGeograficamente } = await client.query(`
+        WITH base_node AS (
+          SELECT id, posizione FROM nodi_direttrice WHERE id = $1
+        )
+        SELECT n.id
+        FROM nodi_direttrice n, base_node b
+        WHERE n.id = ANY($2::int[])
+        ORDER BY ST_Distance(b.posizione::geography, n.posizione::geography) ASC
+      `, [nodiIdsArray[0], nodiIdsArray]);
+
+      const nodiOrdinati = nodiOrdinatiGeograficamente.map(n => n.id);
+      console.log(`🗺️ [DEBUG SEQUENZA NODI GEOGRAFICA] Slot: ${info.slot_orario}, Fascia: ${info.fascia_percorrenza} ➔ Nodi Ordinati: [${nodiOrdinati.join(' ➔ ')}]`);
 
       const minNodoCorrente = nodiOrdinati[0];
       const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
@@ -178,8 +185,8 @@ export async function processaProposteDinamiche() {
 
         console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice compatibile esistente ID: ${direttriceId} (Stato: ${dirEsistente.stato}, Tratta: ${dirEsistente.start_node_id}➔${dirEsistente.end_node_id}, Orario transito nodo: ${dirEsistente.orario_transito_nodo})`);
 
-        const nuovoStart = Math.min(dirEsistente.start_node_id, nodiOrdinati[0]);
-        const nuovoEnd = Math.max(dirEsistente.end_node_id, nodiOrdinati[nodiOrdinati.length - 1]);
+        const nuovoStart = nodiOrdinati[0];
+        const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
 
         await client.query(`
           UPDATE direttrici_virtuali
@@ -296,7 +303,7 @@ export async function processaProposteDinamiche() {
           DO UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
-        `, [segmentoId, direttriceId, eNode, endAssoluto, info.slot_orario, info.fascia_percorrenza]);
+        `, [segmentoId, direttriceId, eNode, nodiOrdinati[nodiOrdinati.length - 1], info.slot_orario, info.fascia_percorrenza]);
       }
     }
 

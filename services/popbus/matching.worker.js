@@ -343,6 +343,9 @@ export async function processaProposteDinamiche() {
       return;
     }
 
+    // INTERPOLAZIONE SICURA DELLA LISTA ID PER EVITARE L'ERRORE 42P18
+    const idsListSql = segmentiCoinvoltiIds.join(',');
+
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
@@ -397,7 +400,7 @@ export async function processaProposteDinamiche() {
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
+        WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
       ),
       veicoli_disponibili_pool AS (
         SELECT 
@@ -449,7 +452,7 @@ export async function processaProposteDinamiche() {
         COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
       FROM ricavi_segmento rs
       LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
-    `, [segmentiCoinvoltiIds]);
+    `);
 
     console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE DETTAGLIATO] ---------------------------------------');
     debugMetrics.forEach(m => {
@@ -507,7 +510,7 @@ export async function processaProposteDinamiche() {
         LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        WHERE s.id = ANY($1::int[]) AND s.stato = 'in_attesa'
+        WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
       ),
       ricavi_gerarchici AS (
         SELECT 
@@ -609,7 +612,7 @@ export async function processaProposteDinamiche() {
         RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id
       )
       SELECT id, direttrice_id, stato, start_node_id FROM update_segmenti
-    `, [segmentiCoinvoltiIds]);
+    `);
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 

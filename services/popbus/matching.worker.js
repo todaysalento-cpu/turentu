@@ -310,6 +310,11 @@ export async function processaProposteDinamiche() {
         const dIdNum = Number(direttriceId);
         const eNodeNum = Number(eNode);
         const capolineaFinaleId = Number(nodiOrdinati[nodiOrdinati.length - 1]);
+        const slotIso = info.slot_orario instanceof Date ? info.slot_orario.toISOString() : new Date(info.slot_orario).toISOString();
+        const fascia = info.fascia_percorrenza;
+
+        const intervalSql = fascia === 'alta' ? "INTERVAL '30 minutes'" : fascia === 'media' ? "INTERVAL '20 minutes'" : "INTERVAL '10 minutes'";
+        const maxAttesaVal = fascia === 'alta' ? 40 : fascia === 'media' ? 25 : 15;
 
         await client.query(`
           INSERT INTO missioni_ritorno (
@@ -317,25 +322,15 @@ export async function processaProposteDinamiche() {
           )
           VALUES (
             ${sIdNum}, ${dIdNum}, ${eNodeNum}, ${capolineaFinaleId}, 
-            ($1::timestamptz + 
-              CASE 
-                WHEN $2 = 'alta' THEN INTERVAL '30 minutes'
-                WHEN $2 = 'media' THEN INTERVAL '20 minutes'
-                ELSE INTERVAL '10 minutes'
-              END
-            ), 
+            ('${slotIso}'::timestamptz + ${intervalSql}), 
             'in_attesa',
-            CASE 
-              WHEN $2 = 'alta' THEN 40
-              WHEN $2 = 'media' THEN 25
-              ELSE 15
-            END
+            ${maxAttesaVal}
           )
           ON CONFLICT (segmento_id, capolinea_finale_id) 
           DO UPDATE SET 
             orario_previsto = EXCLUDED.orario_previsto,
             nodo_origine = EXCLUDED.nodo_origine
-        `, [info.slot_orario, info.fascia_percorrenza]);
+        `);
       }
     }
 

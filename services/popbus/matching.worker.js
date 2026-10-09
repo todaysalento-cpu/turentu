@@ -171,8 +171,9 @@ export async function processaProposteDinamiche() {
         const dirEsistente = esistenti[0];
         direttriceId = dirEsistente.id;
 
-        const nuovoStart = Math.min(dirEsistente.start_node_id, minNodoCorrente);
-        const nuovoEnd = Math.max(dirEsistente.end_node_id, maxNodoCorrente);
+        // CORRETTO: Uso dei nodi estremi ordinati anziché Math.min/max sugli ID grezzi
+        const nuovoStart = nodiOrdinati[0];
+        const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
 
         await client.query(`
           UPDATE direttrici_virtuali
@@ -184,7 +185,7 @@ export async function processaProposteDinamiche() {
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
           VALUES ('in_formazione', $1, $2, $3, $4)
           RETURNING id
-        `, [info.slot_orario, minNodoCorrente, maxNodoCorrente, `STANDARD_${info.fascia_percorrenza}`]);
+        `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], `STANDARD_${info.fascia_percorrenza}`]);
 
         direttriceId = dir[0].id;
       }

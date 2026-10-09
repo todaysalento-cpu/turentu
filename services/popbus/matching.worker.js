@@ -280,9 +280,9 @@ export async function processaProposteDinamiche() {
         } else {
           const { rows: newSeg } = await client.query(`
             INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-            VALUES ($1, $2, $3, 0, 'in_attesa', $5)
+            VALUES ($1, $2, $3, 0, 'in_attesa', $4)
             RETURNING id
-          `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
+          `, [direttriceId, sNode, eNode, ordineSeq]);
           segmentoId = newSeg[0].id;
           console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId}`);
         }

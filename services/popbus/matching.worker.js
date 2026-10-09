@@ -248,7 +248,7 @@ export async function processaProposteDinamiche() {
         const [sNode, eNode] = subKey.split('_').map(Number);
         ordineSeq++;
 
-        console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}, Posti accumulati: ${postiTotaliSub}`);
+        console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}`);
 
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 
@@ -259,21 +259,35 @@ export async function processaProposteDinamiche() {
         let segmentoId;
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
-          await client.query(`
-            UPDATE segmenti 
-            SET posti_occupati = GREATEST(posti_occupati, $1) 
-            WHERE id = $2
-          `, [postiTotaliSub, segmentoId]);
           console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId}`);
         } else {
           const { rows: newSeg } = await client.query(`
             INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale)
-            VALUES ($1, $2, $3, $4, 'in_attesa', $5)
+            VALUES ($1, $2, $3, 0, 'in_attesa', $5)
             RETURNING id
           `, [direttriceId, sNode, eNode, postiTotaliSub, ordineSeq]);
           segmentoId = newSeg[0].id;
           console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId}`);
         }
+
+        // Calcolo e aggiornamento dinamico della somma reale dei posti occupati sul segmento
+        await client.query(`
+          UPDATE segmenti s
+          SET posti_occupati = (
+            SELECT COALESCE(SUM(r.posti_richiesti), 0)
+            FROM richieste_pop_bus r
+            JOIN segmenti r_start ON r_start.direttrice_id = s.direttrice_id AND r_start.start_node_id = r.start_node_id
+            JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
+            WHERE r.direttrice_id = s.direttrice_id
+              AND r.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r.end_node_id
+              )
+          )
+          WHERE s.id = $1
+        `, [segmentoId]);
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
           segmentiCoinvoltiIds.push(Number(segmentoId));

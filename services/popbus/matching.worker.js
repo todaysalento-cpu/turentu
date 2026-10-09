@@ -293,7 +293,7 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
-    // 🔍 [DIAGNOSTICA AGGIUNTA] Estrazione e stampa dei parametri di calcolo soglia per ciascun segmento (con aggregazione ricavi gerarchica flessibile)
+    // 🔍 [DIAGNOSTICA ESTESA] Estrazione, calcolo e log dettagliato per ogni parametro della soglia di attivazione
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -361,9 +361,6 @@ export async function processaProposteDinamiche() {
             FROM richieste_pop_bus r_sub
             JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
             JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
-            JOIN segmenti sub_s ON sub_s.direttrice_id = rs.direttrice_id
-            JOIN nodi_direttrice sub_s_start ON sub_s.start_node_id = sub_s_start.id
-            JOIN nodi_direttrice sub_s_end ON sub_s.end_node_id = sub_s_end.id
             WHERE r_sub.direttrice_id = rs.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
               AND r_start.id >= rs.start_node_id
@@ -379,7 +376,7 @@ export async function processaProposteDinamiche() {
       LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
     `, [segmentiCoinvoltiIds]);
 
-    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE] Risultati analisi segmenti candidati:');
+    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE] --------------------------------------------------');
     debugMetrics.forEach(m => {
       const ricavo = Number(m.ricavo_attuale);
       const soglia = Number(m.soglia_attivazione_minima);
@@ -388,12 +385,16 @@ export async function processaProposteDinamiche() {
       const cap = Number(m.capacita_veicolo);
       const capOk = posti <= cap;
 
-      console.log(`  • Segmento ID: ${m.segmento_id} | Direttrice: ${m.direttrice_id} [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
-      console.log(`    - Km calcolati (tratta + missioni): ${Number(m.km_segmento).toFixed(2)} km`);
-      console.log(`    - Costo/km da tariffe: €${Number(m.euro_km_selezionato).toFixed(2)}`);
-      console.log(`    - Soglia minima attivazione (€/km * km): €${soglia.toFixed(2)}`);
-      console.log(`    - Ricavo attuale generato: €${ricavo.toFixed(2)} ➔ [Soglia Superata? ${superato ? '✅ SI' : '❌ NO'}]`);
-      console.log(`    - Posti occupati: ${posti} / Capacità veicolo: ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
+      console.log(`📊 [DIAGNOSTICA SEGMENTO ID: ${m.segmento_id}]`);
+      console.log(`  • Direttrice ID      : ${m.direttrice_id}`);
+      console.log(`  • Tratta Nodi        : [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
+      console.log(`  • Km Operativi       : ${Number(m.km_segmento).toFixed(2)} km (Tratta + Missioni Ritorno)`);
+      console.log(`  • Costo/km (Pool)    : €${Number(m.euro_km_selezionato).toFixed(2)}`);
+      console.log(`  • Soglia Calcolata   : €${soglia.toFixed(2)} (Costo/km * Km Operativi)`);
+      console.log(`  • Ricavo Aggregato   : €${ricavo.toFixed(2)} (Somma richieste incluse)`);
+      console.log(`  • Soglia Superata?   : ${superato ? '✅ SI (Attivabile)' : '❌ NO (Sotto soglia)'}`);
+      console.log(`  • Posti / Capacità   : ${posti} / ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
+      console.log('--------------------------------------------------------------------------------');
     });
 
     const { rows: segmentiAttivati } = await client.query(`

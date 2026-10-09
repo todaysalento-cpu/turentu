@@ -309,7 +309,6 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
-    // 🔍 [LOG AGGIUNTIVO PER ISPEZIONARE LE RICHIESTE INCLUSE NEI SEGMENTI]
     for (const segId of segmentiCoinvoltiIds) {
       const { rows: reqIncluse } = await client.query(`
         SELECT r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id

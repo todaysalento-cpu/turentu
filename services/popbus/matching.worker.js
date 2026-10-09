@@ -545,6 +545,7 @@ export async function processaProposteDinamiche() {
           ca.direttrice_id,
           ca.start_node_id,
           ca.end_node_id,
+          ca.ordine_sequenziale,
           d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
             PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
           ) * INTERVAL '1 minute') as calculated_start,

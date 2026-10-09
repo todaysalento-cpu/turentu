@@ -178,7 +178,6 @@ export async function processaProposteDinamiche() {
 
         console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice compatibile esistente ID: ${direttriceId} (Stato: ${dirEsistente.stato}, Tratta: ${dirEsistente.start_node_id}➔${dirEsistente.end_node_id}, Orario transito nodo: ${dirEsistente.orario_transito_nodo})`);
 
-        // ESPANSIONE SICURA DEGLI ESTREMI (Evita il troncamento di tratte più lunghe già presenti)
         const nuovoStart = Math.min(dirEsistente.start_node_id, nodiOrdinati[0]);
         const nuovoEnd = Math.max(dirEsistente.end_node_id, nodiOrdinati[nodiOrdinati.length - 1]);
 
@@ -310,6 +309,25 @@ export async function processaProposteDinamiche() {
     // 2. CALCOLO ATTIVAZIONE ECONOMICA BASATO SUL POOL DEI VEICOLI DISPONIBILI
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sul pool di veicoli disponibili per segmento...');
 
+    // 🔍 [LOG AGGIUNTIVO PER ISPEZIONARE LE RICHIESTE INCLUSE NEI SEGMENTI]
+    for (const segId of segmentiCoinvoltiIds) {
+      const { rows: reqIncluse } = await client.query(`
+        SELECT r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id
+        FROM segmenti s
+        JOIN richieste_pop_bus r ON r.direttrice_id = s.direttrice_id
+        JOIN nodi_direttrice r_start ON r.start_node_id = r_start.id
+        JOIN nodi_direttrice r_end ON r.end_node_id = r_end.id
+        JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
+        JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
+        WHERE s.id = $1
+          AND r.stato IN ('in_attesa', 'in_lavorazione')
+          AND r_start.id >= s_start.id
+          AND r_end.id <= s_end.id
+      `, [segId]);
+
+      console.log(`🔎 [DETTAGLIO RICAVI] Richieste incluse nel Segmento ID ${segId}:`, reqIncluse);
+    }
+
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -392,7 +410,7 @@ export async function processaProposteDinamiche() {
       LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
     `, [segmentiCoinvoltiIds]);
 
-    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE] --------------------------------------------------');
+    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE DETTAGLIATO] ---------------------------------------');
     debugMetrics.forEach(m => {
       const ricavo = Number(m.ricavo_attuale);
       const soglia = Number(m.soglia_attivazione_minima);
@@ -404,10 +422,10 @@ export async function processaProposteDinamiche() {
       console.log(`📊 [DIAGNOSTICA SEGMENTO ID: ${m.segmento_id}]`);
       console.log(`  • Direttrice ID      : ${m.direttrice_id}`);
       console.log(`  • Tratta Nodi        : [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
-      console.log(`  • Km Operativi       : ${Number(m.km_segmento).toFixed(2)} km (Tratta + Missioni Ritorno)`);
+      console.log(`  • Km Operativi       : ${Number(m.km_segmento).toFixed(2)} km`);
       console.log(`  • Costo/km (Pool)    : €${Number(m.euro_km_selezionato).toFixed(2)}`);
-      console.log(`  • Soglia Calcolata   : €${soglia.toFixed(2)} (Costo/km * Km Operativi)`);
-      console.log(`  • Ricavo Aggregato   : €${ricavo.toFixed(2)} (Somma richieste incluse)`);
+      console.log(`  • Soglia Calcolata   : €${soglia.toFixed(2)}`);
+      console.log(`  • Ricavo Aggregato   : €${ricavo.toFixed(2)}`);
       console.log(`  • Soglia Superata?   : ${superato ? '✅ SI (Attivabile)' : '❌ NO (Sotto soglia)'}`);
       console.log(`  • Posti / Capacità   : ${posti} / ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
       console.log('--------------------------------------------------------------------------------');

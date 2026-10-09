@@ -331,11 +331,10 @@ export async function processaProposteDinamiche() {
         SELECT 
           rs.segmento_id,
           COALESCE(v.posti_totali, 50) as capacita_veicolo,
-          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
+          COALESCE(v.euro_km, 0.50) as euro_km_veicolo
         FROM ricavi_segmento rs
         JOIN veicolo v ON true
         JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
-        CROSS JOIN tariffe t
         WHERE v.id NOT IN (
           SELECT veicolo_id FROM direttrici_virtuali 
           WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
@@ -375,7 +374,7 @@ export async function processaProposteDinamiche() {
 
       console.log(`  • Segmento ID: ${m.segmento_id} | Direttrice: ${m.direttrice_id} [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
       console.log(`    - Km calcolati (tratta + missioni): ${Number(m.km_segmento).toFixed(2)} km`);
-      console.log(`    - Costo/km selezionato dal pool: €${Number(m.euro_km_selezionato).toFixed(2)}`);
+      console.log(`    - Costo/km dal veicolo: €${Number(m.euro_km_selezionato).toFixed(2)}`);
       console.log(`    - Soglia minima attivazione (€/km * km): €${soglia.toFixed(2)}`);
       console.log(`    - Ricavo attuale generato: €${ricavo.toFixed(2)} ➔ [Soglia Superata? ${superato ? '✅ SI' : '❌ NO'}]`);
       console.log(`    - Posti occupati: ${posti} / Capacità veicolo: ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
@@ -421,12 +420,11 @@ export async function processaProposteDinamiche() {
         SELECT 
           rs.segmento_id,
           COALESCE(v.posti_totali, 50) as capacita_veicolo,
-          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
+          COALESCE(v.euro_km, 0.50) as euro_km_veicolo
         FROM ricavi_segmento rs
         JOIN nodi_direttrice n_partenza ON n_partenza.id = rs.start_node_id
         JOIN veicolo v ON true
         JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
-        CROSS JOIN tariffe t
         WHERE v.id NOT IN (
           SELECT veicolo_id FROM direttrici_virtuali 
           WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')

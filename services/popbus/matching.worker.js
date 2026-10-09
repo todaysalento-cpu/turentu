@@ -321,14 +321,15 @@ export async function processaProposteDinamiche() {
         SELECT r.id, r.start_node_id, r.end_node_id, r.prezzo, r.stato, r.direttrice_id
         FROM segmenti s
         JOIN richieste_pop_bus r ON r.direttrice_id = s.direttrice_id
-        JOIN nodi_direttrice r_start ON r.start_node_id = r_start.id
-        JOIN nodi_direttrice r_end ON r.end_node_id = r_end.id
-        JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
-        JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
+        JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r.start_node_id
+        JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r.end_node_id
         WHERE s.id = $1
           AND r.stato IN ('in_attesa', 'in_lavorazione')
-          AND r_start.id >= s_start.id
-          AND r_end.id <= s_end.id
+          AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+          AND r_end_seg.ordine_sequenziale <= (
+            SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+            WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r.end_node_id
+          )
       `, [segId]);
 
       console.log(`🔎 [DETTAGLIO RICAVI] Richieste incluse nel Segmento ID ${segId}:`, reqIncluse);
@@ -350,14 +351,15 @@ export async function processaProposteDinamiche() {
           (
             SELECT COALESCE(SUM(r_sub.prezzo), 0)
             FROM richieste_pop_bus r_sub
-            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
-            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
-            JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
-            JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
+            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.id >= s_start.id
-              AND r_end.id <= s_end.id
+              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -399,12 +401,15 @@ export async function processaProposteDinamiche() {
           (
             SELECT COALESCE(SUM(r_sub.prezzo), 0)
             FROM richieste_pop_bus r_sub
-            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
-            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = rs.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = rs.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = rs.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.id >= rs.start_node_id
-              AND r_end.id <= rs.end_node_id
+              AND r_start_seg.ordine_sequenziale >= (SELECT sub_s.ordine_sequenziale FROM segmenti sub_s WHERE sub_s.id = rs.segmento_id)
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = rs.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           )
         ) as ricavo_attuale,
         rs.km_segmento,
@@ -455,14 +460,15 @@ export async function processaProposteDinamiche() {
           (
             SELECT COALESCE(SUM(r_sub.prezzo), 0)
             FROM richieste_pop_bus r_sub
-            JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
-            JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
-            JOIN nodi_direttrice s_start ON s.start_node_id = s_start.id
-            JOIN nodi_direttrice s_end ON s.end_node_id = s_end.id
+            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.id >= s_start.id
-              AND r_end.id <= s_end.id
+              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -481,12 +487,15 @@ export async function processaProposteDinamiche() {
             (
               SELECT COALESCE(SUM(r_sub.prezzo), 0)
               FROM richieste_pop_bus r_sub
-              JOIN nodi_direttrice r_start ON r_sub.start_node_id = r_start.id
-              JOIN nodi_direttrice r_end ON r_sub.end_node_id = r_end.id
+              JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = rs.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+              JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = rs.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
               WHERE r_sub.direttrice_id = rs.direttrice_id
                 AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-                AND r_start.id >= rs.start_node_id
-                AND r_end.id <= rs.end_node_id
+                AND r_start_seg.ordine_sequenziale >= rs.ordine_sequenziale
+                AND r_end_seg.ordine_sequenziale <= (
+                  SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                  WHERE sub_s.direttrice_id = rs.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+                )
             )
           ) as ricavo_aggregato
         FROM ricavi_segmento rs
@@ -556,9 +565,7 @@ export async function processaProposteDinamiche() {
             SELECT 1 
             FROM calcolo_orari padre
             WHERE padre.direttrice_id = co.direttrice_id
-              AND (padre.end_node_id - padre.start_node_id) > (co.end_node_id - co.start_node_id)
-              AND padre.start_node_id <= co.start_node_id
-              AND padre.end_node_id >= co.end_node_id
+              AND padre.ordine_sequenziale < co.ordine_sequenziale
               AND padre.ricavo_attuale >= COALESCE(padre.soglia_attivazione_minima, 0)
               AND padre.posti_occupati <= padre.capacita_veicolo
           )

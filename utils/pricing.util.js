@@ -52,7 +52,7 @@ async function getDettaglioPool(veicoli_ids) {
 }
 
 /**
- * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti (senza moltiplicatore di classe).
+ * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti.
  */
 export async function calcolaPrezzo(
     corsa, 
@@ -136,21 +136,19 @@ export async function calcolaPrezzo(
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
 
-                    // Calcolo Break-Even basato sui km operativi effettivi
-                    const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
+                    // Calcolo dei passeggeri target in base alla soglia della classe
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 
+                    // Costo al chilometro per singolo passeggero
+                    const costoKmPasseggero = mezzo.euro_km / targetPasseggeri;
+                    
+                    // Prezzo finale calcolato direttamente sui chilometri effettivi dell'utente
+                    prezzoCalcolato = costoKmPasseggero * safeKmUtente * postiUtente;
+
                     console.log(`📊 [POPBUS Calcoli Intermedi]:`);
-                    console.log(`   - Km complessivi operativi (Tratta + Avv + Rip): ${kmComplessiviOperativi}`);
-                    console.log(`   - Break-Even Totale della corsa (${mezzo.euro_km} €/km * ${kmComplessiviOperativi} km): ${breakEvenTotale.toFixed(4)} €`);
-                    console.log(`   - Posti totali del mezzo: ${mezzo.posti} | Soglia classe (${config.soglia * 100}%): targetPasseggeri = ${targetPasseggeri}`);
-
-                    // Calcolo del prezzo unitario rapportato alla tratta dell'utente (senza moltiplicatore)
-                    const prezzoUnitarioPerKm = (breakEvenTotale / targetPasseggeri) * (safeKmUtente / safeKmTotali);
-                    prezzoCalcolato = prezzoUnitarioPerKm * postiUtente;
-
-                    console.log(`   - Prezzo unitario proporzionale per km: ${prezzoUnitarioPerKm.toFixed(4)} €`);
-                    console.log(`   - Posti utente richiesti: ${postiUtente}`);
+                    console.log(`   - Euro/km mezzo: ${mezzo.euro_km} | Target Passeggeri: ${targetPasseggeri}`);
+                    console.log(`   - Costo al km per passeggero: ${costoKmPasseggero.toFixed(4)} €`);
+                    console.log(`   - Km utente: ${safeKmUtente} | Posti richiesti: ${postiUtente}`);
                     console.log(`✨ [POPBUS] Subtotale calcolato finale: ${prezzoCalcolato.toFixed(4)} €`);
                 }
                 console.log(`====================================================================\n`);

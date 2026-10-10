@@ -375,7 +375,7 @@ export async function processaProposteDinamiche() {
     const idsListSql = segmentiCoinvoltiIds.join(',');
 
     // 2. CALCOLO ATTIVAZIONE ECONOMICA (Ristretto ai segmenti interamente inclusi)
-    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti interamente inclusi...');
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti...');
 
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
@@ -398,9 +398,12 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              -- Condizione rigorosa: la richiesta deve ricadere INTERAMENTE all'interno del singolo segmento (ordine_sequenziale exact match o intervallo locale)
+              -- Condizione flessibile per coprire correttamente anche le tratte lunghe/multi-segmento
               AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= s.ordine_sequenziale + 1
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -447,27 +450,6 @@ export async function processaProposteDinamiche() {
       LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
     `);
 
-    console.log('🔍 [DEBUG SOGLIA ATTIVAZIONE DETTAGLIATO] ---------------------------------------');
-    debugMetrics.forEach(m => {
-      const ricavo = Number(m.ricavo_attuale);
-      const soglia = Number(m.soglia_attivazione_minima);
-      const superato = ricavo >= soglia;
-      const posti = Number(m.posti_occupati);
-      const cap = Number(m.capacita_veicolo);
-      const capOk = posti <= cap;
-
-      console.log(`📊 [DIAGNOSTICA SEGMENTO ID: ${m.segmento_id}]`);
-      console.log(`  • Direttrice ID      : ${m.direttrice_id}`);
-      console.log(`  • Tratta Nodi        : [Nodo ${m.start_node_id} ➔ ${m.end_node_id}]`);
-      console.log(`  • Km Operativi       : ${Number(m.km_segmento).toFixed(2)} km`);
-      console.log(`  • Costo/km (Pool)    : €${Number(m.euro_km_selezionato).toFixed(2)}`);
-      console.log(`  • Soglia Calcolata   : €${soglia.toFixed(2)}`);
-      console.log(`  • Ricavo Aggregato   : €${ricavo.toFixed(2)}`);
-      console.log(`  • Soglia Superata?   : ${superato ? '✅ SI (Attivabile)' : '❌ NO (Sotto soglia)'}`);
-      console.log(`  • Posti / Capacità   : ${posti} / ${cap} ➔ [Capacità OK? ${capOk ? '✅ SI' : '❌ NO'}]`);
-      console.log('--------------------------------------------------------------------------------');
-    });
-
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
         SELECT 
@@ -491,7 +473,10 @@ export async function processaProposteDinamiche() {
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
               AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= s.ordine_sequenziale + 1
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -585,7 +570,7 @@ export async function processaProposteDinamiche() {
 
     console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
 
-    // 🚗 2B. ASSEGNAZIONE DEL VEICOLO BASATA SUL NODO DI PARTENZA DEL SEGMENTO
+    // 🚗 2B. ASSEGNAZIONE DEL VEICOLO E AGGIORNAMENTO TOTALI SULLA DIRETTRICE
     for (const seg of segmentiAttivati) {
       const { rows: dirCheck } = await client.query(
         `SELECT veicolo_id FROM direttrici_virtuali WHERE id = $1`,
@@ -617,6 +602,26 @@ export async function processaProposteDinamiche() {
           console.log(`🚌 [WORKER] Assegnato veicolo ID ${veicoloIdAssegnato} alla direttrice ${seg.direttrice_id}`);
         }
       }
+
+      // Sincronizzazione campi globali distanza e soglia sulla direttrice
+      await client.query(`
+        UPDATE direttrici_virtuali dv
+        SET 
+          distanza_totale_km = sub.tot_km,
+          soglia_attivazione = sub.tot_soglia
+        FROM (
+          SELECT 
+            s.direttrice_id,
+            SUM(ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000) as tot_km,
+            SUM(ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 * 0.50) as tot_soglia
+          FROM segmenti s
+          JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+          JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+          WHERE s.direttrice_id = $1
+          GROUP BY s.direttrice_id
+        ) sub
+        WHERE dv.id = sub.direttrice_id;
+      `, [seg.direttrice_id]);
     }
 
     // 3. AUTO-UPGRADE

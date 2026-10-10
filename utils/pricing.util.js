@@ -75,16 +75,16 @@ export async function calcolaPrezzo(
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione e normalizzazione dei chilometri operativi
+    // Estrazione e normalizzazione dei chilometri operativi basati unicamente sulla tratta utente e costi accessori
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
     const safeKmUtente = Math.abs(Number(kmUtente) || 0);
-    const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
     
-    // Allineamento dei km totali sui km operativi effettivi della richiesta
+    // I km operativi effettivi sono esclusivamente la tratta dell'utente + avvicinamento + riposizionamento
+    const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
     const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);
 
-    console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Totali: ${safeKmTotali}`);
+    console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Complessivi Operativi: ${kmComplessiviOperativi}`);
 
     try {
         switch (tipoValido) {
@@ -138,7 +138,7 @@ export async function calcolaPrezzo(
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
 
-                    // Calcolo Break-Even e target passeggeri allineato ai km operativi della richiesta (Tratta + Avv + Rip)
+                    // Calcolo Break-Even basato sui km operativi della richiesta
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 

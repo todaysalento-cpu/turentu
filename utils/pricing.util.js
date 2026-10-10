@@ -75,17 +75,12 @@ export async function calcolaPrezzo(
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione e normalizzazione dei chilometri operativi
+    // Estrazione dei chilometri operativi e della tratta utente
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
+    const safeKmUtente = Math.abs(Number(kmUtente) || 0);
     
-    // Protezione: se kmUtente supera i 2000km per errore di ereditarietà direttrice, lo isoliamo o normalizziamo
-    let safeKmUtente = Math.abs(Number(kmUtente) || 0);
-    if (safeKmUtente > 2000 && corsa.distanzaKm) {
-        safeKmUtente = Number(corsa.distanzaKm);
-    }
-
-    // I km operativi effettivi sono esclusivamente la tratta dell'utente + avvicinamento + riposizionamento
+    // I km operativi effettivi sono la somma esatta di tratta utente + avvicinamento + riposizionamento
     const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
     const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);
 
@@ -143,7 +138,7 @@ export async function calcolaPrezzo(
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
 
-                    // Calcolo Break-Even basato sui km operativi della richiesta
+                    // Calcolo Break-Even basato sui km operativi effettivi
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 

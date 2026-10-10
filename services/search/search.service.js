@@ -328,6 +328,8 @@ export async function cercaSlotUltra(richiesta) {
                 posti_totali: capacita, 
                 distanza: distanzaMetri, 
                 distanzaKm: distanzaKm, 
+                km_utente: distanzaKm,
+                km_totali_percorso: distanzaKm + kmAvvPool + kmRipPool, // 👈 Somma operativa esatta (Tratta + Avv + Rip)
                 km_avvicinamento: kmAvvPool,
                 km_riposizionamento: kmRipPool,
                 is_pool: true,
@@ -404,7 +406,8 @@ export async function cercaSlotUltra(richiesta) {
             stato: 'in_attesa',
             distanza: distanzaMetri,
             distanzaKm: distanzaKm, 
-            distanzaTotaleRotte: distanzaKm,
+            km_utente: distanzaKm,
+            km_totali_percorso: distanzaKm + kmAvvFallback + kmRipFallback, // 👈 Anche per il virtuale/pending
             km_avvicinamento: kmAvvFallback,
             km_riposizionamento: kmRipFallback,
             start_offset: 0,
@@ -425,7 +428,7 @@ export async function cercaSlotUltra(richiesta) {
         coordDest: { lat: destLat, lon: destLon },
         distanzaKm,
         distanzaMetri, 
-        posti_richiesti: postiRichiesti, // <-- Corretto qui!
+        posti_richiesti: postiRichiesti,
         return_datetime: orarioRitornoUtente || orarioEventoRitorno 
     }, risultatiFinali);
 }

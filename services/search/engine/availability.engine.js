@@ -35,7 +35,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
                 const coordinatesPrincipali = decoded.map(c => [c[1], c[0]]); // [lon, lat]
                 
                 if (coordinatesPrincipali.length < 2) {
-                    console.log(`⚠️️ [SNAP ERROR] Corsa ${corsaId}: polyline decodificata ha meno di 2 punti.`);
+                    console.log(`⚠ [SNAP ERROR] Corsa ${corsaId}: polyline decodificata ha meno di 2 punti.`);
                     return null;
                 }
                 
@@ -266,8 +266,11 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
         }
 
-        const baseResult = { 
-            ...c, 
+        const kmUtentePop = Math.max(0.1, (endOffsetPop - startOffsetPop) / 1000);
+        const kmTotaliPop = kmUtentePop + kmAvvicinamento + kmRiposizionamento;
+
+        const baseResult = {  
+            ...c,  
             veicoli_pool_ids: c.veicoli_pool_ids || [],
             km_avvicinamento: kmAvvicinamento,
             km_riposizionamento: kmRiposizionamento,
@@ -275,7 +278,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             endOffset: endOffsetPop,
             calculated_start_offset: startOffsetPop,
             calculated_end_offset: endOffsetPop,
-            km_utente: Math.max(0.1, (endOffsetPop - startOffsetPop) / 1000)
+            km_utente: kmUtentePop,
+            km_totali_percorso: kmTotaliPop
         };
 
         if (c.direttrice_id) {

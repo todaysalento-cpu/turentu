@@ -192,13 +192,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const kmRipItem = Number(item.km_riposizionamento ?? richiesta.km_riposizionamento ?? 0);
             
             const kmTrattaUtente = Number(item.distanzaKm || item.km_utente || (item.distanza ? item.distanza / 1000 : distKmItem)); 
-            const kmTotaliRotte = Number(
-                item.km_totali_percorso || 
-                item.km_totali_rotta || 
-                item.distanza_totale_corsa || 
-                item.distanzaTotaleRotte || 
-                (kmTrattaUtente + kmAvvItem + kmRipItem)
-            );
+            
+            // 👈 Forziamo la somma operativa esatta (Tratta + Avv + Rip) ed evitiamo l'eredità della direttrice globale
+            const kmTotaliRotte = kmTrattaUtente + kmAvvItem + kmRipItem;
 
             if (tipoCoerente === 'pop-bus') {
                 console.log(`📊 [DEBUG BREAK-EVEN REAL] Analisi Pop-Bus reale ID: ${itemId}`);

@@ -78,9 +78,8 @@ export async function calcolaPrezzo(
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
     const safeKmUtente = Math.abs(Number(kmUtente) || 0);
     
-    // I km operativi effettivi sono la somma esatta di tratta utente + avvicinamento + riposizionamento
+    // I km operativi effettivi sono la somma esatta di tratta utente + avvicinamento + riposizionamento (ritorno)
     const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
-    const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);
 
     console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Senza Moltiplicatore) | Km Utente: ${safeKmUtente} | Km Complessivi Operativi: ${kmComplessiviOperativi}`);
 
@@ -132,21 +131,24 @@ export async function calcolaPrezzo(
                         break;
                     }
                     
-                    // Selezioniamo il veicolo con l'indice di efficienza più basso tra quelli idonei
+                    // Selezioniamo il veicolo con l'indice di efficienza più basso (euro_km / posti^2)
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.indice < curr.indice ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (indice più basso):`, mezzo);
 
-                    // Calcolo Break-Even basato sui km operativi totali (tratta + avvicinamento + riposizionamento)
+                    // Calcolo Break-Even basato su tutti i km operativi della missione (Andata + Ritorno)
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
-                    targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 
-                    // Prezzo finale calcolato ripartendo il break-even totale sui passeggeri target (basato sui km operativi totali)
+                    // Capienza totale calcolata sull'intero ciclo A/R (Posti x 2) e relativo target passeggeri
+                    const postiTotaliMissione = mezzo.posti * 2;
+                    targetPasseggeri = Math.max(1, Math.round(postiTotaliMissione * config.soglia));
+
+                    // Prezzo per singolo biglietto/posto
                     prezzoCalcolato = (breakEvenTotale / targetPasseggeri) * postiUtente;
 
-                    console.log(`📊 [POPBUS Calcoli Intermedi]:`);
-                    console.log(`   - Km complessivi operativi (Tratta + Avv + Rip): ${kmComplessiviOperativi}`);
+                    console.log(`📊 [POPBUS Calcoli Intermedi A/R]:`);
+                    console.log(`   - Km complessivi operativi (Tratta A/R + Avv + Rip): ${kmComplessiviOperativi} km`);
                     console.log(`   - Break-Even Totale della missione (${mezzo.euro_km} €/km * ${kmComplessiviOperativi} km): ${breakEvenTotale.toFixed(4)} €`);
-                    console.log(`   - Target Passeggeri: ${targetPasseggeri}`);
+                    console.log(`   - Posti Totali Missione A/R: ${postiTotaliMissione} | Target Passeggeri Totale (A/R): ${targetPasseggeri}`);
                     console.log(`   - Posti utente richiesti: ${postiUtente}`);
                     console.log(`✨ [POPBUS] Subtotale calcolato finale: ${prezzoCalcolato.toFixed(4)} €`);
                 }

@@ -192,12 +192,23 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             const kmRipItem = Number(item.km_riposizionamento ?? richiesta.km_riposizionamento ?? 0);
             
             const kmTrattaUtente = Number(item.distanzaKm || item.km_utente || (item.distanza ? item.distanza / 1000 : distKmItem)); 
-            
-            // 👈 Forziamo la somma operativa esatta (Tratta + Avv + Rip) ed evitiamo l'eredità della direttrice globale
             const kmTotaliRotte = kmTrattaUtente + kmAvvItem + kmRipItem;
 
             if (tipoCoerente === 'pop-bus') {
                 console.log(`📊 [DEBUG BREAK-EVEN REAL] Analisi Pop-Bus reale ID: ${itemId}`);
+                // 🛑 LOG DI ISPEZIONE DETTAGLIATO PER TRACCIARE LA PROVENIENZA DEI KM
+                console.log(`🔍 [DEBUG FORMATTER ITEM DETAILS]`, {
+                    id: item.id,
+                    km_totali_percorso: item.km_totali_percorso,
+                    km_totali_rotta: item.km_totali_rotta,
+                    distanza_totale_corsa: item.distanza_totale_corsa,
+                    distanzaKm: item.distanzaKm,
+                    km_utente: item.km_utente,
+                    kmTrattaUtente,
+                    kmAvvItem,
+                    kmRipItem,
+                    kmTotaliRotte
+                });
                 console.log(`👉 [DEBUG BREAK-EVEN REAL] Parametri: postiUtente=${postiUtenteRichiesti}, kmTratta=${kmTrattaUtente}, kmTotali=${kmTotaliRotte}, passeggeriA1Bordo=${passeggeriGiaA1Bordo}, classe=${item.classe || 'STANDARD'}`);
             }
 

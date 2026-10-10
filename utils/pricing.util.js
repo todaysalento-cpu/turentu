@@ -4,9 +4,12 @@ const TARIFF_DEFAULT = { euro_km: 0.50, prezzo_passeggero: 1.00 };
 const PREZZO_MINIMO = 0.50;
 
 const CLASSI_CONFIG = {
-    EXPRESS:  { soglia: 0.40, minIndice: 1.0, maxIndice: 99.0 }, 
-    STANDARD: { soglia: 0.60, minIndice: 0.02, maxIndice: 1.5 },
-    SAVER:    { soglia: 0.70, minIndice: 0.0, maxIndice: 0.05 }
+    EXPRESS:        { soglia: 0.40, minIndice: 1.0, maxIndice: 99.0 }, 
+    STANDARD:       { soglia: 0.60, minIndice: 0.02, maxIndice: 1.5 },
+    STANDARD_ALTA:  { soglia: 0.60, minIndice: 0.005, maxIndice: 1.5 },
+    STANDARD_MEDIA: { soglia: 0.60, minIndice: 0.01, maxIndice: 1.5 },
+    STANDARD_BASSA: { soglia: 0.60, minIndice: 0.01, maxIndice: 1.5 },
+    SAVER:          { soglia: 0.70, minIndice: 0.0, maxIndice: 0.05 }
 };
 
 const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);
@@ -118,7 +121,8 @@ export async function calcolaPrezzo(
                     console.log(`⚠️ [PRICING POPBUS] Nessun pool trovato o veicoli non validi per la classe ${classeKey}.`);
                     prezzoCalcolato = null;
                 } else {
-                    const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG.STANDARD;
+                    // Risoluzione robusta della configurazione classe (supporta STANDARD_ALTA o fallback su STANDARD)
+                    const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG[classeKey.split('_')[0]] || CLASSI_CONFIG.STANDARD;
                     console.log(`⚙️ [POPBUS Config] Classe: ${classeKey} -> Soglia: ${config.soglia}, minIndice: ${config.minIndice}, maxIndice: ${config.maxIndice}`);
 
                     // Filtriamo i veicoli in base ai parametri della classe

@@ -80,6 +80,15 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       LIMIT 1
     `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
 
+    // 🔍 LOG DEBUG: Valutazione compatibilità temporale e direttrici esistenti
+    console.log(`🔍 [MATCHER] Valutazione direttrici esistenti per nodo ${minNodoCorrente} (Slot: ${info.slot_orario}):`, esistenti.map(e => ({
+      direttrice_id: e.id,
+      stato: e.stato,
+      orario_transito: e.orario_transito_nodo,
+      scarto_secondi: Math.round(e.scarto_secondi),
+      compatibile: e.scarto_secondi <= 2400
+    })));
+
     let direttriceId;
 
     if (esistenti.length > 0) {
@@ -88,6 +97,9 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
       const nuovoStart = nodiOrdinati[0];
       const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
+
+      // 🔍 LOG DEBUG: Scelta riutilizzo direttrice esistente
+      console.log(`♻️ [MATCHER] Accodamento a direttrice ESISTENTE ID: ${direttriceId}. Estensione capolinea a Start: ${nuovoStart}, End: ${nuovoEnd}`);
 
       await client.query(`
         UPDATE direttrici_virtuali
@@ -104,6 +116,9 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], tipoServizioTarget]);
 
       direttriceId = dir[0].id;
+
+      // 🔍 LOG DEBUG: Creazione nuova direttrice
+      console.log(`✨ [MATCHER] Creata NUOVA direttrice ID: ${direttriceId} per slot ${info.slot_orario} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}]`);
     }
 
     const segmentiDaCreare = new Map();
@@ -196,6 +211,9 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         )
         WHERE s.id = $1
       `, [segmentoId]);
+
+      // 🔍 LOG DEBUG: Sincronizzazione segmento completata
+      console.log(`📏 [MATCHER] Segmento ${segmentoId} (Direttrice ${direttriceId}) [Tratta ${sNode} ➔ ${eNode}] sincronizzato. Ordine: ${ordineSeq}, Tempo: ${tempoStimatoMinuti} min`);
 
       if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
         segmentiCoinvoltiIds.push(Number(segmentoId));

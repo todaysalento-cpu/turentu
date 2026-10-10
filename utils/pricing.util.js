@@ -132,9 +132,9 @@ export async function calcolaPrezzo(
                         break;
                     }
                     
-                    // Selezioniamo il veicolo più economico (euro_km più basso) tra quelli idonei
-                    const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
-                    console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
+                    // Selezioniamo il veicolo con l'indice di efficienza più basso tra quelli idonei
+                    const mezzo = poolFiltrato.reduce((prev, curr) => prev.indice < curr.indice ? prev : curr);
+                    console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (indice più basso):`, mezzo);
 
                     // Calcolo Break-Even basato sui km operativi totali (tratta + avvicinamento + riposizionamento)
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;

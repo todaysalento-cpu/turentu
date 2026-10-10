@@ -144,10 +144,11 @@ export async function processaProposteDinamiche() {
 
       console.log(`🔍 [VERIFICA COMPATIBILITÀ] Controllo direttrice esistente per Servizio: ${tipoServizioTarget}, Nodo Iniziale: ${minNodoCorrente}, Slot Orario: ${info.slot_orario}`);
 
+      // 🛠️ AGGIORNATO: Inclusi gli stati 'in_attesa_autista' e 'attivo' per considerare la direttrice un contenitore persistente
       const { rows: direttriciCandidate } = await client.query(`
         SELECT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, dv.partenza_prevista
         FROM direttrici_virtuali dv
-        WHERE dv.tipo_servizio = $1 AND dv.stato IN ('in_formazione', 'attivo')
+        WHERE dv.tipo_servizio = $1 AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
       `, [tipoServizioTarget]);
       console.log(`📋 [DIAGNOSTICA COMPATIBILITÀ] Direttrici candidate trovate nel DB per tipo '${tipoServizioTarget}':`, direttriciCandidate);
 
@@ -170,14 +171,14 @@ export async function processaProposteDinamiche() {
           FROM direttrici_virtuali dv
           JOIN segmenti s ON s.direttrice_id = dv.id
           WHERE dv.tipo_servizio = $2
-            AND dv.stato IN ('in_formazione', 'attivo')
+            AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
         )
         SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_transito_nodo,
                ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) as scarto_secondi
         FROM direttrici_virtuali dv
         JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
         WHERE dv.tipo_servizio = $2
-          AND dv.stato IN ('in_formazione', 'attivo')
+          AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
           AND (sc.start_node_id = $1 OR sc.end_node_id = $1)
           AND ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) <= 2400
         ORDER BY dv.id ASC
@@ -287,10 +288,10 @@ export async function processaProposteDinamiche() {
           }
         }
 
-        // 🛠️ FIX: Rimosso il filtro rigido 'AND stato = 'in_attesa'' per evitare duplicati indesiderati
+        // Cerca se esiste già il segmento (indipendentemente dallo stato, per poterlo riutilizzare o aggiornare)
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 
-          WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
+          WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
           LIMIT 1
         `, [direttriceId, sNode, eNode]);
 
@@ -309,7 +310,7 @@ export async function processaProposteDinamiche() {
           console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         }
 
-        // Calcolo posti occupati mirato sul segmento corrente (isolato dai segmenti attivi precedenti)
+        // Calcolo posti occupati mirato sul segmento corrente
         await client.query(`
           UPDATE segmenti s
           SET posti_occupati = (
@@ -319,7 +320,6 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
             WHERE r.direttrice_id = s.direttrice_id
               AND r.stato IN ('in_attesa', 'in_lavorazione')
-              AND s.stato = 'in_attesa'
               AND r_start.ordine_sequenziale <= s.ordine_sequenziale
               AND r_end.ordine_sequenziale > s.ordine_sequenziale
           )
@@ -421,7 +421,7 @@ export async function processaProposteDinamiche() {
         LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
         WHERE v.id NOT IN (
           SELECT veicolo_id FROM direttrici_virtuali 
-          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
         )
       ),
       parametri_pool_ottimali AS (
@@ -508,7 +508,7 @@ export async function processaProposteDinamiche() {
           WHERE n_partenza.id = $1
             AND v.id NOT IN (
               SELECT veicolo_id FROM direttrici_virtuali 
-              WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+              WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
             )
           ORDER BY ST_Distance(COALESCE(d.coord, n_partenza.posizione)::geography, n_partenza.posizione::geography) ASC
           LIMIT 1
@@ -518,7 +518,7 @@ export async function processaProposteDinamiche() {
           const veicoloIdAssegnato = veicoliLiberi[0].id;
           await client.query(`
             UPDATE direttrici_virtuali 
-            SET veicolo_id = $1, stato = 'attivo'
+            SET veicolo_id = $1, stato = 'in_attesa_autista'
             WHERE id = $2
           `, [veicoloIdAssegnato, seg.direttrice_id]);
           console.log(`🚌 [WORKER] Assegnato veicolo ID ${veicoloIdAssegnato} alla direttrice ${seg.direttrice_id}`);
@@ -555,7 +555,7 @@ export async function processaProposteDinamiche() {
           AND d_target.tipo_servizio = d_source.tipo_servizio
       WHERE r.direttrice_id = d_source.id
         AND d_source.stato = 'in_formazione'
-        AND d_target.stato = 'attivo'
+        AND d_target.stato IN ('in_attesa_autista', 'attivo')
         AND d_source.id <> d_target.id
     `);
 

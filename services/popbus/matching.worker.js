@@ -125,6 +125,7 @@ export async function processaProposteDinamiche() {
     for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
       const nodiIdsArray = Array.from(info.nodi);
 
+      // 🛠️ FIX GEOGRAFICO: Ordinamento basato sulla distanza rispetto al primo nodo o sulla posizione lineare geografica
       const { rows: nodiOrdinatiGeograficamente } = await client.query(`
         WITH base_node AS (
           SELECT id, posizione FROM nodi_direttrice WHERE id = $1
@@ -142,12 +143,17 @@ export async function processaProposteDinamiche() {
       const maxNodoCorrente = nodiOrdinati[nodiOrdinati.length - 1];
       const tipoServizioTarget = `STANDARD_${info.fascia_percorrenza}`;
 
+      console.log(`🔍 [VERIFICA COMPATIBILITÀ] Controllo direttrice esistente per Servizio: ${tipoServizioTarget}, Nodo Iniziale: ${minNodoCorrente}, Slot Orario: ${info.slot_orario}`);
+
+      // 🔍 LOG DI DIAGNOSTICA PRE-VERIFICA
       const { rows: direttriciCandidate } = await client.query(`
         SELECT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, dv.partenza_prevista
         FROM direttrici_virtuali dv
         WHERE dv.tipo_servizio = $1 AND dv.stato IN ('in_formazione', 'attivo')
       `, [tipoServizioTarget]);
+      console.log(`📋 [DIAGNOSTICA COMPATIBILITÀ] Direttrici candidate trovate nel DB per tipo '${tipoServizioTarget}':`, direttriciCandidate);
 
+      // VERIFICA DI COMPATIBILITÀ BASATA SULL'ORARIO DI TRANSITO DAL NODO
       const { rows: esistenti } = await client.query(`
         WITH segmenti_cumulativi AS (
           SELECT 
@@ -181,12 +187,17 @@ export async function processaProposteDinamiche() {
         LIMIT 1
       `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
 
+      if (esistenti.length === 0 && direttriciCandidate.length > 0) {
+        console.warn(`⚠️ [ESCLUSIONE COMPATIBILITÀ] Esistono direttrici per il tipo '${tipoServizioTarget}', ma NESSUNA soddisfa i vincoli di nodo (${minNodoCorrente}) o di finestra temporale (±40 min / 2400s) rispetto allo slot ${info.slot_orario}.`);
+      }
+
       let direttriceId;
 
       if (esistenti.length > 0) {
         const dirEsistente = esistenti[0];
         direttriceId = dirEsistente.id;
-        console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice esistente ID: ${direttriceId}`);
+
+        console.log(`✅ [COMPATIBILITÀ TROVATA] Trovata direttrice compatibile esistente ID: ${direttriceId} (Stato: ${dirEsistente.stato}, Tratta: ${dirEsistente.start_node_id}➔${dirEsistente.end_node_id}, Orario transito nodo: ${dirEsistente.orario_transito_nodo}, Scarto temporale: ${dirEsistente.scarto_secondi}s)`);
 
         const nuovoStart = nodiOrdinati[0];
         const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
@@ -196,8 +207,9 @@ export async function processaProposteDinamiche() {
           SET start_node_id = $1, end_node_id = $2
           WHERE id = $3
         `, [nuovoStart, nuovoEnd, direttriceId]);
+        console.log(`🚌 [DIRETTRICE] Espansi estremi direttrice ID ${direttriceId} a [${nuovoStart} ➔ ${nuovoEnd}]`);
       } else {
-        console.log(`⚠️ [COMPATIBILITÀ NON TROVATA] Creazione nuova direttrice per il nodo ${minNodoCorrente}...`);
+        console.log(`⚠️ [COMPATIBILITÀ NON TROVATA] Creazione nuova direttrice per il nodo ${minNodoCorrente} nello slot ${info.slot_orario}...`);
 
         const { rows: dir } = await client.query(`
           INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
@@ -208,7 +220,7 @@ export async function processaProposteDinamiche() {
         `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], tipoServizioTarget]);
 
         direttriceId = dir[0].id;
-        console.log(`🚌 [DIRETTRICE CREATA] ID: ${direttriceId}`);
+        console.log(`🚌 [DIRETTRICE] Creata nuova direttrice ID: ${direttriceId} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}] con slot ${info.slot_orario}`);
       }
 
       const segmentiDaCreare = new Map();
@@ -220,6 +232,8 @@ export async function processaProposteDinamiche() {
         const idxStart = Math.min(idx1, idx2);
         const idxEnd = Math.max(idx1, idx2);
 
+        console.log(`🔎 [CLUSTER PROCESSING] Tratta richiesta [${c.start_node_id} ➔ ${c.end_node_id}] ➔ Indici array: [${idxStart} ... ${idxEnd}]`);
+
         for (let i = idxStart; i < idxEnd; i++) {
           const sId = nodiOrdinati[i];
           const eId = nodiOrdinati[i + 1];
@@ -229,7 +243,9 @@ export async function processaProposteDinamiche() {
         }
 
         if (!c.is_composta) {
-          const slotIso = c.slot_orario instanceof Date ? c.slot_orario.toISOString() : new Date(c.slot_orario).toISOString();
+          const slotIso = c.slot_orario instanceof Date 
+            ? c.slot_orario.toISOString() 
+            : new Date(c.slot_orario).toISOString();
 
           await client.query(`
             UPDATE richieste_pop_bus
@@ -243,11 +259,16 @@ export async function processaProposteDinamiche() {
         }
       }
 
+      console.log(`📊 [SEGMENTI MAP] Trovati ${segmentiDaCreare.size} sotto-segmenti unici da creare/aggiornare per la direttrice ${direttriceId}`);
+
       let ordineSeq = 0;
       for (const [subKey, postiTotaliSub] of segmentiDaCreare.entries()) {
         const [sNode, eNode] = subKey.split('_').map(Number);
         ordineSeq++;
 
+        console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}`);
+
+        // Recupero coordinate dei nodi per Google Maps
         const { rows: coordNodes } = await client.query(`
           SELECT id, ST_Y(posizione::geometry) as lat, ST_X(posizione::geometry) as lon
           FROM nodi_direttrice
@@ -257,7 +278,7 @@ export async function processaProposteDinamiche() {
         const startNodeData = coordNodes.find(n => n.id === sNode);
         const endNodeData = coordNodes.find(n => n.id === eNode);
 
-        let tempoStimatoMinuti = 10;
+        let tempoStimatoMinuti = 10; // Fallback di default
         if (startNodeData && endNodeData) {
           try {
             const routeInfo = await getRouteGeometry(
@@ -266,7 +287,7 @@ export async function processaProposteDinamiche() {
             );
             tempoStimatoMinuti = Math.max(1, Math.ceil(routeInfo.durata / 60));
           } catch (mapsErr) {
-            console.warn(`⚠️ [MAPS WARNING] Fallback 10 min per [${sNode} ➔ ${eNode}]`);
+            console.warn(`⚠️ [MAPS WARNING] Impossibile calcolare il tempo con Google Maps per [${sNode} ➔ ${eNode}], uso default 10 min: ${mapsErr.message}`);
           }
         }
 
@@ -280,6 +301,7 @@ export async function processaProposteDinamiche() {
         if (existingSeg.length > 0) {
           segmentoId = existingSeg[0].id;
           await client.query(`UPDATE segmenti SET tempo_stimato = $1 WHERE id = $2`, [tempoStimatoMinuti, segmentoId]);
+          console.log(`🔄 [SEGMENTO AGGIORNATO] ID Segmento esistente: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         } else {
           const { rows: newSeg } = await client.query(`
             INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale, tempo_stimato)
@@ -287,10 +309,10 @@ export async function processaProposteDinamiche() {
             RETURNING id
           `, [direttriceId, sNode, eNode, ordineSeq, tempoStimatoMinuti]);
           segmentoId = newSeg[0].id;
-          console.log(`✨ [SEGMENTO CREATO] ID: ${segmentoId} [Nodo ${sNode} ➔ ${eNode}]`);
+          console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         }
 
-        // 🛠️ FIX POSTI OCCUPATI CON LOG DI CONTROLLO
+        // Calcolo posti occupati (mantenendo la copertura logica dei passeggeri a bordo)
         await client.query(`
           UPDATE segmenti s
           SET posti_occupati = (
@@ -300,15 +322,14 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
             WHERE r.direttrice_id = s.direttrice_id
               AND r.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.ordine_sequenziale <= s.ordine_sequenziale
-              AND r_end.ordine_sequenziale > s.ordine_sequenziale
+              AND r_start.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r.end_node_id
+              )
           )
           WHERE s.id = $1
         `, [segmentoId]);
-
-        // 🔍 LOG DIAGNOSTICA POSTI SUL SEGMENTO
-        const { rows: checkPosti } = await client.query(`SELECT id, posti_occupati FROM segmenti WHERE id = $1`, [segmentoId]);
-        console.log(`📊 [DEBUG POSTI] Segmento ID ${segmentoId} (Ordine ${ordineSeq}) ➔ Posti occupati calcolati: ${checkPosti[0]?.posti_occupati}`);
 
         if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
           segmentiCoinvoltiIds.push(Number(segmentoId));
@@ -329,24 +350,32 @@ export async function processaProposteDinamiche() {
             segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
           )
           VALUES (
-            ${sIdNum}, ${dIdNum}, ${eNodeNum}, ${capolineaFinaleId}, ('${slotIso}'::timestamptz + ${intervalSql}), 'in_attesa', ${maxAttesaVal}
+            ${sIdNum}, 
+            ${dIdNum}, 
+            ${eNodeNum}, 
+            ${capolineaFinaleId}, 
+            ('${slotIso}'::timestamptz + ${intervalSql}), 
+            'in_attesa',
+            ${maxAttesaVal}
           )
           ON CONFLICT (segmento_id, capolinea_finale_id) 
-          DO UPDATE SET orario_previsto = EXCLUDED.orario_previsto, nodo_origine = EXCLUDED.nodo_origine
+          DO UPDATE SET 
+            orario_previsto = EXCLUDED.orario_previsto,
+            nodo_origine = EXCLUDED.nodo_origine
         `);
       }
     }
 
     if (segmentiCoinvoltiIds.length === 0) {
-      console.log('⚠️ [WORKER] Nessun segmento coinvolto. Commit e fine.');
+      console.log('⚠️ [WORKER] Nessun segmento coinvolto in questo giro. Commit e fine.');
       await client.query('COMMIT');
       return;
     }
 
     const idsListSql = segmentiCoinvoltiIds.join(',');
 
-    // 2. CALCOLO ATTIVAZIONE ECONOMICA
-    console.log('💰 [WORKER] Fase 2: Calcolo economico e metriche segmenti...');
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA (Ristretto ai segmenti interamente inclusi)
+    console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti...');
 
     const { rows: debugMetrics } = await client.query(`
       WITH ricavi_segmento AS (
@@ -369,8 +398,12 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start_seg.ordine_sequenziale <= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale > s.ordine_sequenziale
+              -- Condizione flessibile per coprire correttamente anche le tratte lunghe/multi-segmento
+              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -379,14 +412,43 @@ export async function processaProposteDinamiche() {
         LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
         LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
         WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
+      ),
+      veicoli_disponibili_pool AS (
+        SELECT 
+          rs.segmento_id,
+          COALESCE(v.posti_totali, 50) as capacita_veicolo,
+          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
+        FROM ricavi_segmento rs
+        JOIN veicolo v ON true
+        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
+        LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
+        WHERE v.id NOT IN (
+          SELECT veicolo_id FROM direttrici_virtuali 
+          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
+        )
+      ),
+      parametri_pool_ottimali AS (
+        SELECT 
+          segmento_id,
+          MIN(euro_km_veicolo) as min_euro_km,
+          MAX(capacita_veicolo) as capacita_veicolo
+        FROM veicoli_disponibili_pool
+        GROUP BY segmento_id
       )
-      SELECT segmento_id, direttrice_id, ricavo_attuale, km_segmento, posti_occupati 
-      FROM ricavi_segmento
+      SELECT 
+        rs.segmento_id,
+        rs.direttrice_id,
+        rs.start_node_id,
+        rs.end_node_id,
+        rs.ricavo_attuale,
+        rs.km_segmento,
+        COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
+        (COALESCE(ppo.min_euro_km, 0.50) * rs.km_segmento) as soglia_attivazione_minima,
+        rs.posti_occupati,
+        COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
+      FROM ricavi_segmento rs
+      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
     `);
-
-    debugMetrics.forEach(m => {
-      console.log(`🔎 [DEBUG RICAVI] Segmento ${m.segmento_id} ➔ Ricavo Attuale: €${m.ricavo_attuale}, Km: ${Number(m.km_segmento).toFixed(2)}, Posti: ${m.posti_occupati}`);
-    });
 
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (
@@ -410,8 +472,11 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
             WHERE r_sub.direttrice_id = s.direttrice_id
               AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start_seg.ordine_sequenziale <= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale > s.ordine_sequenziale
+              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
           ) as ricavo_attuale
         FROM segmenti s
         JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
@@ -538,6 +603,7 @@ export async function processaProposteDinamiche() {
         }
       }
 
+      // Sincronizzazione campi globali distanza e soglia sulla direttrice
       await client.query(`
         UPDATE direttrici_virtuali dv
         SET 

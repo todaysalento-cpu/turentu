@@ -5,10 +5,10 @@ const PREZZO_MINIMO = 0.50;
 
 const CLASSI_CONFIG = {
     EXPRESS:        { soglia: 0.40, minIndice: 1.0, maxIndice: 99.0 }, 
-    STANDARD:       { soglia: 0.60, minIndice: 0.02, maxIndice: 1.5 },
+    STANDARD:       { soglia: 0.60, minIndice: 0.005, maxIndice: 1.5 },
     STANDARD_ALTA:  { soglia: 0.60, minIndice: 0.005, maxIndice: 1.5 },
-    STANDARD_MEDIA: { soglia: 0.60, minIndice: 0.01, maxIndice: 1.5 },
-    STANDARD_BASSA: { soglia: 0.60, minIndice: 0.01, maxIndice: 1.5 },
+    STANDARD_MEDIA: { soglia: 0.60, minIndice: 0.005, maxIndice: 1.5 },
+    STANDARD_BASSA: { soglia: 0.60, minIndice: 0.005, maxIndice: 1.5 },
     SAVER:          { soglia: 0.70, minIndice: 0.0, maxIndice: 0.05 }
 };
 
@@ -106,10 +106,18 @@ export async function calcolaPrezzo(
                 console.log(`\n================ 🚌 [DEBUG POP-BUS PRICING INIZIO] ================`);
                 let poolIds = corsa.veicoli_pool_ids;
                 
-                if ((!poolIds || poolIds.length === 0) && corsa.direttrice_id) {
-                    console.log(`🔍 [POPBUS] Pool vuoto nell'oggetto corsa, recupero da direttrice_id: ${corsa.direttrice_id}`);
-                    const { rows } = await pool.query('SELECT veicolo_id FROM direttrici_virtuali WHERE id = $1', [corsa.direttrice_id]);
-                    if (rows.length > 0) poolIds = [rows[0].veicolo_id];
+                // Recuperiamo la classe/tipo_servizio reale direttamente dalla direttrice nel DB se presente
+                let classeEfficace = classeKey;
+                if (corsa.direttrice_id) {
+                    const { rows: dirRows } = await pool.query('SELECT tipo_servizio, veicolo_id FROM direttrici_virtuali WHERE id = $1', [corsa.direttrice_id]);
+                    if (dirRows.length > 0) {
+                        if (dirRows[0].tipo_servizio) {
+                            classeEfficace = dirRows[0].tipo_servizio.toUpperCase();
+                        }
+                        if ((!poolIds || poolIds.length === 0) && dirRows[0].veicolo_id) {
+                            poolIds = [dirRows[0].veicolo_id];
+                        }
+                    }
                 }
 
                 console.log(`📋 [POPBUS] ID veicoli nel pool da analizzare:`, poolIds);
@@ -118,19 +126,19 @@ export async function calcolaPrezzo(
                 console.log(`📦 [POPBUS] Dettaglio grezzo estratto dal DB per i veicoli del pool:`, JSON.stringify(poolData));
                 
                 if (poolData.length === 0) {
-                    console.log(`⚠️ [PRICING POPBUS] Nessun pool trovato o veicoli non validi per la classe ${classeKey}.`);
+                    console.log(`⚠️ [PRICING POPBUS] Nessun pool trovato o veicoli non validi per la classe ${classeEfficace}.`);
                     prezzoCalcolato = null;
                 } else {
-                    // Risoluzione robusta della configurazione classe (supporta STANDARD_ALTA o fallback su STANDARD)
-                    const config = CLASSI_CONFIG[classeKey] || CLASSI_CONFIG[classeKey.split('_')[0]] || CLASSI_CONFIG.STANDARD;
-                    console.log(`⚙️ [POPBUS Config] Classe: ${classeKey} -> Soglia: ${config.soglia}, minIndice: ${config.minIndice}, maxIndice: ${config.maxIndice}`);
+                    // Risoluzione della configurazione basata sulla classe efficace
+                    const config = CLASSI_CONFIG[classeEfficace] || CLASSI_CONFIG[classeEfficace.split('_')[0]] || CLASSI_CONFIG.STANDARD;
+                    console.log(`⚙️ [POPBUS Config] Classe: ${classeEfficace} (Input: ${classeKey}) -> Soglia: ${config.soglia}, minIndice: ${config.minIndice}, maxIndice: ${config.maxIndice}`);
 
                     // Filtriamo i veicoli in base ai parametri della classe
                     const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
-                    console.log(`🎯 [POPBUS] Veicoli dopo il filtraggio per indice (${classeKey}):`, JSON.stringify(poolFiltrato));
+                    console.log(`🎯 [POPBUS] Veicoli dopo il filtraggio per indice (${classeEfficace}):`, JSON.stringify(poolFiltrato));
                     
                     if (poolFiltrato.length === 0) {
-                        console.log(`❌ [PRICING POPBUS] Nessun veicolo idoneo dopo il filtraggio per l'indice della classe ${classeKey}.`);
+                        console.log(`❌ [PRICING POPBUS] Nessun veicolo idoneo dopo il filtraggio per l'indice della classe ${classeEfficace}.`);
                         prezzoCalcolato = null;
                         break;
                     }

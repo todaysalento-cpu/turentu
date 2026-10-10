@@ -15,11 +15,16 @@ const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);
 export async function getTariffe(veicolo_id) {
     try {
         const { rows } = await pool.query(
-            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 LIMIT 1',
+            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $1 LIMIT 1', // oppure mantenendo la priorità standard
             [veicolo_id]
         );
-        if (rows[0]) {
-            return { euro_km: Number(rows[0].euro_km), prezzo_passeggero: Number(rows[0].prezzo_passeggero) };
+        // Fallback sicuro prendendo almeno una tariffa valida con euro_km > 0
+        const { rows: fallbackRows } = await pool.query(
+            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND euro_km > 0 ORDER BY (tipo = \'standard\') DESC LIMIT 1',
+            [veicolo_id]
+        );
+        if (fallbackRows[0]) {
+            return { euro_km: Number(fallbackRows[0].euro_km), prezzo_passeggero: Number(fallbackRows[0].prezzo_passeggero) };
         }
         return TARIFF_DEFAULT;
     } catch (err) {
@@ -31,11 +36,14 @@ export async function getTariffe(veicolo_id) {
 async function getDettaglioPool(veicoli_ids) {
     if (!veicoli_ids || veicoli_ids.length === 0) return [];
     try {
+        // Selezioniamo la tariffa standard (o la migliore disponibile con euro_km > 0) per evitare duplicati anomali
         const res = await pool.query(
-            `SELECT t.veicolo_id, t.euro_km, v.posti_totali as posti 
+            `SELECT DISTINCT ON (t.veicolo_id) 
+                t.veicolo_id, t.euro_km, v.posti_totali as posti 
              FROM tariffe t
              JOIN veicolo v ON t.veicolo_id = v.id 
-             WHERE t.veicolo_id = ANY($1)`,
+             WHERE t.veicolo_id = ANY($1) AND t.euro_km > 0
+             ORDER BY t.veicolo_id, (t.tipo = 'standard') DESC`,
             [veicoli_ids]
         );
         return res.rows.map(r => ({
@@ -73,7 +81,7 @@ export async function calcolaPrezzo(
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione e normalizzazione dei chilometri operativi (Math.abs garantisce che la distanza sia sempre positiva)
+    // Estrazione e normalizzazione dei chilometri operativi
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
     const safeKmUtente = Math.abs(Number(kmUtente) || 0);

@@ -104,7 +104,6 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
     debug_log AS (
       SELECT 
         co.segmento_id,
-        -- Stampa diretta dei dettagli di calcolo nei log di Postgres
         pg_notify('econ_engine_debug', format(
           'SEGMENTO %s | Km: %s | Euro/Km Min: %s | Soglia Minima: %s € | Ricavo Attuale: %s € | Esito: %s',
           co.segmento_id,
@@ -132,12 +131,28 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
     ),
     update_segmenti AS (
       UPDATE segmenti s
-      SET start_datetime = sf.calculated_start, stato = 'attivo', ricavo_stimato = sf.ricavo_attuale
+      SET 
+        start_datetime = sf.calculated_start, 
+        stato = 'attivo', 
+        ricavo_stimato = sf.ricavo_attuale,
+        posti_occupati = (
+          SELECT COALESCE(SUM(r_sub.posti_richiesti), 0)
+          FROM richieste_pop_bus r_sub
+          JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+          JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
+          WHERE r_sub.direttrice_id = s.direttrice_id
+            AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+            AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+            AND r_end_seg.ordine_sequenziale <= (
+              SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+              WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+            )
+        )
       FROM segmenti_filtrati sf
       WHERE s.id = sf.segmento_id
-      RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id, s.ricavo_stimato
+      RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id, s.ricavo_stimato, s.posti_occupati
     )
-    SELECT id, direttrice_id, stato, start_node_id, ricavo_stimato FROM update_segmenti
+    SELECT id, direttrice_id, stato, start_node_id, ricavo_stimato, posti_occupati FROM update_segmenti
   `);
 
   console.log(`📊 [WORKER - ECONOMIC ENGINE] Analisi completata.`);
@@ -145,7 +160,7 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
   
   if (segmentiAttivati.length > 0) {
     segmentiAttivati.forEach(seg => {
-      console.log(`    ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} €`);
+      console.log(`    ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} € | Posti Occupati: ${seg.posti_occupati}`);
     });
   } else {
     console.log(`    ⚠️ Nessun segmento ha soddisfatto i requisiti di soglia economica o capienza in questo ciclo.`);

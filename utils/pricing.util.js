@@ -5,9 +5,9 @@ const PREZZO_MINIMO = 0.50;
 
 const CLASSE_MULTIPLIER = { EXPRESS: 1.4, STANDARD: 1.0, SAVER: 0.75 };
 const CLASSI_CONFIG = {
-    EXPRESS:  { soglia: 0.5, minIndice: 1.5, maxIndice: 99.0 }, 
-    STANDARD: { soglia: 0.6, minIndice: 0.3, maxIndice: 1.5 },
-    SAVER:    { soglia: 0.9, minIndice: 0.0, maxIndice: 0.3 }
+    EXPRESS:  { soglia: 0.5, minIndice: 1.0, maxIndice: 99.0 }, 
+    STANDARD: { soglia: 0.6, minIndice: 0.02, maxIndice: 1.5 }, // 👈 minIndice abbassato per includere veicoli da 5+ posti
+    SAVER:    { soglia: 0.9, minIndice: 0.0, maxIndice: 0.05 }
 };
 
 const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);

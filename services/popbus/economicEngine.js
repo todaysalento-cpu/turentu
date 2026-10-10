@@ -94,10 +94,27 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
         ca.ricavo_aggregato as ricavo_attuale,
         ca.posti_occupati,
         ca.capacita_veicolo,
+        ca.km_segmento,
+        ca.euro_km_selezionato,
         (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima
       FROM costo_attivazione ca
       JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
       JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
+    ),
+    debug_log AS (
+      SELECT 
+        co.segmento_id,
+        -- Stampa diretta dei dettagli di calcolo nei log di Postgres
+        pg_notify('econ_engine_debug', format(
+          'SEGMENTO %s | Km: %s | Euro/Km Min: %s | Soglia Minima: %s € | Ricavo Attuale: %s € | Esito: %s',
+          co.segmento_id,
+          round(co.km_segmento::numeric, 2),
+          co.euro_km_selezionato,
+          round(co.soglia_attivazione_minima::numeric, 2),
+          round(co.ricavo_attuale::numeric, 2),
+          CASE WHEN co.ricavo_attuale >= co.soglia_attivazione_minima THEN 'SUPERATA (Attivabile)' ELSE 'NON SUPERATA (Bloccato)' END
+        ))
+      FROM calcolo_orari co
     ),
     segmenti_filtrati AS (
       SELECT co.*
@@ -128,10 +145,10 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
   
   if (segmentiAttivati.length > 0) {
     segmentiAttivati.forEach(seg => {
-      console.log(`   ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} €`);
+      console.log(`    ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} €`);
     });
   } else {
-    console.log(`   ⚠️ Nessun segmento ha soddisfatto i requisiti di soglia economica o capienza in questo ciclo.`);
+    console.log(`    ⚠️ Nessun segmento ha soddisfatto i requisiti di soglia economica o capienza in questo ciclo.`);
   }
 
   return segmentiAttivati;

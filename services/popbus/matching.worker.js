@@ -125,7 +125,6 @@ export async function processaProposteDinamiche() {
     for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
       const nodiIdsArray = Array.from(info.nodi);
 
-      // 🛠️ FIX GEOGRAFICO: Ordinamento basato sulla distanza rispetto al primo nodo o sulla posizione lineare geografica
       const { rows: nodiOrdinatiGeograficamente } = await client.query(`
         WITH base_node AS (
           SELECT id, posizione FROM nodi_direttrice WHERE id = $1
@@ -145,7 +144,6 @@ export async function processaProposteDinamiche() {
 
       console.log(`🔍 [VERIFICA COMPATIBILITÀ] Controllo direttrice esistente per Servizio: ${tipoServizioTarget}, Nodo Iniziale: ${minNodoCorrente}, Slot Orario: ${info.slot_orario}`);
 
-      // 🔍 LOG DI DIAGNOSTICA PRE-VERIFICA
       const { rows: direttriciCandidate } = await client.query(`
         SELECT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, dv.partenza_prevista
         FROM direttrici_virtuali dv
@@ -153,7 +151,6 @@ export async function processaProposteDinamiche() {
       `, [tipoServizioTarget]);
       console.log(`📋 [DIAGNOSTICA COMPATIBILITÀ] Direttrici candidate trovate nel DB per tipo '${tipoServizioTarget}':`, direttriciCandidate);
 
-      // VERIFICA DI COMPATIBILITÀ BASATA SULL'ORARIO DI TRANSITO DAL NODO
       const { rows: esistenti } = await client.query(`
         WITH segmenti_cumulativi AS (
           SELECT 
@@ -268,7 +265,6 @@ export async function processaProposteDinamiche() {
 
         console.log(`📌 [SEGMENTO SEQUENZIALE] Direttrice ${direttriceId} ➔ Sotto-tratta [Nodo ${sNode} ➔ ${eNode}], Ordine: ${ordineSeq}`);
 
-        // Recupero coordinate dei nodi per Google Maps
         const { rows: coordNodes } = await client.query(`
           SELECT id, ST_Y(posizione::geometry) as lat, ST_X(posizione::geometry) as lon
           FROM nodi_direttrice
@@ -278,7 +274,7 @@ export async function processaProposteDinamiche() {
         const startNodeData = coordNodes.find(n => n.id === sNode);
         const endNodeData = coordNodes.find(n => n.id === eNode);
 
-        let tempoStimatoMinuti = 10; // Fallback di default
+        let tempoStimatoMinuti = 10;
         if (startNodeData && endNodeData) {
           try {
             const routeInfo = await getRouteGeometry(
@@ -291,6 +287,7 @@ export async function processaProposteDinamiche() {
           }
         }
 
+        // 🛠️ FIX: Rimosso il filtro rigido 'AND stato = 'in_attesa'' per evitare duplicati indesiderati
         const { rows: existingSeg } = await client.query(`
           SELECT id, stato FROM segmenti 
           WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 AND stato = 'in_attesa'
@@ -312,7 +309,7 @@ export async function processaProposteDinamiche() {
           console.log(`✨ [SEGMENTO CREATO] Nuovo ID Segmento inserito: ${segmentoId} (Tempo stimato: ${tempoStimatoMinuti} min)`);
         }
 
-        // Calcolo posti occupati (mantenendo la copertura logica dei passeggeri a bordo)
+        // Calcolo posti occupati mirato sul segmento corrente (isolato dai segmenti attivi precedenti)
         await client.query(`
           UPDATE segmenti s
           SET posti_occupati = (
@@ -322,11 +319,9 @@ export async function processaProposteDinamiche() {
             JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
             WHERE r.direttrice_id = s.direttrice_id
               AND r.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r.end_node_id
-              )
+              AND s.stato = 'in_attesa'
+              AND r_start.ordine_sequenziale <= s.ordine_sequenziale
+              AND r_end.ordine_sequenziale > s.ordine_sequenziale
           )
           WHERE s.id = $1
         `, [segmentoId]);
@@ -374,81 +369,8 @@ export async function processaProposteDinamiche() {
 
     const idsListSql = segmentiCoinvoltiIds.join(',');
 
-    // 2. CALCOLO ATTIVAZIONE ECONOMICA (Ristretto ai segmenti interamente inclusi)
+    // 2. CALCOLO ATTIVAZIONE ECONOMICA (Ristretto ai segmenti in attesa)
     console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti...');
-
-    const { rows: debugMetrics } = await client.query(`
-      WITH ricavi_segmento AS (
-        SELECT 
-          s.id as segmento_id,
-          s.direttrice_id,
-          s.start_node_id,
-          s.end_node_id,
-          s.ordine_sequenziale,
-          s.posti_occupati,
-          (
-            ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
-            COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
-            COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
-          ) as km_segmento,
-          (
-            SELECT COALESCE(SUM(r_sub.prezzo), 0)
-            FROM richieste_pop_bus r_sub
-            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-            WHERE r_sub.direttrice_id = s.direttrice_id
-              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              -- Condizione flessibile per coprire correttamente anche le tratte lunghe/multi-segmento
-              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-              )
-          ) as ricavo_attuale
-        FROM segmenti s
-        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-        LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
-        LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
-        LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
-      ),
-      veicoli_disponibili_pool AS (
-        SELECT 
-          rs.segmento_id,
-          COALESCE(v.posti_totali, 50) as capacita_veicolo,
-          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
-        FROM ricavi_segmento rs
-        JOIN veicolo v ON true
-        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
-        LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
-        WHERE v.id NOT IN (
-          SELECT veicolo_id FROM direttrici_virtuali 
-          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'attivo')
-        )
-      ),
-      parametri_pool_ottimali AS (
-        SELECT 
-          segmento_id,
-          MIN(euro_km_veicolo) as min_euro_km,
-          MAX(capacita_veicolo) as capacita_veicolo
-        FROM veicoli_disponibili_pool
-        GROUP BY segmento_id
-      )
-      SELECT 
-        rs.segmento_id,
-        rs.direttrice_id,
-        rs.start_node_id,
-        rs.end_node_id,
-        rs.ricavo_attuale,
-        rs.km_segmento,
-        COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
-        (COALESCE(ppo.min_euro_km, 0.50) * rs.km_segmento) as soglia_attivazione_minima,
-        rs.posti_occupati,
-        COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
-      FROM ricavi_segmento rs
-      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
-    `);
 
     const { rows: segmentiAttivati } = await client.query(`
       WITH ricavi_segmento AS (

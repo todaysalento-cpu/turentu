@@ -75,11 +75,16 @@ export async function calcolaPrezzo(
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione e normalizzazione dei chilometri operativi basati unicamente sulla tratta utente e costi accessori
+    // Estrazione e normalizzazione dei chilometri operativi
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
-    const safeKmUtente = Math.abs(Number(kmUtente) || 0);
     
+    // Protezione: se kmUtente supera i 2000km per errore di ereditarietà direttrice, lo isoliamo o normalizziamo
+    let safeKmUtente = Math.abs(Number(kmUtente) || 0);
+    if (safeKmUtente > 2000 && corsa.distanzaKm) {
+        safeKmUtente = Number(corsa.distanzaKm);
+    }
+
     // I km operativi effettivi sono esclusivamente la tratta dell'utente + avvicinamento + riposizionamento
     const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
     const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);

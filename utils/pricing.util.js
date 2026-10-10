@@ -15,16 +15,11 @@ const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);
 export async function getTariffe(veicolo_id) {
     try {
         const { rows } = await pool.query(
-            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND tipo = $1 LIMIT 1', // oppure mantenendo la priorità standard
-            [veicolo_id]
-        );
-        // Fallback sicuro prendendo almeno una tariffa valida con euro_km > 0
-        const { rows: fallbackRows } = await pool.query(
             'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND euro_km > 0 ORDER BY (tipo = \'standard\') DESC LIMIT 1',
             [veicolo_id]
         );
-        if (fallbackRows[0]) {
-            return { euro_km: Number(fallbackRows[0].euro_km), prezzo_passeggero: Number(fallbackRows[0].prezzo_passeggero) };
+        if (rows[0]) {
+            return { euro_km: Number(rows[0].euro_km), prezzo_passeggero: Number(rows[0].prezzo_passeggero) };
         }
         return TARIFF_DEFAULT;
     } catch (err) {
@@ -36,7 +31,6 @@ export async function getTariffe(veicolo_id) {
 async function getDettaglioPool(veicoli_ids) {
     if (!veicoli_ids || veicoli_ids.length === 0) return [];
     try {
-        // Selezioniamo la tariffa standard (o la migliore disponibile con euro_km > 0) per evitare duplicati anomali
         const res = await pool.query(
             `SELECT DISTINCT ON (t.veicolo_id) 
                 t.veicolo_id, t.euro_km, v.posti_totali as posti 

@@ -136,21 +136,17 @@ export async function calcolaPrezzo(
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
 
-                    // Calcolo Break-Even basato sui km operativi effettivi (tratta + avvicinamento + riposizionamento)
+                    // Calcolo Break-Even basato sui km operativi totali (tratta + avvicinamento + riposizionamento)
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 
-                    // Costo totale per singolo passeggero per l'intera missione
-                    const costoPasseggeroTotale = breakEvenTotale / targetPasseggeri;
-
-                    // Prezzo finale proporzionato alla tratta specifica dell'utente rispetto ai km operativi totali
-                    prezzoCalcolato = (costoPasseggeroTotale * (safeKmUtente / safeKmTotali)) * postiUtente;
+                    // Prezzo finale calcolato ripartendo il break-even totale sui passeggeri target (basato sui km operativi totali)
+                    prezzoCalcolato = (breakEvenTotale / targetPasseggeri) * postiUtente;
 
                     console.log(`📊 [POPBUS Calcoli Intermedi]:`);
                     console.log(`   - Km complessivi operativi (Tratta + Avv + Rip): ${kmComplessiviOperativi}`);
                     console.log(`   - Break-Even Totale della missione (${mezzo.euro_km} €/km * ${kmComplessiviOperativi} km): ${breakEvenTotale.toFixed(4)} €`);
-                    console.log(`   - Target Passeggeri: ${targetPasseggeri} | Costo totale per passeggero: ${costoPasseggeroTotale.toFixed(4)} €`);
-                    console.log(`   - Rapporto km utente/totali (${safeKmUtente} / ${safeKmTotali}): ${(safeKmUtente / safeKmTotali).toFixed(4)}`);
+                    console.log(`   - Target Passeggeri: ${targetPasseggeri}`);
                     console.log(`   - Posti utente richiesti: ${postiUtente}`);
                     console.log(`✨ [POPBUS] Subtotale calcolato finale: ${prezzoCalcolato.toFixed(4)} €`);
                 }

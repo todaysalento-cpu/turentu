@@ -80,7 +80,7 @@ export async function calcolaPrezzo(
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
     const safeKmUtente = Math.abs(Number(kmUtente) || 0);
     const safeKmTotali = Math.max(0.1, Number(kmTotali) || safeKmUtente || 1);
-    const kmComplessiviOperativi = safeKmTotali + avvicinamento + riposizionamento;
+    const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
 
     console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Totali: ${safeKmTotali}`);
 
@@ -89,8 +89,7 @@ export async function calcolaPrezzo(
             case 'privata':
             case 'standard': {
                 const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
-                const kmTotaliPrivato = safeKmUtente + avvicinamento + riposizionamento;
-                prezzoCalcolato = ((info.euro_km * kmTotaliPrivato) * multiplier) * postiUtente;
+                prezzoCalcolato = ((info.euro_km * kmComplessiviOperativi) * multiplier) * postiUtente;
                 console.log(`🚗 [PRICING PRIVATA] Subtotale (per ${postiUtente} posti): ${prezzoCalcolato}`);
                 break;
             }
@@ -137,7 +136,7 @@ export async function calcolaPrezzo(
                     const mezzo = poolFiltrato.reduce((prev, curr) => prev.euro_km < curr.euro_km ? prev : curr);
                     console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (euro_km più basso):`, mezzo);
 
-                    // Calcolo Break-Even e target passeggeri
+                    // Calcolo Break-Even e target passeggeri allineato ai km operativi della richiesta (Tratta + Avv + Rip)
                     const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
                     targetPasseggeri = Math.max(1, Math.round(mezzo.posti * config.soglia));
 
@@ -160,7 +159,7 @@ export async function calcolaPrezzo(
             }
 
             default: {
-                prezzoCalcolato = ((0.50 * (safeKmUtente + avvicinamento + riposizionamento)) * multiplier) * postiUtente;
+                prezzoCalcolato = ((0.50 * kmComplessiviOperativi) * multiplier) * postiUtente;
                 console.log(`⚠ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
             }
         }

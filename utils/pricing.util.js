@@ -6,7 +6,7 @@ const PREZZO_MINIMO = 0.50;
 const CLASSE_MULTIPLIER = { EXPRESS: 1.4, STANDARD: 1.0, SAVER: 0.75 };
 const CLASSI_CONFIG = {
     EXPRESS:  { soglia: 0.5, minIndice: 1.0, maxIndice: 99.0 }, 
-    STANDARD: { soglia: 0.6, minIndice: 0.02, maxIndice: 1.5 }, // 👈 minIndice abbassato per includere veicoli da 5+ posti
+    STANDARD: { soglia: 0.6, minIndice: 0.02, maxIndice: 1.5 },
     SAVER:    { soglia: 0.9, minIndice: 0.0, maxIndice: 0.05 }
 };
 
@@ -79,8 +79,10 @@ export async function calcolaPrezzo(
     const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
     const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
     const safeKmUtente = Math.abs(Number(kmUtente) || 0);
-    const safeKmTotali = Math.max(0.1, Number(kmTotali) || safeKmUtente || 1);
     const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
+    
+    // Allineamento dei km totali sui km operativi effettivi della richiesta
+    const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);
 
     console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Totali: ${safeKmTotali}`);
 

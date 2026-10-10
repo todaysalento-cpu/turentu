@@ -2,7 +2,7 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
   if (segmentiCoinvoltiIds.length === 0) return [];
 
   const idsListSql = segmentiCoinvoltiIds.join(',');
-  console.log('💰 [WORKER] Fase 2: Calcolo economico basato sui segmenti...');
+  console.log(`\n💰 [WORKER - ECONOMIC ENGINE] Avvio calcolo economico per ${segmentiCoinvoltiIds.length} segmenti: [${idsListSql}]`);
 
   const { rows: segmentiAttivati } = await client.query(`
     WITH ricavi_segmento AS (
@@ -44,6 +44,7 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
     veicoli_disponibili_pool AS (
       SELECT 
         rs.segmento_id,
+        v.id as veicolo_id,
         COALESCE(v.posti_totali, 50) as capacita_veicolo,
         COALESCE(t.euro_km, 0.50) as euro_km_veicolo
       FROM ricavi_segmento rs
@@ -117,11 +118,21 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
       SET start_datetime = sf.calculated_start, stato = 'attivo', ricavo_stimato = sf.ricavo_attuale
       FROM segmenti_filtrati sf
       WHERE s.id = sf.segmento_id
-      RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id
+      RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id, s.ricavo_stimato
     )
-    SELECT id, direttrice_id, stato, start_node_id FROM update_segmenti
+    SELECT id, direttrice_id, stato, start_node_id, ricavo_stimato FROM update_segmenti
   `);
 
+  console.log(`📊 [WORKER - ECONOMIC ENGINE] Analisi completata.`);
   console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
+  
+  if (segmentiAttivati.length > 0) {
+    segmentiAttivati.forEach(seg => {
+      console.log(`   ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} €`);
+    });
+  } else {
+    console.log(`   ⚠️ Nessun segmento ha soddisfatto i requisiti di soglia economica o capienza in questo ciclo.`);
+  }
+
   return segmentiAttivati;
 }

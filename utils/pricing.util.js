@@ -3,7 +3,6 @@ import { pool } from '../db/db.js';
 const TARIFF_DEFAULT = { euro_km: 0.50, prezzo_passeggero: 1.00 };
 const PREZZO_MINIMO = 0.50;
 
-const CLASSE_MULTIPLIER = { EXPRESS: 1.4, STANDARD: 1.0, SAVER: 0.75 };
 const CLASSI_CONFIG = {
     EXPRESS:  { soglia: 0.5, minIndice: 1.0, maxIndice: 99.0 }, 
     STANDARD: { soglia: 0.6, minIndice: 0.02, maxIndice: 1.5 },
@@ -53,7 +52,7 @@ async function getDettaglioPool(veicoli_ids) {
 }
 
 /**
- * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti.
+ * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti (senza moltiplicatore di classe).
  */
 export async function calcolaPrezzo(
     corsa, 
@@ -70,7 +69,6 @@ export async function calcolaPrezzo(
     const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
     const postiUtente = Math.max(1, Number(postiRichiesti || 1));
     const classeKey = classe?.toUpperCase() || 'STANDARD';
-    const multiplier = CLASSE_MULTIPLIER[classeKey] || 1.0;
 
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
@@ -84,14 +82,14 @@ export async function calcolaPrezzo(
     const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
     const safeKmTotali = Math.max(0.1, kmComplessiviOperativi);
 
-    console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Mult: ${multiplier}) | Km Utente: ${safeKmUtente} | Km Complessivi Operativi: ${kmComplessiviOperativi}`);
+    console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Senza Moltiplicatore) | Km Utente: ${safeKmUtente} | Km Complessivi Operativi: ${kmComplessiviOperativi}`);
 
     try {
         switch (tipoValido) {
             case 'privata':
             case 'standard': {
                 const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
-                prezzoCalcolato = ((info.euro_km * kmComplessiviOperativi) * multiplier) * postiUtente;
+                prezzoCalcolato = (info.euro_km * kmComplessiviOperativi) * postiUtente;
                 console.log(`🚗 [PRICING PRIVATA] Subtotale (per ${postiUtente} posti): ${prezzoCalcolato}`);
                 break;
             }
@@ -147,12 +145,11 @@ export async function calcolaPrezzo(
                     console.log(`   - Break-Even Totale della corsa (${mezzo.euro_km} €/km * ${kmComplessiviOperativi} km): ${breakEvenTotale.toFixed(4)} €`);
                     console.log(`   - Posti totali del mezzo: ${mezzo.posti} | Soglia classe (${config.soglia * 100}%): targetPasseggeri = ${targetPasseggeri}`);
 
-                    // Calcolo del prezzo unitario rapportato alla tratta dell'utente
+                    // Calcolo del prezzo unitario rapportato alla tratta dell'utente (senza moltiplicatore)
                     const prezzoUnitarioPerKm = (breakEvenTotale / targetPasseggeri) * (safeKmUtente / safeKmTotali);
-                    prezzoCalcolato = (prezzoUnitarioPerKm * multiplier) * postiUtente;
+                    prezzoCalcolato = prezzoUnitarioPerKm * postiUtente;
 
                     console.log(`   - Prezzo unitario proporzionale per km: ${prezzoUnitarioPerKm.toFixed(4)} €`);
-                    console.log(`   - Moltiplicatore applicato (${classeKey}): ${multiplier}`);
                     console.log(`   - Posti utente richiesti: ${postiUtente}`);
                     console.log(`✨ [POPBUS] Subtotale calcolato finale: ${prezzoCalcolato.toFixed(4)} €`);
                 }
@@ -161,7 +158,7 @@ export async function calcolaPrezzo(
             }
 
             default: {
-                prezzoCalcolato = ((0.50 * kmComplessiviOperativi) * multiplier) * postiUtente;
+                prezzoCalcolato = (0.50 * kmComplessiviOperativi) * postiUtente;
                 console.log(`⚠ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
             }
         }

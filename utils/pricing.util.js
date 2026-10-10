@@ -4,9 +4,9 @@ const TARIFF_DEFAULT = { euro_km: 0.50, prezzo_passeggero: 1.00 };
 const PREZZO_MINIMO = 0.50;
 
 const CLASSI_CONFIG = {
-    EXPRESS:  { soglia: 0.5, minIndice: 1.0, maxIndice: 99.0 }, 
-    STANDARD: { soglia: 0.6, minIndice: 0.02, maxIndice: 1.5 },
-    SAVER:    { soglia: 0.9, minIndice: 0.0, maxIndice: 0.05 }
+    EXPRESS:  { soglia: 0.20, minIndice: 1.0, maxIndice: 99.0 }, 
+    STANDARD: { soglia: 0.30, minIndice: 0.02, maxIndice: 1.5 },
+    SAVER:    { soglia: 0.40, minIndice: 0.0, maxIndice: 0.05 }
 };
 
 const CALCOLA_INDICE = (euro_km, posti) => euro_km / (posti * posti);

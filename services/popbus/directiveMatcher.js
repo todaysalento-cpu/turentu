@@ -125,6 +125,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
     const segmentiDaCreare = new Map();
 
+    // 1. Prima raccogliamo tutti i segmenti necessari dai cluster
     for (const c of info.clustersInclusi) {
       const idx1 = nodiOrdinati.indexOf(c.start_node_id);
       const idx2 = nodiOrdinati.indexOf(c.end_node_id);
@@ -137,34 +138,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         const subKey = `${sId}_${eId}`;
         const currentPosti = segmentiDaCreare.get(subKey) || 0;
         segmentiDaCreare.set(subKey, currentPosti + c.posti_totali);
-      }
-
-      if (!c.is_composta) {
-        // CORRETTO: Verifica rigorosa del transito effettivo sul nodo per evitare false corrispondenze su nodi intermedi
-        await client.query(`
-          WITH transito_nodo AS (
-            SELECT 
-              s.start_node_id,
-              s.direttrice_id,
-              dv.partenza_prevista + (
-                COALESCE(SUM(s_prev.tempo_stimato), 0)
-              ) * INTERVAL '1 minute' as orario_transito
-            FROM segmenti s
-            JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-            LEFT JOIN segmenti s_prev ON s_prev.direttrice_id = s.direttrice_id 
-              AND s_prev.ordine_sequenziale < s.ordine_sequenziale
-            WHERE s.direttrice_id = $1 AND s.start_node_id = $2
-            GROUP BY s.start_node_id, s.direttrice_id, dv.partenza_prevista
-          )
-          UPDATE richieste_pop_bus r
-          SET direttrice_id = $1, stato = 'in_lavorazione'
-          FROM transito_nodo tn
-          WHERE r.stato = 'in_attesa'
-            AND r.start_node_id = tn.start_node_id
-            AND r.end_node_id = $3
-            AND r.direttrice_id IS NULL
-            AND ABS(EXTRACT(EPOCH FROM (r.start_datetime - tn.orario_transito))) <= 2400
-        `, [direttriceId, c.start_node_id, c.end_node_id]);
       }
     }
 
@@ -214,21 +187,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         segmentoId = newSeg[0].id;
       }
 
-      await client.query(`
-        UPDATE segmenti s
-        SET posti_occupati = (
-          SELECT COALESCE(SUM(r.posti_richiesti), 0)
-          FROM richieste_pop_bus r
-          JOIN segmenti r_start ON r_start.direttrice_id = s.direttrice_id AND r_start.start_node_id = r.start_node_id
-          JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
-          WHERE r.direttrice_id = s.direttrice_id
-            AND r.stato IN ('in_attesa', 'in_lavorazione')
-            AND r_start.ordine_sequenziale <= s.ordine_sequenziale
-            AND r_end.ordine_sequenziale > s.ordine_sequenziale
-        )
-        WHERE s.id = $1
-      `, [segmentoId]);
-
       console.log(`📏 [MATCHER] Segmento ${segmentoId} (Direttrice ${direttriceId}) [Tratta ${sNode} ➔ ${eNode}] sincronizzato. Ordine: ${ordineSeq}, Tempo: ${tempoStimatoMinuti} min`);
 
       if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
@@ -256,6 +214,62 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         ON CONFLICT (segmento_id, capolinea_finale_id) 
         DO UPDATE SET orario_previsto = EXCLUDED.orario_previsto, nodo_origine = EXCLUDED.nodo_origine
       `);
+    }
+
+    // 2. ORA CHE I SEGMENTI E I TEMPI SONO AGGIORNATI, ASSOCIHIAMO LE RICHIESTE CON VERIFICA RIGOROSA DEL TRANSITO
+    for (const c of info.clustersInclusi) {
+      if (!c.is_composta) {
+        await client.query(`
+          WITH transito_nodo AS (
+            SELECT 
+              s.start_node_id,
+              s.direttrice_id,
+              dv.partenza_prevista + (
+                COALESCE(SUM(s_prev.tempo_stimato), 0)
+              ) * INTERVAL '1 minute' as orario_transito
+            FROM segmenti s
+            JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+            LEFT JOIN segmenti s_prev ON s_prev.direttrice_id = s.direttrice_id 
+              AND s_prev.ordine_sequenziale < s.ordine_sequenziale
+            WHERE s.direttrice_id = $1 AND s.start_node_id = $2
+            GROUP BY s.start_node_id, s.direttrice_id, dv.partenza_prevista
+          )
+          UPDATE richieste_pop_bus r
+          SET direttrice_id = $1, stato = 'in_lavorazione'
+          FROM transito_nodo tn
+          WHERE r.stato = 'in_attesa'
+            AND r.start_node_id = tn.start_node_id
+            AND r.end_node_id = $3
+            AND r.direttrice_id IS NULL
+            AND ABS(EXTRACT(EPOCH FROM (r.start_datetime - tn.orario_transito))) <= 2400
+        `, [direttriceId, c.start_node_id, c.end_node_id]);
+      }
+    }
+
+    // 3. AGGIORNIAMO I POSTI OCCUPATI SUI SEGMENTI IN BASE ALLE RICHIESTE ASSOCIATE
+    for (const [subKey] of segmentiDaCreare.entries()) {
+      const [sNode, eNode] = subKey.split('_').map(Number);
+      const { rows: segRows } = await client.query(`
+        SELECT id FROM segmenti WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 LIMIT 1
+      `, [direttriceId, sNode, eNode]);
+
+      if (segRows.length > 0) {
+        const segId = segRows[0].id;
+        await client.query(`
+          UPDATE segmenti s
+          SET posti_occupati = (
+            SELECT COALESCE(SUM(r.posti_richiesti), 0)
+            FROM richieste_pop_bus r
+            JOIN segmenti r_start ON r_start.direttrice_id = s.direttrice_id AND r_start.start_node_id = r.start_node_id
+            JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
+            WHERE r.direttrice_id = s.direttrice_id
+              AND r.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start.ordine_sequenziale <= s.ordine_sequenziale
+              AND r_end.ordine_sequenziale > s.ordine_sequenziale
+          )
+          WHERE s.id = $1
+        `, [segId]);
+      }
     }
   }
 

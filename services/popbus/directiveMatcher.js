@@ -49,7 +49,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
     console.log(`⏱️ [MATCHER - TEMPORAL] Cerca direttrice compatibile per Nodo Iniziale: ${minNodoCorrente}, Tipo: ${tipoServizioTarget}, Slot Target: ${info.slot_orario}`);
 
-    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti (con calcolo esatto dell'orario di arrivo per l'estensione in avanti)
+    // 2. Compatibilità Temporale e Spaziale combinata con estensione in avanti basata su ID o prossimità geografica (ST_DWithin)
     const { rows: esistenti } = await client.query(`
       WITH segmenti_cumulativi AS (
         SELECT 
@@ -59,7 +59,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
           s.end_node_id,
           s.ordine_sequenziale,
           COALESCE(s.tempo_stimato, 0) as tempo_stimato,
-          -- Orario di arrivo alla fine del segmento (somma cumulativa del tempo stimato)
           dv.partenza_prevista + (
             SUM(COALESCE(s.tempo_stimato, 0)) OVER (
               PARTITION BY dv.id 
@@ -71,22 +70,27 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         JOIN segmenti s ON s.direttrice_id = dv.id
         WHERE dv.tipo_servizio = $2
           AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
+      ),
+      nodo_target AS (
+        SELECT id, posizione FROM nodi_direttrice WHERE id = $1
       )
       SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_arrivo_nodo as orario_transito_nodo,
              ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) as scarto_secondi
       FROM direttrici_virtuali dv
       JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
+      JOIN nodi_direttrice n_fine ON n_fine.id = sc.end_node_id
+      CROSS JOIN nodo_target nt
       WHERE dv.tipo_servizio = $2
         AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
         AND (
           sc.start_node_id = $1 
           OR (
-            sc.end_node_id = $1 
-            AND sc.ordine_sequenziale = (
+            sc.ordine_sequenziale = (
               SELECT MAX(s_max.ordine_sequenziale) 
               FROM segmenti s_max 
               WHERE s_max.direttrice_id = dv.id
             )
+            AND ST_DWithin(n_fine.posizione::geography, nt.posizione::geography, 100)
           )
         )
         AND ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) <= 2400
@@ -136,7 +140,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
     const segmentiDaCreare = new Map();
 
-    // 1. Prima raccogliamo tutti i segmenti necessari dai cluster
     for (const c of info.clustersInclusi) {
       const idx1 = nodiOrdinati.indexOf(c.start_node_id);
       const idx2 = nodiOrdinati.indexOf(c.end_node_id);
@@ -227,7 +230,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       `);
     }
 
-    // 2. ORA CHE I SEGMENTI E I TEMPI SONO AGGIORNATI, ASSOCIHIAMO LE RICHIESTE CON VERIFICA RIGOROSA DEL TRANSITO
+    // Associazione delle richieste
     for (const c of info.clustersInclusi) {
       if (!c.is_composta) {
         await client.query(`
@@ -257,7 +260,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       }
     }
 
-    // 3. AGGIORNIAMO I POSTI OCCUPATI SUI SEGMENTI IN BASE ALLE RICHIESTE ASSOCIATE
+    // Aggiornamento dei posti occupati sui segmenti
     for (const [subKey] of segmentiDaCreare.entries()) {
       const [sNode, eNode] = subKey.split('_').map(Number);
       const { rows: segRows } = await client.query(`

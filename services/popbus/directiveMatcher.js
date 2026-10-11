@@ -49,7 +49,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
     console.log(`⏱️ [MATCHER - TEMPORAL] Cerca direttrice compatibile per Nodo Iniziale: ${minNodoCorrente}, Tipo: ${tipoServizioTarget}, Slot Target: ${info.slot_orario}`);
 
-    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti (con estensione in avanti dal capolinea)
+    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti (con calcolo esatto dell'orario di arrivo per l'estensione in avanti)
     const { rows: esistenti } = await client.query(`
       WITH segmenti_cumulativi AS (
         SELECT 
@@ -59,20 +59,21 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
           s.end_node_id,
           s.ordine_sequenziale,
           COALESCE(s.tempo_stimato, 0) as tempo_stimato,
+          -- Orario di arrivo alla fine del segmento (somma cumulativa del tempo stimato)
           dv.partenza_prevista + (
             SUM(COALESCE(s.tempo_stimato, 0)) OVER (
               PARTITION BY dv.id 
               ORDER BY s.ordine_sequenziale 
               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            ) - COALESCE(s.tempo_stimato, 0)
-          ) * INTERVAL '1 minute' as orario_transito_nodo
+            )
+          ) * INTERVAL '1 minute' as orario_arrivo_nodo
         FROM direttrici_virtuali dv
         JOIN segmenti s ON s.direttrice_id = dv.id
         WHERE dv.tipo_servizio = $2
           AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
       )
-      SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_transito_nodo,
-             ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) as scarto_secondi
+      SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_arrivo_nodo as orario_transito_nodo,
+             ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) as scarto_secondi
       FROM direttrici_virtuali dv
       JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
       WHERE dv.tipo_servizio = $2
@@ -88,7 +89,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
             )
           )
         )
-        AND ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) <= 2400
+        AND ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) <= 2400
       ORDER BY dv.id ASC
       LIMIT 1
     `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);

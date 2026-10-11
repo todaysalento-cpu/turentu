@@ -4,6 +4,97 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
   const idsListSql = segmentiCoinvoltiIds.join(',');
   console.log(`\n💰 [WORKER - ECONOMIC ENGINE] Avvio calcolo economico per ${segmentiCoinvoltiIds.length} segmenti: [${idsListSql}]`);
 
+  // 1. Query di debug preliminare per stampare i dettagli in chiaro nella console Node.js
+  try {
+    const { rows: debugRows } = await client.query(`
+      WITH ricavi_segmento AS (
+        SELECT 
+          s.id as segmento_id,
+          s.direttrice_id,
+          s.start_node_id,
+          s.end_node_id,
+          s.ordine_sequenziale,
+          s.posti_occupati,
+          (
+            ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
+            COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
+            COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
+          ) as km_segmento,
+          (
+            SELECT COALESCE(SUM(r_sub.prezzo), 0)
+            FROM richieste_pop_bus r_sub
+            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
+            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
+            WHERE r_sub.direttrice_id = s.direttrice_id
+              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
+              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
+              AND r_end_seg.ordine_sequenziale <= (
+                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
+                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
+              )
+          ) as ricavo_attuale
+        FROM segmenti s
+        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+        JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+        LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
+        LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
+        LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
+        WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
+      ),
+      veicoli_disponibili_pool AS (
+        SELECT 
+          rs.segmento_id,
+          v.id as veicolo_id,
+          COALESCE(v.posti_totali, 50) as capacita_veicolo,
+          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
+        FROM ricavi_segmento rs
+        JOIN veicolo v ON true
+        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
+        LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
+        WHERE v.id NOT IN (
+          SELECT veicolo_id FROM direttrici_virtuali 
+          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
+        )
+      ),
+      parametri_pool_ottimali AS (
+        SELECT 
+          segmento_id,
+          MIN(euro_km_veicolo) as min_euro_km,
+          MAX(capacita_veicolo) as capacita_veicolo
+        FROM veicoli_disponibili_pool
+        GROUP BY segmento_id
+      )
+      SELECT 
+        rs.segmento_id,
+        rs.direttrice_id,
+        round(rs.km_segmento::numeric, 2) as km,
+        COALESCE(ppo.min_euro_km, 0.50) as euro_km,
+        round((rs.km_segmento * COALESCE(ppo.min_euro_km, 0.50))::numeric, 2) as soglia_minima,
+        round(rs.ricavo_attuale::numeric, 2) as ricavo_attuale,
+        rs.posti_occupati
+      FROM ricavi_segmento rs
+      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
+    `);
+
+    if (debugRows.length > 0) {
+      debugRows.forEach(row => {
+        const superata = row.ricavo_attuale >= row.soglia_minima;
+        console.log(`    🔎 [DEBUG VALORI] Segmento ID: ${row.segmento_id} | Direttrice: ${row.direttrice_id}`);
+        console.log(`       - Distanza stimata: ${row.km} km`);
+        console.log(`       - Costo al km: ${row.euro_km} €/km`);
+        console.log(`       - Soglia minima richiesta: ${row.soglia_minima} €`);
+        console.log(`       - Ricavo attuale aggregato: ${row.ricavo_attuale} €`);
+        console.log(`       - Esito soglia: ${superata ? '✅ SUPERATA' : '❌ NON SUPERATA (Mancano ' + (row.soglia_minima - row.ricavo_attuale).toFixed(2) + ' €)'}`);
+      });
+    } else {
+      console.log(`    ⚠️ [DEBUG VALORI] Nessun segmento trovato nello stato 'attesa' per gli ID passati.`);
+    }
+  } catch (err) {
+    console.error(`    ❌ [DEBUG ERRORE] Impossibile eseguire la query di debug:`, err.message);
+  }
+
+  // 2. Transazione principale con calcolo, notifiche e aggiornamento
   const { rows: segmentiAttivati } = await client.query(`
     WITH ricavi_segmento AS (
       SELECT 

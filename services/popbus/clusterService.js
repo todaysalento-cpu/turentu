@@ -1,5 +1,5 @@
 export async function elaboraClustering(client) {
-  console.log('🔍 [WORKER] Fase 1A: Ricerca e clustering delle richieste in attesa...');
+  console.log('\n🔍 [WORKER] Fase 1A: Ricerca e clustering delle richieste in attesa...');
   
   const { rows: clustersBase } = await client.query(`
     SELECT 
@@ -22,7 +22,7 @@ export async function elaboraClustering(client) {
 
   const clusterMap = new Map();
 
-  clustersBase.forEach(c => {
+  clustersBase.forEach((c, index) => {
     const dist = Number(c.dist_km || 0);
     let fasciaPercorrenza = 'bassa';
     if (dist > 60) {
@@ -43,15 +43,20 @@ export async function elaboraClustering(client) {
       fascia_percorrenza: fasciaPercorrenza,
       is_composta: false
     });
+
+    console.log(`   - Cluster Base [${index + 1}]: Tratta ${c.start_node_id} ➔ ${c.end_node_id} | Slot: ${slotKey} | Posti: ${c.posti_totali} | Distanza: ${dist.toFixed(2)} km | Fascia: ${fasciaPercorrenza}`);
   });
 
   // 1B. CHIUSURA TRANSITIVA MULTI-TRATTA
-  console.log('🔗 [WORKER] Fase 1B: Avvio chiusura transitiva multi-tratta...');
+  console.log('\n🔗 [WORKER] Fase 1B: Avvio chiusura transitiva multi-tratta...');
   let addedNew = true;
+  let iterazione = 0;
 
   while (addedNew) {
     addedNew = false;
+    iterazione++;
     const currentTratte = Array.from(clusterMap.values());
+    console.log(`   🔄 [CHIUSURA TRANSITIVA] Iterazione ${iterazione} - Tratte totali in esame: ${currentTratte.length}`);
 
     for (const t1 of currentTratte) {
       for (const t2 of currentTratte) {
@@ -78,6 +83,7 @@ export async function elaboraClustering(client) {
                 is_composta: true
               });
               addedNew = true;
+              console.log(`      ✨ [NUOVA TRATTA COMPOSTA] Unione (${t1.start_node_id}➔${t1.end_node_id}) + (${t2.start_node_id}➔${t2.end_node_id}) ➔ Risultato: ${startNode}➔${endNode} | Slot: ${slotKey} | Distanza: ${(t1.dist_km + t2.dist_km).toFixed(2)} km`);
             }
           }
         }
@@ -86,6 +92,6 @@ export async function elaboraClustering(client) {
   }
 
   const allClusters = Array.from(clusterMap.values());
-  console.log(`📦 [WORKER] Trovati ${allClusters.length} cluster totali dopo la chiusura transitiva.`);
+  console.log(`\n📦 [WORKER] Clustering completato. Trovati ${allClusters.length} cluster totali dopo la chiusura transitiva.`);
   return allClusters;
 }

@@ -2,6 +2,7 @@ import { getRouteGeometry } from '../../utils/maps.util.js';
 
 export async function gestisciMatchingEDirettrici(client, allClusters) {
   const direttriciPerSlotEFascia = new Map();
+  
   allClusters.forEach(c => {
     const slotKey = new Date(c.slot_orario).toISOString();
     const mapKey = `${slotKey}_${c.fascia_percorrenza}`;
@@ -25,6 +26,11 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
   for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
     const nodiIdsArray = Array.from(info.nodi);
 
+    console.log(`\n--------------------------------------------------`);
+    console.log(`🗺️ [MATCHER - SPATIAL] Elaborazione slot: ${info.slot_orario} | Fascia: ${info.fascia_percorrenza}`);
+    console.log(`   - Nodi grezzi identificati nel batch: [${nodiIdsArray.join(', ')}]`);
+
+    // 1. Compatibilità Spaziale: Ordinamento geografico dei nodi rispetto al primo nodo base
     const { rows: nodiOrdinatiGeograficamente } = await client.query(`
       WITH base_node AS (
         SELECT id, posizione FROM nodi_direttrice WHERE id = $1
@@ -36,17 +42,14 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
     `, [nodiIdsArray[0], nodiIdsArray]);
 
     const nodiOrdinati = nodiOrdinatiGeograficamente.map(n => n.id);
-    console.log(`🗺️ [DEBUG SEQUENZA NODI GEOGRAFICA] Slot: ${info.slot_orario}, Fascia: ${info.fascia_percorrenza} ➔ Nodi Ordinati: [${nodiOrdinati.join(' ➔ ')}]`);
+    console.log(`   📍 [SPATIAL OK] Nodi ordinati per distanza crescente da ${nodiIdsArray[0]}: [${nodiOrdinati.join(' ➔ ')}]`);
 
     const minNodoCorrente = nodiOrdinati[0];
     const tipoServizioTarget = `STANDARD_${info.fascia_percorrenza}`;
 
-    const { rows: direttriciCandidate } = await client.query(`
-      SELECT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, dv.partenza_prevista
-      FROM direttrici_virtuali dv
-      WHERE dv.tipo_servizio = $1 AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-    `, [tipoServizioTarget]);
+    console.log(`⏱️ [MATCHER - TEMPORAL] Cerca direttrice compatibile per Nodo Iniziale: ${minNodoCorrente}, Tipo: ${tipoServizioTarget}, Slot Target: ${info.slot_orario}`);
 
+    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti
     const { rows: esistenti } = await client.query(`
       WITH segmenti_cumulativi AS (
         SELECT 
@@ -80,14 +83,17 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       LIMIT 1
     `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
 
-    // 🔍 LOG DEBUG: Valutazione compatibilità temporale e direttrici esistenti
-    console.log(`🔍 [MATCHER] Valutazione direttrici esistenti per nodo ${minNodoCorrente} (Slot: ${info.slot_orario}):`, esistenti.map(e => ({
-      direttrice_id: e.id,
-      stato: e.stato,
-      orario_transito: e.orario_transito_nodo,
-      scarto_secondi: Math.round(e.scarto_secondi),
-      compatibile: e.scarto_secondi <= 2400
-    })));
+    // Log dettagliato della valutazione della compatibilità
+    if (esistenti.length > 0) {
+      const match = esistenti[0];
+      console.log(`   ✅ [TEMPORAL OK] Trovata direttrice esistente compatibile!`);
+      console.log(`      - ID Direttrice: ${match.id} (Stato: ${match.stato})`);
+      console.log(`      - Orario transito stimato sul nodo: ${match.orario_transito_nodo}`);
+      console.log(`      - Slot richiesto: ${info.slot_orario}`);
+      console.log(`      - Scarto temporale: ${Math.round(match.scarto_secondi)} secondi (Soglia max: 2400s / 40 min)`);
+    } else {
+      console.log(`   ❌ [TEMPORAL MISS] Nessuna direttrice esistente rispetta i criteri spaziali (passaggio per nodo ${minNodoCorrente}) e temporali (scarto <= 40 min). Sarà creata una nuova direttrice.`);
+    }
 
     let direttriceId;
 
@@ -98,7 +104,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       const nuovoStart = nodiOrdinati[0];
       const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
 
-      // 🔍 LOG DEBUG: Scelta riutilizzo direttrice esistente
       console.log(`♻️ [MATCHER] Accodamento a direttrice ESISTENTE ID: ${direttriceId}. Estensione capolinea a Start: ${nuovoStart}, End: ${nuovoEnd}`);
 
       await client.query(`
@@ -116,8 +121,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], tipoServizioTarget]);
 
       direttriceId = dir[0].id;
-
-      // 🔍 LOG DEBUG: Creazione nuova direttrice
       console.log(`✨ [MATCHER] Creata NUOVA direttrice ID: ${direttriceId} per slot ${info.slot_orario} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}]`);
     }
 
@@ -212,7 +215,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         WHERE s.id = $1
       `, [segmentoId]);
 
-      // 🔍 LOG DEBUG: Sincronizzazione segmento completata
       console.log(`📏 [MATCHER] Segmento ${segmentoId} (Direttrice ${direttriceId}) [Tratta ${sNode} ➔ ${eNode}] sincronizzato. Ordine: ${ordineSeq}, Tempo: ${tempoStimatoMinuti} min`);
 
       if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {

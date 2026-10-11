@@ -83,7 +83,6 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       LIMIT 1
     `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
 
-    // Log dettagliato della valutazione della compatibilità
     if (esistenti.length > 0) {
       const match = esistenti[0];
       console.log(`   ✅ [TEMPORAL OK] Trovata direttrice esistente compatibile!`);
@@ -92,7 +91,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       console.log(`      - Slot richiesto: ${info.slot_orario}`);
       console.log(`      - Scarto temporale: ${Math.round(match.scarto_secondi)} secondi (Soglia max: 2400s / 40 min)`);
     } else {
-      console.log(`   ❌ [TEMPORAL MISS] Nessuna direttrice esistente rispetta i criteri spaziali (passaggio per nodo ${minNodoCorrente}) e temporali (scarto <= 40 min). Sarà creata una nuova direttrice.`);
+      console.log(`   ❌ [TEMPORAL MISS] Nessuna direttrice esistente rispetta i criteri spaziali e temporali. Sarà creata una nuova direttrice.`);
     }
 
     let direttriceId;
@@ -141,16 +140,31 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       }
 
       if (!c.is_composta) {
-        const slotIso = new Date(c.slot_orario).toISOString();
+        // CORRETTO: Verifica rigorosa del transito effettivo sul nodo per evitare false corrispondenze su nodi intermedi
         await client.query(`
-          UPDATE richieste_pop_bus
-          SET direttrice_id = ${direttriceId}, stato = 'in_lavorazione'
-          WHERE stato = 'in_attesa'
-            AND start_node_id = ${c.start_node_id}
-            AND end_node_id = ${c.end_node_id}
-            AND TO_TIMESTAMP(FLOOR(EXTRACT(EPOCH FROM start_datetime) / 3600) * 3600) = '${slotIso}'::timestamptz
-            AND direttrice_id IS NULL
-        `);
+          WITH transito_nodo AS (
+            SELECT 
+              s.start_node_id,
+              s.direttrice_id,
+              dv.partenza_prevista + (
+                COALESCE(SUM(s_prev.tempo_stimato), 0)
+              ) * INTERVAL '1 minute' as orario_transito
+            FROM segmenti s
+            JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
+            LEFT JOIN segmenti s_prev ON s_prev.direttrice_id = s.direttrice_id 
+              AND s_prev.ordine_sequenziale < s.ordine_sequenziale
+            WHERE s.direttrice_id = $1 AND s.start_node_id = $2
+            GROUP BY s.start_node_id, s.direttrice_id, dv.partenza_prevista
+          )
+          UPDATE richieste_pop_bus r
+          SET direttrice_id = $1, stato = 'in_lavorazione'
+          FROM transito_nodo tn
+          WHERE r.stato = 'in_attesa'
+            AND r.start_node_id = tn.start_node_id
+            AND r.end_node_id = $3
+            AND r.direttrice_id IS NULL
+            AND ABS(EXTRACT(EPOCH FROM (r.start_datetime - tn.orario_transito))) <= 2400
+        `, [direttriceId, c.start_node_id, c.end_node_id]);
       }
     }
 

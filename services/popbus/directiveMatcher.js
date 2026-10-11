@@ -49,7 +49,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
 
     console.log(`⏱️ [MATCHER - TEMPORAL] Cerca direttrice compatibile per Nodo Iniziale: ${minNodoCorrente}, Tipo: ${tipoServizioTarget}, Slot Target: ${info.slot_orario}`);
 
-    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti
+    // 2. Compatibilità Temporale e Spaziale combinata con le direttrici esistenti (con estensione in avanti dal capolinea)
     const { rows: esistenti } = await client.query(`
       WITH segmenti_cumulativi AS (
         SELECT 
@@ -77,7 +77,17 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
       JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
       WHERE dv.tipo_servizio = $2
         AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-        AND (sc.start_node_id = $1 OR sc.end_node_id = $1)
+        AND (
+          sc.start_node_id = $1 
+          OR (
+            sc.end_node_id = $1 
+            AND sc.ordine_sequenziale = (
+              SELECT MAX(s_max.ordine_sequenziale) 
+              FROM segmenti s_max 
+              WHERE s_max.direttrice_id = dv.id
+            )
+          )
+        )
         AND ABS(EXTRACT(EPOCH FROM (sc.orario_transito_nodo - $3::timestamptz))) <= 2400
       ORDER BY dv.id ASC
       LIMIT 1

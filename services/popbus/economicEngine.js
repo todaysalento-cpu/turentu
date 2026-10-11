@@ -105,13 +105,14 @@ export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) 
       SELECT 
         co.segmento_id,
         pg_notify('econ_engine_debug', format(
-          'SEGMENTO %s | Km: %s | Euro/Km Min: %s | Soglia Minima: %s € | Ricavo Attuale: %s € | Esito: %s',
+          '🔍 [ECON_DEBUG] Seg ID: %s | Direttrice: %s | Km: %s | Euro/Km: %s | Soglia Min: %s € | Ricavo Attuale: %s € | Esito: %s',
           co.segmento_id,
+          co.direttrice_id,
           round(co.km_segmento::numeric, 2),
           co.euro_km_selezionato,
           round(co.soglia_attivazione_minima::numeric, 2),
           round(co.ricavo_attuale::numeric, 2),
-          CASE WHEN co.ricavo_attuale >= co.soglia_attivazione_minima THEN 'SUPERATA (Attivabile)' ELSE 'NON SUPERATA (Bloccato)' END
+          CASE WHEN co.ricavo_attuale >= co.soglia_attivazione_minima THEN '✅ SUPERATA (Attivabile)' ELSE '❌ NON SUPERATA (Bloccato)' END
         ))
       FROM calcolo_orari co
     ),

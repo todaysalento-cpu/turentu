@@ -1,262 +1,380 @@
-export async function calcolaAttivazioneEconomica(client, segmentiCoinvoltiIds) {
-  if (segmentiCoinvoltiIds.length === 0) return [];
+// La transazione è gestita dal worker chiamante.
+// Questo servizio valuta il pool: non prenota né assegna un veicolo.
 
-  const idsListSql = segmentiCoinvoltiIds.join(',');
-  console.log(`\n💰 [WORKER - ECONOMIC ENGINE] Avvio calcolo economico per ${segmentiCoinvoltiIds.length} segmenti: [${idsListSql}]`);
-
-  // 1. Query di debug preliminare per stampare i dettagli in chiaro nella console Node.js
-  try {
-    const { rows: debugRows } = await client.query(`
-      WITH ricavi_segmento AS (
-        SELECT 
-          s.id as segmento_id,
-          s.direttrice_id,
-          s.start_node_id,
-          s.end_node_id,
-          s.ordine_sequenziale,
-          s.posti_occupati,
-          (
-            ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
-            COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
-            COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
-          ) as km_segmento,
-          (
-            SELECT COALESCE(SUM(r_sub.prezzo), 0)
-            FROM richieste_pop_bus r_sub
-            JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-            JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-            WHERE r_sub.direttrice_id = s.direttrice_id
-              AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-              AND r_end_seg.ordine_sequenziale <= (
-                SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-                WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-              )
-          ) as ricavo_attuale
-        FROM segmenti s
-        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-        JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-        LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
-        LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
-        LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-        WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
-      ),
-      veicoli_disponibili_pool AS (
-        SELECT 
-          rs.segmento_id,
-          v.id as veicolo_id,
-          COALESCE(v.posti_totali, 50) as capacita_veicolo,
-          COALESCE(t.euro_km, 0.50) as euro_km_veicolo
-        FROM ricavi_segmento rs
-        JOIN veicolo v ON true
-        JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
-        LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
-        WHERE v.id NOT IN (
-          SELECT veicolo_id FROM direttrici_virtuali 
-          WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-        )
-      ),
-      parametri_pool_ottimali AS (
-        SELECT 
-          segmento_id,
-          MIN(euro_km_veicolo) as min_euro_km,
-          MAX(capacita_veicolo) as capacita_veicolo
-        FROM veicoli_disponibili_pool
-        GROUP BY segmento_id
-      )
-      SELECT 
-        rs.segmento_id,
-        rs.direttrice_id,
-        round(rs.km_segmento::numeric, 2) as km,
-        COALESCE(ppo.min_euro_km, 0.50) as euro_km,
-        round((rs.km_segmento * COALESCE(ppo.min_euro_km, 0.50))::numeric, 2) as soglia_minima,
-        round(rs.ricavo_attuale::numeric, 2) as ricavo_attuale,
-        rs.posti_occupati
-      FROM ricavi_segmento rs
-      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
-    `);
-
-    if (debugRows.length > 0) {
-      debugRows.forEach(row => {
-        const superata = row.ricavo_attuale >= row.soglia_minima;
-        console.log(`    🔎 [DEBUG VALORI] Segmento ID: ${row.segmento_id} | Direttrice: ${row.direttrice_id}`);
-        console.log(`       - Distanza stimata: ${row.km} km`);
-        console.log(`       - Costo al km: ${row.euro_km} €/km`);
-        console.log(`       - Soglia minima richiesta: ${row.soglia_minima} €`);
-        console.log(`       - Ricavo attuale aggregato: ${row.ricavo_attuale} €`);
-        console.log(`       - Esito soglia: ${superata ? '✅ SUPERATA' : '❌ NON SUPERATA (Mancano ' + (row.soglia_minima - row.ricavo_attuale).toFixed(2) + ' €)'}`);
-      });
-    } else {
-      console.log(`    ⚠️ [DEBUG VALORI] Nessun segmento trovato nello stato 'attesa' per gli ID passati.`);
-    }
-  } catch (err) {
-    console.error(`    ❌ [DEBUG ERRORE] Impossibile eseguire la query di debug:`, err.message);
+export function analizzaPercorso(segmenti, richieste, partenza) {
+  if (!segmenti.length) {
+    throw new Error('Direttrice senza segmenti');
   }
 
-  // 2. Transazione principale con calcolo, notifiche e aggiornamento
-  const { rows: segmentiAttivati } = await client.query(`
-    WITH ricavi_segmento AS (
-      SELECT 
-        s.id as segmento_id,
+  const nodi = [Number(segmenti[0].start_node_id)];
+  let transito = new Date(partenza).getTime();
+
+  if (!Number.isFinite(transito)) {
+    throw new Error('Partenza direttrice non valida');
+  }
+
+  const analisi = segmenti.map((s, i) => {
+    const durata =
+      s.tempo_stimato == null ? NaN : Number(s.tempo_stimato);
+
+    if (
+      Number(s.ordine_sequenziale) !== i + 1 ||
+      Number(s.start_node_id) !== nodi[i] ||
+      !Number.isFinite(durata) ||
+      durata <= 0
+    ) {
+      throw new Error('Sequenza o durata segmenti non valida');
+    }
+
+    if (
+      s.start_datetime != null &&
+      new Date(s.start_datetime).getTime() !== transito
+    ) {
+      throw new Error(
+        `Orario incoerente del segmento ${s.id}: ` +
+        'richiede verifica, non viene sovrascritto'
+      );
+    }
+
+    const result = {
+      ...s,
+      transito: new Date(transito),
+      occupazione: 0,
+      ricavo: 0
+    };
+
+    nodi.push(Number(s.end_node_id));
+    transito += durata * 60000;
+
+    return result;
+  });
+
+  if (new Set(nodi).size !== nodi.length) {
+    throw new Error('Percorso con nodi ripetuti non supportato');
+  }
+
+  for (const r of richieste) {
+    const start = nodi.indexOf(Number(r.start_node_id));
+    const end = nodi.indexOf(Number(r.end_node_id));
+    const posti = Number(r.posti_richiesti);
+    const prezzo = r.prezzo == null ? NaN : Number(r.prezzo);
+
+    if (
+      start < 0 ||
+      end <= start ||
+      !Number.isInteger(posti) ||
+      posti <= 0 ||
+      !Number.isFinite(prezzo) ||
+      prezzo < 0
+    ) {
+      throw new Error(`Richiesta ${r.id} non valida sul percorso`);
+    }
+
+    const requested =
+      r.start_datetime == null
+        ? NaN
+        : new Date(r.start_datetime).getTime();
+
+    if (
+      !Number.isFinite(requested) ||
+      Math.abs(
+        requested - analisi[start].transito.getTime()
+      ) > 30 * 60000
+    ) {
+      throw new Error(
+        `Richiesta ${r.id} fuori tolleranza di salita ±30 minuti`
+      );
+    }
+
+    for (let i = start; i < end; i++) {
+      analisi[i].occupazione += posti;
+
+      // Ricavo dei clienti che attraversano il segmento.
+      // Non sommare questi valori per ottenere il ricavo
+      // complessivo della direttrice: una richiesta può
+      // attraversare più segmenti.
+      analisi[i].ricavo += prezzo;
+    }
+  }
+
+  return {
+    segmenti: analisi,
+    picco: Math.max(...analisi.map(s => s.occupazione)),
+    arrivo: new Date(transito)
+  };
+}
+
+export async function calcolaAttivazioneEconomica(
+  client,
+  segmentiCoinvoltiIds
+) {
+  if (!Array.isArray(segmentiCoinvoltiIds)) {
+    throw new Error('Elenco segmenti non valido');
+  }
+
+  const ids = [
+    ...new Set(segmentiCoinvoltiIds.map(Number))
+  ];
+
+  if (
+    ids.some(
+      id =>
+        !Number.isInteger(id) ||
+        id <= 0 ||
+        id > 2147483647
+    )
+  ) {
+    throw new Error('ID segmento non valido');
+  }
+
+  if (!ids.length) return [];
+
+  await client.query(
+    'SELECT pg_advisory_xact_lock(734021, 1)'
+  );
+
+  const { rows: dirs } = await client.query(`
+    SELECT
+      d.id,
+      d.partenza_prevista,
+      d.veicolo_id
+    FROM direttrici_virtuali d
+    WHERE d.stato = 'in_formazione'
+      AND EXISTS (
+        SELECT 1
+        FROM segmenti s
+        WHERE s.direttrice_id = d.id
+          AND s.id = ANY($1::int[])
+      )
+    ORDER BY d.id
+    FOR UPDATE OF d
+  `, [ids]);
+
+  const attivati = [];
+
+  for (const d of dirs) {
+    const { rows: segmenti } = await client.query(`
+      SELECT
+        s.id,
         s.direttrice_id,
         s.start_node_id,
         s.end_node_id,
-        s.tempo_stimato,
         s.ordine_sequenziale,
-        s.posti_occupati,
-        (
-          ST_Distance(n1.posizione::geography, n2.posizione::geography)/1000 +
-          COALESCE(ST_Distance(n_orig.posizione::geography, n1.posizione::geography)/1000, 0) +
-          COALESCE(ST_Distance(n2.posizione::geography, n_dest.posizione::geography)/1000, 0)
-        ) as km_segmento,
-        (
-          SELECT COALESCE(SUM(r_sub.prezzo), 0)
-          FROM richieste_pop_bus r_sub
-          JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-          JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-          WHERE r_sub.direttrice_id = s.direttrice_id
-            AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-            AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-            AND r_end_seg.ordine_sequenziale <= (
-              SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-              WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-            )
-        ) as ricavo_attuale
-      FROM segmenti s
-      JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
-      JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
-      JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-      LEFT JOIN missioni_ritorno mr ON mr.segmento_id = s.id
-      LEFT JOIN nodi_direttrice n_orig ON mr.nodo_origine = n_orig.id
-      LEFT JOIN nodi_direttrice n_dest ON mr.capolinea_finale_id = n_dest.id
-      WHERE s.id IN (${idsListSql}) AND s.stato = 'in_attesa'
-    ),
-    veicoli_disponibili_pool AS (
-      SELECT 
-        rs.segmento_id,
-        v.id as veicolo_id,
-        COALESCE(v.posti_totali, 50) as capacita_veicolo,
-        COALESCE(t.euro_km, 0.50) as euro_km_veicolo
-      FROM ricavi_segmento rs
-      JOIN nodi_direttrice n_partenza ON n_partenza.id = rs.start_node_id
-      JOIN veicolo v ON true
-      JOIN disponibilita_veicolo d ON d.veicolo_id = v.id
-      LEFT JOIN tariffe t ON t.veicolo_id = v.id AND t.tipo = 'standard'
-      WHERE v.id NOT IN (
-        SELECT veicolo_id FROM direttrici_virtuali 
-        WHERE veicolo_id IS NOT NULL AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-      )
-    ),
-    parametri_pool_ottimali AS (
-      SELECT 
-        segmento_id,
-        MIN(euro_km_veicolo) as min_euro_km,
-        MAX(capacita_veicolo) as capacita_veicolo
-      FROM veicoli_disponibili_pool
-      GROUP BY segmento_id
-    ),
-    costo_attivazione AS (
-      SELECT 
-        rs.segmento_id,
-        rs.direttrice_id,
-        rs.start_node_id,
-        rs.end_node_id,
-        rs.tempo_stimato,
-        rs.ordine_sequenziale,
-        rs.posti_occupati,
-        rs.km_segmento,
-        rs.ricavo_attuale as ricavo_aggregato,
-        COALESCE(ppo.min_euro_km, 0.50) as euro_km_selezionato,
-        COALESCE(ppo.capacita_veicolo, 50) as capacita_veicolo
-      FROM ricavi_segmento rs
-      LEFT JOIN parametri_pool_ottimali ppo ON rs.segmento_id = ppo.segmento_id
-    ),
-    calcolo_orari AS (
-      SELECT 
-        ca.segmento_id, 
-        ca.direttrice_id,
-        ca.start_node_id,
-        ca.end_node_id,
-        ca.ordine_sequenziale,
-        d.partenza_prevista + (SUM(COALESCE(rs_t.tempo_stimato, 0)) OVER (
-          PARTITION BY ca.direttrice_id ORDER BY rs_t.ordine_sequenziale
-        ) * INTERVAL '1 minute') as calculated_start,
-        ca.ricavo_aggregato as ricavo_attuale,
-        ca.posti_occupati,
-        ca.capacita_veicolo,
-        ca.km_segmento,
-        ca.euro_km_selezionato,
-        (ca.euro_km_selezionato * ca.km_segmento) as soglia_attivazione_minima
-      FROM costo_attivazione ca
-      JOIN direttrici_virtuali d ON ca.direttrice_id = d.id
-      JOIN segmenti rs_t ON rs_t.id = ca.segmento_id
-    ),
-    debug_log AS (
-      SELECT 
-        co.segmento_id,
-        pg_notify('econ_engine_debug', format(
-          '🔍 [ECON_DEBUG] Seg ID: %s | Direttrice: %s | Km: %s | Euro/Km: %s | Soglia Min: %s € | Ricavo Attuale: %s € | Esito: %s',
-          co.segmento_id,
-          co.direttrice_id,
-          round(co.km_segmento::numeric, 2),
-          co.euro_km_selezionato,
-          round(co.soglia_attivazione_minima::numeric, 2),
-          round(co.ricavo_attuale::numeric, 2),
-          CASE WHEN co.ricavo_attuale >= co.soglia_attivazione_minima THEN '✅ SUPERATA (Attivabile)' ELSE '❌ NON SUPERATA (Bloccato)' END
-        ))
-      FROM calcolo_orari co
-    ),
-    segmenti_filtrati AS (
-      SELECT co.*
-      FROM calcolo_orari co
-      WHERE co.ricavo_attuale >= COALESCE(co.soglia_attivazione_minima, 0)
-        AND co.posti_occupati <= co.capacita_veicolo
-        AND NOT EXISTS (
-          SELECT 1 
-          FROM calcolo_orari padre
-          WHERE padre.direttrice_id = co.direttrice_id
-            AND padre.ordine_sequenziale < co.ordine_sequenziale
-            AND padre.ricavo_attuale >= COALESCE(padre.soglia_attivazione_minima, 0)
-            AND padre.posti_occupati <= padre.capacita_veicolo
-        )
-    ),
-    update_segmenti AS (
-      UPDATE segmenti s
-      SET 
-        start_datetime = sf.calculated_start, 
-        stato = 'attivo', 
-        ricavo_stimato = sf.ricavo_attuale,
-        posti_occupati = (
-          SELECT COALESCE(SUM(r_sub.posti_richiesti), 0)
-          FROM richieste_pop_bus r_sub
-          JOIN segmenti r_start_seg ON r_start_seg.direttrice_id = s.direttrice_id AND r_start_seg.start_node_id = r_sub.start_node_id
-          JOIN segmenti r_end_seg ON r_end_seg.direttrice_id = s.direttrice_id AND r_end_seg.end_node_id = r_sub.end_node_id
-          WHERE r_sub.direttrice_id = s.direttrice_id
-            AND r_sub.stato IN ('in_attesa', 'in_lavorazione')
-            AND r_start_seg.ordine_sequenziale >= s.ordine_sequenziale
-            AND r_end_seg.ordine_sequenziale <= (
-              SELECT MAX(sub_s.ordine_sequenziale) FROM segmenti sub_s 
-              WHERE sub_s.direttrice_id = s.direttrice_id AND sub_s.end_node_id = r_sub.end_node_id
-            )
-        )
-      FROM segmenti_filtrati sf
-      WHERE s.id = sf.segmento_id
-      RETURNING s.id, s.direttrice_id, s.stato, s.start_node_id, s.ricavo_stimato, s.posti_occupati
-    )
-    SELECT id, direttrice_id, stato, start_node_id, ricavo_stimato, posti_occupati FROM update_segmenti
-  `);
+        s.tempo_stimato,
+        s.start_datetime,
+        s.stato,
+        s.posti_impegnati,
 
-  console.log(`📊 [WORKER - ECONOMIC ENGINE] Analisi completata.`);
-  console.log(`🚀 [WORKER] Segmenti passati allo stato 'attivo': ${segmentiAttivati.length}`);
-  
-  if (segmentiAttivati.length > 0) {
-    segmentiAttivati.forEach(seg => {
-      console.log(`    ✨ Attivato -> Segmento ID: ${seg.id} | Direttrice ID: ${seg.direttrice_id} | Nodo Start: ${seg.start_node_id} | Ricavo Stimato: ${seg.ricavo_stimato} € | Posti Occupati: ${seg.posti_occupati}`);
+        ST_Distance(
+          n1.posizione::geography,
+          n2.posizione::geography
+        ) / 1000 AS km_tratta,
+
+        COALESCE((
+          SELECT MAX(
+            ST_Distance(
+              no.posizione::geography,
+              n1.posizione::geography
+            ) / 1000
+            +
+            ST_Distance(
+              n2.posizione::geography,
+              ne.posizione::geography
+            ) / 1000
+          )
+          FROM missioni_ritorno m
+          JOIN nodi_direttrice no
+            ON no.id = m.nodo_origine
+          JOIN nodi_direttrice ne
+            ON ne.id = m.capolinea_finale_id
+          WHERE m.segmento_id = s.id
+        ), 0) AS km_accessori
+
+      FROM segmenti s
+      JOIN nodi_direttrice n1
+        ON n1.id = s.start_node_id
+      JOIN nodi_direttrice n2
+        ON n2.id = s.end_node_id
+      WHERE s.direttrice_id = $1
+      ORDER BY s.ordine_sequenziale, s.id
+      FOR UPDATE OF s
+    `, [d.id]);
+
+    // Non ricalcolare occupazione su direttrici operative
+    // o con impegni di cui non è ancora chiarita la semantica.
+    if (
+      !segmenti.length ||
+      segmenti.some(
+        s =>
+          s.stato !== 'in_attesa' ||
+          Number(s.posti_impegnati || 0) !== 0
+      )
+    ) {
+      continue;
+    }
+
+    const { rows: richieste } = await client.query(`
+      SELECT
+        id,
+        start_node_id,
+        end_node_id,
+        start_datetime,
+        posti_richiesti,
+        prezzo
+      FROM richieste_pop_bus
+      WHERE direttrice_id = $1
+        AND stato IN ('in_attesa', 'in_lavorazione')
+      ORDER BY id
+      FOR UPDATE
+    `, [d.id]);
+
+    if (!richieste.length) continue;
+
+    let percorso;
+
+    try {
+      percorso = analizzaPercorso(
+        segmenti,
+        richieste,
+        d.partenza_prevista
+      );
+    } catch (err) {
+      console.warn(
+        `[ECONOMIA] Direttrice ${d.id} rinviata: ${err.message}`
+      );
+
+      // Viene gestito soltanto un errore di validazione JS.
+      // Gli errori SQL si propagano al worker per il rollback.
+      continue;
+    }
+
+    const { rows: veicoli } = await client.query(`
+      SELECT
+        v.id AS veicolo_id,
+        v.posti_totali,
+        t.euro_km
+
+      FROM veicolo v
+
+      JOIN LATERAL (
+        SELECT MIN(euro_km) AS euro_km
+        FROM tariffe
+        WHERE veicolo_id = v.id
+          AND tipo = 'standard'
+          AND euro_km > 0
+      ) t ON t.euro_km IS NOT NULL
+
+      WHERE v.driver_id IS NOT NULL
+        AND v.posti_totali >= $1
+
+        AND (
+          $3::int IS NULL
+          OR v.id = $3::int
+        )
+
+        AND EXISTS (
+          SELECT 1
+          FROM disponibilita_veicolo dv
+          WHERE dv.veicolo_id = v.id
+        )
+
+        AND NOT EXISTS (
+          SELECT 1
+          FROM direttrici_virtuali other
+          JOIN veicolo ov
+            ON ov.id = other.veicolo_id
+          WHERE other.id <> $2
+            AND other.stato IN (
+              'in_formazione',
+              'in_attesa_autista',
+              'attivo',
+              'confermata'
+            )
+            AND (
+              ov.id = v.id
+              OR ov.driver_id = v.driver_id
+            )
+        )
+
+      ORDER BY t.euro_km, v.id
+    `, [
+      percorso.picco,
+      d.id,
+      d.veicolo_id
+    ]);
+
+    // Nessuna capacità o tariffa inventata se il pool è vuoto.
+    const veicolo = veicoli[0];
+
+    if (!veicolo) {
+      console.log(
+        `[ECONOMIA] Direttrice ${d.id}: ` +
+        'nessun mezzo con tariffa standard e ' +
+        `capienza ${percorso.picco}`
+      );
+      continue;
+    }
+
+    const tariffa = Number(veicolo.euro_km);
+
+    if (!Number.isFinite(tariffa) || tariffa <= 0) {
+      continue;
+    }
+
+    // Mantiene l'attivazione di al massimo un segmento
+    // per direttrice in questo ciclo.
+    const candidato = percorso.segmenti.find(s => {
+      const km =
+        Number(s.km_tratta) + Number(s.km_accessori);
+
+      return (
+        ids.includes(Number(s.id)) &&
+        s.occupazione > 0 &&
+        Number.isFinite(km) &&
+        km > 0 &&
+        s.ricavo >= km * tariffa
+      );
     });
-  } else {
-    console.log(`    ⚠️ Nessun segmento ha soddisfatto i requisiti di soglia economica o capienza in questo ciclo.`);
+
+    if (!candidato) continue;
+
+    const { rows: updated } = await client.query(`
+      UPDATE segmenti
+      SET
+        stato = 'attivo',
+        ricavo_stimato = $2,
+        posti_occupati = $3,
+        start_datetime = COALESCE(
+          start_datetime,
+          $4::timestamptz
+        )
+      WHERE id = $1
+        AND stato = 'in_attesa'
+      RETURNING
+        id,
+        direttrice_id,
+        stato,
+        start_node_id,
+        ricavo_stimato,
+        posti_occupati
+    `, [
+      candidato.id,
+      candidato.ricavo,
+      candidato.occupazione,
+      candidato.transito
+    ]);
+
+    attivati.push(...updated);
+
+    console.log(
+      `[ECONOMIA] Direttrice ${d.id}, ` +
+      `segmento ${candidato.id}: ` +
+      `picco ${percorso.picco}, ` +
+      `mezzo di riferimento ${veicolo.veicolo_id}, ` +
+      `tariffa ${tariffa} €/km ` +
+      '(assegnazione da verificare)'
+    );
   }
 
-  return segmentiAttivati;
+  return attivati;
 }

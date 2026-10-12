@@ -1,199 +1,651 @@
+
 import { pool } from '../db/db.js';
 
-const TARIFF_DEFAULT = { euro_km: 0.50, prezzo_passeggero: 1.00 };
+const TARIFF_DEFAULT = {
+    euro_km: 0.50,
+    prezzo_passeggero: 1.00
+};
+
 const PREZZO_MINIMO = 0.50;
 
 const CLASSI_CONFIG = {
-    EXPRESS:        { soglia: 0.40, minIndice: 0.0, maxIndice: 99.0 }, 
-    STANDARD:       { soglia: 0.60, minIndice: 0.0, maxIndice: 0.15 },
-    STANDARD_ALTA:  { soglia: 0.60, minIndice: 0.0, maxIndice: 0.15 },
-    STANDARD_MEDIA: { soglia: 0.60, minIndice: 0.0, maxIndice: 0.15 },
-    STANDARD_BASSA: { soglia: 0.60, minIndice: 0.0, maxIndice: 0.15 },
-    SAVER:          { soglia: 0.70, minIndice: 0.0, maxIndice: 0.07 }
+    EXPRESS: {
+        soglia: 0.40,
+        minIndice: 0.0,
+        maxIndice: 99.0
+    },
+    STANDARD: {
+        soglia: 0.60,
+        minIndice: 0.0,
+        maxIndice: 0.15
+    },
+    STANDARD_ALTA: {
+        soglia: 0.60,
+        minIndice: 0.0,
+        maxIndice: 0.15
+    },
+    STANDARD_MEDIA: {
+        soglia: 0.60,
+        minIndice: 0.0,
+        maxIndice: 0.15
+    },
+    STANDARD_BASSA: {
+        soglia: 0.60,
+        minIndice: 0.0,
+        maxIndice: 0.15
+    },
+    SAVER: {
+        soglia: 0.70,
+        minIndice: 0.0,
+        maxIndice: 0.07
+    }
 };
 
-// Formula lineare: costo per singolo posto offerto al km (euro_km / posti)
-const CALCOLA_INDICE = (euro_km, posti) => euro_km / Math.max(1, posti);
+const CALCOLA_INDICE = (euro_km, posti) =>
+    euro_km / Math.max(1, posti);
 
+const arrotondaEuro = (value) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
+function numeroFinito(value, fallback = null) {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ''
+    ) {
+        return fallback;
+    }
+
+    const n = Number(value);
+
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function kmNonNegativi(value, fallback = 0) {
+    const n = numeroFinito(value, fallback);
+
+    return n !== null && n >= 0 ? n : fallback;
+}
+
+function risolviKm(esplicito, daCorsa) {
+    return kmNonNegativi(
+        esplicito ?? daCorsa,
+        0
+    );
+}
+
+function normalizzaClasse(classe) {
+    const key = String(
+        classe || 'STANDARD'
+    ).trim().toUpperCase();
+
+    return CLASSI_CONFIG[key]
+        ? key
+        : CLASSI_CONFIG[key.split('_')[0]]
+            ? key.split('_')[0]
+            : 'STANDARD';
+}
+
+function dettagliDefault() {
+    return {
+        costoMissione: null,
+        postiTotaliMissione: null,
+        prezzoUnitario: null,
+        veicoloRiferimentoId: null,
+        tariffaKm: null,
+        kmComplessiviOperativi: null,
+        sogliaPercentuale: null,
+        indiceEfficienza: null
+    };
+}
+
+/**
+ * Recupera la tariffa di un singolo veicolo.
+ *
+ * Mantiene il fallback storico per non interrompere
+ * le corse private già gestite dal sistema.
+ */
 export async function getTariffe(veicolo_id) {
     try {
         const { rows } = await pool.query(
-            'SELECT euro_km, prezzo_passeggero FROM tariffe WHERE veicolo_id = $1 AND euro_km > 0 ORDER BY (tipo = \'standard\') DESC LIMIT 1',
+            `
+            SELECT
+                euro_km,
+                prezzo_passeggero
+            FROM tariffe
+            WHERE veicolo_id = $1
+              AND euro_km > 0
+            ORDER BY
+                (tipo = 'standard') DESC
+            LIMIT 1
+            `,
             [veicolo_id]
         );
+
         if (rows[0]) {
-            return { euro_km: Number(rows[0].euro_km), prezzo_passeggero: Number(rows[0].prezzo_passeggero) };
+            return {
+                euro_km: Number(rows[0].euro_km),
+                prezzo_passeggero: Number(
+                    rows[0].prezzo_passeggero
+                )
+            };
         }
-        return TARIFF_DEFAULT;
+
+        return { ...TARIFF_DEFAULT };
+
     } catch (err) {
-        console.error(`⚠ [PRICING] Errore DB per veicolo ${veicolo_id}:`, err);
-        return TARIFF_DEFAULT;
+        console.error(
+            `⚠ [PRICING] Errore DB per veicolo ${veicolo_id}:`,
+            err
+        );
+
+        return { ...TARIFF_DEFAULT };
     }
 }
 
+/**
+ * Recupera i veicoli del pool con tariffa valida.
+ *
+ * La preferenza per la tariffa standard è coerente
+ * con la logica precedente.
+ */
 async function getDettaglioPool(veicoli_ids) {
-    if (!veicoli_ids || veicoli_ids.length === 0) return [];
+    if (
+        !Array.isArray(veicoli_ids) ||
+        veicoli_ids.length === 0
+    ) {
+        return [];
+    }
+
+    const ids = [
+        ...new Set(
+            veicoli_ids
+                .map(Number)
+                .filter(
+                    id =>
+                        Number.isInteger(id) &&
+                        id > 0
+                )
+        )
+    ];
+
+    if (ids.length === 0) {
+        return [];
+    }
+
     try {
-        const res = await pool.query(
-            `SELECT DISTINCT ON (t.veicolo_id) 
-                t.veicolo_id, t.euro_km, v.posti_totali as posti 
-             FROM tariffe t
-             JOIN veicolo v ON t.veicolo_id = v.id 
-             WHERE t.veicolo_id = ANY($1) AND t.euro_km > 0
-             ORDER BY t.veicolo_id, (t.tipo = 'standard') DESC`,
-            [veicoli_ids]
+        const { rows } = await pool.query(
+            `
+            SELECT DISTINCT ON (t.veicolo_id)
+                t.veicolo_id,
+                t.euro_km,
+                v.posti_totali AS posti
+            FROM tariffe t
+            JOIN veicolo v
+                ON t.veicolo_id = v.id
+            WHERE t.veicolo_id = ANY($1::int[])
+              AND t.euro_km > 0
+              AND v.posti_totali > 0
+            ORDER BY
+                t.veicolo_id,
+                (t.tipo = 'standard') DESC,
+                t.euro_km ASC
+            `,
+            [ids]
         );
-        return res.rows.map(r => ({
-            id: r.veicolo_id,
-            euro_km: Number(r.euro_km),
-            posti: Number(r.posti),
-            indice: CALCOLA_INDICE(Number(r.euro_km), Number(r.posti))
-        }));
+
+        return rows.map(r => {
+            const euro_km = Number(r.euro_km);
+            const posti = Number(r.posti);
+
+            return {
+                id: Number(r.veicolo_id),
+                euro_km,
+                posti,
+                indice: CALCOLA_INDICE(
+                    euro_km,
+                    posti
+                )
+            };
+        }).filter(v =>
+            Number.isFinite(v.euro_km) &&
+            v.euro_km > 0 &&
+            Number.isInteger(v.posti) &&
+            v.posti > 0
+        );
+
     } catch (err) {
-        console.error(`❌ [POOL] Errore query pool:`, err);
+        console.error(
+            '❌ [POOL] Errore query pool:',
+            err
+        );
+
         return [];
     }
 }
 
 /**
- * Calcola il prezzo considerando la tratta utente, l'avvicinamento, il riposizionamento e i posti richiesti.
+ * Calcola il prezzo di una corsa.
+ *
+ * Compatibilità:
+ * - Mantiene la firma originale.
+ * - Mantiene prezzo e targetPasseggeri.
+ * - Aggiunge dettagli economici informativi.
+ *
+ * IMPORTANTE:
+ * Il ritorno alla base fa parte del costo
+ * della missione e della soglia di attivazione.
  */
 export async function calcolaPrezzo(
-    corsa, 
-    postiRichiesti, 
-    tipo, 
-    kmUtente, 
-    kmTotali, 
-    totPasseggeriCorrenti = 0, 
+    corsa,
+    postiRichiesti,
+    tipo,
+    kmUtente,
+    kmTotali,
+    totPasseggeriCorrenti = 0,
     classe = 'STANDARD',
     kmAvvicinamento = 0,
     kmRiposizionamento = 0,
     isNuovoUtente = true
 ) {
-    const tipoValido = ['privata', 'condivisa', 'popbus', 'pop-bus'].includes(tipo) ? tipo : 'standard';
-    const postiUtente = Math.max(1, Number(postiRichiesti || 1));
-    const classeKey = classe?.toUpperCase() || 'STANDARD';
+    const tipoValido = [
+        'privata',
+        'condivisa',
+        'popbus',
+        'pop-bus'
+    ].includes(tipo)
+        ? tipo
+        : 'standard';
+
+    const postiUtente = Math.max(
+        1,
+        Number(postiRichiesti || 1)
+    );
+
+    const classeKey = normalizzaClasse(classe);
+
+    const avvicinamento = risolviKm(
+        kmAvvicinamento,
+        corsa?.km_avvicinamento
+    );
+
+    const riposizionamento = risolviKm(
+        kmRiposizionamento,
+        corsa?.km_riposizionamento
+    );
+
+    const safeKmUtente = Math.abs(
+        numeroFinito(kmUtente, 0)
+    );
+
+    // Il costo operativo comprende sempre:
+    // tratta + avvicinamento + ritorno alla base.
+    //
+    // kmTotali è mantenuto nella firma per
+    // compatibilità con i chiamanti esistenti.
+    const kmComplessiviOperativi =
+        safeKmUtente +
+        avvicinamento +
+        riposizionamento;
 
     let prezzoCalcolato = null;
     let targetPasseggeri = 1;
 
-    // Estrazione dei chilometri operativi e della tratta utente
-    const avvicinamento = Number(kmAvvicinamento) || Number(corsa.km_avvicinamento) || 0;
-    const riposizionamento = Number(kmRiposizionamento) || Number(corsa.km_riposizionamento) || 0;
-    const safeKmUtente = Math.abs(Number(kmUtente) || 0);
-    
-    // I km operativi effettivi sono la somma esatta di tratta utente + avvicinamento + riposizionamento (ritorno)
-    const kmComplessiviOperativi = safeKmUtente + avvicinamento + riposizionamento;
+    const dettagli = dettagliDefault();
 
-    console.log(`🧮 [PRICING START] Tipo: ${tipoValido} | Posti richiesti: ${postiUtente} | Classe: ${classeKey} (Lineare) | Km Utente: ${safeKmUtente} | Km Complessivi Operativi: ${kmComplessiviOperativi}`);
+    dettagli.kmComplessiviOperativi =
+        kmComplessiviOperativi;
+
+    console.log(
+        `🧮 [PRICING START] ` +
+        `Tipo=${tipoValido} | ` +
+        `Posti=${postiUtente} | ` +
+        `Classe=${classeKey} | ` +
+        `Km utente=${safeKmUtente} | ` +
+        `Km operativi=${kmComplessiviOperativi}`
+    );
 
     try {
         switch (tipoValido) {
+
+            // ---------------------------------
+            // 1. CORSA PRIVATA
+            // ---------------------------------
             case 'privata':
             case 'standard': {
-                const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : TARIFF_DEFAULT;
-                prezzoCalcolato = (info.euro_km * kmComplessiviOperativi) * postiUtente;
-                console.log(`🚗 [PRICING PRIVATA] Subtotale (per ${postiUtente} posti): ${prezzoCalcolato}`);
+                const info = corsa?.veicolo_id
+                    ? await getTariffe(
+                        corsa.veicolo_id
+                    )
+                    : TARIFF_DEFAULT;
+
+                prezzoCalcolato =
+                    (
+                        info.euro_km *
+                        kmComplessiviOperativi
+                    ) *
+                    postiUtente;
+
+                console.log(
+                    `🚗 [PRICING PRIVATA] ` +
+                    `Prezzo=${prezzoCalcolato}`
+                );
+
                 break;
             }
 
+            // ---------------------------------
+            // 2. CORSA CONDIVISA
+            // ---------------------------------
             case 'condivisa': {
-                const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : null;
-                if (!info) return null;
-                const gia = Math.max(0, Number(totPasseggeriCorrenti) || 0);
-                const totale = gia + postiUtente;
-                const primo = Math.max(1, Number(corsa.primo_posto) || 1);
-                prezzoCalcolato = ((info.euro_km * kmComplessiviOperativi +
-                    Math.max(0, totale - primo) * info.prezzo_passeggero) / totale) * postiUtente;
+                const info = corsa?.veicolo_id
+                    ? await getTariffe(
+                        corsa.veicolo_id
+                    )
+                    : null;
+
+                if (!info) {
+                    return null;
+                }
+
+                const gia = Math.max(
+                    0,
+                    Number(
+                        totPasseggeriCorrenti
+                    ) || 0
+                );
+
+                const totale =
+                    gia + postiUtente;
+
+                const primo = Math.max(
+                    1,
+                    Number(
+                        corsa.primo_posto
+                    ) || 1
+                );
+
+                prezzoCalcolato = (
+                    (
+                        info.euro_km *
+                        kmComplessiviOperativi
+                    ) +
+                    (
+                        Math.max(
+                            0,
+                            totale - primo
+                        ) *
+                        info.prezzo_passeggero
+                    )
+                ) / totale * postiUtente;
+
+                console.log(
+                    `🚐 [PRICING CONDIVISA] ` +
+                    `Passeggeri esistenti=${gia} | ` +
+                    `Totale=${totale} | ` +
+                    `Prezzo=${prezzoCalcolato}`
+                );
+
                 break;
             }
 
+            // ---------------------------------
+            // 3. POPBUS V2
+            // ---------------------------------
             case 'popbus':
             case 'pop-bus': {
-                console.log(`\n================ 🚌 [DEBUG POP-BUS PRICING INIZIO] ================`);
-                let poolIds = corsa.veicoli_pool_ids;
-                
-                // Recuperiamo la classe/tipo_servizio reale direttamente dalla direttrice nel DB se presente
-                let classeEfficace = classeKey;
-                if (corsa.direttrice_id) {
-                    const { rows: dirRows } = await pool.query('SELECT tipo_servizio, veicolo_id FROM direttrici_virtuali WHERE id = $1', [corsa.direttrice_id]);
+
+                console.log(
+                    '\n========== 🚌 POPBUS PRICING V2 =========='
+                );
+
+                let poolIds = Array.isArray(
+                    corsa?.veicoli_pool_ids
+                )
+                    ? corsa.veicoli_pool_ids
+                    : [];
+
+                let classeEfficace =
+                    classeKey;
+
+                // Se la direttrice è già presente,
+                // recuperiamo classe e veicolo.
+                if (corsa?.direttrice_id) {
+                    const { rows: dirRows } =
+                        await pool.query(
+                            `
+                            SELECT
+                                tipo_servizio,
+                                veicolo_id
+                            FROM direttrici_virtuali
+                            WHERE id = $1
+                            `,
+                            [corsa.direttrice_id]
+                        );
+
                     if (dirRows.length > 0) {
-                        if (dirRows[0].tipo_servizio) {
-                            classeEfficace = dirRows[0].tipo_servizio.toUpperCase();
+                        const dir = dirRows[0];
+
+                        if (dir.tipo_servizio) {
+                            classeEfficace =
+                                normalizzaClasse(
+                                    dir.tipo_servizio
+                                );
                         }
-                        if ((!poolIds || poolIds.length === 0) && dirRows[0].veicolo_id) {
-                            poolIds = [dirRows[0].veicolo_id];
+
+                        if (
+                            poolIds.length === 0 &&
+                            dir.veicolo_id
+                        ) {
+                            poolIds = [
+                                dir.veicolo_id
+                            ];
                         }
                     }
                 }
 
-                console.log(`📋 [POPBUS] ID veicoli nel pool da analizzare:`, poolIds);
+                console.log(
+                    '[POPBUS] Classe:',
+                    classeEfficace
+                );
 
-                const poolData = await getDettaglioPool(poolIds || []);
-                console.log(`📦 [POPBUS] Dettaglio grezzo estratto dal DB per i veicoli del pool:`, JSON.stringify(poolData));
-                
+                console.log(
+                    '[POPBUS] Veicoli pool:',
+                    poolIds
+                );
+
+                const poolData =
+                    await getDettaglioPool(
+                        poolIds
+                    );
+
                 if (poolData.length === 0) {
-                    console.log(`⚠️ [PRICING POPBUS] Nessun pool trovato o veicoli non validi per la classe ${classeEfficace}.`);
+                    console.warn(
+                        '[POPBUS] Nessun veicolo con tariffa valida'
+                    );
+
                     prezzoCalcolato = null;
-                } else {
-                    // Risoluzione della configurazione basata sulla classe efficace
-                    const config = CLASSI_CONFIG[classeEfficace] || CLASSI_CONFIG[classeEfficace.split('_')[0]] || CLASSI_CONFIG.STANDARD;
-                    console.log(`⚙️ [POPBUS Config] Classe: ${classeEfficace} (Input: ${classeKey}) -> Soglia: ${config.soglia}, minIndice: ${config.minIndice}, maxIndice: ${config.maxIndice}`);
-
-                    // Filtriamo i veicoli in base ai parametri della classe
-                    const poolFiltrato = poolData.filter(v => v.euro_km > 0 && v.indice >= config.minIndice && v.indice <= config.maxIndice);
-                    console.log(`🎯 [POPBUS] Veicoli dopo il filtraggio per indice (${classeEfficace}):`, JSON.stringify(poolFiltrato));
-                    
-                    if (poolFiltrato.length === 0) {
-                        console.log(`❌ [PRICING POPBUS] Nessun veicolo idoneo dopo il filtraggio per l'indice della classe ${classeEfficace}.`);
-                        prezzoCalcolato = null;
-                        break;
-                    }
-                    
-                    // Selezioniamo il veicolo con l'indice di efficienza lineare più basso (costo per posto minore)
-                    const mezzo = poolFiltrato.reduce((prev, curr) => prev.indice < curr.indice ? prev : curr);
-                    console.log(`🥇 [POPBUS] Mezzo vincitore selezionato (indice lineare più basso):`, mezzo);
-
-                    // Calcolo Break-Even basato su tutti i km operativi della missione (Andata + Ritorno)
-                    const breakEvenTotale = mezzo.euro_km * kmComplessiviOperativi;
-
-                    // Capienza totale calcolata sull'intero ciclo A/R (Posti x 2) e relativo target passeggeri
-                    const postiTotaliMissione = mezzo.posti * 2;
-                    targetPasseggeri = Math.max(1, Math.round(postiTotaliMissione * config.soglia));
-
-                    // Prezzo per singolo biglietto/posto
-                    prezzoCalcolato = (breakEvenTotale / targetPasseggeri) * postiUtente;
-
-                    console.log(`📊 [POPBUS Calcoli Intermedi A/R]:`);
-                    console.log(`    - Km complessivi operativi (Tratta A/R + Avv + Rip): ${kmComplessiviOperativi} km`);
-                    console.log(`    - Break-Even Totale della missione (${mezzo.euro_km} €/km * ${kmComplessiviOperativi} km): ${breakEvenTotale.toFixed(4)} €`);
-                    console.log(`    - Posti Totali Missione A/R: ${postiTotaliMissione} | Target Passeggeri Totale (A/R): ${targetPasseggeri}`);
-                    console.log(`    - Posti utente richiesti: ${postiUtente}`);
-                    console.log(`✨ [POPBUS] Subtotale calcolato finale: ${prezzoCalcolato.toFixed(4)} €`);
+                    break;
                 }
-                console.log(`====================================================================\n`);
+
+                const config =
+                    CLASSI_CONFIG[classeEfficace] ||
+                    CLASSI_CONFIG.STANDARD;
+
+                // Filtro classe basato sull'indice
+                // lineare euro/km per posto.
+                const poolFiltrato =
+                    poolData.filter(v =>
+                        v.euro_km > 0 &&
+                        v.indice >=
+                            config.minIndice &&
+                        v.indice <=
+                            config.maxIndice
+                    );
+
+                if (poolFiltrato.length === 0) {
+                    console.warn(
+                        `[POPBUS] Nessun veicolo idoneo per ${classeEfficace}`
+                    );
+
+                    prezzoCalcolato = null;
+                    break;
+                }
+
+                // Selezione deterministica:
+                // indice più basso, poi ID.
+                const mezzo = [
+                    ...poolFiltrato
+                ].sort(
+                    (a, b) =>
+                        a.indice - b.indice ||
+                        a.id - b.id
+                )[0];
+
+                const breakEvenTotale =
+                    mezzo.euro_km *
+                    kmComplessiviOperativi;
+
+                // Modello commerciale A/R:
+                // posti del veicolo moltiplicati
+                // per due e soglia della classe.
+                const postiTotaliMissione =
+                    mezzo.posti * 2;
+
+                targetPasseggeri = Math.max(
+                    1,
+                    Math.round(
+                        postiTotaliMissione *
+                        config.soglia
+                    )
+                );
+
+                const prezzoUnitario =
+                    breakEvenTotale /
+                    targetPasseggeri;
+
+                prezzoCalcolato =
+                    prezzoUnitario *
+                    postiUtente;
+
+                // Dati informativi aggiuntivi
+                dettagli.costoMissione =
+                    arrotondaEuro(
+                        breakEvenTotale
+                    );
+
+                dettagli.postiTotaliMissione =
+                    postiTotaliMissione;
+
+                dettagli.prezzoUnitario =
+                    arrotondaEuro(
+                        prezzoUnitario
+                    );
+
+                dettagli.veicoloRiferimentoId =
+                    mezzo.id;
+
+                dettagli.tariffaKm =
+                    mezzo.euro_km;
+
+                dettagli.sogliaPercentuale =
+                    config.soglia;
+
+                dettagli.indiceEfficienza =
+                    mezzo.indice;
+
+                console.log(
+                    '[POPBUS] Riepilogo:',
+                    {
+                        classe: classeEfficace,
+                        veicolo_id: mezzo.id,
+                        tariffa_km:
+                            mezzo.euro_km,
+                        indice:
+                            mezzo.indice,
+                        km_operativi:
+                            kmComplessiviOperativi,
+                        costo_missione:
+                            breakEvenTotale,
+                        posti_totali_missione:
+                            postiTotaliMissione,
+                        soglia:
+                            config.soglia,
+                        target_passeggeri:
+                            targetPasseggeri,
+                        prezzo_unitario:
+                            prezzoUnitario,
+                        posti_richiesti:
+                            postiUtente,
+                        prezzo_totale:
+                            prezzoCalcolato
+                    }
+                );
+
+                console.log(
+                    '========================================\n'
+                );
+
                 break;
             }
 
+            // ---------------------------------
+            // 4. FALLBACK
+            // ---------------------------------
             default: {
-                prezzoCalcolato = (0.50 * kmComplessiviOperativi) * postiUtente;
-                console.log(`⚠ [PRICING DEFAULT] Subtotale: ${prezzoCalcolato}`);
+                prezzoCalcolato =
+                    0.50 *
+                    kmComplessiviOperativi *
+                    postiUtente;
+
+                console.warn(
+                    '[PRICING DEFAULT] Tipo non riconosciuto'
+                );
+
+                break;
             }
         }
+
     } catch (err) {
-        console.error("❌ [PRICING ERROR]", err);
+        console.error(
+            '❌ [PRICING ERROR]',
+            err
+        );
+
         prezzoCalcolato = null;
     }
 
-    if (prezzoCalcolato === null) {
+    if (
+        prezzoCalcolato === null ||
+        !Number.isFinite(
+            prezzoCalcolato
+        ) ||
+        prezzoCalcolato < 0
+    ) {
         return null;
     }
 
-    const finale = Math.max(PREZZO_MINIMO, Math.round(prezzoCalcolato * 100) / 100);
-    console.log(`✅ [PRICING FINALE] Prezzo calcolato: ${finale} € (per ${postiUtente} posti)`);
-    
+    const finale = Math.max(
+        PREZZO_MINIMO,
+        arrotondaEuro(
+            prezzoCalcolato
+        )
+    );
+
+    console.log(
+        `✅ [PRICING FINALE] ` +
+        `Tipo=${tipoValido} | ` +
+        `Classe=${classeKey} | ` +
+        `Prezzo=${finale} € | ` +
+        `Target=${targetPasseggeri}`
+    );
+
     return {
+        // Campi storici: invariati
         prezzo: finale,
-        targetPasseggeri: targetPasseggeri
+        targetPasseggeri,
+
+        // Nuovi campi informativi
+        ...dettagli
     };
 }

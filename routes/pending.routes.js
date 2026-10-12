@@ -177,11 +177,19 @@ router.post('/:id/accetta', async (req, res) => {
 
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
+      // 🛠️ AGGIORNAMENTO FORZATO DEGLI INDIRIZZI REALI NELLA TABELLA CORSE
+      await client.query(
+        `UPDATE corse 
+         SET origine_address = $1, 
+             destinazione_address = $2 
+         WHERE id = $3`,
+        [pRow.origine_address, pRow.destinazione_address, corsa.id]
+      );
+
       if (!prenotazioneEffettuata) {
-          console.log(`🎟️️ [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
+          console.log(`🎟 [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
           await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
       }
-
       const nuoveFermate = [
         {
           indirizzo: pRow.origine_address,

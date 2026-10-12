@@ -601,10 +601,37 @@ export async function processaProposteDinamicheV2() {
           new Date(busyEnd)
         ]);
 
-        if (conflicts.length) {
-          stats.veicoliConflitto++;
-          continue;
-        }
+       if (conflicts.length) {
+
+  log('SCARTO CONFLITTO DETTAGLIO', {
+    candidata: stats.candidate,
+    classe: c.classe,
+    seeds: c.seeds,
+    percorso: plan.nodes.join('>'),
+
+    veicolo: vehicle.id,
+    autista: vehicle.driver_id,
+
+    postiVeicolo: Number(vehicle.posti_totali),
+    postiRichiesti: evaluation.peak,
+
+    ricavoEuro: Number(evaluation.revenue),
+    costoEuro: cost,
+
+    busyStart: new Date(busyStart).toISOString(),
+    busyEnd: new Date(busyEnd).toISOString(),
+
+    numeroConflitti: conflicts.length,
+
+    conflitti: conflicts.map((conflict, index) => ({
+      numero: index + 1,
+      ...conflict
+    }))
+  });
+
+  stats.veicoliConflitto++;
+  continue;
+}
 
         feasible.push({
           plan,

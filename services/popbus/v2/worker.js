@@ -576,13 +576,11 @@ export async function processaProposteDinamicheV2() {
             AND c.stato IN (
               'prenotabile','in_corso','da_attivare'
             )
-            AND (
-              c.arrivo_datetime IS NULL
-              OR (
-                c.start_datetime<$4::timestamptz
-                AND c.arrivo_datetime>$3::timestamptz
-              )
-            )
+         AND c.start_datetime < $4::timestamptz
+AND (
+  c.arrivo_datetime IS NULL
+  OR c.arrivo_datetime > $3::timestamptz
+)
 
           UNION ALL
 

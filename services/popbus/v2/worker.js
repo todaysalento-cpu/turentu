@@ -362,13 +362,80 @@ export async function processaProposteDinamicheV2() {
           evaluation.arrival +
           returnTrip.seconds * 1000;
 
-        if (
-          busyStart <= Date.now() ||
-          !turno(vehicle, busyStart, busyEnd)
-        ) {
-          stats.veicoliTurno++;
-          continue;
-        }
+       // =====================================================
+// DIAGNOSTICA DISPONIBILITÀ VEICOLO
+// =====================================================
+
+const adesso = Date.now();
+
+const partenzaImpossibile = busyStart <= adesso;
+
+const turnoValido = partenzaImpossibile
+  ? null
+  : turno(vehicle, busyStart, busyEnd);
+
+if (partenzaImpossibile || !turnoValido) {
+  stats.veicoliTurno++;
+
+  const motivi = [];
+
+  if (partenzaImpossibile) {
+    motivi.push('AVVICINAMENTO NON COMPLETABILE IN TEMPO');
+  }
+
+  if (turnoValido === false) {
+    motivi.push('TURNO NON COMPATIBILE');
+  }
+
+  if ((vehicle.giorni_esclusi || []).length > 0) {
+    motivi.push('GIORNI ESCLUSI PRESENTI');
+  }
+
+  if ((vehicle.inattivita || []).length > 0) {
+    motivi.push('PERIODI INATTIVITA PRESENTI');
+  }
+
+  log('SCARTO TURNO', {
+    candidata: stats.candidate,
+    classe: c.classe,
+    seeds: c.seeds,
+    percorso: plan.nodes.join('>'),
+
+    veicolo: vehicle.id,
+    autista: vehicle.driver_id,
+    postiDisponibili: vehicle.posti_totali,
+    postiRichiesti: evaluation.peak,
+
+    manual: vehicle.manual,
+    turnoStart: vehicle.start,
+    turnoFine: vehicle.fine,
+    giorniEsclusi: vehicle.giorni_esclusi,
+    inattivita: vehicle.inattivita,
+
+    partenzaRichiesta:
+      new Date(evaluation.departure).toISOString(),
+
+    busyStart:
+      new Date(busyStart).toISOString(),
+
+    busyEnd:
+      new Date(busyEnd).toISOString(),
+
+    avvicinamentoMinuti:
+      Math.round(approach.seconds / 60),
+
+    ritornoMinuti:
+      Math.round(returnTrip.seconds / 60),
+
+    partenzaImpossibile,
+    turnoValido:
+      turnoValido === null ? 'NON VALUTATO' : turnoValido,
+
+    motivi
+  });
+
+  continue;
+}
 
         // Costo comprensivo di avvicinamento,
         // percorso e ritorno alla base.

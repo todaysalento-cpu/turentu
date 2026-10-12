@@ -1,291 +1,166 @@
 import { getRouteGeometry } from '../../utils/maps.util.js';
 
+export const TOLLERANZA_SALITA_MINUTI = 30;
+
+export function verificaSalita(segmenti, partenza, richiesta) {
+  if (!segmenti.length) return null;
+  const nodes = [Number(segmenti[0].start_node_id)];
+  const times = [new Date(partenza).getTime()];
+  if (!Number.isFinite(times[0])) return null;
+  for (let i = 0; i < segmenti.length; i++) {
+    const s = segmenti[i];
+    const durata = s.tempo_stimato == null ? NaN : Number(s.tempo_stimato);
+    if (Number(s.ordine_sequenziale) !== i + 1 ||
+        Number(s.start_node_id) !== nodes[i] || !Number.isFinite(durata) || durata <= 0) return null;
+    // Il tempo cumulato è la fonte del transito; un timestamp incoerente blocca il matching.
+    if (s.start_datetime != null && new Date(s.start_datetime).getTime() !== times[i]) return null;
+    nodes.push(Number(s.end_node_id));
+    times.push(times[i] + durata * 60000);
+  }
+  if (new Set(nodes).size !== nodes.length) return null;
+  const start = nodes.indexOf(Number(richiesta.start_node_id));
+  const end = nodes.indexOf(Number(richiesta.end_node_id));
+  const requested = new Date(richiesta.start_datetime).getTime();
+  if (start < 0 || end <= start || !Number.isFinite(requested)) return null;
+  const scarto = Math.abs(times[start] - requested);
+  return scarto <= TOLLERANZA_SALITA_MINUTI * 60000
+    ? { start, end, scarto, transito: times[start], nodes, times } : null;
+}
+
+async function durataStradale(client, start, end) {
+  const { rows } = await client.query(`
+    SELECT id, ST_Y(posizione::geometry) AS lat, ST_X(posizione::geometry) AS lon
+    FROM nodi_direttrice WHERE id = ANY($1::int[])
+  `, [[start, end]]);
+  const a = rows.find(n => Number(n.id) === start);
+  const b = rows.find(n => Number(n.id) === end);
+  if (!a || !b) return null;
+  try {
+    const route = await getRouteGeometry({lat:a.lat, lon:a.lon}, {lat:b.lat, lon:b.lon});
+    const seconds = Number(route.durata);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : null;
+  } catch (err) {
+    console.warn(`[POPBUS] Tratta ${start} → ${end} rinviata: ${err.message}`);
+    return null; // Nessun tempo arbitrario usato per dichiarare compatibilità.
+  }
+}
+
 export async function gestisciMatchingEDirettrici(client, allClusters) {
-  const direttriciPerSlotEFascia = new Map();
-  
-  allClusters.forEach(c => {
-    const slotKey = new Date(c.slot_orario).toISOString();
-    const mapKey = `${slotKey}_${c.fascia_percorrenza}`;
-    
-    if (!direttriciPerSlotEFascia.has(mapKey)) {
-      direttriciPerSlotEFascia.set(mapKey, {
-        slot_orario: c.slot_orario,
-        fascia_percorrenza: c.fascia_percorrenza,
-        nodi: new Set(),
-        clustersInclusi: []
-      });
-    }
-    const dirInfo = direttriciPerSlotEFascia.get(mapKey);
-    dirInfo.nodi.add(c.start_node_id);
-    dirInfo.nodi.add(c.end_node_id);
-    dirInfo.clustersInclusi.push(c);
-  });
-
-  const segmentiCoinvoltiIds = [];
-
-  for (const [mapKey, info] of direttriciPerSlotEFascia.entries()) {
-    const nodiIdsArray = Array.from(info.nodi);
-
-    console.log(`\n--------------------------------------------------`);
-    console.log(`🗺️ [MATCHER - SPATIAL] Elaborazione slot: ${info.slot_orario} | Fascia: ${info.fascia_percorrenza}`);
-    console.log(`   - Nodi grezzi identificati nel batch: [${nodiIdsArray.join(', ')}]`);
-
-    // 1. Compatibilità Spaziale: Ordinamento geografico dei nodi rispetto al primo nodo base
-    const { rows: nodiOrdinatiGeograficamente } = await client.query(`
-      WITH base_node AS (
-        SELECT id, posizione FROM nodi_direttrice WHERE id = $1
-      )
-      SELECT n.id
-      FROM nodi_direttrice n, base_node b
-      WHERE n.id = ANY($2::int[])
-      ORDER BY ST_Distance(b.posizione::geography, n.posizione::geography) ASC
-    `, [nodiIdsArray[0], nodiIdsArray]);
-
-    const nodiOrdinati = nodiOrdinatiGeograficamente.map(n => n.id);
-    console.log(`   📍 [SPATIAL OK] Nodi ordinati per distanza crescente da ${nodiIdsArray[0]}: [${nodiOrdinati.join(' ➔ ')}]`);
-
-    const minNodoCorrente = nodiOrdinati[0];
-    const tipoServizioTarget = `STANDARD_${info.fascia_percorrenza}`;
-
-    console.log(`⏱️ [MATCHER - TEMPORAL] Cerca direttrice compatibile per Nodo Iniziale: ${minNodoCorrente}, Tipo: ${tipoServizioTarget}, Slot Target: ${info.slot_orario}`);
-
-    // 2. Compatibilità Temporale e Spaziale combinata con estensione in avanti basata su ID o prossimità geografica (ST_DWithin)
-    const { rows: esistenti } = await client.query(`
-      WITH segmenti_cumulativi AS (
-        SELECT 
-          dv.id as direttrice_id,
-          dv.partenza_prevista,
-          s.start_node_id,
-          s.end_node_id,
-          s.ordine_sequenziale,
-          COALESCE(s.tempo_stimato, 0) as tempo_stimato,
-          dv.partenza_prevista + (
-            SUM(COALESCE(s.tempo_stimato, 0)) OVER (
-              PARTITION BY dv.id 
-              ORDER BY s.ordine_sequenziale 
-              ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  // Lock cooperativo per l'intera transazione del worker; prima di qualsiasi mutazione.
+  await client.query('SELECT pg_advisory_xact_lock(734021, 1)');
+  const candidates = new Map();
+  for (const c of allClusters) {
+    if (c.is_composta) continue;
+    if (!Array.isArray(c.richieste)) throw new Error('Aggiornare anche clusterService.js: mancano gli ID delle richieste');
+    for (const r of c.richieste) candidates.set(String(r.id), { ...r, fascia: c.fascia_percorrenza });
+  }
+  const richieste = [...candidates.values()].sort((a,b) =>
+    new Date(a.start_datetime) - new Date(b.start_datetime) || String(a.id).localeCompare(String(b.id)));
+  const coinvolti = new Set();
+  for (const candidate of richieste) {
+    const { rows: fresh } = await client.query(`
+      SELECT id, start_node_id, end_node_id, start_datetime, posti_richiesti
+      FROM richieste_pop_bus WHERE id = $1 AND stato = 'in_attesa'
+        AND direttrice_id IS NULL FOR UPDATE
+    `, [candidate.id]);
+    if (!fresh.length) continue;
+    const r = fresh[0];
+    const start = Number(r.start_node_id), end = Number(r.end_node_id), posti = Number(r.posti_richiesti);
+    if (start === end || r.start_datetime == null || !Number.isInteger(posti) || posti <= 0) continue;
+    const servizio = `STANDARD_${candidate.fascia}`;
+    const { rows: dirs } = await client.query(`
+      SELECT id, partenza_prevista FROM direttrici_virtuali
+      WHERE tipo_servizio = $1 AND stato = 'in_formazione'
+      ORDER BY partenza_prevista, id FOR UPDATE
+    `, [servizio]);
+    let chosen = null;
+    for (const d of dirs) {
+      const { rows: segments } = await client.query(`
+        SELECT id, start_node_id, end_node_id, ordine_sequenziale,
+               tempo_stimato, start_datetime, stato, posti_impegnati
+        FROM segmenti WHERE direttrice_id = $1 ORDER BY ordine_sequenziale, id FOR UPDATE
+      `, [d.id]);
+      if (!segments.length || segments.some(s => s.stato !== 'in_attesa' || Number(s.posti_impegnati || 0) !== 0)) continue;
+      let trial = segments;
+      let append = null;
+      // Estensione solo al capolinea: nessun riordino o spostamento dei transiti precedenti.
+      if (Number(segments.at(-1).end_node_id) === start &&
+          !segments.some(s => Number(s.start_node_id) === end || Number(s.end_node_id) === end)) {
+        const { rows: protectedReturns } = await client.query(`
+          SELECT m.id FROM missioni_ritorno m
+          WHERE m.direttrice_id=$1 AND (
+            m.stato IS DISTINCT FROM 'in_attesa' OR EXISTS (
+              SELECT 1 FROM richieste_pop_bus r WHERE r.target_missione_id=m.id
             )
-          ) * INTERVAL '1 minute' as orario_arrivo_nodo
-        FROM direttrici_virtuali dv
-        JOIN segmenti s ON s.direttrice_id = dv.id
-        WHERE dv.tipo_servizio = $2
-          AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-      ),
-      nodo_target AS (
-        SELECT id, posizione FROM nodi_direttrice WHERE id = $1
-      )
-      SELECT DISTINCT dv.id, dv.start_node_id, dv.end_node_id, dv.stato, sc.orario_arrivo_nodo as orario_transito_nodo,
-             ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) as scarto_secondi
-      FROM direttrici_virtuali dv
-      JOIN segmenti_cumulativi sc ON sc.direttrice_id = dv.id
-      JOIN nodi_direttrice n_fine ON n_fine.id = sc.end_node_id
-      CROSS JOIN nodo_target nt
-      WHERE dv.tipo_servizio = $2
-        AND dv.stato IN ('in_formazione', 'in_attesa_autista', 'attivo')
-        AND (
-          sc.start_node_id = $1 
-          OR (
-            sc.ordine_sequenziale = (
-              SELECT MAX(s_max.ordine_sequenziale) 
-              FROM segmenti s_max 
-              WHERE s_max.direttrice_id = dv.id
-            )
-            AND ST_DWithin(n_fine.posizione::geography, nt.posizione::geography, 100)
-          )
-        )
-        AND ABS(EXTRACT(EPOCH FROM (sc.orario_arrivo_nodo - $3::timestamptz))) <= 2400
-      ORDER BY dv.id ASC
-      LIMIT 1
-    `, [minNodoCorrente, tipoServizioTarget, info.slot_orario]);
-
-    if (esistenti.length > 0) {
-      const match = esistenti[0];
-      console.log(`   ✅ [TEMPORAL OK] Trovata direttrice esistente compatibile!`);
-      console.log(`      - ID Direttrice: ${match.id} (Stato: ${match.stato})`);
-      console.log(`      - Orario transito stimato sul nodo: ${match.orario_transito_nodo}`);
-      console.log(`      - Slot richiesto: ${info.slot_orario}`);
-      console.log(`      - Scarto temporale: ${Math.round(match.scarto_secondi)} secondi (Soglia max: 2400s / 40 min)`);
-    } else {
-      console.log(`   ❌ [TEMPORAL MISS] Nessuna direttrice esistente rispetta i criteri spaziali e temporali. Sarà creata una nuova direttrice.`);
+          ) LIMIT 1
+        `, [d.id]);
+        if (protectedReturns.length) continue;
+        const durata = await durataStradale(client, start, end);
+        if (durata == null) continue;
+        append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,
+          ordine_sequenziale:segments.length + 1, start_datetime:null};
+        trial = [...segments, append];
+      }
+      const validation = verificaSalita(trial, d.partenza_prevista, r);
+      if (validation && (!chosen || validation.scarto < chosen.validation.scarto)) {
+        chosen = { d, segments, append, validation };
+      }
     }
-
-    let direttriceId;
-
-    if (esistenti.length > 0) {
-      const dirEsistente = esistenti[0];
-      direttriceId = dirEsistente.id;
-
-      const nuovoStart = nodiOrdinati[0];
-      const nuovoEnd = nodiOrdinati[nodiOrdinati.length - 1];
-
-      console.log(`♻️ [MATCHER] Accodamento a direttrice ESISTENTE ID: ${direttriceId}. Estensione capolinea a Start: ${nuovoStart}, End: ${nuovoEnd}`);
-
-      await client.query(`
-        UPDATE direttrici_virtuali
-        SET start_node_id = $1, end_node_id = $2
-        WHERE id = $3
-      `, [nuovoStart, nuovoEnd, direttriceId]);
-    } else {
-      const { rows: dir } = await client.query(`
+    if (!chosen) {
+      const durata = await durataStradale(client, start, end);
+      if (durata == null) continue;
+      const { rows: inserted } = await client.query(`
         INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)
         VALUES ('in_formazione', $1, $2, $3, $4)
-        ON CONFLICT (start_node_id, end_node_id, partenza_prevista) 
-        DO UPDATE SET stato = EXCLUDED.stato
-        RETURNING id
-      `, [info.slot_orario, nodiOrdinati[0], nodiOrdinati[nodiOrdinati.length - 1], tipoServizioTarget]);
-
-      direttriceId = dir[0].id;
-      console.log(`✨ [MATCHER] Creata NUOVA direttrice ID: ${direttriceId} per slot ${info.slot_orario} [${nodiOrdinati[0]} ➔ ${nodiOrdinati[nodiOrdinati.length - 1]}]`);
+        ON CONFLICT (start_node_id, end_node_id, partenza_prevista) DO NOTHING RETURNING id, partenza_prevista
+      `, [r.start_datetime, start, end, servizio]);
+      // Non riattivare né sovrascrivere una direttrice già presente.
+      if (!inserted.length) continue;
+      const append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,
+        ordine_sequenziale:1, start_datetime:null};
+      chosen = {d:inserted[0], segments:[], append,
+        validation:verificaSalita([append], r.start_datetime, r)};
     }
-
-    const segmentiDaCreare = new Map();
-
-    for (const c of info.clustersInclusi) {
-      const idx1 = nodiOrdinati.indexOf(c.start_node_id);
-      const idx2 = nodiOrdinati.indexOf(c.end_node_id);
-      const idxStart = Math.min(idx1, idx2);
-      const idxEnd = Math.max(idx1, idx2);
-
-      for (let i = idxStart; i < idxEnd; i++) {
-        const sId = nodiOrdinati[i];
-        const eId = nodiOrdinati[i + 1];
-        const subKey = `${sId}_${eId}`;
-        const currentPosti = segmentiDaCreare.get(subKey) || 0;
-        segmentiDaCreare.set(subKey, currentPosti + c.posti_totali);
-      }
-    }
-
-    let ordineSeq = 0;
-    for (const [subKey] of segmentiDaCreare.entries()) {
-      const [sNode, eNode] = subKey.split('_').map(Number);
-      ordineSeq++;
-
-      const { rows: coordNodes } = await client.query(`
-        SELECT id, ST_Y(posizione::geometry) as lat, ST_X(posizione::geometry) as lon
-        FROM nodi_direttrice
-        WHERE id IN ($1, $2)
-      `, [sNode, eNode]);
-
-      const startNodeData = coordNodes.find(n => n.id === sNode);
-      const endNodeData = coordNodes.find(n => n.id === eNode);
-
-      let tempoStimatoMinuti = 10;
-      if (startNodeData && endNodeData) {
-        try {
-          const routeInfo = await getRouteGeometry(
-            { lat: startNodeData.lat, lon: startNodeData.lon },
-            { lat: endNodeData.lat, lon: endNodeData.lon }
-          );
-          tempoStimatoMinuti = Math.max(1, Math.ceil(routeInfo.durata / 60));
-        } catch (mapsErr) {
-          console.warn(`⚠️ [MAPS WARNING] Default 10 min per [${sNode} ➔ ${eNode}]: ${mapsErr.message}`);
-        }
-      }
-
-      const { rows: existingSeg } = await client.query(`
-        SELECT id, stato FROM segmenti 
-        WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3
-        LIMIT 1
-      `, [direttriceId, sNode, eNode]);
-
-      let segmentoId;
-      if (existingSeg.length > 0) {
-        segmentoId = existingSeg[0].id;
-        await client.query(`UPDATE segmenti SET tempo_stimato = $1 WHERE id = $2`, [tempoStimatoMinuti, segmentoId]);
-      } else {
-        const { rows: newSeg } = await client.query(`
-          INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati, stato, ordine_sequenziale, tempo_stimato)
-          VALUES ($1, $2, $3, 0, 'in_attesa', $4, $5)
-          RETURNING id
-        `, [direttriceId, sNode, eNode, ordineSeq, tempoStimatoMinuti]);
-        segmentoId = newSeg[0].id;
-      }
-
-      console.log(`📏 [MATCHER] Segmento ${segmentoId} (Direttrice ${direttriceId}) [Tratta ${sNode} ➔ ${eNode}] sincronizzato. Ordine: ${ordineSeq}, Tempo: ${tempoStimatoMinuti} min`);
-
-      if (segmentoId && !segmentiCoinvoltiIds.includes(Number(segmentoId))) {
-        segmentiCoinvoltiIds.push(Number(segmentoId));
-      }
-
-      const sIdNum = Number(segmentoId);
-      const dIdNum = Number(direttriceId);
-      const eNodeNum = Number(eNode);
-      const capolineaFinaleId = Number(nodiOrdinati[nodiOrdinati.length - 1]);
-      const slotIso = new Date(info.slot_orario).toISOString();
-      const fascia = info.fascia_percorrenza;
-
-      const intervalSql = fascia === 'alta' ? "INTERVAL '30 minutes'" : fascia === 'media' ? "INTERVAL '20 minutes'" : "INTERVAL '10 minutes'";
-      const maxAttesaVal = fascia === 'alta' ? 40 : fascia === 'media' ? 25 : 15;
-
+    const { d, validation } = chosen;
+    if (chosen.append) {
+      const s = chosen.append;
+      const segmentStart = new Date(validation.times[s.ordine_sequenziale - 1]);
+      const { rows: added } = await client.query(`
+        INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati,
+          stato, ordine_sequenziale, tempo_stimato, start_datetime)
+        VALUES ($1,$2,$3,0,'in_attesa',$4,$5,$6) RETURNING id
+      `, [d.id, s.start_node_id, s.end_node_id, s.ordine_sequenziale, s.tempo_stimato, segmentStart]);
+      chosen.segments.push({...s, id:added[0].id});
+      await client.query('UPDATE direttrici_virtuali SET end_node_id = $1 WHERE id = $2', [end, d.id]);
       await client.query(`
-        INSERT INTO missioni_ritorno (
-          segmento_id, direttrice_id, nodo_origine, capolinea_finale_id, orario_previsto, stato, tempo_max_attesa
-        )
-        VALUES (
-          ${sIdNum}, ${dIdNum}, ${eNodeNum}, ${capolineaFinaleId}, 
-          ('${slotIso}'::timestamptz + ${intervalSql}), 'in_attesa', ${maxAttesaVal}
-        )
-        ON CONFLICT (segmento_id, capolinea_finale_id) 
-        DO UPDATE SET orario_previsto = EXCLUDED.orario_previsto, nodo_origine = EXCLUDED.nodo_origine
-      `);
+        UPDATE missioni_ritorno SET capolinea_finale_id=$1
+        WHERE direttrice_id=$2 AND stato='in_attesa'
+      `, [end,d.id]);
+      const fascia = candidate.fascia;
+      const ritorno = fascia === 'alta' ? 30 : fascia === 'media' ? 20 : 10;
+      const attesa = fascia === 'alta' ? 40 : fascia === 'media' ? 25 : 15;
+      // Mantiene la regola di ritorno esistente; cambia solo il riferimento alla partenza effettiva.
+      await client.query(`
+        INSERT INTO missioni_ritorno (segmento_id,direttrice_id,nodo_origine,capolinea_finale_id,
+          orario_previsto,stato,tempo_max_attesa)
+        VALUES ($1,$2,$3,$3,$4::timestamptz + $5::double precision * INTERVAL '1 minute','in_attesa',$6)
+        ON CONFLICT (segmento_id,capolinea_finale_id) DO NOTHING
+      `, [added[0].id, d.id, end, d.partenza_prevista, ritorno, attesa]);
+      // Gli ID e gli stati rimangono invariati; estensione esclusa per ritorni già collegati a richieste.
     }
-
-    // Associazione delle richieste
-    for (const c of info.clustersInclusi) {
-      if (!c.is_composta) {
-        await client.query(`
-          WITH transito_nodo AS (
-            SELECT 
-              s.start_node_id,
-              s.direttrice_id,
-              dv.partenza_prevista + (
-                COALESCE(SUM(s_prev.tempo_stimato), 0)
-              ) * INTERVAL '1 minute' as orario_transito
-            FROM segmenti s
-            JOIN direttrici_virtuali dv ON s.direttrice_id = dv.id
-            LEFT JOIN segmenti s_prev ON s_prev.direttrice_id = s.direttrice_id 
-              AND s_prev.ordine_sequenziale < s.ordine_sequenziale
-            WHERE s.direttrice_id = $1 AND s.start_node_id = $2
-            GROUP BY s.start_node_id, s.direttrice_id, dv.partenza_prevista
-          )
-          UPDATE richieste_pop_bus r
-          SET direttrice_id = $1, stato = 'in_lavorazione'
-          FROM transito_nodo tn
-          WHERE r.stato = 'in_attesa'
-            AND r.start_node_id = tn.start_node_id
-            AND r.end_node_id = $3
-            AND r.direttrice_id IS NULL
-            AND ABS(EXTRACT(EPOCH FROM (r.start_datetime - tn.orario_transito))) <= 2400
-        `, [direttriceId, c.start_node_id, c.end_node_id]);
-      }
-    }
-
-    // Aggiornamento dei posti occupati sui segmenti
-    for (const [subKey] of segmentiDaCreare.entries()) {
-      const [sNode, eNode] = subKey.split('_').map(Number);
-      const { rows: segRows } = await client.query(`
-        SELECT id FROM segmenti WHERE direttrice_id = $1 AND start_node_id = $2 AND end_node_id = $3 LIMIT 1
-      `, [direttriceId, sNode, eNode]);
-
-      if (segRows.length > 0) {
-        const segId = segRows[0].id;
-        await client.query(`
-          UPDATE segmenti s
-          SET posti_occupati = (
-            SELECT COALESCE(SUM(r.posti_richiesti), 0)
-            FROM richieste_pop_bus r
-            JOIN segmenti r_start ON r_start.direttrice_id = s.direttrice_id AND r_start.start_node_id = r.start_node_id
-            JOIN segmenti r_end ON r_end.direttrice_id = s.direttrice_id AND r_end.end_node_id = r.end_node_id
-            WHERE r.direttrice_id = s.direttrice_id
-              AND r.stato IN ('in_attesa', 'in_lavorazione')
-              AND r_start.ordine_sequenziale <= s.ordine_sequenziale
-              AND r_end.ordine_sequenziale > s.ordine_sequenziale
-          )
-          WHERE s.id = $1
-        `, [segId]);
-      }
+    const { rows: associated } = await client.query(`
+      UPDATE richieste_pop_bus SET direttrice_id=$1, stato='in_lavorazione'
+      WHERE id=$2 AND stato='in_attesa' AND direttrice_id IS NULL RETURNING id
+    `, [d.id, r.id]);
+    if (associated.length !== 1) throw new Error(`Associazione concorrente richiesta ${r.id}`);
+    for (let i = validation.start; i < validation.end; i++) {
+      const s = chosen.segments[i];
+      await client.query(`
+        UPDATE segmenti SET posti_occupati=COALESCE(posti_occupati,0)+$1
+        WHERE id=$2
+      `, [posti, s.id]);
+      coinvolti.add(Number(s.id));
     }
   }
-
-  return segmentiCoinvoltiIds;
+  return [...coinvolti];
 }

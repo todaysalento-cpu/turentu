@@ -224,6 +224,19 @@ export async function anteprimaFormazionePopbus(opts) {
 
             for (const v of vehicles) {
                 const cap = num(v.posti_totali);
+
+                // DIAGNOSTICA: verifica perché un veicolo viene escluso
+                // dalla formazione e confronta tariffa e picco occupazione.
+                console.log('[POPBUS VEHICLE CHECK]', {
+                    classe,
+                    veicolo_id: num(v.id),
+                    posti_totali: cap,
+                    picco_richiesto: num(evaluation.peak),
+                    tariffa_km: num(v.euro_km),
+                    escluso_per_capienza:
+                        !Number.isInteger(cap) || cap < evaluation.peak
+                });
+
                 if (!Number.isInteger(cap) || cap < evaluation.peak) continue;
                 let approach, returnTrip;
                 try {

@@ -1,12 +1,13 @@
 
 import { pool } from '../../../db/db.js';
-import { generaCandidate, valutaRichieste } from './model.js';
+import { generaCandidate, generaFormazioniAlternative } from './model.js';
 import { pianifica, leg } from './planner.js';
 
 // Le classi sono distinte: STANDARD_* non viene mai convertita in STANDARD.
 const CLASSI = ['EXPRESS', 'STANDARD', 'STANDARD_ALTA', 'STANDARD_MEDIA', 'STANDARD_BASSA', 'SAVER'];
 const MAX_RICHIESTE = 200;
 const MAX_CANDIDATE = 500;
+const MAX_FORMAZIONI_PER_PIANO = 100;
 const EPS = 1e-8;
 
 const euro = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -192,15 +193,28 @@ export async function anteprimaFormazionePopbus(opts) {
         }
 
         let best = null;
+        const viste = new Set();
+        let formazioniValutate = 0;
         for (const candidate of candidates) {
             if (!candidate.seeds.includes(fakeId)) continue;
             let plan;
             try { plan = await pianifica(candidate, nodes); }
             catch { continue; }
             if (!plan?.legs?.length || !plan?.nodes?.length) continue;
-            const evaluation = valutaRichieste(plan, batch, candidate.seeds);
-            if (!evaluation || evaluation.departure <= Date.now()) continue;
-            if (!evaluation.requests.some(r => num(r.id) === fakeId)) continue;
+            // La richiesta simulata è obbligatoria, ma le altre
+            // richieste possono essere distribuite tra veicoli diversi.
+            const alternatives = generaFormazioniAlternative(
+                plan, batch, candidate.seeds,
+                { maxFormazioni: MAX_FORMAZIONI_PER_PIANO }
+            );
+            for (const evaluation of alternatives) {
+                if (evaluation.departure <= Date.now()) continue;
+                if (!evaluation.requests.some(r => num(r.id) === fakeId)) continue;
+                const signature = `${classe}|${plan.nodes.join(':')}|${evaluation.requests
+                    .map(r => r.id).sort((a, b) => a - b).join(',')}|${evaluation.departure}`;
+                if (viste.has(signature)) continue;
+                viste.add(signature);
+                formazioniValutate++;
 
             const selected = new Set(evaluation.requests.map(r => num(r.id)));
             const formation = relevant.filter(r => selected.has(num(r.id)));
@@ -291,7 +305,14 @@ export async function anteprimaFormazionePopbus(opts) {
                 };
                 if (migliore(candidateResult, best)) best = candidateResult;
             }
-        }
+            } // fine alternativa
+        } // fine candidata
+        console.log('[POPBUS PREVIEW MULTI-VEICOLO]', {
+            classe, candidate: candidates.length,
+            formazioniValutate,
+            miglioreVeicolo: best?.veicolo_riferimento_id ?? null,
+            deficitEuro: best ? best._deficitDopo / 100 : null
+        });
         if (best) {
             const { _deficitDopo, ...publicResult } = best;
             output[classe] = {

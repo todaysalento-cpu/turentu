@@ -75,15 +75,10 @@ function risolviKm(esplicito, daCorsa) {
 }
 
 function normalizzaClasse(classe) {
-    const key = String(
-        classe || 'STANDARD'
-    ).trim().toUpperCase();
-
-    return CLASSI_CONFIG[key]
-        ? key
-        : CLASSI_CONFIG[key.split('_')[0]]
-            ? key.split('_')[0]
-            : 'STANDARD';
+    const raw = String(classe || 'STANDARD').trim().toUpperCase();
+    const key = raw.endsWith('_V2') ? raw.slice(0, -3) : raw;
+    // Le classi STANDARD_ALTA / MEDIA / BASSA restano distinte.
+    return Object.hasOwn(CLASSI_CONFIG, key) ? key : 'STANDARD';
 }
 
 function dettagliDefault() {
@@ -95,7 +90,11 @@ function dettagliDefault() {
         tariffaKm: null,
         kmComplessiviOperativi: null,
         sogliaPercentuale: null,
-        indiceEfficienza: null
+        indiceEfficienza: null,
+        veicoliIdonei: 0,
+        veicoliCapienti: 0,
+        criterioSelezione: null,
+        avvisoCapienza: null
     };
 }
 
@@ -257,10 +256,11 @@ export async function calcolaPrezzo(
         ? tipo
         : 'standard';
 
-    const postiUtente = Math.max(
-        1,
-        Number(postiRichiesti || 1)
-    );
+    const postiUtente = Number(postiRichiesti || 1);
+    if (!Number.isInteger(postiUtente) || postiUtente <= 0) {
+        console.warn('[PRICING] Numero posti non valido:', postiRichiesti);
+        return null;
+    }
 
     const classeKey = normalizzaClasse(classe);
 
@@ -396,8 +396,13 @@ export async function calcolaPrezzo(
             case 'pop-bus': {
 
                 console.log(
-                    '\n========== 🚌 POPBUS PRICING V2 =========='
+                    '\n========== 🚌 POPBUS PRICING V2 MULTI-VEICOLO =========='
                 );
+                if (kmComplessiviOperativi <= 0) {
+                    console.warn('[POPBUS] Distanza operativa non valida');
+                    prezzoCalcolato = null;
+                    break;
+                }
 
                 let poolIds = Array.isArray(
                     corsa?.veicoli_pool_ids
@@ -472,35 +477,44 @@ export async function calcolaPrezzo(
                     CLASSI_CONFIG[classeEfficace] ||
                     CLASSI_CONFIG.STANDARD;
 
-                // Filtro classe basato sull'indice
-                // lineare euro/km per posto.
-                const poolFiltrato =
-                    poolData.filter(v =>
-                        v.euro_km > 0 &&
-                        v.indice >=
-                            config.minIndice &&
-                        v.indice <=
-                            config.maxIndice
-                    );
+                // L'indice filtra l'idoneità commerciale della classe.
+                // La capienza è invece fisica: mai moltiplicarla per due.
+                const poolFiltrato = poolData.filter(v =>
+                    v.euro_km > 0 &&
+                    v.indice >= config.minIndice &&
+                    v.indice <= config.maxIndice
+                );
 
-                if (poolFiltrato.length === 0) {
-                    console.warn(
-                        `[POPBUS] Nessun veicolo idoneo per ${classeEfficace}`
-                    );
+                dettagli.veicoliIdonei = poolFiltrato.length;
 
+                const poolCapiente = poolFiltrato.filter(v =>
+                    v.posti >= postiUtente
+                );
+                dettagli.veicoliCapienti = poolCapiente.length;
+
+                if (!poolCapiente.length) {
+                    console.warn('[POPBUS] Nessun mezzo capiente per la richiesta', {
+                        classe: classeEfficace,
+                        postiRichiesti: postiUtente,
+                        veicoliIdonei: poolFiltrato.length
+                    });
                     prezzoCalcolato = null;
                     break;
                 }
 
-                // Selezione deterministica:
-                // indice più basso, poi ID.
-                const mezzo = [
-                    ...poolFiltrato
-                ].sort(
-                    (a, b) =>
-                        a.indice - b.indice ||
-                        a.id - b.id
+                // Nel pool multi-veicolo il riferimento per il prezzo
+                // è il veicolo capiente dal minor costo operativo stimato,
+                // non quello con indice €/km/posto più basso.
+                // Questo NON riserva il mezzo e NON garantisce disponibilità.
+                const mezzo = [...poolCapiente].sort((a, b) =>
+                    a.euro_km - b.euro_km ||
+                    a.indice - b.indice ||
+                    a.id - b.id
                 )[0];
+
+                dettagli.criterioSelezione = 'minor_costo_km_tra_veicoli_capienti';
+                dettagli.avvisoCapienza =
+                    'Capienza verificata sulla singola richiesta; disponibilità, percorso e assegnazione verificati dal matching.';
 
                 const breakEvenTotale =
                     mezzo.euro_km *
@@ -512,13 +526,16 @@ export async function calcolaPrezzo(
                 const postiTotaliMissione =
                     mezzo.posti * 2;
 
-                targetPasseggeri = Math.max(
+                const targetTeorico = Math.max(
                     1,
-                    Math.round(
-                        postiTotaliMissione *
-                        config.soglia
-                    )
+                    Math.round(postiTotaliMissione * config.soglia)
                 );
+
+                // Il target economico non può eccedere i posti fisici
+                // per una formazione sulla stessa tratta/segmento.
+                // Se le tratte non si sovrappongono, il matching potrà
+                // sfruttare il ricambio dei posti sui singoli segmenti.
+                targetPasseggeri = Math.min(mezzo.posti, targetTeorico);
 
                 const prezzoUnitario =
                     breakEvenTotale /
@@ -573,6 +590,9 @@ export async function calcolaPrezzo(
                             config.soglia,
                         target_passeggeri:
                             targetPasseggeri,
+                        target_teorico_ar: targetTeorico,
+                        posti_fisici_veicolo: mezzo.posti,
+                        veicoli_capienti: poolCapiente.length,
                         prezzo_unitario:
                             prezzoUnitario,
                         posti_richiesti:

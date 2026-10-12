@@ -5,6 +5,7 @@ import { getIO } from '../../../socket.js';
 import {
   generaCandidate,
   valutaRichieste,
+  generaFormazioniAlternative,
   scegliAttivazioni
 } from './model.js';
 import { pianifica, leg } from './planner.js';
@@ -70,6 +71,7 @@ async function movement(a, b) {
 }
 
 function fingerprint(r) {
+  if (!r) return null;
   return JSON.stringify([
     r.start_node_id,
     r.end_node_id,
@@ -217,6 +219,7 @@ export async function processaProposteDinamicheV2() {
     veicoliCosto: 0,
     veicoliConflitto: 0,
     fattibili: 0,
+    formazioniAlternative: 0,
     selezionate: 0,
     scartiRivalidazione: 0,
     scartiPrenotazione: 0,
@@ -501,44 +504,52 @@ export async function processaProposteDinamicheV2() {
       // VALUTAZIONE RICHIESTE
       // =====================================================
 
-      const evaluation = valutaRichieste(
-        plan,
-        requests.filter(
-          r => (r.classe || 'STANDARD') === c.classe
-        ),
-        c.seeds
+      const classRequests = requests.filter(
+        r => String(r.classe || 'STANDARD').toUpperCase() ===
+          String(c.classe).toUpperCase()
       );
 
-      if (
-        !evaluation ||
-        evaluation.departure <= Date.now()
-      ) {
-        stats.valutazioniScartate++;
-
-        log(
-          'VALUTAZIONE',
-          'Assente o partenza già passata'
-        );
-
-        continue;
-      }
-
-      stats.pianiValidi++;
-
-      log(
-        'PIANO',
-        `nodi=${plan.nodes.join('>')} ` +
-        `peak=${evaluation.peak} ` +
-        `ricavo=${evaluation.revenue} ` +
-        `partenza=${new Date(
-          evaluation.departure
-        ).toISOString()}`
+      // Genera formazioni distinte: singole richieste, aggregazioni
+      // parziali e aggregazione completa. La prenotazione resta indivisibile.
+      const alternatives = generaFormazioniAlternative(
+        plan,
+        classRequests,
+        c.seeds,
+        { maxFormazioni: 80 }
       );
 
-      plans.push({
-        plan,
-        evaluation
+      stats.formazioniAlternative += alternatives.length;
+
+      log('ALTERNATIVE', {
+        candidata: stats.candidate,
+        classe: c.classe,
+        percorso: plan.nodes.join('>'),
+        numero: alternatives.length,
+        gruppi: alternatives.map(e => ({
+          ids: e.requests.map(r => r.id),
+          picco: e.peak,
+          ricavo: e.revenue
+        }))
       });
+
+      for (const evaluation of alternatives) {
+        if (evaluation.departure <= Date.now()) {
+          stats.valutazioniScartate++;
+          continue;
+        }
+
+        stats.pianiValidi++;
+        log('PIANO ALTERNATIVO', {
+          percorso: plan.nodes.join('>'),
+          richieste: evaluation.requests.map(r => r.id),
+          peak: evaluation.peak,
+          ricavo: evaluation.revenue,
+          partenza: new Date(evaluation.departure).toISOString()
+        });
+
+        // La direttrice viene mantenuta come contenitore geometrico.
+        // Ogni alternativa ha valutazione e assegnazione indipendenti.
+        plans.push({ plan, evaluation });
 
       // =====================================================
       // VALUTAZIONE VEICOLI
@@ -1047,6 +1058,7 @@ export async function processaProposteDinamicheV2() {
           `ricavo=${evaluation.revenue}`
         );
       }
+      } // fine formazioni alternative
     }
 
     log(
@@ -1058,8 +1070,18 @@ export async function processaProposteDinamicheV2() {
     // SCELTA ATTIVAZIONI
     // =====================================================
 
-    const chosen =
-      scegliAttivazioni(feasible);
+    // Più missioni possono essere selezionate nello stesso intervallo
+    // se utilizzano richieste, autisti e veicoli distinti.
+    const chosen = scegliAttivazioni(feasible);
+    log('MULTI VEICOLO', chosen.map(x => ({
+      veicolo: x.vehicle.id,
+      autista: x.vehicle.driver_id,
+      richieste: x.evaluation.requests.map(r => r.id),
+      ricavo: x.evaluation.revenue,
+      costo: x.cost,
+      busyStart: new Date(x.busyStart).toISOString(),
+      busyEnd: new Date(x.busyEnd).toISOString()
+    })));
 
     stats.selezionate =
       chosen.length;
@@ -1124,7 +1146,7 @@ export async function processaProposteDinamicheV2() {
             fingerprint(r) !==
               fingerprint(
                 requests.find(
-                  x => x.id === r.id
+                  x => Number(x.id) === Number(r.id)
                 )
               )
         )

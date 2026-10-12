@@ -59,7 +59,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
   const coinvolti = new Set();
   for (const candidate of richieste) {
     const { rows: fresh } = await client.query(`
-      SELECT id, start_node_id, end_node_id, start_datetime, posti_richiesti
+      SELECT id, start_node_id, end_node_id, start_datetime, posti_richiesti, classe, target_direttrice_id
       FROM richieste_pop_bus WHERE id = $1 AND stato = 'in_attesa'
         AND direttrice_id IS NULL FOR UPDATE
     `, [candidate.id]);
@@ -67,12 +67,14 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
     const r = fresh[0];
     const start = Number(r.start_node_id), end = Number(r.end_node_id), posti = Number(r.posti_richiesti);
     if (start === end || r.start_datetime == null || !Number.isInteger(posti) || posti <= 0) continue;
-    const servizio = `STANDARD_${candidate.fascia}`;
+    const classe = String(r.classe || 'STANDARD').toUpperCase();
+    const servizio = `${classe}_${candidate.fascia}`;
     const { rows: dirs } = await client.query(`
       SELECT id, partenza_prevista FROM direttrici_virtuali
       WHERE tipo_servizio = $1 AND stato = 'in_formazione'
+        AND ($2::int IS NULL OR id=$2::int)
       ORDER BY partenza_prevista, id FOR UPDATE
-    `, [servizio]);
+    `, [servizio,r.target_direttrice_id]);
     let chosen = null;
     for (const d of dirs) {
       const { rows: segments } = await client.query(`
@@ -106,6 +108,7 @@ export async function gestisciMatchingEDirettrici(client, allClusters) {
         chosen = { d, segments, append, validation };
       }
     }
+    if (!chosen && r.target_direttrice_id != null) continue;
     if (!chosen) {
       const durata = await durataStradale(client, start, end);
       if (durata == null) continue;

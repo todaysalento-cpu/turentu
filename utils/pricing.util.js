@@ -98,7 +98,13 @@ export async function calcolaPrezzo(
             }
 
             case 'condivisa': {
-                // ... (logica condivisa invariata)
+                const info = corsa.veicolo_id ? await getTariffe(corsa.veicolo_id) : null;
+                if (!info) return null;
+                const gia = Math.max(0, Number(totPasseggeriCorrenti) || 0);
+                const totale = gia + postiUtente;
+                const primo = Math.max(1, Number(corsa.primo_posto) || 1);
+                prezzoCalcolato = ((info.euro_km * kmComplessiviOperativi +
+                    Math.max(0, totale - primo) * info.prezzo_passeggero) / totale) * postiUtente;
                 break;
             }
 

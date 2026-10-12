@@ -156,6 +156,9 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                     return {
                         id: `${itemId}_${classeCorrente.toLowerCase()}`,
                         veicolo_id: null,
+                        operazione: 'richiesta_virtuale',
+                        direttrice_id: null,
+                        corsa_id: null,
                         tipo: 'pop-bus',
                         colore_ui: UI_CONFIG['pop-bus'].colore,
                         classe: classeCorrente,
@@ -226,7 +229,7 @@ export async function formatResults(richiesta, risultatiFiltrati) {
                 if (tipoCoerente === 'pop-bus') {
                     console.error(`💥 [DEBUG BREAK-EVEN REAL] Errore in calcolaPrezzo per pop-bus reale:`, err);
                 }
-                return ({ prezzo: kmTrattaUtente * 0.50 });
+                return null;
             });
             
             if (!p) {
@@ -250,6 +253,14 @@ export async function formatResults(richiesta, risultatiFiltrati) {
             return [{
                 id: itemId || `slot_${item.veicolo_id}`,
                 veicolo_id: item.veicolo_id,
+                operazione: item.operazione || (item.is_pool ? 'richiesta_direttrice' : 'pending'),
+                direttrice_id: item.direttrice_id ?? null,
+                corsa_id: item.corsa_id ?? null,
+                start_node_id: item.start_node_id ?? null,
+                end_node_id: item.end_node_id ?? null,
+                stato: item.stato ?? null,
+                start_index_polyline: item.start_index_polyline ?? null,
+                end_index_polyline: item.end_index_polyline ?? null,
                 tipo: tipoCoerente,
                 colore_ui: UI_CONFIG[tipoCoerente]?.colore || '#9E9E9E',
                 classe: item.classe || 'STANDARD',

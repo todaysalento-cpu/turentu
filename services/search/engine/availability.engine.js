@@ -1,3 +1,4 @@
+import { calcolaPicco } from '../../../utils/occupazione.util.js';
 import * as turf from '@turf/turf';
 import polyline from '@mapbox/polyline';
 import { pool } from '../../../db/db.js';
@@ -50,6 +51,7 @@ function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV
 
                     return {
                         offset_metri: offsetMetri,
+                        index_polyline: snapped.properties.index,
                         type: 'DYNAMIC',
                         dist: snapped.properties.dist
                     };
@@ -164,7 +166,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         }
 
         // --- LOGICA CONDIVISA ---
-        if (c.tipo_corsa === 'condivisa') {
+        if (['condivisa','riempimento'].includes(c.tipo_corsa)) {
             const startOffset = Number(startSnap.offset_metri);
             const endOffset = Number(endSnap.offset_metri);
             
@@ -180,31 +182,19 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
             const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
 
-            let postiOccupatiNelTratto = 0;
+            // Occupazione in metri, con nessun fallback agli indici.
+            let postiOccupatiNelTratto;
             const percentualiEsistentiArray = [];
-            const kmTotaliCorsaOriginale = Number(c.km_totali_percorso) || 1;
-            const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali) || (kmTotaliCorsaOriginale * 1000);
-
-            for (const p of prenotazioni) {
-                const pStartTratto = Number(p.start_offset ?? p.start_index_polyline ?? 0);
-                const pEndTratto = Number(p.end_offset ?? p.end_index_polyline ?? 0);
-
-                if (startOffset < pEndTratto && endOffset > pStartTratto) {
-                    postiOccupatiNelTratto += Number(p.posti_richiesti || 0);
-                }
-
-                const lunghezzaTrattaPaz = Math.max(0, pEndTratto - pStartTratto);
-                let percPaz = lunghezzaTrattaPaz / lunghezzaTotaleMetri;
-                percPaz = Math.min(1.0, Math.max(0.01, percPaz));
-
-                percentualiEsistentiArray.push(percPaz);
-            }
-
-            if ((postiOccupatiNelTratto + Number(richiesta.posti_richiesti)) > capacitaTotale) {
-                console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata per saturazione posti nel tratto globale (Occupati: ${postiOccupatiNelTratto}, Richiesti: ${richiesta.posti_richiesti}, Capacità: ${capacitaTotale}).`);
-                return null;
-            }
-
+            const kmTotaliCorsaOriginale = Number(c.km_totali_percorso || c.distanza || 0);
+            const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
+            try {
+                const intervals = prenotazioni.map(p => {
+                    if (p.start_offset == null || p.end_offset == null) throw new Error('Offset storici mancanti');
+                    return {start:Number(p.start_offset),end:Number(p.end_offset),posti:Number(p.posti_richiesti)};
+                });
+                postiOccupatiNelTratto = calcolaPicco(intervals,startOffset,endOffset);
+            } catch(err) { console.warn('[SEARCH] Corsa esclusa:',c.id,err.message); return null; }
+            if (postiOccupatiNelTratto + Number(richiesta.posti_richiesti) > capacitaTotale) return null;
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
             const tipoPercorrenza = determinaTipoPercorrenza(kmUtenteTratta);
 
@@ -232,7 +222,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 console.log(`ℹ️ [ORARIO DINAMICO - INFO] Partenza dall'origine o dati mancanti. Orario invariato.`);
             }
 
-            console.log(`✅ [SUCCESSO FILTER] Corsa ID ${c.id} superata con successo! Tratto utente: ${kmUtenteTratta.toFixed(3)} km.`);
+            if (!oraPartenzaUtente || Math.abs(new Date(oraPartenzaUtente).getTime()-new Date(richiesta.start_datetime).getTime()) > 1800000) return null;
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,
@@ -240,6 +230,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 passeggeri_correnti: postiOccupatiNelTratto,
                 startOffset: startOffset,
                 endOffset: endOffset,
+                calculated_start_index_polyline: Number(startSnap.index_polyline),
+                calculated_end_index_polyline: Number(endSnap.index_polyline) + 1,
                 calculated_start_offset: startOffset,
                 calculated_end_offset: endOffset,
                 km_utente: kmUtenteTratta,
@@ -335,7 +327,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
  */
 async function verificaSaturazioneSegmenti(direttrice_id, seqStart, seqEnd, postiRichiesti, capacitaTotale) {
     const { rows } = await pool.query(
-        `SELECT COALESCE(SUM(posti_occupati), 0) as occupati
+        `SELECT COALESCE(MAX(posti_occupati), 0) as occupati
          FROM segmenti
          WHERE direttrice_id = $1
          AND ordine_sequenziale BETWEEN $2 AND $3`,

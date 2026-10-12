@@ -1,3 +1,4 @@
+import { cercaSlotUltra } from '../services/search/search.service.js';
 import express from 'express';
 import Stripe from 'stripe';
 import { authMiddleware } from '../middleware/auth.js';
@@ -18,6 +19,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   console.log(`💳 [PAYMENT:${requestId}] Inizio flusso per user: ${req.user.id}`);
   console.log(`📥 [PAYMENT:${requestId}] Payload ricevuto:`, JSON.stringify(req.body, null, 2));
 
+  let paymentIntent=null;
+  let transaction=false;
+  let committed=false;
   try {
     const { type, prezzo, slots, usaWallet, searchOrigine, searchDestinazione } = req.body;
 
@@ -30,6 +34,17 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Slots mancanti' });
     }
 
+    const selected=slots[0];
+    const o=searchOrigine||selected.origine,d=searchDestinazione||selected.destinazione;
+    const count=Number(selected.posti_richiesti),when=selected.start_datetime;
+    if(!o||!d||!Number.isInteger(count)||count<=0||!when||!Number.isFinite(new Date(when).getTime())||new Date(when)<=new Date())return res.status(400).json({error:'Coordinate, passeggeri e data futura obbligatori'});
+    const fresh=await cercaSlotUltra({coord:o,coordDest:d,posti_richiesti:count,start_datetime:when});
+    const quotation=fresh.find(x=>String(x.id)===String(selected.id));
+    if(!quotation||Math.round(Number(quotation.prezzo)*100)!==Math.round(Number(prezzo)*100))return res.status(409).json({error:'Prezzo/opzione cambiati: ripetere la ricerca'});
+    if(quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
+    Object.assign(selected,quotation,{start_datetime:when,posti_richiesti:count});
+    await client.query('BEGIN');transaction=true;
+    await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
     const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
 
@@ -53,7 +68,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       }
     }
 
-    let paymentIntent = null;
+
 
     if (!pagatoConWallet) {
       console.log(`💳 [PAYMENT:${requestId}] Creazione Stripe PaymentIntent per importo: €${prezzo}`);
@@ -66,7 +81,6 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`💳 [PAYMENT:${requestId}}] Stripe PaymentIntent creato con ID: ${paymentIntent.id}`);
     }
     
-    await client.query('BEGIN');
     console.log(`🔄 [PAYMENT:${requestId}] Transazione SQL avviata (BEGIN)`);
 
     const pendingRows = [];
@@ -84,8 +98,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     // 🔒 GESTIONE SLOT UNICO E ESTRAZIONE INDIRIZZI (Con supporto a ricerca personalizzata)
     const slot = slots[0];
     
-    const finalOrigine = searchOrigine || slot.origine;
-    const finalDestinazione = searchDestinazione || slot.destinazione;
+    const finalOrigine = {lat:Number(o.lat),lon:Number(o.lon)};
+    const finalDestinazione = {lat:Number(d.lat),lon:Number(d.lon)};
 
     const origineAddress = slot.origine_address || slot.origineAddress || (finalOrigine?.lat ? `Posizione (${finalOrigine.lat.toFixed(4)}, ${finalOrigine.lon.toFixed(4)})` : 'Partenza');
     const destinazioneAddress = slot.destinazione_address || slot.destinazioneAddress || (finalDestinazione?.lat ? `Destinazione (${finalDestinazione.lat.toFixed(4)}, ${finalDestinazione.lon.toFixed(4)})` : 'Arrivo');
@@ -109,13 +123,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-          start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo
+          start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15
         ) RETURNING *`,
         [
           clienteId,
@@ -128,7 +142,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           slot.classe || 'STANDARD',
           origineAddress,
           destinazioneAddress,
-          prezzo // <--- PREZZO REALE SALVATO DIRETTAMENTE
+          prezzo,
+          pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
+          requestId
         ]
       );
 
@@ -199,12 +215,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`✅ [DEBUG-INSERT:${requestId}] Inserimento pending completato con ID: ${savedRow.id}`);
 
       console.log(`📦 [DEBUG-CACHE:${requestId}] Aggiornamento cache prenotazioni per ID: ${savedRow.id}`);
-      await upsertPrenotazione(savedRow);
+      // Cache dopo COMMIT.
     }
     
     pendingRows.push(savedRow);
     console.log(`📝 [PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
+    await client.query('COMMIT');committed=true;transaction=false;
+    if(!isPopBus){try{await upsertPrenotazione(savedRow);}catch(e){console.error('[CACHE POSTCOMMIT]',e.message);}}
     // ================= NOTIFICA DRIVER / AUTISTA =================
     try {
       console.log(`📢 [NOTIFY_DRIVER:${requestId}] Ricerca autista per invio notifica (Veicolo ID: ${slot.veicolo_id})...`);
@@ -249,7 +267,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.error(`⚠️ [NOTIFY_CLIENT:${requestId}] Errore durante l'invio della notifica cliente:`, notifyErr);
     }
 
-    await client.query('COMMIT');
+
     console.log(`✅ [PAYMENT:${requestId}] Transazione SQL completata con successo (COMMIT).`);
 
     res.json({ 
@@ -260,7 +278,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    if(transaction&&!committed)await client.query('ROLLBACK');
+    if(!committed&&paymentIntent){try{await stripe.paymentIntents.cancel(paymentIntent.id);}catch(e){console.error('[PAYMENT CANCEL]',e.message);}}
     console.error(`❌ [PAYMENT:${requestId}] Errore critico intercettato. Rollback eseguito. Dettagli:`, err);
     res.status(500).json({ error: err.message });
   } finally {

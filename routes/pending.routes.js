@@ -50,6 +50,7 @@ router.post('/:id/accetta', async (req, res) => {
 
   console.log(`🔍 [ACCETTA] Ricevuta richiesta per accettare il pending ID: ${id}`);
 
+  let committed=false;
   try {
     await client.query('BEGIN');
 
@@ -78,6 +79,13 @@ router.post('/:id/accetta', async (req, res) => {
     const p = pendingRes.rows[0];
     console.log(`📋 [ACCETTA] Dati pending trovati:`, { id: p.id, stato: p.stato, veicolo_id: p.veicolo_id, cliente_id: p.cliente_id, tipo_corsa: p.tipo_corsa, corsa_id: p.corsa_id });
 
+    const {rows:owner}=await client.query('SELECT driver_id FROM veicolo WHERE id=$1',[p.veicolo_id]);
+    if(!owner.length||Number(owner[0].driver_id)!==Number(req.user.id)){
+      await client.query('ROLLBACK');return res.status(403).json({error:'Veicolo non tuo'});
+    }
+    if(!p.expires_at||new Date(p.expires_at)<=new Date()){
+      await client.query('ROLLBACK');return res.status(409).json({error:'Richiesta scaduta'});
+    }
     if (p.stato !== 'pending') {
       console.warn(`⚠️ [ACCETTA] Tentativo di accettare un pending con stato non valido ('${p.stato}'). Richiesto 'pending'.`);
       await client.query('ROLLBACK');
@@ -124,7 +132,7 @@ router.post('/:id/accetta', async (req, res) => {
       let prenotazioneEffettuata = false;
 
       // Ignoriamo il corsa_id se corrisponde al veicolo_id (evitando il falso ID veicolo scambiato per corsa)
-      const validCorsaId = (pRow.corsa_id && pRow.corsa_id !== pRow.veicolo_id) ? pRow.corsa_id : null;
+      const validCorsaId = pRow.corsa_id ?? null;
 
       if (validCorsaId) {
         console.log(`🔍 [ACCETTA] Verifica esistenza corsa associata ID: ${validCorsaId}`);
@@ -141,7 +149,7 @@ router.post('/:id/accetta', async (req, res) => {
         if (isPopBus) {
           console.log(`🚌 [ACCETTA] Creazione corsa PopBus da pending...`);
           const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
-          corsa = resCorsa.corsa;
+          corsa = resCorsa.corsa ?? resCorsa;
           prenotazioneEffettuata = true; 
         } else {
           // Controllo conflitti rigoroso per le corse private/dedicate
@@ -159,7 +167,7 @@ router.post('/:id/accetta', async (req, res) => {
           console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
           const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
           const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
-          corsa = resCorsa.corsa;
+          corsa = resCorsa.corsa ?? resCorsa;
           prenotazioneEffettuata = true; 
         }
         
@@ -200,8 +208,7 @@ router.post('/:id/accetta', async (req, res) => {
       );
       corsa = updateCorsaRes.rows[0];
 
-      upsertCorsa(corsa);
-      CacheManager.corsa.update(corsa);
+      // Cache aggiornata dopo COMMIT.
 
       const prenotazioneRes = await client.query(
         `SELECT id FROM prenotazioni WHERE cliente_id = $1 AND corsa_id = $2 ORDER BY id DESC LIMIT 1`,
@@ -229,12 +236,13 @@ router.post('/:id/accetta', async (req, res) => {
       notificheDaInviare.push({ p: pRow, corsa, driverId, driverNome });
     }
 
-    await client.query('COMMIT');
+    await client.query('COMMIT');committed=true;
     console.log(`✅ [ACCETTA SUCCESS] Richiesta ${id} accettata con successo.`);
     
     const io = getIO();
     for (const data of notificheDaInviare) {
       const { p, corsa, driverId, driverNome } = data;
+      upsertCorsa(corsa);CacheManager.corsa.update(corsa);
       const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
       
       io.to(`autista_${driverId}`).emit('pending_update', { id: p.id, stato: 'accettata', corsa: corsaCompleta });
@@ -251,6 +259,7 @@ router.post('/:id/accetta', async (req, res) => {
 
     res.json({ ok: true });
   } catch (err) {
+    if(committed){console.error('[PENDING POSTCOMMIT]',err.message);return res.json({ok:true,notifica_inviata:false});}
     await client.query('ROLLBACK');
     console.error(`❌ [ACCETTA ERRORE CRITICO] Fallita elaborazione ID ${id}:`, err.message);
     console.error(err.stack);

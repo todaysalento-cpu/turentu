@@ -45,7 +45,7 @@ async function getCapacitaDirettrice(direttriceIdOrVeicoloId, isVeicolo = false)
 
 async function getOccupazioneSegmenti(direttriceId, seqStart, seqEnd) {
     const { rows } = await pool.query(`
-        SELECT COALESCE(SUM(posti_occupati), 0) as occupati
+        SELECT COALESCE(MAX(posti_occupati), 0) as occupati
         FROM segmenti
         WHERE direttrice_id = $1 
         AND ordine_sequenziale BETWEEN $2 AND $3
@@ -220,6 +220,7 @@ export async function cercaSlotUltra(richiesta) {
         }
 
         const cap = await getCapacitaDirettrice(disp.veicolo_id, true);
+        if (cap < postiRichiesti) return null;
 
         let kmAvv = distVeicoloGeo;
         try {
@@ -269,88 +270,10 @@ export async function cercaSlotUltra(richiesta) {
         return slotPrivato;
     }))).filter(Boolean);
 
-    // --- 3. POP-BUS ---
-    const orariRicercaPool = [orarioAndataUtente];
-    if (orarioEventoAndata) orariRicercaPool.push(orarioEventoAndata);
-
-    let direttriciAttivateSet = new Map();
-
-    for (const orarioTarget of orariRicercaPool) {
-        const { rows: direttrici } = await pool.query(`
-            SELECT d.id, d.stato, d.partenza_prevista, d.veicolo_id, d.tipo_servizio, MIN(s1.ordine_sequenziale) as min_seq, MAX(s2.ordine_sequenziale) as max_seq
-            FROM direttrici_virtuali d
-            JOIN segmenti s1 ON d.id = s1.direttrice_id
-            JOIN segmenti s2 ON d.id = s2.direttrice_id
-            WHERE d.stato IN ('in_formazione', 'in_attesa_autista', 'confermata')
-            AND d.partenza_prevista BETWEEN $1::timestamptz - INTERVAL '2 hours' AND $1::timestamptz + INTERVAL '2 hours'
-            GROUP BY d.id, d.stato, d.partenza_prevista, d.veicolo_id, d.tipo_servizio
-        `, [orarioTarget.toISOString()]);
-
-        direttrici.forEach(d => direttriciAttivateSet.set(d.id, d));
-    }
-
-    const risultatiPool = (await Promise.all(Array.from(direttriciAttivateSet.values()).map(async (dir) => {
-        const occupati = await getOccupazioneSegmenti(dir.id, dir.min_seq, dir.max_seq);
-        const capacita = await getCapacitaDirettrice(dir.id);
-        const disponibili = capacita - occupati;
-        
-        if (disponibili >= postiRichiesti) {
-            const dispVeicolo = CacheStore.veicoloToDisponibilita.get(dir.veicolo_id) || {};
-            
-            let kmAvvPool = 0;
-            let kmRipPool = 0;
-            const latV = (isImmediata && dispVeicolo.lat_live != null) ? dispVeicolo.lat_live : dispVeicolo.lat_base;
-            const lonV = (isImmediata && dispVeicolo.lon_live != null) ? dispVeicolo.lon_live : dispVeicolo.lon_base;
-
-            if (latV != null && lonV != null) {
-                try {
-                    const infoAvv = await getDurataDistanza({ lat: Number(latV), lon: Number(lonV) }, { lat, lon });
-                    if (infoAvv?.distanzaKm) kmAvvPool = infoAvv.distanzaKm;
-                } catch (e) {}
-
-                if (dispVeicolo.lat_base != null && dispVeicolo.lon_base != null) {
-                    try {
-                        const infoRip = await getDurataDistanza({ lat: destLat, lon: destLon }, { lat: Number(dispVeicolo.lat_base), lon: Number(dispVeicolo.lon_base) });
-                        if (infoRip?.distanzaKm) kmRipPool = infoRip.distanzaKm;
-                    } catch (e) {}
-                }
-            }
-
-            const slotPool = { 
-                id: `pop_${dir.id}`, 
-                tipo: 'pop-bus', 
-                direttrice_id: dir.id, 
-                veicolo_id: dir.veicolo_id,
-                marca: dispVeicolo.marca || dispVeicolo.veicolo?.marca || '',
-                modello: dispVeicolo.modello || dispVeicolo.veicolo?.modello || '',
-                partenza_prevista: dir.partenza_prevista,
-                posti_disponibili: disponibili, 
-                posti_totali: capacita, 
-                distanza: distanzaMetri, 
-                distanzaKm: distanzaKm, 
-                km_utente: distanzaKm,
-                km_totali_percorso: distanzaKm + kmAvvPool + kmRipPool, // 👈 Somma operativa esatta (Tratta + Avv + Rip)
-                km_avvicinamento: kmAvvPool,
-                km_riposizionamento: kmRipPool,
-                is_pool: true,
-                include_ritorno: !!orarioRitornoUtente || !!orarioEventoRitorno,
-                start_offset: 0,
-                end_offset: distanzaMetri,
-                startOffset: 0,
-                endOffset: distanzaMetri,
-                start_index_polyline: 0,
-                end_index_polyline: 100
-            };
-
-            console.log(`🚌 [SEARCH ENGINE MAPPING] Corsa Pop-Bus ID [${slotPool.id}] generata con offset:`, {
-                start_offset: slotPool.start_offset,
-                end_offset: slotPool.end_offset
-            });
-
-            return slotPool;
-        }
-        return null;
-    }))).filter(Boolean);
+    // V2: una direttrice logica non è una corsa prenotabile.
+    // Le corse riempimento confermate arrivano dal ramo corseCandidate.
+    // Le nuove richieste sono sempre virtuali e pianificate dal worker V2.
+    const risultatiPool = [];
 
     let risultatiFinali = [...risultatiCondivise, ...risultatiPrivati, ...risultatiPool];
 

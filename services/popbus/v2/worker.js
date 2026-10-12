@@ -1,3 +1,4 @@
+
 import { verificaPagamento } from './acceptance.js';
 import { pool } from '../../../db/db.js';
 import { getIO } from '../../../socket.js';
@@ -362,102 +363,195 @@ export async function processaProposteDinamicheV2() {
           evaluation.arrival +
           returnTrip.seconds * 1000;
 
-       // =====================================================
-// DIAGNOSTICA DISPONIBILITÀ VEICOLO
-// =====================================================
+        // =====================================================
+        // DIAGNOSTICA DISPONIBILITÀ VEICOLO
+        // =====================================================
 
-const adesso = Date.now();
+        const adesso = Date.now();
 
-const partenzaImpossibile = busyStart <= adesso;
+        const partenzaImpossibile = busyStart <= adesso;
 
-const turnoValido = partenzaImpossibile
-  ? null
-  : turno(vehicle, busyStart, busyEnd);
+        const turnoValido = partenzaImpossibile
+          ? null
+          : turno(vehicle, busyStart, busyEnd);
 
-if (partenzaImpossibile || !turnoValido) {
-  stats.veicoliTurno++;
+        if (partenzaImpossibile || !turnoValido) {
+          stats.veicoliTurno++;
 
-  const motivi = [];
+          const motivi = [];
 
-  if (partenzaImpossibile) {
-    motivi.push('AVVICINAMENTO NON COMPLETABILE IN TEMPO');
-  }
+          if (partenzaImpossibile) {
+            motivi.push('AVVICINAMENTO NON COMPLETABILE IN TEMPO');
+          }
 
-  if (turnoValido === false) {
-    motivi.push('TURNO NON COMPATIBILE');
-  }
+          if (turnoValido === false) {
+            motivi.push('TURNO NON COMPATIBILE');
+          }
 
-  if ((vehicle.giorni_esclusi || []).length > 0) {
-    motivi.push('GIORNI ESCLUSI PRESENTI');
-  }
+          if ((vehicle.giorni_esclusi || []).length > 0) {
+            motivi.push('GIORNI ESCLUSI PRESENTI');
+          }
 
-  if ((vehicle.inattivita || []).length > 0) {
-    motivi.push('PERIODI INATTIVITA PRESENTI');
-  }
+          if ((vehicle.inattivita || []).length > 0) {
+            motivi.push('PERIODI INATTIVITA PRESENTI');
+          }
 
-  log('SCARTO TURNO', {
-    candidata: stats.candidate,
-    classe: c.classe,
-    seeds: c.seeds,
-    percorso: plan.nodes.join('>'),
+          log('SCARTO TURNO', {
+            candidata: stats.candidate,
+            classe: c.classe,
+            seeds: c.seeds,
+            percorso: plan.nodes.join('>'),
 
-    veicolo: vehicle.id,
-    autista: vehicle.driver_id,
-    postiDisponibili: vehicle.posti_totali,
-    postiRichiesti: evaluation.peak,
+            veicolo: vehicle.id,
+            autista: vehicle.driver_id,
+            postiDisponibili: vehicle.posti_totali,
+            postiRichiesti: evaluation.peak,
 
-    manual: vehicle.manual,
-    turnoStart: vehicle.start,
-    turnoFine: vehicle.fine,
-    giorniEsclusi: vehicle.giorni_esclusi,
-    inattivita: vehicle.inattivita,
+            manual: vehicle.manual,
+            turnoStart: vehicle.start,
+            turnoFine: vehicle.fine,
+            giorniEsclusi: vehicle.giorni_esclusi,
+            inattivita: vehicle.inattivita,
 
-    partenzaRichiesta:
-      new Date(evaluation.departure).toISOString(),
+            partenzaRichiesta:
+              new Date(evaluation.departure).toISOString(),
 
-    busyStart:
-      new Date(busyStart).toISOString(),
+            busyStart:
+              new Date(busyStart).toISOString(),
 
-    busyEnd:
-      new Date(busyEnd).toISOString(),
+            busyEnd:
+              new Date(busyEnd).toISOString(),
 
-    avvicinamentoMinuti:
-      Math.round(approach.seconds / 60),
+            avvicinamentoMinuti:
+              Math.round(approach.seconds / 60),
 
-    ritornoMinuti:
-      Math.round(returnTrip.seconds / 60),
+            ritornoMinuti:
+              Math.round(returnTrip.seconds / 60),
 
-    partenzaImpossibile,
-    turnoValido:
-      turnoValido === null ? 'NON VALUTATO' : turnoValido,
+            partenzaImpossibile,
+            turnoValido:
+              turnoValido === null ? 'NON VALUTATO' : turnoValido,
 
-    motivi
-  });
+            motivi
+          });
 
-  continue;
-}
+          continue;
+        }
 
-        // Costo comprensivo di avvicinamento,
-        // percorso e ritorno alla base.
+        // =====================================================
+        // COSTO OPERATIVO COMPLETO
+        // AVVICINAMENTO + PERCORSO + RITORNO
+        // =====================================================
+
+        const metriPercorso = plan.legs.reduce(
+          (sum, l) => sum + l.metres, 0
+        );
+
+        const metriAvvicinamento = approach.metres;
+        const metriRitorno = returnTrip.metres;
+
+        const metriTotali =
+          metriPercorso + metriAvvicinamento + metriRitorno;
+
+        const tariffaEuroKm = Number(vehicle.euro_km);
+
+        // Formula originale invariata.
         const cost = Math.ceil(
-          (
-            plan.legs.reduce(
-              (sum, l) => sum + l.metres, 0
-            ) +
-            approach.metres +
-            returnTrip.metres
-          ) / 1000 *
-          Number(vehicle.euro_km) * 100
+          metriTotali / 1000 * tariffaEuroKm * 100
         ) / 100;
+
+        const ricavo = Number(evaluation.revenue);
+
+        const arrotonda = (n, cifre = 2) =>
+          Number(Number(n).toFixed(cifre));
+
+        const km = m =>
+          arrotonda(Number(m) / 1000, 3);
+
+        const euro = m =>
+          arrotonda(Number(m) / 1000 * tariffaEuroKm);
+
+        // =====================================================
+        // NUOVO LOG DIAGNOSTICO COSTI
+        // =====================================================
+
+        log('COSTO DETTAGLIO', {
+          candidata: stats.candidate,
+          classe: c.classe,
+          seeds: c.seeds,
+          percorso: plan.nodes.join('>'),
+
+          veicolo: vehicle.id,
+          autista: vehicle.driver_id,
+
+          origineVeicolo: {
+            lat: Number(vehicle.lat),
+            lon: Number(vehicle.lon)
+          },
+
+          nodoPartenza: nodeMap.get(plan.nodes[0]),
+          nodoArrivo: nodeMap.get(plan.nodes.at(-1)),
+
+          avvicinamento: {
+            km: km(metriAvvicinamento),
+            minuti: arrotonda(approach.seconds / 60, 1),
+            costoEuroNonArrotondato: euro(metriAvvicinamento)
+          },
+
+          percorsoCommerciale: {
+            km: km(metriPercorso),
+            minuti: arrotonda(
+              plan.legs.reduce(
+                (sum, l) => sum + l.seconds, 0
+              ) / 60,
+              1
+            ),
+            costoEuroNonArrotondato: euro(metriPercorso)
+          },
+
+          ritornoAllaBase: {
+            km: km(metriRitorno),
+            minuti: arrotonda(returnTrip.seconds / 60, 1),
+            costoEuroNonArrotondato: euro(metriRitorno)
+          },
+
+          kmTotali: km(metriTotali),
+          tariffaEuroKm,
+
+          ricavoEuro: ricavo,
+          costoTotaleEuro: cost,
+          margineEuro: arrotonda(ricavo - cost),
+
+          coperturaCostoPercentuale:
+            cost > 0
+              ? arrotonda(ricavo / cost * 100, 1)
+              : null,
+
+          sogliaSuperata: ricavo >= cost,
+
+          busyStart: new Date(busyStart).toISOString(),
+          busyEnd: new Date(busyEnd).toISOString()
+        });
 
         if (evaluation.revenue < cost) {
           stats.veicoliCosto++;
 
-          log('COSTO',
-            `veicolo=${vehicle.id} ricavo=${evaluation.revenue} costo=${cost} (inclusi avvicinamento e ritorno)`
+          log('SCARTO COSTO',
+            `candidata=${stats.candidate} ` +
+            `seeds=${JSON.stringify(c.seeds)} ` +
+            `veicolo=${vehicle.id} ` +
+            `ricavo=${ricavo} ` +
+            `costo=${cost} ` +
+            `differenza=${arrotonda(ricavo - cost)} ` +
+            `(inclusi avvicinamento, percorso e ritorno)`
           );
+
           continue;
         }
+
+        // =====================================================
+        // CONTROLLO CONFLITTI
+        // =====================================================
 
         const { rows: conflicts } = await client.query(`
           SELECT 1
@@ -544,6 +638,10 @@ if (partenzaImpossibile || !turnoValido) {
       log('STOP', 'Nessuna attivazione selezionata');
       return;
     }
+
+    // =====================================================
+    // RIVALIDAZIONE E ATTIVAZIONE
+    // =====================================================
 
     await client.query('BEGIN');
     tx = true;

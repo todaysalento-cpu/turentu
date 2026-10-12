@@ -18,13 +18,19 @@ const fmt = new Intl.DateTimeFormat('en-GB', {
 
 function minute(t) {
   const p = fmt.formatToParts(new Date(t));
-  return Number(p.find(x => x.type === 'hour').value) * 60 +
-    Number(p.find(x => x.type === 'minute').value);
+
+  return Number(
+    p.find(x => x.type === 'hour').value
+  ) * 60 + Number(
+    p.find(x => x.type === 'minute').value
+  );
 }
 
 function turno(v, a, b) {
-  if ((v.giorni_esclusi || []).length ||
-      (v.inattivita || []).length) return false;
+  if (
+    (v.giorni_esclusi || []).length ||
+    (v.inattivita || []).length
+  ) return false;
 
   if (v.manual) {
     return new Date(v.start).getTime() <= a &&
@@ -36,9 +42,16 @@ function turno(v, a, b) {
 
   for (let t = a; t < b; t += 60000) {
     const m = minute(t);
-    if (!(s < e ? m >= s && m < e :
-          s > e ? m >= s || m < e : false)) return false;
+
+    if (!(
+      s < e
+        ? m >= s && m < e
+        : s > e
+          ? m >= s || m < e
+          : false
+    )) return false;
   }
+
   return true;
 }
 
@@ -46,7 +59,12 @@ async function movement(a, b) {
   if (
     Math.abs(Number(a.lat) - Number(b.lat)) < 1e-7 &&
     Math.abs(Number(a.lon) - Number(b.lon)) < 1e-7
-  ) return { metres: 0, seconds: 0 };
+  ) {
+    return {
+      metres: 0,
+      seconds: 0
+    };
+  }
 
   return leg(a, b);
 }
@@ -62,16 +80,129 @@ function fingerprint(r) {
   ]);
 }
 
+// =====================================================
+// POPBUS V2 - LOCALITÀ
+//
+// Recupera i nomi dalle richieste selezionate.
+// Non modifica la geometria o la tabella dei nodi.
+//
+// Le richieste sono già state rivalidate e bloccate
+// con SELECT ... FOR UPDATE.
+//
+// Se due richieste associano indirizzi diversi allo
+// stesso nodo, mantiene il primo e registra un log.
+// =====================================================
+
+function costruisciCoordinateConLocalita(
+  plan,
+  nodeMap,
+  richieste,
+  log
+) {
+  const nomiNodi = new Map();
+
+  function registraNome(nodoId, indirizzo, richiestaId) {
+    const id = Number(nodoId);
+
+    const nome = String(
+      indirizzo || ''
+    ).trim();
+
+    if (!Number.isInteger(id) || !nome) {
+      return;
+    }
+
+    const esistente = nomiNodi.get(id);
+
+    if (!esistente) {
+      nomiNodi.set(id, nome);
+      return;
+    }
+
+    if (esistente !== nome) {
+      log('LOCALITA DISCORDANTE', {
+        nodo: id,
+        nomeEsistente: esistente,
+        nomeNuovo: nome,
+        richiesta: richiestaId
+      });
+    }
+  }
+
+  for (const r of richieste) {
+    registraNome(
+      r.start_node_id,
+      r.origine_address,
+      r.id
+    );
+
+    registraNome(
+      r.end_node_id,
+      r.destinazione_address,
+      r.id
+    );
+  }
+
+  const coordinates = plan.nodes.map(id => {
+    const nodo = nodeMap.get(Number(id));
+
+    if (!nodo) {
+      throw new Error(
+        `POPBUS V2: nodo ${id} non trovato`
+      );
+    }
+
+    const nomeDatabase = String(
+      nodo.nome_nodo || ''
+    ).trim();
+
+    const nomeRichiesta =
+      nomiNodi.get(Number(id)) || null;
+
+    return {
+      ...nodo,
+      nome_nodo:
+        nomeDatabase ||
+        nomeRichiesta ||
+        null
+    };
+  });
+
+  log('LOCALITA', {
+    nodi: coordinates.map(n => ({
+      id: n.id,
+      nome_nodo: n.nome_nodo
+    }))
+  });
+
+  const senzaNome = coordinates.filter(
+    n => !n.nome_nodo
+  );
+
+  if (senzaNome.length) {
+    log('LOCALITA MANCANTI', {
+      numero: senzaNome.length,
+      nodi: senzaNome.map(n => n.id)
+    });
+  }
+
+  return coordinates;
+}
+
 let cicliAttivi = 0;
 let numeroCiclo = 0;
 
 export async function processaProposteDinamicheV2() {
   const ciclo = ++numeroCiclo;
   const inizio = Date.now();
+
   cicliAttivi++;
 
   const log = (fase, ...args) =>
-    console.log(`[POPBUS V2 #${ciclo}] [${fase}]`, ...args);
+    console.log(
+      `[POPBUS V2 #${ciclo}] [${fase}]`,
+      ...args
+    );
 
   const stats = {
     richieste: 0,
@@ -94,25 +225,36 @@ export async function processaProposteDinamicheV2() {
     attivazioni: 0
   };
 
-  log('START',
-    `PID=${process.pid} attivi=${cicliAttivi} ora=${new Date().toISOString()}`
+  log(
+    'START',
+    `PID=${process.pid} ` +
+    `attivi=${cicliAttivi} ` +
+    `ora=${new Date().toISOString()}`
   );
 
   if (cicliAttivi > 1) {
-    log('ATTENZIONE',
+    log(
+      'ATTENZIONE',
       `Esecuzioni sovrapposte nello stesso processo: ${cicliAttivi}`
     );
   }
 
   let client;
   let tx = false;
+
   const events = [];
 
   try {
+    // =====================================================
+    // CONNESSIONE DATABASE
+    // =====================================================
+
     const tConn = Date.now();
+
     client = await pool.connect();
 
-    log('DB',
+    log(
+      'DB',
       `Connessione ottenuta in ${Date.now() - tConn} ms`
     );
 
@@ -120,13 +262,19 @@ export async function processaProposteDinamicheV2() {
     tx = true;
 
     const tLock1 = Date.now();
+
     await client.query(
       'SELECT pg_advisory_xact_lock(734021,1)'
     );
 
-    log('LOCK',
+    log(
+      'LOCK',
       `Lock iniziale ottenuto in ${Date.now() - tLock1} ms`
     );
+
+    // =====================================================
+    // PULIZIA ATTIVAZIONI SCADUTE
+    // =====================================================
 
     const { rows: expired } = await client.query(`
       UPDATE popbus_attivazioni
@@ -136,43 +284,56 @@ export async function processaProposteDinamicheV2() {
       RETURNING id
     `);
 
-    log('SCADENZE',
+    log(
+      'SCADENZE',
       `Attivazioni scadute: ${expired.length}`
     );
 
     for (const a of expired) {
       await client.query(
-        `UPDATE popbus_attivazione_richieste
-         SET attiva=false
-         WHERE attivazione_id=$1`,
+        `
+        UPDATE popbus_attivazione_richieste
+        SET attiva=false
+        WHERE attivazione_id=$1
+        `,
         [a.id]
       );
 
       await client.query(
-        `UPDATE offerte_autisti
-         SET stato='scaduta'
-         WHERE attivazione_id=$1 AND stato='inviata'`,
+        `
+        UPDATE offerte_autisti
+        SET stato='scaduta'
+        WHERE attivazione_id=$1
+          AND stato='inviata'
+        `,
         [a.id]
       );
 
       await client.query(
-        `UPDATE richieste_pop_bus r
-         SET stato='in_attesa'
-         FROM popbus_attivazione_richieste ar
-         WHERE ar.attivazione_id=$1
-           AND ar.richiesta_id=r.id
-           AND r.stato='in_lavorazione'
-           AND r.corsa_id IS NULL`,
+        `
+        UPDATE richieste_pop_bus r
+        SET stato='in_attesa'
+        FROM popbus_attivazione_richieste ar
+        WHERE ar.attivazione_id=$1
+          AND ar.richiesta_id=r.id
+          AND r.stato='in_lavorazione'
+          AND r.corsa_id IS NULL
+        `,
         [a.id]
       );
     }
 
     await client.query('COMMIT');
     tx = false;
+
     log('DB', 'Pulizia scadenze completata');
 
+    // =====================================================
+    // RICERCA RICHIESTE
+    //
     // Routing fuori transazione.
     // Snapshot rivalidato prima della riserva.
+    // =====================================================
 
     const { rows: rawRequests } = await client.query(`
       SELECT r.*
@@ -180,7 +341,7 @@ export async function processaProposteDinamicheV2() {
       WHERE r.stato='in_attesa'
         AND r.start_datetime>NOW()
         AND r.corsa_id IS NULL
-        AND NOT EXISTS(
+        AND NOT EXISTS (
           SELECT 1
           FROM popbus_attivazione_richieste ar
           WHERE ar.richiesta_id=r.id
@@ -191,7 +352,11 @@ export async function processaProposteDinamicheV2() {
     `);
 
     stats.richieste = rawRequests.length;
-    log('RICHIESTE', `Trovate: ${rawRequests.length}`);
+
+    log(
+      'RICHIESTE',
+      `Trovate: ${rawRequests.length}`
+    );
 
     if (rawRequests.length > 200) {
       throw new Error(
@@ -199,28 +364,41 @@ export async function processaProposteDinamicheV2() {
       );
     }
 
+    // =====================================================
+    // VERIFICA PAGAMENTI
+    // =====================================================
+
     const requests = [];
 
     for (const r of rawRequests) {
       try {
         await verificaPagamento(client, r);
+
         requests.push(r);
       } catch (e) {
         stats.pagamentiScartati++;
-        log('PAGAMENTO',
+
+        log(
+          'PAGAMENTO',
           `Richiesta ${r.id} scartata: ${e.message}`
         );
       }
     }
 
-    log('PAGAMENTI',
-      `Valide: ${requests.length}; scartate: ${stats.pagamentiScartati}`
+    log(
+      'PAGAMENTI',
+      `Valide: ${requests.length}; ` +
+      `scartate: ${stats.pagamentiScartati}`
     );
 
     if (!requests.length) {
       log('STOP', 'Nessuna richiesta valida');
       return;
     }
+
+    // =====================================================
+    // CARICAMENTO NODI
+    // =====================================================
 
     const nodeIds = [
       ...new Set(
@@ -242,8 +420,15 @@ export async function processaProposteDinamicheV2() {
     `, [nodeIds]);
 
     const nodeMap = new Map(
-      nodes.map(n => [Number(n.id), n])
+      nodes.map(n => [
+        Number(n.id),
+        n
+      ])
     );
+
+    // =====================================================
+    // CARICAMENTO VEICOLI
+    // =====================================================
 
     const { rows: vehicles } = await client.query(`
       SELECT
@@ -256,12 +441,16 @@ export async function processaProposteDinamicheV2() {
         dv.manual,
         dv.giorni_esclusi,
         dv.inattivita,
-        ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
-        ST_X(COALESCE(dv.coord,v.coord)::geometry) AS lon
+        ST_Y(
+          COALESCE(dv.coord,v.coord)::geometry
+        ) AS lat,
+        ST_X(
+          COALESCE(dv.coord,v.coord)::geometry
+        ) AS lon
       FROM veicolo v
       JOIN disponibilita_veicolo dv
         ON dv.veicolo_id=v.id
-      JOIN LATERAL(
+      JOIN LATERAL (
         SELECT MIN(euro_km) AS euro_km
         FROM tariffe
         WHERE veicolo_id=v.id
@@ -274,18 +463,27 @@ export async function processaProposteDinamicheV2() {
       ORDER BY t.euro_km,v.id
     `);
 
-    log('RISORSE',
-      `Nodi: ${nodes.length}/${nodeIds.length}; veicoli: ${vehicles.length}`
+    log(
+      'RISORSE',
+      `Nodi: ${nodes.length}/${nodeIds.length}; ` +
+      `veicoli: ${vehicles.length}`
     );
 
     const feasible = [];
     const plans = [];
 
+    // =====================================================
+    // GENERAZIONE CANDIDATE
+    // =====================================================
+
     for (const c of generaCandidate(requests)) {
       stats.candidate++;
 
-      log('CANDIDATA',
-        `#${stats.candidate} classe=${c.classe} seeds=${JSON.stringify(c.seeds)}`
+      log(
+        'CANDIDATA',
+        `#${stats.candidate} ` +
+        `classe=${c.classe} ` +
+        `seeds=${JSON.stringify(c.seeds)}`
       );
 
       let plan;
@@ -294,9 +492,14 @@ export async function processaProposteDinamicheV2() {
         plan = await pianifica(c, nodes);
       } catch (e) {
         stats.erroriPercorso++;
+
         log('ROUTE ERROR', e.message);
         continue;
       }
+
+      // =====================================================
+      // VALUTAZIONE RICHIESTE
+      // =====================================================
 
       const evaluation = valutaRichieste(
         plan,
@@ -311,19 +514,35 @@ export async function processaProposteDinamicheV2() {
         evaluation.departure <= Date.now()
       ) {
         stats.valutazioniScartate++;
-        log('VALUTAZIONE',
+
+        log(
+          'VALUTAZIONE',
           'Assente o partenza già passata'
         );
+
         continue;
       }
 
       stats.pianiValidi++;
 
-      log('PIANO',
-        `nodi=${plan.nodes.join('>')} peak=${evaluation.peak} ricavo=${evaluation.revenue} partenza=${new Date(evaluation.departure).toISOString()}`
+      log(
+        'PIANO',
+        `nodi=${plan.nodes.join('>')} ` +
+        `peak=${evaluation.peak} ` +
+        `ricavo=${evaluation.revenue} ` +
+        `partenza=${new Date(
+          evaluation.departure
+        ).toISOString()}`
       );
 
-      plans.push({ plan, evaluation });
+      plans.push({
+        plan,
+        evaluation
+      });
+
+      // =====================================================
+      // VALUTAZIONE VEICOLI
+      // =====================================================
 
       for (const vehicle of vehicles) {
         if (
@@ -349,9 +568,12 @@ export async function processaProposteDinamicheV2() {
           );
         } catch (e) {
           stats.erroriAvvicinamento++;
-          log('MOVIMENTO ERROR',
+
+          log(
+            'MOVIMENTO ERROR',
             `veicolo=${vehicle.id}: ${e.message}`
           );
+
           continue;
         }
 
@@ -369,31 +591,51 @@ export async function processaProposteDinamicheV2() {
 
         const adesso = Date.now();
 
-        const partenzaImpossibile = busyStart <= adesso;
+        const partenzaImpossibile =
+          busyStart <= adesso;
 
         const turnoValido = partenzaImpossibile
           ? null
-          : turno(vehicle, busyStart, busyEnd);
+          : turno(
+              vehicle,
+              busyStart,
+              busyEnd
+            );
 
-        if (partenzaImpossibile || !turnoValido) {
+        if (
+          partenzaImpossibile ||
+          !turnoValido
+        ) {
           stats.veicoliTurno++;
 
           const motivi = [];
 
           if (partenzaImpossibile) {
-            motivi.push('AVVICINAMENTO NON COMPLETABILE IN TEMPO');
+            motivi.push(
+              'AVVICINAMENTO NON COMPLETABILE IN TEMPO'
+            );
           }
 
           if (turnoValido === false) {
-            motivi.push('TURNO NON COMPATIBILE');
+            motivi.push(
+              'TURNO NON COMPATIBILE'
+            );
           }
 
-          if ((vehicle.giorni_esclusi || []).length > 0) {
-            motivi.push('GIORNI ESCLUSI PRESENTI');
+          if (
+            (vehicle.giorni_esclusi || []).length > 0
+          ) {
+            motivi.push(
+              'GIORNI ESCLUSI PRESENTI'
+            );
           }
 
-          if ((vehicle.inattivita || []).length > 0) {
-            motivi.push('PERIODI INATTIVITA PRESENTI');
+          if (
+            (vehicle.inattivita || []).length > 0
+          ) {
+            motivi.push(
+              'PERIODI INATTIVITA PRESENTI'
+            );
           }
 
           log('SCARTO TURNO', {
@@ -404,33 +646,55 @@ export async function processaProposteDinamicheV2() {
 
             veicolo: vehicle.id,
             autista: vehicle.driver_id,
-            postiDisponibili: vehicle.posti_totali,
-            postiRichiesti: evaluation.peak,
+
+            postiDisponibili:
+              vehicle.posti_totali,
+
+            postiRichiesti:
+              evaluation.peak,
 
             manual: vehicle.manual,
+
             turnoStart: vehicle.start,
             turnoFine: vehicle.fine,
-            giorniEsclusi: vehicle.giorni_esclusi,
-            inattivita: vehicle.inattivita,
+
+            giorniEsclusi:
+              vehicle.giorni_esclusi,
+
+            inattivita:
+              vehicle.inattivita,
 
             partenzaRichiesta:
-              new Date(evaluation.departure).toISOString(),
+              new Date(
+                evaluation.departure
+              ).toISOString(),
 
             busyStart:
-              new Date(busyStart).toISOString(),
+              new Date(
+                busyStart
+              ).toISOString(),
 
             busyEnd:
-              new Date(busyEnd).toISOString(),
+              new Date(
+                busyEnd
+              ).toISOString(),
 
             avvicinamentoMinuti:
-              Math.round(approach.seconds / 60),
+              Math.round(
+                approach.seconds / 60
+              ),
 
             ritornoMinuti:
-              Math.round(returnTrip.seconds / 60),
+              Math.round(
+                returnTrip.seconds / 60
+              ),
 
             partenzaImpossibile,
+
             turnoValido:
-              turnoValido === null ? 'NON VALUTATO' : turnoValido,
+              turnoValido === null
+                ? 'NON VALUTATO'
+                : turnoValido,
 
             motivi
           });
@@ -443,36 +707,61 @@ export async function processaProposteDinamicheV2() {
         // AVVICINAMENTO + PERCORSO + RITORNO
         // =====================================================
 
-        const metriPercorso = plan.legs.reduce(
-          (sum, l) => sum + l.metres, 0
-        );
+        const metriPercorso =
+          plan.legs.reduce(
+            (sum, l) =>
+              sum + l.metres,
+            0
+          );
 
-        const metriAvvicinamento = approach.metres;
-        const metriRitorno = returnTrip.metres;
+        const metriAvvicinamento =
+          approach.metres;
+
+        const metriRitorno =
+          returnTrip.metres;
 
         const metriTotali =
-          metriPercorso + metriAvvicinamento + metriRitorno;
+          metriPercorso +
+          metriAvvicinamento +
+          metriRitorno;
 
-        const tariffaEuroKm = Number(vehicle.euro_km);
+        const tariffaEuroKm =
+          Number(vehicle.euro_km);
 
         // Formula originale invariata.
         const cost = Math.ceil(
-          metriTotali / 1000 * tariffaEuroKm * 100
+          metriTotali /
+          1000 *
+          tariffaEuroKm *
+          100
         ) / 100;
 
-        const ricavo = Number(evaluation.revenue);
+        const ricavo =
+          Number(evaluation.revenue);
 
-        const arrotonda = (n, cifre = 2) =>
-          Number(Number(n).toFixed(cifre));
+        const arrotonda = (
+          n,
+          cifre = 2
+        ) =>
+          Number(
+            Number(n).toFixed(cifre)
+          );
 
         const km = m =>
-          arrotonda(Number(m) / 1000, 3);
+          arrotonda(
+            Number(m) / 1000,
+            3
+          );
 
         const euro = m =>
-          arrotonda(Number(m) / 1000 * tariffaEuroKm);
+          arrotonda(
+            Number(m) /
+            1000 *
+            tariffaEuroKm
+          );
 
         // =====================================================
-        // NUOVO LOG DIAGNOSTICO COSTI
+        // DIAGNOSTICA COSTI
         // =====================================================
 
         log('COSTO DETTAGLIO', {
@@ -489,60 +778,110 @@ export async function processaProposteDinamicheV2() {
             lon: Number(vehicle.lon)
           },
 
-          nodoPartenza: nodeMap.get(plan.nodes[0]),
-          nodoArrivo: nodeMap.get(plan.nodes.at(-1)),
+          nodoPartenza:
+            nodeMap.get(plan.nodes[0]),
+
+          nodoArrivo:
+            nodeMap.get(
+              plan.nodes.at(-1)
+            ),
 
           avvicinamento: {
-            km: km(metriAvvicinamento),
-            minuti: arrotonda(approach.seconds / 60, 1),
-            costoEuroNonArrotondato: euro(metriAvvicinamento)
+            km: km(
+              metriAvvicinamento
+            ),
+
+            minuti: arrotonda(
+              approach.seconds / 60,
+              1
+            ),
+
+            costoEuroNonArrotondato:
+              euro(metriAvvicinamento)
           },
 
           percorsoCommerciale: {
-            km: km(metriPercorso),
+            km: km(
+              metriPercorso
+            ),
+
             minuti: arrotonda(
               plan.legs.reduce(
-                (sum, l) => sum + l.seconds, 0
+                (sum, l) =>
+                  sum + l.seconds,
+                0
               ) / 60,
               1
             ),
-            costoEuroNonArrotondato: euro(metriPercorso)
+
+            costoEuroNonArrotondato:
+              euro(metriPercorso)
           },
 
           ritornoAllaBase: {
-            km: km(metriRitorno),
-            minuti: arrotonda(returnTrip.seconds / 60, 1),
-            costoEuroNonArrotondato: euro(metriRitorno)
+            km: km(
+              metriRitorno
+            ),
+
+            minuti: arrotonda(
+              returnTrip.seconds / 60,
+              1
+            ),
+
+            costoEuroNonArrotondato:
+              euro(metriRitorno)
           },
 
-          kmTotali: km(metriTotali),
+          kmTotali:
+            km(metriTotali),
+
           tariffaEuroKm,
 
           ricavoEuro: ricavo,
           costoTotaleEuro: cost,
-          margineEuro: arrotonda(ricavo - cost),
+
+          margineEuro:
+            arrotonda(
+              ricavo - cost
+            ),
 
           coperturaCostoPercentuale:
             cost > 0
-              ? arrotonda(ricavo / cost * 100, 1)
+              ? arrotonda(
+                  ricavo / cost * 100,
+                  1
+                )
               : null,
 
-          sogliaSuperata: ricavo >= cost,
+          sogliaSuperata:
+            ricavo >= cost,
 
-          busyStart: new Date(busyStart).toISOString(),
-          busyEnd: new Date(busyEnd).toISOString()
+          busyStart:
+            new Date(
+              busyStart
+            ).toISOString(),
+
+          busyEnd:
+            new Date(
+              busyEnd
+            ).toISOString()
         });
 
-        if (evaluation.revenue < cost) {
+        if (
+          evaluation.revenue < cost
+        ) {
           stats.veicoliCosto++;
 
-          log('SCARTO COSTO',
+          log(
+            'SCARTO COSTO',
             `candidata=${stats.candidate} ` +
             `seeds=${JSON.stringify(c.seeds)} ` +
             `veicolo=${vehicle.id} ` +
             `ricavo=${ricavo} ` +
             `costo=${cost} ` +
-            `differenza=${arrotonda(ricavo - cost)} ` +
+            `differenza=${arrotonda(
+              ricavo - cost
+            )} ` +
             `(inclusi avvicinamento, percorso e ritorno)`
           );
 
@@ -553,44 +892,68 @@ export async function processaProposteDinamicheV2() {
         // CONTROLLO CONFLITTI
         // =====================================================
 
-        const { rows: conflicts } = await client.query(`
+        const {
+          rows: conflicts
+        } = await client.query(`
           SELECT 1
           FROM popbus_attivazioni a
           WHERE
-            (a.veicolo_id=$1 OR a.autista_id=$2)
-            AND a.stato IN (
-              'in_attesa_autista','confermata'
+            (
+              a.veicolo_id=$1
+              OR a.autista_id=$2
             )
-            AND (a.piano->>'busyStart')::timestamptz
-                < $4::timestamptz
-            AND (a.piano->>'busyEnd')::timestamptz
-                > $3::timestamptz
+            AND a.stato IN (
+              'in_attesa_autista',
+              'confermata'
+            )
+            AND (
+              a.piano->>'busyStart'
+            )::timestamptz
+              < $4::timestamptz
+            AND (
+              a.piano->>'busyEnd'
+            )::timestamptz
+              > $3::timestamptz
 
           UNION ALL
 
           SELECT 1
           FROM corse c
-          JOIN veicolo v ON v.id=c.veicolo_id
+          JOIN veicolo v
+            ON v.id=c.veicolo_id
           WHERE
-            (v.id=$1 OR v.driver_id=$2)
-            AND c.stato IN (
-              'prenotabile','in_corso','da_attivare'
+            (
+              v.id=$1
+              OR v.driver_id=$2
             )
-         AND c.start_datetime < $4::timestamptz
-AND (
-  c.arrivo_datetime IS NULL
-  OR c.arrivo_datetime > $3::timestamptz
-)
+            AND c.stato IN (
+              'prenotabile',
+              'in_corso',
+              'da_attivare'
+            )
+            AND c.start_datetime
+              < $4::timestamptz
+            AND (
+              c.arrivo_datetime IS NULL
+              OR c.arrivo_datetime
+                > $3::timestamptz
+            )
 
           UNION ALL
 
           SELECT 1
           FROM direttrici_virtuali d
-          JOIN veicolo v ON v.id=d.veicolo_id
+          JOIN veicolo v
+            ON v.id=d.veicolo_id
           WHERE
-            (v.id=$1 OR v.driver_id=$2)
+            (
+              v.id=$1
+              OR v.driver_id=$2
+            )
             AND d.stato IN (
-              'in_attesa_autista','attivo','confermata'
+              'in_attesa_autista',
+              'attivo',
+              'confermata'
             )
         `, [
           vehicle.id,
@@ -599,37 +962,70 @@ AND (
           new Date(busyEnd)
         ]);
 
-       if (conflicts.length) {
+        if (conflicts.length) {
+          log(
+            'SCARTO CONFLITTO DETTAGLIO',
+            {
+              candidata:
+                stats.candidate,
 
-  log('SCARTO CONFLITTO DETTAGLIO', {
-    candidata: stats.candidate,
-    classe: c.classe,
-    seeds: c.seeds,
-    percorso: plan.nodes.join('>'),
+              classe:
+                c.classe,
 
-    veicolo: vehicle.id,
-    autista: vehicle.driver_id,
+              seeds:
+                c.seeds,
 
-    postiVeicolo: Number(vehicle.posti_totali),
-    postiRichiesti: evaluation.peak,
+              percorso:
+                plan.nodes.join('>'),
 
-    ricavoEuro: Number(evaluation.revenue),
-    costoEuro: cost,
+              veicolo:
+                vehicle.id,
 
-    busyStart: new Date(busyStart).toISOString(),
-    busyEnd: new Date(busyEnd).toISOString(),
+              autista:
+                vehicle.driver_id,
 
-    numeroConflitti: conflicts.length,
+              postiVeicolo:
+                Number(
+                  vehicle.posti_totali
+                ),
 
-    conflitti: conflicts.map((conflict, index) => ({
-      numero: index + 1,
-      ...conflict
-    }))
-  });
+              postiRichiesti:
+                evaluation.peak,
 
-  stats.veicoliConflitto++;
-  continue;
-}
+              ricavoEuro:
+                Number(
+                  evaluation.revenue
+                ),
+
+              costoEuro:
+                cost,
+
+              busyStart:
+                new Date(
+                  busyStart
+                ).toISOString(),
+
+              busyEnd:
+                new Date(
+                  busyEnd
+                ).toISOString(),
+
+              numeroConflitti:
+                conflicts.length,
+
+              conflitti:
+                conflicts.map(
+                  (conflict, index) => ({
+                    numero: index + 1,
+                    ...conflict
+                  })
+                )
+            }
+          );
+
+          stats.veicoliConflitto++;
+          continue;
+        }
 
         feasible.push({
           plan,
@@ -644,23 +1040,40 @@ AND (
 
         stats.fattibili++;
 
-        log('FATTIBILE',
-          `veicolo=${vehicle.id} costo=${cost} ricavo=${evaluation.revenue}`
+        log(
+          'FATTIBILE',
+          `veicolo=${vehicle.id} ` +
+          `costo=${cost} ` +
+          `ricavo=${evaluation.revenue}`
         );
       }
     }
 
-    log('MATCHING', JSON.stringify(stats));
+    log(
+      'MATCHING',
+      JSON.stringify(stats)
+    );
 
-    const chosen = scegliAttivazioni(feasible);
-    stats.selezionate = chosen.length;
+    // =====================================================
+    // SCELTA ATTIVAZIONI
+    // =====================================================
 
-    log('SCELTA',
+    const chosen =
+      scegliAttivazioni(feasible);
+
+    stats.selezionate =
+      chosen.length;
+
+    log(
+      'SCELTA',
       `Selezionate: ${chosen.length}`
     );
 
     if (!chosen.length) {
-      log('STOP', 'Nessuna attivazione selezionata');
+      log(
+        'STOP',
+        'Nessuna attivazione selezionata'
+      );
       return;
     }
 
@@ -677,14 +1090,20 @@ AND (
       'SELECT pg_advisory_xact_lock(734021,1)'
     );
 
-    log('LOCK',
+    log(
+      'LOCK',
       `Lock finale ottenuto in ${Date.now() - tLock2} ms`
     );
 
     for (const c of chosen) {
-      const ids = c.evaluation.requests.map(r => r.id);
+      const ids =
+        c.evaluation.requests.map(
+          r => r.id
+        );
 
-      const { rows: locked } = await client.query(`
+      const {
+        rows: locked
+      } = await client.query(`
         SELECT *
         FROM richieste_pop_bus
         WHERE id=ANY($1::int[])
@@ -692,25 +1111,37 @@ AND (
         FOR UPDATE
       `, [ids]);
 
+      // =====================================================
+      // RIVALIDAZIONE SNAPSHOT
+      // =====================================================
+
       if (
         locked.length !== ids.length ||
         locked.some(
           r =>
             r.stato !== 'in_attesa' ||
             r.corsa_id != null ||
-            fingerprint(r) !== fingerprint(
-              requests.find(x => x.id === r.id)
-            )
+            fingerprint(r) !==
+              fingerprint(
+                requests.find(
+                  x => x.id === r.id
+                )
+              )
         )
       ) {
         stats.scartiRivalidazione++;
-        log('RIVALIDAZIONE',
+
+        log(
+          'RIVALIDAZIONE',
           `Richieste modificate: ${ids.join(',')}`
         );
+
         continue;
       }
 
-      const { rows: reservations } = await client.query(`
+      const {
+        rows: reservations
+      } = await client.query(`
         SELECT 1
         FROM popbus_attivazione_richieste
         WHERE richiesta_id=ANY($1::int[])
@@ -719,18 +1150,36 @@ AND (
 
       if (reservations.length) {
         stats.scartiPrenotazione++;
-        log('RISERVAZIONE',
+
+        log(
+          'RISERVAZIONE',
           `Richieste già riservate: ${ids.join(',')}`
         );
+
         continue;
       }
 
+      // =====================================================
+      // LOCK AUTISTA
+      // =====================================================
+
       await client.query(
-        'SELECT id FROM utente WHERE id=$1 FOR UPDATE',
+        `
+        SELECT id
+        FROM utente
+        WHERE id=$1
+        FOR UPDATE
+        `,
         [c.vehicle.driver_id]
       );
 
-      const { rows: stillFree } = await client.query(`
+      // =====================================================
+      // VERIFICA VEICOLO
+      // =====================================================
+
+      const {
+        rows: stillFree
+      } = await client.query(`
         SELECT id
         FROM veicolo
         WHERE id=$1
@@ -745,24 +1194,41 @@ AND (
 
       if (!stillFree.length) {
         stats.scartiVeicolo++;
-        log('VEICOLO',
+
+        log(
+          'VEICOLO',
           `Non più disponibile: ${c.vehicle.id}`
         );
+
         continue;
       }
 
-      const { rows: busy } = await client.query(`
+      // =====================================================
+      // RIVALIDAZIONE OCCUPAZIONE
+      // =====================================================
+
+      const {
+        rows: busy
+      } = await client.query(`
         SELECT 1
         FROM popbus_attivazioni
         WHERE
-          (veicolo_id=$1 OR autista_id=$2)
-          AND stato IN (
-            'in_attesa_autista','confermata'
+          (
+            veicolo_id=$1
+            OR autista_id=$2
           )
-          AND (piano->>'busyStart')::timestamptz
-              < $4::timestamptz
-          AND (piano->>'busyEnd')::timestamptz
-              > $3::timestamptz
+          AND stato IN (
+            'in_attesa_autista',
+            'confermata'
+          )
+          AND (
+            piano->>'busyStart'
+          )::timestamptz
+            < $4::timestamptz
+          AND (
+            piano->>'busyEnd'
+          )::timestamptz
+            > $3::timestamptz
       `, [
         c.vehicle.id,
         c.vehicle.driver_id,
@@ -772,42 +1238,65 @@ AND (
 
       if (busy.length) {
         stats.scartiOccupato++;
-        log('CONFLITTO',
+
+        log(
+          'CONFLITTO',
           `Veicolo/autista occupato: ${c.vehicle.id}`
         );
+
         continue;
       }
 
-      // Contenitore: percorso più ampio
-      // che include la candidata senza riordino.
+      // =====================================================
+      // CONTENITORE PERCORSO
+      // =====================================================
+
       const containers = plans.filter(
         p =>
-          p.plan.classe === c.plan.classe &&
-          c.plan.nodes.every((n, i) => {
-            const start = p.plan.nodes.indexOf(
-              c.plan.nodes[0]
-            );
-            return start >= 0 &&
-              p.plan.nodes[start + i] === n;
-          })
+          p.plan.classe ===
+            c.plan.classe &&
+          c.plan.nodes.every(
+            (n, i) => {
+              const start =
+                p.plan.nodes.indexOf(
+                  c.plan.nodes[0]
+                );
+
+              return start >= 0 &&
+                p.plan.nodes[start + i] === n;
+            }
+          )
       ).sort(
         (a, b) =>
-          b.plan.nodes.length - a.plan.nodes.length
+          b.plan.nodes.length -
+          a.plan.nodes.length
       );
 
-      const container = containers[0] || c;
+      const container =
+        containers[0] || c;
 
-      const prefix = container.plan.nodes.indexOf(
-        c.plan.nodes[0]
-      );
+      const prefix =
+        container.plan.nodes.indexOf(
+          c.plan.nodes[0]
+        );
 
       const dirDeparture =
         c.evaluation.departure -
-        container.plan.legs.slice(0, prefix).reduce(
-          (s, l) => s + l.seconds * 1000, 0
-        );
+        container.plan.legs
+          .slice(0, prefix)
+          .reduce(
+            (s, l) =>
+              s + l.seconds * 1000,
+            0
+          );
 
-      const { rows: dirs } = await client.query(`
+      // =====================================================
+      // CREAZIONE DIRETTRICE VIRTUALE
+      // =====================================================
+
+      const {
+        rows: dirs
+      } = await client.query(`
         INSERT INTO direttrici_virtuali(
           stato,
           partenza_prevista,
@@ -815,8 +1304,9 @@ AND (
           end_node_id,
           tipo_servizio
         )
-        VALUES (
-          'in_formazione',$1,$2,$3,$4
+        VALUES(
+          'in_formazione',
+          $1,$2,$3,$4
         )
         ON CONFLICT(
           start_node_id,
@@ -832,10 +1322,13 @@ AND (
         `${c.plan.classe}_V2`
       ]);
 
-      let dirId = dirs[0]?.id;
+      let dirId =
+        dirs[0]?.id;
 
       if (!dirId) {
-        const { rows: d } = await client.query(`
+        const {
+          rows: d
+        } = await client.query(`
           SELECT id
           FROM direttrici_virtuali
           WHERE start_node_id=$1
@@ -859,7 +1352,13 @@ AND (
         );
       }
 
-      const { rows: existingSegments } = await client.query(`
+      // =====================================================
+      // SEGMENTI DIRETTRICE
+      // =====================================================
+
+      const {
+        rows: existingSegments
+      } = await client.query(`
         SELECT *
         FROM segmenti
         WHERE direttrice_id=$1
@@ -867,6 +1366,7 @@ AND (
       `, [dirId]);
 
       const segs = [];
+
       let t = dirDeparture;
 
       if (
@@ -888,11 +1388,19 @@ AND (
         );
       }
 
-      for (let i = 0; i < container.plan.legs.length; i++) {
+      for (
+        let i = 0;
+        i < container.plan.legs.length;
+        i++
+      ) {
         if (existingSegments.length) {
-          segs.push(existingSegments[i]);
+          segs.push(
+            existingSegments[i]
+          );
         } else {
-          const { rows: s } = await client.query(`
+          const {
+            rows: s
+          } = await client.query(`
             INSERT INTO segmenti(
               direttrice_id,
               start_node_id,
@@ -902,8 +1410,9 @@ AND (
               start_datetime,
               stato
             )
-            VALUES (
-              $1,$2,$3,$4,$5,$6,'in_attesa'
+            VALUES(
+              $1,$2,$3,$4,$5,$6,
+              'in_attesa'
             )
             RETURNING id
           `, [
@@ -920,26 +1429,74 @@ AND (
           segs.push(s[0]);
         }
 
-        t += container.plan.legs[i].seconds * 1000;
+        t +=
+          container.plan.legs[i].seconds *
+          1000;
       }
+
+      // =====================================================
+      // NUOVO: LOCALITÀ NEL PIANO POPBUS
+      //
+      // Utilizza esclusivamente le richieste
+      // selezionate, bloccate e rivalidate.
+      //
+      // Esempio:
+      // nodo 12 -> Brindisi, BR, Italia
+      // nodo 13 -> Tiggiano, LE, Italia
+      // nodo 5  -> Bari, BA, Italia
+      // =====================================================
+
+      const coordinates =
+        costruisciCoordinateConLocalita(
+          c.plan,
+          nodeMap,
+          locked,
+          log
+        );
+
+      // =====================================================
+      // PIANO ATTIVAZIONE
+      // =====================================================
 
       const piano = {
         ...c.plan,
-        requestSnapshot: locked.map(r => ({
-          id: r.id,
-          fingerprint: fingerprint(r)
-        })),
-        coordinates: c.plan.nodes.map(
-          n => nodeMap.get(n)
-        ),
-        evaluation: c.evaluation,
-        approach: c.approach,
-        returnTrip: c.returnTrip,
-        busyStart: new Date(c.busyStart).toISOString(),
-        busyEnd: new Date(c.busyEnd).toISOString()
+
+        requestSnapshot:
+          locked.map(r => ({
+            id: r.id,
+            fingerprint:
+              fingerprint(r)
+          })),
+
+        coordinates,
+
+        evaluation:
+          c.evaluation,
+
+        approach:
+          c.approach,
+
+        returnTrip:
+          c.returnTrip,
+
+        busyStart:
+          new Date(
+            c.busyStart
+          ).toISOString(),
+
+        busyEnd:
+          new Date(
+            c.busyEnd
+          ).toISOString()
       };
 
-      const { rows: as } = await client.query(`
+      // =====================================================
+      // CREAZIONE ATTIVAZIONE POPBUS
+      // =====================================================
+
+      const {
+        rows: as
+      } = await client.query(`
         INSERT INTO popbus_attivazioni(
           direttrice_id,
           veicolo_id,
@@ -954,8 +1511,10 @@ AND (
           expires_at
         )
         VALUES(
-          $1,$2,$3,'in_attesa_autista',
-          $4,$5,$6,$7,$8,$9::jsonb,
+          $1,$2,$3,
+          'in_attesa_autista',
+          $4,$5,$6,$7,$8,
+          $9::jsonb,
           LEAST(
             NOW()+INTERVAL '10 minutes',
             $10::timestamptz
@@ -966,8 +1525,12 @@ AND (
         dirId,
         c.vehicle.id,
         c.vehicle.driver_id,
-        new Date(c.evaluation.departure),
-        new Date(c.evaluation.arrival),
+        new Date(
+          c.evaluation.departure
+        ),
+        new Date(
+          c.evaluation.arrival
+        ),
         c.cost,
         c.evaluation.revenue,
         c.vehicle.euro_km,
@@ -976,13 +1539,27 @@ AND (
       ]);
 
       const act = as[0];
+
       stats.attivazioni++;
 
-      log('ATTIVAZIONE',
-        `id=${act.id} direttrice=${dirId} veicolo=${c.vehicle.id} richieste=${ids.join(',')} scadenza=${act.expires_at}`
+      log(
+        'ATTIVAZIONE',
+        `id=${act.id} ` +
+        `direttrice=${dirId} ` +
+        `veicolo=${c.vehicle.id} ` +
+        `richieste=${ids.join(',')} ` +
+        `origine=${coordinates[0]?.nome_nodo || 'N/D'} ` +
+        `destinazione=${coordinates.at(-1)?.nome_nodo || 'N/D'} ` +
+        `scadenza=${act.expires_at}`
       );
 
-      for (const r of c.evaluation.requests) {
+      // =====================================================
+      // ASSOCIAZIONE RICHIESTE
+      // =====================================================
+
+      for (
+        const r of c.evaluation.requests
+      ) {
         await client.query(`
           INSERT INTO popbus_attivazione_richieste(
             attivazione_id,
@@ -990,7 +1567,9 @@ AND (
             indice_salita,
             indice_discesa
           )
-          VALUES($1,$2,$3,$4)
+          VALUES(
+            $1,$2,$3,$4
+          )
         `, [
           act.id,
           r.id,
@@ -999,14 +1578,24 @@ AND (
         ]);
       }
 
-      for (let i = 0; i < c.plan.legs.length; i++) {
+      // =====================================================
+      // ASSOCIAZIONE SEGMENTI
+      // =====================================================
+
+      for (
+        let i = 0;
+        i < c.plan.legs.length;
+        i++
+      ) {
         await client.query(`
           INSERT INTO popbus_attivazione_segmenti(
             attivazione_id,
             segmento_id,
             ordine
           )
-          VALUES($1,$2,$3)
+          VALUES(
+            $1,$2,$3
+          )
         `, [
           act.id,
           segs[prefix + i].id,
@@ -1014,14 +1603,27 @@ AND (
         ]);
       }
 
+      // =====================================================
+      // AGGIORNAMENTO RICHIESTE
+      // =====================================================
+
       await client.query(`
         UPDATE richieste_pop_bus
         SET stato='in_lavorazione',
             direttrice_id=$2
         WHERE id=ANY($1::int[])
-      `, [ids, dirId]);
+      `, [
+        ids,
+        dirId
+      ]);
 
-      const { rows: offers } = await client.query(`
+      // =====================================================
+      // CREAZIONE OFFERTA AUTISTA
+      // =====================================================
+
+      const {
+        rows: offers
+      } = await client.query(`
         INSERT INTO offerte_autisti(
           direttrice_id,
           autista_id,
@@ -1029,7 +1631,10 @@ AND (
           stato,
           expires_at
         )
-        VALUES($1,$2,$3,'inviata',$4)
+        VALUES(
+          $1,$2,$3,
+          'inviata',$4
+        )
         RETURNING id
       `, [
         dirId,
@@ -1038,36 +1643,82 @@ AND (
         act.expires_at
       ]);
 
+      // =====================================================
+      // SOCKET: ORIGINE E DESTINAZIONE VALORIZZATE
+      // =====================================================
+
       events.push({
-        driver: c.vehicle.driver_id,
+        driver:
+          c.vehicle.driver_id,
+
         payload: {
-          id: offers[0].id,
-          attivazione_id: act.id,
-          direttrice_id: dirId,
-          veicolo_id: c.vehicle.id,
-          classe: c.plan.classe,
-          posti_richiesti: c.evaluation.peak,
-          oraPartenza: new Date(
-            c.evaluation.departure
-          ).toISOString(),
-          start_node_id: c.plan.nodes[0],
-          end_node_id: c.plan.nodes.at(-1)
+          id:
+            offers[0].id,
+
+          attivazione_id:
+            act.id,
+
+          direttrice_id:
+            dirId,
+
+          veicolo_id:
+            c.vehicle.id,
+
+          classe:
+            c.plan.classe,
+
+          posti_richiesti:
+            c.evaluation.peak,
+
+          oraPartenza:
+            new Date(
+              c.evaluation.departure
+            ).toISOString(),
+
+          start_node_id:
+            c.plan.nodes[0],
+
+          end_node_id:
+            c.plan.nodes.at(-1),
+
+          origine_address:
+            coordinates[0]?.nome_nodo ||
+            null,
+
+          destinazione_address:
+            coordinates.at(-1)?.nome_nodo ||
+            null
         }
       });
     }
 
+    // =====================================================
+    // COMMIT
+    // =====================================================
+
     await client.query('COMMIT');
     tx = false;
 
-    log('COMMIT',
-      `Attivazioni create: ${stats.attivazioni}; eventi socket: ${events.length}`
+    log(
+      'COMMIT',
+      `Attivazioni create: ${stats.attivazioni}; ` +
+      `eventi socket: ${events.length}`
     );
+
+    // =====================================================
+    // EMISSIONE SOCKET DOPO COMMIT
+    // =====================================================
 
     for (const e of events) {
       try {
         getIO()
-          .to(`autista_${e.driver}`)
-          .emit('nuova_proposta_popbus', e.payload);
+          .to(
+            `autista_${e.driver}`
+          )
+          .emit(
+            'nuova_proposta_popbus',
+            e.payload
+          );
       } catch (err) {
         console.error(
           '[V2 SOCKET POSTCOMMIT]',
@@ -1077,26 +1728,43 @@ AND (
     }
 
   } catch (err) {
-    log('ERRORE', err.stack || err.message);
+    log(
+      'ERRORE',
+      err.stack || err.message
+    );
 
     if (tx && client) {
       try {
-        await client.query('ROLLBACK');
-        log('ROLLBACK', 'Eseguito');
+        await client.query(
+          'ROLLBACK'
+        );
+
+        log(
+          'ROLLBACK',
+          'Eseguito'
+        );
       } catch (e) {
-        log('ROLLBACK ERROR', e.message);
+        log(
+          'ROLLBACK ERROR',
+          e.message
+        );
       }
     }
 
     throw err;
 
   } finally {
-    if (client) client.release();
+    if (client) {
+      client.release();
+    }
 
     cicliAttivi--;
 
-    log('FINE',
-      `durata=${Date.now() - inizio} ms attivi=${cicliAttivi} riepilogo=${JSON.stringify(stats)}`
+    log(
+      'FINE',
+      `durata=${Date.now() - inizio} ms ` +
+      `attivi=${cicliAttivi} ` +
+      `riepilogo=${JSON.stringify(stats)}`
     );
   }
 }

@@ -27,33 +27,121 @@ function minute(t) {
   );
 }
 
+// I turni sono ricorrenti: la data di start/fine è solo un contenitore
+// dell'orario. Gli istanti della missione sono verificati in Europe/Rome.
+const giornoFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Rome', weekday: 'short'
+});
+const GIORNI = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function giornoLocale(t) {
+  return GIORNI.indexOf(giornoFmt.format(new Date(t)).toLowerCase());
+}
+
+function giornoEscluso(giorni, t) {
+  if (!Array.isArray(giorni) || !giorni.length) return false;
+  const day = giornoLocale(t);
+  const nomi = ['domenica', 'lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato'];
+  return giorni.some(g => {
+    const value = String(g).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Supporta 0..6 (domenica=0), 1..7 (ISO, domenica=7) e nomi.
+    // Per valori numerici 1..6 le due convenzioni differiscono:
+    // qui viene adottata la convenzione JavaScript 0..6.
+    return value === String(day) || (day === 0 && value === '7') ||
+      value === nomi[day] || value === GIORNI[day];
+  });
+}
+
+function inattivo(v, a, b) {
+  const periodi = v.inattivita || [];
+  if (!Array.isArray(periodi) || !periodi.length) return false;
+  return periodi.some(p => {
+    // Se il formato non è riconosciuto, blocca per sicurezza.
+    if (!p || typeof p !== 'object') return true;
+    const start = p.start ?? p.inizio ?? p.dal ?? p.da;
+    const end = p.fine ?? p.end ?? p.al ?? p.a;
+    if (!start || !end) return true;
+    const x = new Date(start).getTime();
+    const y = new Date(end).getTime();
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+    return x < b && y > a;
+  });
+}
+
 function turno(v, a, b) {
-  if (
-    (v.giorni_esclusi || []).length ||
-    (v.inattivita || []).length
-  ) return false;
-
-  if (v.manual) {
-    return new Date(v.start).getTime() <= a &&
-      new Date(v.fine).getTime() >= b;
-  }
-
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return false;
+  if (!v.start || !v.fine) return false;
   const s = minute(v.start);
   const e = minute(v.fine);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s === e) return false;
+  if (inattivo(v, a, b)) return false;
 
-  for (let t = a; t < b; t += 60000) {
+  // Campionamento di ogni minuto, incluso l'ultimo minuto operativo.
+  // Le esclusioni si riferiscono al giorno di inizio del turno:
+  // per un turno notturno 20:00-06:00, le ore dopo mezzanotte
+  // appartengono al turno iniziato il giorno precedente.
+  for (let t = a; t < b; t = Math.min(b, Math.floor(t / 60000) * 60000 + 60000)) {
     const m = minute(t);
-
-    if (!(
-      s < e
-        ? m >= s && m < e
-        : s > e
-          ? m >= s || m < e
-          : false
-    )) return false;
+    const valido = s < e ? (m >= s && m < e) : (m >= s || m < e);
+    if (!valido) return false;
+    const giornoTurno = s > e && m < e ? t - 24 * 60 * 60 * 1000 : t;
+    if (giornoEscluso(v.giorni_esclusi, giornoTurno)) return false;
   }
-
   return true;
+}
+
+// Unica fonte per la verifica iniziale e la rivalidazione finale.
+// driver_id e' il TITOLARE della flotta: l'esclusivita' e' per veicolo_id.
+// Le corse gia' collegate a un'attivazione sono rappresentate dalla
+// relativa attivazione (che include avvicinamento e ritorno).
+// Le direttrici legacy sono controllate soltanto se hanno segmenti
+// temporali determinabili; quelle senza intervallo richiedono gestione
+// separata, non un blocco permanente di tutti i giorni.
+async function conflittiVeicolo(client, veicoloId, busyStart, busyEnd) {
+  const { rows } = await client.query(`
+    SELECT 'attivazione' AS origine, a.id::text AS id,
+           COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) AS inizio,
+           COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) AS fine
+    FROM popbus_attivazioni a
+    WHERE a.veicolo_id=$1
+      AND a.stato IN ('in_attesa_autista','confermata')
+      AND COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) < $3::timestamptz
+      AND COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) > $2::timestamptz
+
+    UNION ALL
+
+    SELECT 'corsa' AS origine, c.id::text AS id,
+           c.start_datetime AS inizio, c.arrivo_datetime AS fine
+    FROM corse c
+    WHERE c.veicolo_id=$1
+      AND c.stato IN ('prenotabile','in_corso','da_attivare')
+      AND c.start_datetime < $3::timestamptz
+      AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime > $2::timestamptz)
+      AND NOT EXISTS (
+        SELECT 1 FROM popbus_attivazioni a
+        WHERE a.corsa_id=c.id AND a.veicolo_id=c.veicolo_id
+          AND a.stato IN ('in_attesa_autista','confermata')
+      )
+
+    UNION ALL
+
+    SELECT 'direttrice' AS origine, d.id::text AS id,
+           d.partenza_prevista AS inizio,
+           MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') AS fine
+    FROM direttrici_virtuali d
+    JOIN segmenti s ON s.direttrice_id=d.id
+    WHERE d.veicolo_id=$1
+      AND d.stato IN ('in_attesa_autista','attivo','confermata')
+      AND d.partenza_prevista < $3::timestamptz
+      AND NOT EXISTS (
+        SELECT 1 FROM popbus_attivazioni a
+        WHERE a.direttrice_id=d.id AND a.veicolo_id=d.veicolo_id
+          AND a.stato IN ('in_attesa_autista','confermata')
+      )
+    GROUP BY d.id, d.partenza_prevista
+    HAVING MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') > $2::timestamptz
+  `, [veicoloId, new Date(busyStart), new Date(busyEnd)]);
+  return rows;
 }
 
 async function movement(a, b) {
@@ -903,75 +991,9 @@ export async function processaProposteDinamicheV2() {
         // CONTROLLO CONFLITTI
         // =====================================================
 
-        const {
-          rows: conflicts
-        } = await client.query(`
-          SELECT 1
-          FROM popbus_attivazioni a
-          WHERE
-            (
-              a.veicolo_id=$1
-              OR a.autista_id=$2
-            )
-            AND a.stato IN (
-              'in_attesa_autista',
-              'confermata'
-            )
-            AND (
-              a.piano->>'busyStart'
-            )::timestamptz
-              < $4::timestamptz
-            AND (
-              a.piano->>'busyEnd'
-            )::timestamptz
-              > $3::timestamptz
-
-          UNION ALL
-
-          SELECT 1
-          FROM corse c
-          JOIN veicolo v
-            ON v.id=c.veicolo_id
-          WHERE
-            (
-              v.id=$1
-              OR v.driver_id=$2
-            )
-            AND c.stato IN (
-              'prenotabile',
-              'in_corso',
-              'da_attivare'
-            )
-            AND c.start_datetime
-              < $4::timestamptz
-            AND (
-              c.arrivo_datetime IS NULL
-              OR c.arrivo_datetime
-                > $3::timestamptz
-            )
-
-          UNION ALL
-
-          SELECT 1
-          FROM direttrici_virtuali d
-          JOIN veicolo v
-            ON v.id=d.veicolo_id
-          WHERE
-            (
-              v.id=$1
-              OR v.driver_id=$2
-            )
-            AND d.stato IN (
-              'in_attesa_autista',
-              'attivo',
-              'confermata'
-            )
-        `, [
-          vehicle.id,
-          vehicle.driver_id,
-          new Date(busyStart),
-          new Date(busyEnd)
-        ]);
+        const conflicts = await conflittiVeicolo(
+          client, vehicle.id, busyStart, busyEnd
+        );
 
         if (conflicts.length) {
           log(
@@ -1071,7 +1093,7 @@ export async function processaProposteDinamicheV2() {
     // =====================================================
 
     // Più missioni possono essere selezionate nello stesso intervallo
-    // se utilizzano richieste, autisti e veicoli distinti.
+    // se utilizzano richieste e veicoli distinti (anche stesso titolare).
     const chosen = scegliAttivazioni(feasible);
     log('MULTI VEICOLO', chosen.map(x => ({
       veicolo: x.vehicle.id,
@@ -1181,19 +1203,7 @@ export async function processaProposteDinamicheV2() {
         continue;
       }
 
-      // =====================================================
-      // LOCK AUTISTA
-      // =====================================================
-
-      await client.query(
-        `
-        SELECT id
-        FROM utente
-        WHERE id=$1
-        FOR UPDATE
-        `,
-        [c.vehicle.driver_id]
-      );
+      // Il lock esclusivo e' sul veicolo, non sul titolare della flotta.
 
       // =====================================================
       // VERIFICA VEICOLO
@@ -1229,41 +1239,16 @@ export async function processaProposteDinamicheV2() {
       // RIVALIDAZIONE OCCUPAZIONE
       // =====================================================
 
-      const {
-        rows: busy
-      } = await client.query(`
-        SELECT 1
-        FROM popbus_attivazioni
-        WHERE
-          (
-            veicolo_id=$1
-            OR autista_id=$2
-          )
-          AND stato IN (
-            'in_attesa_autista',
-            'confermata'
-          )
-          AND (
-            piano->>'busyStart'
-          )::timestamptz
-            < $4::timestamptz
-          AND (
-            piano->>'busyEnd'
-          )::timestamptz
-            > $3::timestamptz
-      `, [
-        c.vehicle.id,
-        c.vehicle.driver_id,
-        new Date(c.busyStart),
-        new Date(c.busyEnd)
-      ]);
+      const busy = await conflittiVeicolo(
+        client, c.vehicle.id, c.busyStart, c.busyEnd
+      );
 
       if (busy.length) {
         stats.scartiOccupato++;
 
         log(
           'CONFLITTO',
-          `Veicolo/autista occupato: ${c.vehicle.id}`
+          `Veicolo occupato: ${c.vehicle.id}`
         );
 
         continue;

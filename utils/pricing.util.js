@@ -7,6 +7,13 @@ const TARIFF_DEFAULT = {
 };
 
 const PREZZO_MINIMO = 0.50;
+// Commissione sul prezzo finale incassato dal cliente.
+const COMMISSIONE_TURENTU = 0.15;
+
+// Arrotondamento al centesimo superiore: il netto dell'autista
+// non deve risultare inferiore al prezzo base calcolato.
+const arrotondaEuroSuperiore = (value) =>
+    Math.ceil(value * 100 - 1e-9) / 100;
 
 const CLASSI_CONFIG = {
     EXPRESS: {
@@ -84,8 +91,10 @@ function normalizzaClasse(classe) {
 function dettagliDefault() {
     return {
         costoMissione: null,
+        costoCommercialeMissione: null,
         postiTotaliMissione: null,
         prezzoUnitario: null,
+        prezzoUnitarioCommerciale: null,
         veicoloRiferimentoId: null,
         tariffaKm: null,
         kmComplessiviOperativi: null,
@@ -94,7 +103,12 @@ function dettagliDefault() {
         veicoliIdonei: 0,
         veicoliCapienti: 0,
         criterioSelezione: null,
-        avvisoCapienza: null
+        avvisoCapienza: null,
+        prezzoBase: null,
+        commissionePercentuale: null,
+        commissioneImporto: null,
+        compensoAutista: null,
+        prezzoCommerciale: null
     };
 }
 
@@ -645,12 +659,37 @@ export async function calcolaPrezzo(
         return null;
     }
 
-    const finale = Math.max(
-        PREZZO_MINIMO,
-        arrotondaEuro(
-            prezzoCalcolato
-        )
+    // Il prezzo calcolato dai singoli rami e' il compenso base.
+    // La commissione e' trattenuta sul prezzo finale, non aggiunta
+    // con una semplice moltiplicazione per 1.15.
+    const prezzoBase = Math.max(PREZZO_MINIMO, arrotondaEuro(prezzoCalcolato));
+    const finale = arrotondaEuroSuperiore(
+        prezzoBase / (1 - COMMISSIONE_TURENTU)
     );
+    const commissioneImporto = arrotondaEuro(
+        finale * COMMISSIONE_TURENTU
+    );
+    const compensoAutista = arrotondaEuro(
+        finale - commissioneImporto
+    );
+
+    dettagli.prezzoBase = prezzoBase;
+    dettagli.commissionePercentuale = COMMISSIONE_TURENTU * 100;
+    dettagli.commissioneImporto = commissioneImporto;
+    dettagli.compensoAutista = compensoAutista;
+    dettagli.prezzoCommerciale = finale;
+
+    // Campi POPBUS: i valori storici restano basi pre-commissione.
+    if (dettagli.costoMissione !== null) {
+        dettagli.costoCommercialeMissione = arrotondaEuroSuperiore(
+            dettagli.costoMissione / (1 - COMMISSIONE_TURENTU)
+        );
+    }
+    if (dettagli.prezzoUnitario !== null) {
+        dettagli.prezzoUnitarioCommerciale = arrotondaEuroSuperiore(
+            dettagli.prezzoUnitario / (1 - COMMISSIONE_TURENTU)
+        );
+    }
 
     console.log(
         `✅ [PRICING FINALE] ` +

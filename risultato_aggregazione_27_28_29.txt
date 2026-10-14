@@ -1,0 +1,157 @@
+
+[RICHIESTE] [
+  {
+    "id": 27,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 8,
+    "prezzo": "254.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  },
+  {
+    "id": 28,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 8,
+    "prezzo": "254.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  },
+  {
+    "id": 29,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 2,
+    "prezzo": "64.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  }
+]
+
+[CONTROLLO_GRUPPO] {
+  "valido": true,
+  "motivi": [],
+  "attivazioni_attive": []
+}
+
+[FORMAZIONI] {
+  "max_posti_flotta": 50,
+  "totale": 7,
+  "prime_otto": [
+    {
+      "ids": [
+        27,
+        28,
+        29
+      ],
+      "posti": 18,
+      "ricavo": 572
+    },
+    {
+      "ids": [
+        27,
+        28
+      ],
+      "posti": 16,
+      "ricavo": 508
+    },
+    {
+      "ids": [
+        27,
+        29
+      ],
+      "posti": 10,
+      "ricavo": 318
+    },
+    {
+      "ids": [
+        28,
+        29
+      ],
+      "posti": 10,
+      "ricavo": 318
+    },
+    {
+      "ids": [
+        27
+      ],
+      "posti": 8,
+      "ricavo": 254
+    },
+    {
+      "ids": [
+        28
+      ],
+      "posti": 8,
+      "ricavo": 254
+    },
+    {
+      "ids": [
+        29
+      ],
+      "posti": 2,
+      "ricavo": 64
+    }
+  ],
+  "aggregazione_completa_presente": true
+}
+
+[VEICOLI_CAPIENTI_E_STIMA_GEOMETRICA] [
+  {
+    "veicolo": 362,
+    "modello": "POPBUS_TEST_LECCE_30",
+    "posti": 30,
+    "euro_km": 1,
+    "capienza_ok": true,
+    "km_linea_aria_minimi": 375.71,
+    "costo_minimo_geometrico_euro": 375.72,
+    "margine_massimo_teorico_euro": 196.28,
+    "nota": "NON sono km stradali; NON verifica turno, conflitti, soglia EXPRESS o commissioni"
+  },
+  {
+    "veicolo": 366,
+    "modello": "POPBUS_TEST_TIGGIANO_50",
+    "posti": 50,
+    "euro_km": 1.2,
+    "capienza_ok": true,
+    "km_linea_aria_minimi": 369.22,
+    "costo_minimo_geometrico_euro": 443.06,
+    "margine_massimo_teorico_euro": 128.94,
+    "nota": "NON sono km stradali; NON verifica turno, conflitti, soglia EXPRESS o commissioni"
+  },
+  {
+    "veicolo": 356,
+    "modello": "156",
+    "posti": 30,
+    "euro_km": 2.8,
+    "capienza_ok": true,
+    "km_linea_aria_minimi": 369.21,
+    "costo_minimo_geometrico_euro": 1033.8,
+    "margine_massimo_teorico_euro": -461.8,
+    "nota": "NON sono km stradali; NON verifica turno, conflitti, soglia EXPRESS o commissioni"
+  }
+]
+
+[CONCLUSIONE] {
+  "richieste": [
+    27,
+    28,
+    29
+  ],
+  "posti_totali": 18,
+  "ricavo_totale_euro": 572,
+  "mezzi_capienti": 3,
+  "routing_google_effettuato": 0,
+  "modifiche_database": 0,
+  "avvertenza": "Per spiegare esclusioni effettive serve tracing della valutazione con gli stessi percorsi stradali del test principale."
+}

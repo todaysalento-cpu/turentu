@@ -1,0 +1,338 @@
+
+[PARAMETRI] {
+  "richieste": [
+    27,
+    28,
+    29
+  ],
+  "veicoli": [
+    362,
+    366
+  ],
+  "max_chiamate_routing": 8,
+  "read_only": true,
+  "nota": "Il routing puo essere fatturato; le soglie EXPRESS e commissioni non vengono validate"
+}
+
+[RICHIESTE] [
+  {
+    "id": 27,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 8,
+    "prezzo": "254.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  },
+  {
+    "id": 28,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 8,
+    "prezzo": "254.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  },
+  {
+    "id": 29,
+    "cliente_id": 101,
+    "start_node_id": 13,
+    "end_node_id": 5,
+    "start_datetime": "2026-10-14T10:00:00.000Z",
+    "posti_richiesti": 2,
+    "prezzo": "64.00",
+    "classe": "EXPRESS",
+    "stato": "in_attesa",
+    "corsa_id": null
+  }
+]
+
+[VEICOLI] [
+  {
+    "id": 362,
+    "modello": "POPBUS_TEST_LECCE_30",
+    "posti": 30,
+    "euro_km": "1.00",
+    "turno_start": "2026-10-08T08:00:00.000Z",
+    "turno_fine": "2026-10-08T20:00:00.000Z",
+    "manual": false
+  },
+  {
+    "id": 366,
+    "modello": "POPBUS_TEST_TIGGIANO_50",
+    "posti": 50,
+    "euro_km": "1.20",
+    "turno_start": "2026-10-08T08:00:00.000Z",
+    "turno_fine": "2026-10-08T20:00:00.000Z",
+    "manual": false
+  }
+]
+
+[FORMAZIONI] [
+  {
+    "ids": [
+      27,
+      28,
+      29
+    ],
+    "seats": 18,
+    "revenue": 572
+  },
+  {
+    "ids": [
+      27,
+      28
+    ],
+    "seats": 16,
+    "revenue": 508
+  },
+  {
+    "ids": [
+      27,
+      29
+    ],
+    "seats": 10,
+    "revenue": 318
+  },
+  {
+    "ids": [
+      28,
+      29
+    ],
+    "seats": 10,
+    "revenue": 318
+  },
+  {
+    "ids": [
+      27
+    ],
+    "seats": 8,
+    "revenue": 254
+  },
+  {
+    "ids": [
+      28
+    ],
+    "seats": 8,
+    "revenue": 254
+  },
+  {
+    "ids": [
+      29
+    ],
+    "seats": 2,
+    "revenue": 64
+  }
+]
+
+[PERCORSO_COMMERCIALE] {
+  "km": 210.33,
+  "minuti": 149.07
+}
+
+[ROUTING_ERROR] {
+  "percorso": "veicolo:366>nodo:13",
+  "messaggio": "Routing stradale incompleto"
+}
+
+[VALUTAZIONE_PER_FORMAZIONE] [
+  {
+    "veicolo": 362,
+    "formazione": [
+      27,
+      28,
+      29
+    ],
+    "posti": 18,
+    "ricavo_euro": 572,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": 151.68,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": true
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      27,
+      28
+    ],
+    "posti": 16,
+    "ricavo_euro": 508,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": 87.68,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": true
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      27,
+      29
+    ],
+    "posti": 10,
+    "ricavo_euro": 318,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": -102.32,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": false
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      28,
+      29
+    ],
+    "posti": 10,
+    "ricavo_euro": 318,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": -102.32,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": false
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      27
+    ],
+    "posti": 8,
+    "ricavo_euro": 254,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": -166.32,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": false
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      28
+    ],
+    "posti": 8,
+    "ricavo_euro": 254,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": -166.32,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": false
+  },
+  {
+    "veicolo": 362,
+    "formazione": [
+      29
+    ],
+    "posti": 2,
+    "ricavo_euro": 64,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": -356.32,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": false
+  },
+  {
+    "veicolo": 366,
+    "errore_routing": "Routing stradale incompleto"
+  }
+]
+
+[FOCUS_27_28_29] [
+  {
+    "veicolo": 362,
+    "formazione": [
+      27,
+      28,
+      29
+    ],
+    "posti": 18,
+    "ricavo_euro": 572,
+    "km_avvicinamento": 57.15,
+    "km_commerciali": 210.33,
+    "km_ritorno": 152.84,
+    "km_totali": 420.32,
+    "costo_completo_euro": 420.32,
+    "margine_euro": 151.68,
+    "partenza_base": "2026-10-14T09:10:02.000Z",
+    "ritorno_base": "2026-10-14T14:14:08.000Z",
+    "turno_ok": true,
+    "conflitti": [],
+    "errore_conflitti": null,
+    "partenza_futura": true,
+    "ammissibile_test_futuro": true
+  }
+]
+
+[CONCLUSIONE] {
+  "chiamate_routing": 4,
+  "formazione_completa_valutata": 1,
+  "candidati_futuro_ammissibili": [
+    362
+  ],
+  "nota": "La ammissibilita qui replica solo i filtri FUTURO del test flotta; NON certifica soglie EXPRESS, pagamenti, commissioni, raggio, qualita o rivalidazione transazionale. Turni interpretati come fascia ricorrente Europe/Rome."
+}
+
+[TRANSAZIONE] ROLLBACK

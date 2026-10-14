@@ -6,9 +6,19 @@ import {
   generaCandidate,
   valutaRichieste,
   generaFormazioniAlternative,
+  verificaQualitaRichieste,
   scegliAttivazioni
 } from './model.js';
 import { pianifica, leg } from './planner.js';
+import { generaRitorniCompatibili } from './return-matching.js';
+import { verificaQualitaOccorrenze } from './service-quality.js';
+
+// I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
+// e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
+// Questo flag non abilita scritture per cicli composti.
+const POPBUS_CYCLE_DIAGNOSTICS = process.env.POPBUS_CYCLE_DIAGNOSTICS === '1';
+const MAX_CYCLE_DIAGNOSTICS = 40;
+
 
 const fmt = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/Rome',
@@ -166,7 +176,19 @@ function fingerprint(r) {
     new Date(r.start_datetime).toISOString(),
     r.posti_richiesti,
     String(r.prezzo),
-    r.classe
+    r.classe,
+    // Campi opzionali di qualità: eventuali modifiche invalidano
+    // lo snapshot già valutato.
+    r.classe_percorrenza,
+    r.tipo_percorrenza,
+    r.distanza_diretta_km,
+    r.distanzaKmDiretta,
+    r.distanza_km_diretta,
+    r.max_fermate_intermedie,
+    r.min_km_tra_fermate,
+    r.max_deviazione_pct,
+    r.max_ritardo_minuti,
+    r.tempo_diretto_secondi
   ]);
 }
 
@@ -277,6 +299,89 @@ function costruisciCoordinateConLocalita(
   }
 
   return coordinates;
+}
+
+
+// Analisi senza effetti collaterali: combina fino a tre missioni già valutate,
+// con lo stesso veicolo e senza richieste duplicate. I collegamenti sono
+// percorsi stradali reali. Non crea attivazioni né modifica lo stato.
+async function diagnosticaCicliContigui(feasible, requests, nodeMap, log) {
+  const byVehicle = new Map();
+  for (const f of feasible) {
+    const id = Number(f.vehicle.id);
+    if (!byVehicle.has(id)) byVehicle.set(id, []);
+    byVehicle.get(id).push(f);
+  }
+  let examined = 0;
+  let compatible = 0;
+  let withReturn = 0;
+  for (const [vehicleId, items] of byVehicle) {
+    const ordered = items.slice().sort((a,b) => a.evaluation.departure - b.evaluation.departure);
+    for (let i=0; i<ordered.length && examined<MAX_CYCLE_DIAGNOSTICS; i++) {
+      for (let j=i+1; j<ordered.length && examined<MAX_CYCLE_DIAGNOSTICS; j++) {
+        const first=ordered[i], second=ordered[j];
+        const idsA=new Set(first.evaluation.requests.map(x=>Number(x.id)));
+        if (second.evaluation.requests.some(x=>idsA.has(Number(x.id)))) continue;
+        if (second.evaluation.departure<=first.evaluation.departure) continue;
+        examined++;
+        try {
+          const lastNode=nodeMap.get(Number(first.plan.nodes.at(-1)));
+          const nextNode=nodeMap.get(Number(second.plan.nodes[0]));
+          if (!lastNode || !nextNode) continue;
+          const link=await movement(lastNode,nextNode);
+          const earliest=first.evaluation.arrival + link.seconds*1000;
+          // Il veicolo non può iniziare la seconda missione prima di arrivare.
+          if (earliest>second.evaluation.departure) continue;
+          // In questo test diagnostico non inseriamo attese nel piano:
+          // le sequenze devono essere temporalmente contigue.
+          if (Math.abs(earliest-second.evaluation.departure)>1000) continue;
+          const joinedNodes=[...first.plan.nodes];
+          const joinedLegs=[...first.plan.legs];
+          if (Number(joinedNodes.at(-1))!==Number(second.plan.nodes[0])) {
+            joinedNodes.push(Number(second.plan.nodes[0]));
+            joinedLegs.push(link);
+          }
+          joinedNodes.push(...second.plan.nodes.slice(1));
+          joinedLegs.push(...second.plan.legs);
+          const joined={nodes:joinedNodes,legs:joinedLegs,classe:'MISTA_V2'};
+          const baseAssignments=[...first.evaluation.requests.map(r=>({
+            richiesta:requests.find(x=>Number(x.id)===Number(r.id)),
+            start:r.start,end:r.end
+          })),...second.evaluation.requests.map(r=>({
+            richiesta:requests.find(x=>Number(x.id)===Number(r.id)),
+            start:r.start+first.plan.nodes.length-1+(Number(first.plan.nodes.at(-1))!==Number(second.plan.nodes[0])?1:0),
+            end:r.end+first.plan.nodes.length-1+(Number(first.plan.nodes.at(-1))!==Number(second.plan.nodes[0])?1:0)
+          }))];
+          if (baseAssignments.some(a=>!a.richiesta)) continue;
+          const q=verificaQualitaOccorrenze(joined,baseAssignments);
+          if (!q.ok) continue;
+          compatible++;
+          const excluded=new Set(baseAssignments.map(a=>Number(a.richiesta.id)));
+          const extra=requests.filter(r=>!excluded.has(Number(r.id)));
+          const matches=generaRitorniCompatibili(joined,extra,first.evaluation.departure,{
+            maxPosti:Number(first.vehicle.posti_totali),baseAssignments,maxRisultati:20
+          });
+          const best=matches.reduce((a,b)=>!a||b.revenue>a.revenue?b:a,null);
+          if (best && best.requestIds.length>baseAssignments.length) withReturn++;
+          const approach=first.approach;
+          const returnTrip=await movement(nodeMap.get(Number(joined.nodes.at(-1))),first.vehicle);
+          const metres=joined.legs.reduce((s,l)=>s+l.metres,0)+approach.metres+returnTrip.metres;
+          const cost=Math.ceil(metres/1000*Number(first.vehicle.euro_km)*100)/100;
+          const revenue=best?.revenue??baseAssignments.reduce((s,a)=>s+Number(a.richiesta.prezzo),0);
+          log('CICLO DIAGNOSTICO SOLA LETTURA',{
+            veicolo:vehicleId,missioni:[first.plan.nodes,second.plan.nodes],
+            percorso:joined.nodes,richieste:best?.requestIds??[...excluded],
+            ricavo:revenue,costo:cost,superaCoperturaIntegrale:revenue>=cost,
+            ritornoFinaleKm:returnTrip.metres/1000,
+            nota:'Nessuna attivazione ciclo eseguita; soglie di classe da rivalidare'
+          });
+        } catch(e) {
+          log('CICLO DIAGNOSTICO SCARTATO',e.message);
+        }
+      }
+    }
+  }
+  log('CICLI DIAGNOSTICA RIEPILOGO',{esaminati:examined,compatibili:compatible,conRichiesteAggiuntive:withReturn});
 }
 
 let cicliAttivi = 0;
@@ -592,10 +697,10 @@ export async function processaProposteDinamicheV2() {
       // VALUTAZIONE RICHIESTE
       // =====================================================
 
-      const classRequests = requests.filter(
-        r => String(r.classe || 'STANDARD').toUpperCase() ===
-          String(c.classe).toUpperCase()
-      );
+      // La classe commerciale appartiene alla richiesta.
+      // Non filtrare per classe della candidata: sono ammesse
+      // formazioni miste, purché compatibili e di qualità valida.
+      const classRequests = requests;
 
       // Genera formazioni distinte: singole richieste, aggregazioni
       // parziali e aggregazione completa. La prenotazione resta indivisibile.
@@ -606,21 +711,39 @@ export async function processaProposteDinamicheV2() {
         { maxFormazioni: 80 }
       );
 
-      stats.formazioniAlternative += alternatives.length;
+      // Difesa aggiuntiva: verifica esplicita della qualità su ogni
+      // formazione. Il model applica già il controllo incrementale.
+      const validAlternatives = alternatives.filter(evaluation => {
+        const selectedIds = new Set(evaluation.requests.map(r => Number(r.id)));
+        const selectedRequests = requests.filter(r => selectedIds.has(Number(r.id)));
+        if (selectedRequests.length !== selectedIds.size) return false;
+        const quality = verificaQualitaRichieste(plan, selectedRequests);
+        if (!quality.ok) {
+          log('QUALITA SCARTO', {
+            candidata: stats.candidate,
+            motivo: quality.motivo,
+            richiestaId: quality.richiestaId
+          });
+          return false;
+        }
+        return true;
+      });
+
+      stats.formazioniAlternative += validAlternatives.length;
 
       log('ALTERNATIVE', {
         candidata: stats.candidate,
         classe: c.classe,
         percorso: plan.nodes.join('>'),
-        numero: alternatives.length,
-        gruppi: alternatives.map(e => ({
+        numero: validAlternatives.length,
+        gruppi: validAlternatives.map(e => ({
           ids: e.requests.map(r => r.id),
           picco: e.peak,
           ricavo: e.revenue
         }))
       });
 
-      for (const evaluation of alternatives) {
+      for (const evaluation of validAlternatives) {
         if (evaluation.departure <= Date.now()) {
           stats.valutazioniScartate++;
           continue;
@@ -1088,6 +1211,13 @@ export async function processaProposteDinamicheV2() {
       JSON.stringify(stats)
     );
 
+    // Analisi opzionale dei cicli contigui, SENZA SCRITTURE.
+    // Il normale worker continua a selezionare soltanto missioni
+    // già supportate dal modello transazionale esistente.
+    if (POPBUS_CYCLE_DIAGNOSTICS) {
+      await diagnosticaCicliContigui(feasible, requests, nodeMap, log);
+    }
+
     // =====================================================
     // SCELTA ATTIVAZIONI
     // =====================================================
@@ -1180,6 +1310,19 @@ export async function processaProposteDinamicheV2() {
           `Richieste modificate: ${ids.join(',')}`
         );
 
+        continue;
+      }
+
+      // Ricalcolo sullo snapshot bloccato: una modifica ai dati
+      // di qualità non deve essere ignorata prima dell'attivazione.
+      const qualityFinal = verificaQualitaRichieste(c.plan, locked);
+      if (!qualityFinal.ok) {
+        stats.scartiRivalidazione++;
+        log('QUALITA RIVALIDAZIONE', {
+          richieste: ids,
+          motivo: qualityFinal.motivo,
+          richiestaId: qualityFinal.richiestaId
+        });
         continue;
       }
 

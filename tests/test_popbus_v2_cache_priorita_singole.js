@@ -1,0 +1,569 @@
+// TURENTU POPBUS V2 — OTTAVO TEST CACHE E PRIORITA SINGOLE — SOLO DIAGNOSTICO
+// Salva come tests/test_popbus_v2_ottimizzazione_flotta.js
+// Esegui: node --env-file=.env tests\test_popbus_v2_ottimizzazione_flotta.js
+// READ ONLY. Non avvia worker, pagamenti o socket. Google Maps puo' essere fatturato.
+// DIAGNOSTICO: NON certifica attivabilita' (turni, conflitti, pagamenti, soglie e qualita').
+import { pool } from '../db/db.js';
+import { leg } from '../services/popbus/v2/planner.js';
+
+const LIMIT = bounded('POPBUS_FLEET_REQUESTS', 40, 1, 120);
+const MAX_GOOGLE = bounded('POPBUS_FLEET_ROUTES', 100, 1, 300);
+const MAX_WAIT = bounded('POPBUS_FLEET_WAIT_MIN', 180, 0, 720);
+const BUFFER = bounded('POPBUS_FLEET_BUFFER_MIN', 0, 0, 120);
+const MAX_RESULTS = bounded('POPBUS_FLEET_RESULTS', 20, 1, 80);
+const MAX_CHAINS = bounded('POPBUS_CYCLE_MAX_CHAINS', 500, 10, 5000);
+const MAX_FORMATIONS = bounded('POPBUS_CYCLE_FORMATIONS', 8, 1, 40);
+const MAX_DEPTH = bounded('POPBUS_CYCLE_DEPTH', 3, 2, 3);
+const COSTO_ATTESA_ORA = Math.max(0, Number(process.env.POPBUS_COSTO_ATTESA_ORA ?? 0) || 0);
+const INCLUDE_PAST = process.env.POPBUS_CYCLE_INCLUDE_PAST === '1';
+const OPT_MAX_NODES = bounded('POPBUS_OPT_MAX_NODES', 250000, 1000, 3000000);
+const OPT_MAX_CANDIDATES = bounded('POPBUS_OPT_MAX_CANDIDATES', 5000, 10, 30000);
+// Modalita valutate sempre: TEORICO, ECONOMICO, TURNO, FUTURO
+
+const fmt = x => Math.round(Number(x) * 100) / 100;
+const ms = x => new Date(x).getTime();
+const iso = x => new Date(x).toISOString();
+const log = (name, obj) => console.log(`[${name}] ${JSON.stringify(obj, null, 2)}`);
+const number = x => Number(x);
+function bounded(name, fallback, min, max) {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isFinite(value) ? Math.max(min, Math.min(max, Math.trunc(value))) : fallback;
+}
+function validCoord(p) {
+  return p && Number.isFinite(number(p.lat)) && Number.isFinite(number(p.lon)) &&
+    Math.abs(number(p.lat)) <= 90 && Math.abs(number(p.lon)) <= 180;
+}
+function equalCoord(a, b) {
+  return Math.abs(number(a.lat)-number(b.lat)) < 1e-7 &&
+    Math.abs(number(a.lon)-number(b.lon)) < 1e-7;
+}
+const cache = new Map();
+let calls = 0, failures = 0, limitHits = 0, cacheHits = 0, cacheMisses = 0;
+const budgetBlockedRoutes = new Set();
+const routeErrors = new Set();
+async function road(a, b) {
+  if (!validCoord(a) || !validCoord(b)) return null;
+  if (equalCoord(a,b)) return {metres:0,seconds:0};
+  const key = `${number(a.lat).toFixed(7)},${number(a.lon).toFixed(7)}>${number(b.lat).toFixed(7)},${number(b.lon).toFixed(7)}`;
+  if (cache.has(key)) { cacheHits++; return cache.get(key); }
+  cacheMisses++;
+  if (calls >= MAX_GOOGLE) {limitHits++; budgetBlockedRoutes.add(key); return null;}
+  calls++;
+  try {
+    const l = await leg(a,b);
+    if (!(number(l.metres)>0 && number(l.seconds)>0)) throw new Error('Percorso non valido');
+    const value={metres:number(l.metres),seconds:number(l.seconds)};
+    cache.set(key,value);
+    return value;
+  } catch (e) {
+    failures++;
+    routeErrors.add(key);
+    log('ROUTING_ERROR',{percorso:key,messaggio:e.message});
+    return null;
+  }
+}
+function groupByRouteAndTime(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const key = `${r.start_node_id}|${r.end_node_id}|${ms(r.start_datetime)}`;
+    if (!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(r);
+  }
+  return [...groups.values()];
+}
+// Enumerazione di sottoinsiemi di richieste simultanee, senza dividere una richiesta
+// su piu' veicoli. Limiti espliciti per evitare esplosione combinatoria.
+function aggregate(group, maxSeats) {
+  const sorted=[...group].sort((a,b)=>number(b.prezzo)-number(a.prezzo));
+  const combos=[];
+  const capped=sorted.slice(0,12);
+  function visit(i, picked, seats, revenue) {
+    if (picked.length) combos.push({ids:picked.map(r=>number(r.id)).sort((a,b)=>a-b),
+      seats,revenue,requests:[...picked]});
+    if (i>=capped.length || combos.length>=2500) return;
+    for(let j=i;j<capped.length;j++) {
+      const seatsNext=seats+number(capped[j].posti_richiesti);
+      if (seatsNext<=maxSeats) visit(j+1,[...picked,capped[j]],seatsNext,revenue+number(capped[j].prezzo));
+      if(combos.length>=2500)break;
+    }
+  }
+  visit(0,[],0,0);
+  combos.sort((a,b)=>b.revenue-a.revenue || a.seats-b.seats);
+  return combos;
+}
+// Diagnosi geometrica di ritorno: nessun criterio geometrico certifica da solo
+// che una missione percorra realmente la stessa direttrice al contrario.
+function haversineKm(a,b){
+ const rad=Math.PI/180,R=6371;
+ const p1=number(a.lat)*rad,p2=number(b.lat)*rad;
+ const dp=p2-p1,dl=(number(b.lon)-number(a.lon))*rad;
+ const q=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+ return 2*R*Math.asin(Math.min(1,Math.sqrt(q)));
+}
+const RETURN_NEAR_KM=bounded('POPBUS_RETURN_NEAR_KM',15,1,100);
+const RETURN_PROGRESS_KM=bounded('POPBUS_RETURN_PROGRESS_KM',10,1,100);
+function classifyReturn(first,previous,next,base){
+ const exact=number(next.start.id)===number(previous.end.id) && number(next.end.id)===number(previous.start.id);
+ const reversedFirst=number(next.start.id)===number(first.end.id)&&number(next.end.id)===number(first.start.id);
+ const startNearEnd=haversineKm(next.start,previous.end);
+ const endNearStart=haversineKm(next.end,first.start);
+ const nearReverse=startNearEnd<=RETURN_NEAR_KM && endNearStart<=RETURN_NEAR_KM;
+ const toBaseBefore=haversineKm(next.start,base),toBaseAfter=haversineKm(next.end,base);
+ const progress=toBaseBefore-toBaseAfter;
+ const toOriginBefore=haversineKm(next.start,first.start),toOriginAfter=haversineKm(next.end,first.start);
+ const progressOrigin=toOriginBefore-toOriginAfter;
+ let type='NESSUN_RITORNO_RICONOSCIUTO';
+ if(exact||reversedFirst)type='RITORNO_INVERSO_ESATTO';
+ else if(nearReverse)type='RITORNO_INVERSO_APPROSSIMATO';
+ else if(progress>=RETURN_PROGRESS_KM&&progressOrigin>=RETURN_PROGRESS_KM)type='RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE';
+ else if(progress>=RETURN_PROGRESS_KM)type='RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE';
+ return {tipo:type,ritorno_candidato:type!=='NESSUN_RITORNO_RICONOSCIUTO',
+  distanza_inizio_da_fine_precedente_km:fmt(startNearEnd),
+  distanza_fine_da_origine_iniziale_km:fmt(endNearStart),
+  progresso_verso_base_km:fmt(progress),progresso_verso_origine_km:fmt(progressOrigin),
+  nota:'Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno'};
+}
+function brief(m) {return {ids:m.ids,origine:m.start.id,destinazione:m.end.id,
+  partenza:iso(m.depart),arrivo:iso(m.arrive),posti:m.seats,ricavo_euro:fmt(m.revenue),
+  km:fmt(m.trip.metres/1000)};}
+
+// Riproduzione diagnostica della logica di turno del worker, senza importarlo.
+const clockFmt = new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+const dayFmt = new Intl.DateTimeFormat('en-US',{timeZone:'Europe/Rome',weekday:'short'});
+const days=['sun','mon','tue','wed','thu','fri','sat'];
+function minuteRome(t){const p=clockFmt.formatToParts(new Date(t));return Number(p.find(x=>x.type==='hour').value)*60+Number(p.find(x=>x.type==='minute').value);}
+function excludedDay(giorni,t){if(!Array.isArray(giorni)||!giorni.length)return false;
+ const d=days.indexOf(dayFmt.format(new Date(t)).toLowerCase());
+ const names=['domenica','lunedi','martedi','mercoledi','giovedi','venerdi','sabato'];
+ return giorni.some(g=>{const v=String(g).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');return v===String(d)||(d===0&&v==='7')||v===names[d]||v===days[d];});}
+function inactive(v,a,b){if(!Array.isArray(v.inattivita)||!v.inattivita.length)return false;
+ return v.inattivita.some(p=>{if(!p||typeof p!=='object')return true;
+ const s=p.start??p.inizio??p.dal??p.da,e=p.fine??p.end??p.al??p.a;
+ if(!s||!e)return true;const x=ms(s),y=ms(e);return !Number.isFinite(x)||!Number.isFinite(y)||x<b&&y>a;});}
+function shiftValid(v,a,b){if(!Number.isFinite(a)||!Number.isFinite(b)||b<=a||!v.start||!v.fine)return false;
+ const s=minuteRome(v.start),e=minuteRome(v.fine);
+ if(!Number.isFinite(s)||!Number.isFinite(e)||s===e||inactive(v,a,b))return false;
+ for(let t=a;t<b;t=Math.min(b,Math.floor(t/60000)*60000+60000)){
+  const m=minuteRome(t),valid=s<e?(m>=s&&m<e):(m>=s||m<e);
+  if(!valid)return false;
+  const shiftDay=s>e&&m<e?t-86400000:t;
+  if(excludedDay(v.giorni_esclusi,shiftDay))return false;
+ }
+ return true;
+}
+async function findConflicts(client,vehicleId,a,b){
+ const {rows}=await client.query(`
+ SELECT 'attivazione' AS origine,a.id::text AS id
+ FROM public.popbus_attivazioni a
+ WHERE a.veicolo_id=$1 AND a.stato IN ('in_attesa_autista','confermata')
+ AND COALESCE((a.piano->>'busyStart')::timestamptz,a.partenza)<$3::timestamptz
+ AND COALESCE((a.piano->>'busyEnd')::timestamptz,a.arrivo)>$2::timestamptz
+ UNION ALL
+ SELECT 'corsa',c.id::text
+ FROM public.corse c
+ WHERE c.veicolo_id=$1 AND c.stato IN ('prenotabile','in_corso','da_attivare')
+ AND c.start_datetime<$3::timestamptz
+ AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime>$2::timestamptz)
+ AND NOT EXISTS(SELECT 1 FROM public.popbus_attivazioni a WHERE a.corsa_id=c.id AND a.veicolo_id=c.veicolo_id AND a.stato IN ('in_attesa_autista','confermata'))
+ UNION ALL
+ SELECT 'direttrice',d.id::text
+ FROM public.direttrici_virtuali d JOIN public.segmenti s ON s.direttrice_id=d.id
+ WHERE d.veicolo_id=$1 AND d.stato IN ('in_attesa_autista','attivo','confermata')
+ AND d.partenza_prevista<$3::timestamptz
+ AND NOT EXISTS(SELECT 1 FROM public.popbus_attivazioni a WHERE a.direttrice_id=d.id AND a.veicolo_id=d.veicolo_id AND a.stato IN ('in_attesa_autista','confermata'))
+ GROUP BY d.id,d.partenza_prevista
+ HAVING MAX(s.start_datetime+s.tempo_stimato*INTERVAL '1 minute')>$2::timestamptz
+ `,[vehicleId,new Date(a),new Date(b)]);
+ return rows;
+}
+
+async function main(){
+ let client,tx=false;
+ console.log('TURENTU POPBUS V2 — OTTAVO TEST OTTIMIZZAZIONE GLOBALE FLOTTA | READ ONLY');
+ console.log('Nessuna scrittura, nessun worker, nessuna verifica pagamento, nessun socket. Routing Google potenzialmente fatturato.');
+ try{
+  client=await pool.connect(); await client.query('BEGIN READ ONLY');tx=true;
+  await client.query("SET LOCAL statement_timeout='20000ms'");
+  const state=(await client.query("SELECT current_database() db,current_setting('transaction_read_only') read_only,now() now")).rows[0];
+  if(state.read_only!=='on')throw Error('Transazione non read-only');
+  log('CONNESSIONE',state);
+  const {rows:raw}=await client.query(`SELECT r.* FROM public.richieste_pop_bus r
+   WHERE r.stato='in_attesa' AND r.corsa_id IS NULL AND ($1::boolean OR r.start_datetime>NOW())
+   AND NOT EXISTS(SELECT 1 FROM public.popbus_attivazione_richieste ar WHERE ar.richiesta_id=r.id AND ar.attiva)
+   ORDER BY r.start_datetime,r.id LIMIT $2`,[INCLUDE_PAST,LIMIT]);
+  const requests=raw.filter(r=>Number.isFinite(ms(r.start_datetime)) && number(r.posti_richiesti)>0 && Number.isFinite(number(r.prezzo)) && number(r.prezzo)>=0);
+  const ids=[...new Set(requests.flatMap(r=>[number(r.start_node_id),number(r.end_node_id)]))];
+  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+  const nodes=new Map(rawNodes.map(n=>[number(n.id),n]));
+  const {rows:vehicles}=await client.query(`SELECT v.id,v.driver_id,v.posti_totali,t.euro_km,dv.start,dv.fine,dv.manual,dv.giorni_esclusi,dv.inattivita,
+   ST_Y(COALESCE(dv.coord,v.coord)::geometry) lat,ST_X(COALESCE(dv.coord,v.coord)::geometry) lon
+   FROM public.veicolo v JOIN public.disponibilita_veicolo dv ON dv.veicolo_id=v.id
+   JOIN LATERAL(SELECT MIN(euro_km) euro_km FROM public.tariffe WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0)t ON t.euro_km IS NOT NULL
+   WHERE v.driver_id IS NOT NULL AND v.posti_totali>0 AND COALESCE(dv.coord,v.coord) IS NOT NULL ORDER BY t.euro_km,v.id`);
+  log('PARAMETRI',{return_near_km:RETURN_NEAR_KM,return_progress_km:RETURN_PROGRESS_KM,richieste:requests.length,veicoli:vehicles.length,include_passate:INCLUDE_PAST,max_wait_min:MAX_WAIT,buffer_min:BUFFER,max_depth:MAX_DEPTH,max_chains:MAX_CHAINS,max_google:MAX_GOOGLE});
+  if(!requests.length||!vehicles.length)return;
+  const maxSeats=Math.max(...vehicles.map(v=>number(v.posti_totali)));
+  const missions=[];
+  for(const group of groupByRouteAndTime(requests)){
+   const first=group[0],start=nodes.get(number(first.start_node_id)),end=nodes.get(number(first.end_node_id));
+   if(!validCoord(start)||!validCoord(end))continue;
+   const trip=await road(start,end);if(!trip)continue;
+   for(const f of aggregate(group,maxSeats).slice(0,MAX_FORMATIONS))missions.push({...f,start,end,trip,depart:ms(first.start_datetime),arrive:ms(first.start_datetime)+trip.seconds*1000});
+  }
+  // I collegamenti vengono calcolati tra gruppi, non fra tutte le combinazioni di formazione.
+  const groupMap=new Map();for(const m of missions){const k=`${m.start.id}|${m.end.id}|${m.depart}`;if(!groupMap.has(k))groupMap.set(k,[]);groupMap.get(k).push(m);}
+  const groups=[...groupMap.values()].sort((a,b)=>a[0].depart-b[0].depart);
+  const edges=new Map();let checked=0,valid=0,timeReject=0,routeReject=0;
+  for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
+   const a=groups[i][0],b=groups[j][0];if(b.depart<=a.depart)continue;
+   if(b.depart-a.arrive>(MAX_WAIT+BUFFER+240)*60000)continue;
+   checked++;const transfer=await road(a.end,b.start);if(!transfer){routeReject++;continue;}
+   const wait=b.depart-a.arrive-transfer.seconds*1000-BUFFER*60000;
+   if(wait<0||wait>MAX_WAIT*60000){timeReject++;continue;}
+   if(!edges.has(i))edges.set(i,[]);edges.get(i).push({to:j,transfer,wait});valid++;
+  }
+  log('MISSIONI_E_COLLEGAMENTI',{missioni:missions.length,gruppi:groups.length,collegamenti_esaminati:checked,collegamenti_validi:valid,scarti_temporali:timeReject,routing_mancante:routeReject});
+  // Enumerazione di catene 2-3 missioni. Non filtra mai la redditivita' della singola missione.
+  const chains=[];
+  function visit(path,links){if(chains.length>=MAX_CHAINS)return;
+   if(path.length>=2)chains.push({path:[...path],links:[...links]});
+   if(path.length>=MAX_DEPTH)return;
+   for(const e of edges.get(path.at(-1))||[]){if(chains.length>=MAX_CHAINS)break;visit([...path,e.to],[...links,e]);}
+  }
+  for(let i=0;i<groups.length&&chains.length<MAX_CHAINS;i++)visit([i],[]);
+  log('CATENE_GENERATE',{totale:chains.length,due:chains.filter(c=>c.path.length===2).length,tre:chains.filter(c=>c.path.length===3).length,limite_raggiunto:chains.length>=MAX_CHAINS});
+  // Calcola una sola volta i trasferimenti base -> missione -> base.
+  // La cache road() usa gli stessi percorsi per ogni confronto.
+  const separateCache=new Map();
+  async function separateTrip(vehicle,mission){
+   const key=`${vehicle.id}:${mission.start.id}:${mission.end.id}:${mission.depart}`;
+   if(separateCache.has(key))return separateCache.get(key);
+   const to=await road(vehicle,mission.start);
+   const back=await road(mission.end,vehicle);
+   if(!to||!back){return null;} // Non memorizzare un fallimento temporaneo o per budget
+   const metres=to.metres+mission.trip.metres+back.metres;
+   const cost=Math.ceil(metres/1000*number(vehicle.euro_km)*100)/100;
+   const start=mission.depart-to.seconds*1000;
+   const end=mission.arrive+back.seconds*1000;
+   const result={metres,cost,start,end,to,back,turnOK:shiftValid(vehicle,start,end)};
+   separateCache.set(key,result);return result;
+  }
+  const results=[];const counters={combinazioni_valutate:0,capienza_o_duplicati:0,routing_incompleto:0,turno_non_compatibile:0,conflitti:0,passate:0,economicamente_negative:0,economicamente_positive:0,conflitti_non_verificabili:0};
+  const now=Date.now();
+  // Priorita alle singole: impedisce alle catene di esaurire il budget
+  // prima della valutazione base-base di ciascuna formazione.
+  log('ROUTING_PRIMA_SINGOLE',{invocazioni_leg:calls,limite:MAX_GOOGLE,cache_hit:cacheHits});
+  // Aggiunge anche le missioni singole: una ottimizzazione globale non deve
+  // costringere tutte le richieste in catene da 2 o 3 missioni.
+  const singles=[];
+  for(const v of vehicles)for(const m of missions){
+   if(m.seats>number(v.posti_totali))continue;
+   const duty=await separateTrip(v,m);
+   if(!duty)continue;
+   const revenue=fmt(m.revenue),cost=duty.cost;
+   let conflicts=[],conflictError=null;
+   try{conflicts=await findConflicts(client,number(v.id),duty.start,duty.end);}
+   catch(e){conflictError=e.message;}
+   singles.push({veicolo:number(v.id),posti:number(v.posti_totali),richieste:[m.ids],classi:[...new Set(m.requests.map(r=>r.classe))],
+    missioni:1,partenza_base:iso(duty.start),ritorno_base:iso(duty.end),
+    ha_ritorno_commerciale_candidato:false,km_totali:fmt(duty.metres/1000),
+    ricavo_euro:revenue,costo_completo_euro:cost,margine_euro:fmt(revenue-cost),
+    margine_ciclo_con_attesa_euro:fmt(revenue-cost),turni_ok:duty.turnOK,
+    conflitti:conflicts,conflitti_errore:conflictError,copertura_integrale:revenue>=cost,
+    tipo_candidato:'MISSIONE_SINGOLA'});
+  }
+  log('ROUTING_DOPO_SINGOLE',{invocazioni_leg:calls,limite:MAX_GOOGLE,cache_hit:cacheHits,
+   focus_362_27_28_29:singles.filter(r=>r.veicolo===362&&r.richieste.length===1&&r.richieste[0].join(',')==='27,28,29')
+    .map(r=>({margine:r.margine_euro,turno:r.turni_ok,conflitti:r.conflitti.length,errore:r.conflitti_errore}))});
+  for(const chain of chains){
+   for(const v of vehicles){
+    const seats=number(v.posti_totali),rate=number(v.euro_km);
+    // Valuta diverse formazioni, non soltanto quella con ricavo piu' alto.
+    let combos=[{selected:[],used:new Set(),revenue:0}];
+    for(const gi of chain.path){const next=[];
+     for(const x of combos)for(const m of groups[gi]){
+      if(m.seats>seats||m.ids.some(id=>x.used.has(id)))continue;
+      next.push({selected:[...x.selected,m],used:new Set([...x.used,...m.ids]),revenue:x.revenue+m.revenue});
+     }
+     next.sort((a,b)=>b.revenue-a.revenue);
+     combos=next.slice(0,MAX_FORMATIONS);
+     if(!combos.length)break;
+    }
+    if(!combos.length){counters.capienza_o_duplicati++;continue;}
+    const first=groups[chain.path[0]][0],last=groups[chain.path.at(-1)][0];
+    const approach=await road(v,first.start),back=await road(last.end,v);
+    if(!approach||!back){counters.routing_incompleto++;continue;}
+    const start=first.depart-approach.seconds*1000,end=last.arrive+back.seconds*1000;
+    const historical=start<=now;
+    const turnOK=shiftValid(v,start,end);
+    let conflicts=[],conflictError=null;
+    try{conflicts=await findConflicts(client,number(v.id),start,end);}catch(e){conflictError=e.message;counters.conflitti_non_verificabili++;}
+    const baseMetres=approach.metres+back.metres+chain.links.reduce((s,l)=>s+l.transfer.metres,0);
+    for(const x of combos){
+     counters.combinazioni_valutate++;
+     const separate=await Promise.all(x.selected.map(m=>separateTrip(v,m)));
+     const separateComplete=separate.every(Boolean);
+     const separateCost=separateComplete?fmt(separate.reduce((sum,z)=>sum+z.cost,0)):null;
+     const separateKm=separateComplete?fmt(separate.reduce((sum,z)=>sum+z.metres,0)/1000):null;
+     // Stesso veicolo: missioni separate potrebbero sovrapporsi per via dei rientri.
+     const separateOverlap=separateComplete&&separate.some((z,i)=>i>0&&z.start<separate[i-1].end);
+     const separateShiftOK=separateComplete&&separate.every(z=>z.turnOK);
+     const separateFuture=separateComplete&&separate.every(z=>z.start>now);
+     const separateConflicts=[];
+     let separateConflictError=null;
+     if(separateComplete){
+      try{
+       for(const z of separate){
+        const cs=await findConflicts(client,number(v.id),z.start,z.end);
+        separateConflicts.push(...cs);
+       }
+      }catch(e){separateConflictError=e.message;}
+     }
+     const commercial=x.selected.reduce((s,m)=>s+m.trip.metres,0);
+     const total=baseMetres+commercial;
+     const cost=Math.ceil(total/1000*rate*100)/100;
+     const margin=fmt(x.revenue-cost);
+     const waitHours=chain.links.reduce((sum,l)=>sum+l.wait,0)/3600000;
+     const waitCost=fmt(waitHours*COSTO_ATTESA_ORA);
+     const adjustedCost=fmt(cost+waitCost);
+     const adjustedMargin=fmt(x.revenue-adjustedCost);
+     const saving=separateComplete?fmt(separateCost-cost):null;
+     const savingKm=separateComplete?fmt(separateKm-total/1000):null;
+     const economical=x.revenue>=cost;
+     if(economical)counters.economicamente_positive++;else counters.economicamente_negative++;
+     if(historical)counters.passate++;
+     if(!turnOK)counters.turno_non_compatibile++;
+     if(conflicts.length)counters.conflitti++;
+     const reasons=[];
+     if(historical)reasons.push('PARTENZA_TRASCORSA');
+     if(!turnOK)reasons.push('TURNO_O_INATTIVITA');
+     if(conflicts.length)reasons.push('CONFLITTO_VEICOLO');
+     if(!economical)reasons.push('RICAVO_INFERIORE_COSTO_COMPLETO');
+     if(conflictError)reasons.push('CONFLITTI_NON_VERIFICABILI');
+     const ritorni=x.selected.slice(1).map((m,i)=>({
+       missione_indice:i+2,richieste:m.ids,
+       ...classifyReturn(x.selected[0],x.selected[i],m,v)
+     }));
+     const haRitorno=ritorni.some(r=>r.ritorno_candidato);
+     const commercialReturnRevenue=fmt(ritorni.filter(r=>r.ritorno_candidato).reduce((sum,r)=>sum+x.selected[r.missione_indice-1].revenue,0));
+     const deadheadBackIfOnlyFirst=await road(x.selected[0].end,v);
+     const confrontoPrimoSolo=deadheadBackIfOnlyFirst?{
+       km_rientro_vuoto_dopo_prima:fmt(deadheadBackIfOnlyFirst.metres/1000),
+       km_rientro_finale_ciclo:fmt(back.metres/1000),
+       nota:'Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo'
+     }:null;
+     const selectedIds=x.selected.flatMap(m=>m.ids);
+     const classes=[...new Set(x.selected.flatMap(m=>m.requests.map(r=>r.classe)))];
+     results.push({veicolo:number(v.id),posti:seats,richieste:x.selected.map(m=>m.ids),classi:classes,
+      missioni:x.selected.length,partenza_base:iso(start),ritorno_base:iso(end),
+      ha_ritorno_commerciale_candidato:haRitorno,missioni_ritorno:ritorni,
+      ricavo_missioni_ritorno_euro:commercialReturnRevenue,
+      confronto_rientro_vuoto:confrontoPrimoSolo,
+      attesa_minuti:chain.links.map(l=>fmt(l.wait/60000)),
+      km_avvicinamento:fmt(approach.metres/1000),km_commerciali:fmt(commercial/1000),
+      km_trasferimenti:fmt(chain.links.reduce((s,l)=>s+l.transfer.metres,0)/1000),km_ritorno:fmt(back.metres/1000),km_totali:fmt(total/1000),
+      ricavo_euro:fmt(x.revenue),costo_completo_euro:cost,margine_euro:margin,
+      costo_attesa_orario_euro:COSTO_ATTESA_ORA,costo_attesa_euro:waitCost,
+      costo_ciclo_con_attesa_euro:adjustedCost,margine_ciclo_con_attesa_euro:adjustedMargin,
+      missioni_separate_stesso_veicolo:{
+       km_totali:separateKm,costo_euro:separateCost,margine_euro:separateComplete?fmt(x.revenue-separateCost):null,
+       sovrapposizione_operativa:separateOverlap,turni_ok:separateShiftOK,
+       partenze_future:separateFuture,conflitti:separateConflicts.slice(0,8),errore_conflitti:separateConflictError,
+       dettagli:separateComplete?separate.map((z,i)=>({richieste:x.selected[i].ids,
+        partenza_base:iso(z.start),ritorno_base:iso(z.end),km:fmt(z.metres/1000),costo_euro:z.cost,
+        turno_ok:z.turnOK})):[]
+      },
+      risparmio_ciclo_vs_separate_euro:saving,
+      km_risparmiati_vs_separate:savingKm,
+      confronto_certificabile:separateComplete&&!separateOverlap&&!separateConflictError,
+      turni_ok:turnOK,conflitti:conflicts.slice(0,5),conflitti_errore:conflictError,
+      copertura_integrale:economical,esito:reasons.length?'SCARTATO_O_NON_CERTIFICABILE':'PRELIMINARE_NON_CERTIFICATO',motivi:reasons,
+      controlli_non_eseguiti:['pagamenti','qualita_individuale_e_occorrerenze','soglie_di_classe','rivalidazione_transazionale'],
+      confronto_singole:separateComplete?'CALCOLATO':'NON CALCOLABILE: routing incompleto'});
+    }
+   }
+  }
+  const optimizationCandidates=[...results.map(r=>({...r,tipo_candidato:'CATENA'})),...singles];
+  function exclusionReasons(r,mode){
+   const reasons=[];
+   if(!(Number.isFinite(r.margine_ciclo_con_attesa_euro)&&r.margine_ciclo_con_attesa_euro>0))reasons.push('MARGINE_NON_POSITIVO');
+   if(mode!=='TEORICO'){
+    if(r.conflitti_errore)reasons.push('ERRORE_VERIFICA_CONFLITTI');
+    if(r.conflitti.length)reasons.push('CONFLITTO_DB');
+   }
+   if((mode==='TURNO'||mode==='FUTURO')&&!r.turni_ok)reasons.push('TURNO_O_INATTIVITA');
+   if(mode==='FUTURO'&&ms(r.partenza_base)<=now)reasons.push('PARTENZA_TRASCORSA');
+   return reasons;
+  }
+  function candidateDiagnostics(candidates,mode){
+   const counts={};
+   const excludedPositive=[];
+   for(const r of candidates){
+    const reasons=exclusionReasons(r,mode);
+    for(const reason of reasons)counts[reason]=(counts[reason]||0)+1;
+    if(r.margine_ciclo_con_attesa_euro>0&&reasons.length){
+     excludedPositive.push({veicolo:r.veicolo,tipo:r.tipo_candidato,richieste:r.richieste,
+      margine_euro:r.margine_ciclo_con_attesa_euro,motivi:reasons,
+      conflitti:r.conflitti.slice(0,5),conflitti_errore:r.conflitti_errore});
+    }
+   }
+   return {modalita:mode,candidati_totali:candidates.length,
+    candidati_margine_positivo:candidates.filter(r=>r.margine_ciclo_con_attesa_euro>0).length,
+    candidati_ammissibili:candidates.filter(r=>exclusionReasons(r,mode).length===0).length,
+    scarti_per_motivo_non_esclusivi:counts,
+    candidati_positivi_esclusi:excludedPositive.length,
+    esempi_positivi_esclusi:excludedPositive.slice(0,15)};
+  }
+  // Exact set-packing: ogni richiesta al massimo una volta, ogni veicolo puo'
+  // effettuare piu' cicli se gli intervalli base-base non si sovrappongono.
+  // Ottimizza margine aggregato, lasciando non assegnate le richieste in perdita.
+  // Non usa come filtro la redditivita' della singola missione.
+  function optimize(candidates,mode){
+   let filtered=candidates.filter(r=>exclusionReasons(r,mode).length===0);
+   filtered.sort((a,b)=>b.margine_ciclo_con_attesa_euro-a.margine_ciclo_con_attesa_euro);
+   const truncated=filtered.length>OPT_MAX_CANDIDATES;
+   filtered=filtered.slice(0,OPT_MAX_CANDIDATES);
+   const ids=filtered.map(r=>r.richieste.flat());
+   const starts=filtered.map(r=>ms(r.partenza_base));
+   const ends=filtered.map(r=>ms(r.ritorno_base));
+   const vals=filtered.map(r=>Math.round(r.margine_ciclo_con_attesa_euro*100));
+   const conflicts=new Array(filtered.length).fill(null).map(()=>[]);
+   const byRequest=new Map(),byVehicle=new Map();
+   for(let i=0;i<filtered.length;i++){
+    for(const id of ids[i]){if(!byRequest.has(id))byRequest.set(id,[]);byRequest.get(id).push(i);}
+    const v=filtered[i].veicolo;if(!byVehicle.has(v))byVehicle.set(v,[]);byVehicle.get(v).push(i);
+   }
+   for(let i=0;i<filtered.length;i++){
+    const bad=new Set();
+    for(const id of ids[i])for(const j of byRequest.get(id)||[])if(j>i)bad.add(j);
+    for(const j of byVehicle.get(filtered[i].veicolo)||[])
+     if(j>i&&starts[i]<ends[j]&&starts[j]<ends[i])bad.add(j);
+    conflicts[i]=[...bad];
+   }
+   const suffix=new Array(filtered.length+1).fill(0);
+   for(let i=filtered.length-1;i>=0;i--)suffix[i]=suffix[i+1]+vals[i];
+   let best=0,bestIndices=[],visited=0,cut=false;
+   const forbidden=new Uint16Array(filtered.length);
+   const chosen=[];
+   function dfs(i,score){
+    if(++visited>OPT_MAX_NODES){cut=true;return;}
+    if(score>best){best=score;bestIndices=[...chosen];}
+    if(i>=filtered.length||score+suffix[i]<=best)return;
+    if(!forbidden[i]){
+     chosen.push(i);
+     for(const j of conflicts[i])forbidden[j]++;
+     dfs(i+1,score+vals[i]);
+     for(const j of conflicts[i])forbidden[j]--;
+     chosen.pop();
+    }
+    if(!cut)dfs(i+1,score);
+   }
+   dfs(0,0);
+   const selected=bestIndices.map(i=>filtered[i]);
+   const used=[...new Set(selected.flatMap(r=>r.richieste.flat()))].sort((a,b)=>a-b);
+   return {modalita:mode,ottimo_dimostrato:!cut&&!truncated&&limitHits===0&&failures===0,nodi_esplorati:visited,
+     ottimo_sul_campione:!cut&&!truncated,routing_incompleto:limitHits>0||failures>0,
+    limite_nodi_raggiunto:cut,candidati_positivi:filtered.length,candidati_tagliati:truncated,
+    margine_totale_euro:fmt(best/100),ricavo_totale_euro:fmt(selected.reduce((a,r)=>a+r.ricavo_euro,0)),
+    costo_totale_euro:fmt(selected.reduce((a,r)=>a+r.costo_completo_euro,0)),
+    cicli_selezionati:selected.length,richieste_coperte:used.length,richieste_ids:used,
+    veicoli_usati:[...new Set(selected.map(r=>r.veicolo))],
+    cicli:selected.map(r=>({veicolo:r.veicolo,tipo:r.tipo_candidato,richieste:r.richieste,
+     partenza_base:r.partenza_base,ritorno_base:r.ritorno_base,
+     ricavo_euro:r.ricavo_euro,costo_euro:r.costo_completo_euro,
+     margine_euro:r.margine_ciclo_con_attesa_euro,ritorno_candidato:r.ha_ritorno_commerciale_candidato})),
+    nota:'Ottimizzazione sul campione enumerato; non certifica pagamenti, soglie di classe, qualita o raggio operativo'};
+  }
+  // Autotest deterministico: A e B condividono richiesta, C e' indipendente;
+  // il massimo e' B+C=16, non A+C=15. Nessun DB e nessun routing.
+  const synthetic=[
+   {veicolo:1,richieste:[[9001]],partenza_base:'2030-01-01T10:00:00Z',ritorno_base:'2030-01-01T11:00:00Z',margine_ciclo_con_attesa_euro:10,ricavo_euro:20,costo_completo_euro:10,conflitti:[],conflitti_errore:null,turni_ok:true,tipo_candidato:'TEST_A'},
+   {veicolo:2,richieste:[[9001]],partenza_base:'2030-01-01T10:00:00Z',ritorno_base:'2030-01-01T11:00:00Z',margine_ciclo_con_attesa_euro:11,ricavo_euro:21,costo_completo_euro:10,conflitti:[],conflitti_errore:null,turni_ok:true,tipo_candidato:'TEST_B'},
+   {veicolo:1,richieste:[[9002]],partenza_base:'2030-01-01T11:00:00Z',ritorno_base:'2030-01-01T12:00:00Z',margine_ciclo_con_attesa_euro:5,ricavo_euro:15,costo_completo_euro:10,conflitti:[],conflitti_errore:null,turni_ok:true,tipo_candidato:'TEST_C'}
+  ];
+  const selfTest=optimize(synthetic,'TEORICO');
+  if(selfTest.margine_totale_euro!==16||selfTest.cicli_selezionati!==2||!selfTest.ottimo_sul_campione){
+   throw new Error('AUTOTEST OTTIMIZZATORE FALLITO: '+JSON.stringify(selfTest));
+  }
+  log('AUTOTEST_OTTIMIZZATORE',{esito:'OK',margine_atteso:16,margine_calcolato:selfTest.margine_totale_euro,cicli:selfTest.cicli_selezionati});
+  const modes=['TEORICO','ECONOMICO','TURNO','FUTURO'];
+  for(const mode of modes)log('DIAGNOSTICA_FILTRI_'+mode,candidateDiagnostics(optimizationCandidates,mode));
+  const optimizations=modes.map(mode=>optimize(optimizationCandidates,mode));
+  for(const o of optimizations)log('OTTIMIZZAZIONE_GLOBALE_'+o.modalita,o);
+  log('RIEPILOGO_OTTAVO_TEST_AGGIORNATO',{
+   richieste:requests.length,veicoli:vehicles.length,catene:chains.length,
+   combinazioni_catene:results.length,candidati_singoli:singles.length,
+   ritorni_candidati:results.filter(r=>r.ha_ritorno_commerciale_candidato).length,
+   risultati:optimizations.map(o=>({modalita:o.modalita,margine_euro:o.margine_totale_euro,
+    cicli:o.cicli_selezionati,richieste:o.richieste_coperte,ottimo_dimostrato:o.ottimo_dimostrato})),
+   google_chiamate:calls,google_errori:failures,google_limite_raggiunto:limitHits>0,
+   avvertenze:['TEORICO ignora turni, storicita e conflitti DB, ma rispetta vincoli interni tra richieste e veicoli: non attivabile',
+    'ECONOMICO ignora turno e storicita, ma verifica conflitti DB: scenario diagnostico, non attivabile',
+    'TURNO include turni ma ammette date passate: scenario storico',
+    'FUTURO richiede anche partenza futura: solo fattibilita preliminare',
+    'Ottimizzazione esatta solo se ottimo_dimostrato=true, entro limiti di enumerazione',
+    'Non genera nuove richieste e non sostituisce il generatore produttivo',
+    'Conflitti gia esistenti vengono esclusi; nessuna scrittura o prenotazione',
+    'Costi completi inclusivi del ritorno alla base; ricavi solo dalle richieste reali',
+    'Non verifica soglie di classe, pagamenti, qualita individuale, raggio operativo, rivalidazione transazionale']
+  });
+  results.sort((a,b)=>b.margine_euro-a.margine_euro);
+  const viable=results.filter(r=>r.copertura_integrale&&r.turni_ok&&!r.conflitti.length&&!r.conflitti_errore);
+  const future=viable.filter(r=>ms(r.partenza_base)>now);
+  log('MIGLIORI_CICLI_ECONOMICI', {totale:results.length,esempi:results.filter(r=>r.copertura_integrale).slice(0,MAX_RESULTS)});
+  log('CICLI_OPERATIVAMENTE_COMPATIBILI_PRELIMINARI',{totale:viable.length,futuri:future.length,esempi:viable.slice(0,MAX_RESULTS)});
+  const compared=results.filter(r=>r.confronto_singole==='CALCOLATO');
+  const bestSaving=compared.slice().sort((a,b)=>b.risparmio_ciclo_vs_separate_euro-a.risparmio_ciclo_vs_separate_euro);
+  log('CONFRONTO_SEPARATE_VS_CICLO',{
+   confronti_completi:compared.length,
+   cicli_con_risparmio_positivo:compared.filter(r=>r.risparmio_ciclo_vs_separate_euro>0).length,
+   cicli_con_risparmio_nullo:compared.filter(r=>r.risparmio_ciclo_vs_separate_euro===0).length,
+   cicli_con_risparmio_negativo:compared.filter(r=>r.risparmio_ciclo_vs_separate_euro<0).length,
+   missioni_separate_con_sovrapposizione:compared.filter(r=>r.missioni_separate_stesso_veicolo.sovrapposizione_operativa).length,
+   esempi:bestSaving.slice(0,Math.min(MAX_RESULTS,3))
+  });
+  const returns=results.filter(r=>r.ha_ritorno_commerciale_candidato);
+  const exact=returns.filter(r=>r.missioni_ritorno.some(z=>z.tipo==='RITORNO_INVERSO_ESATTO'));
+  const partial=returns.filter(r=>r.missioni_ritorno.some(z=>z.tipo==='RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE'));
+  const near=returns.filter(r=>r.missioni_ritorno.some(z=>z.tipo==='RITORNO_INVERSO_APPROSSIMATO'));
+  const backToBase=returns.filter(r=>r.missioni_ritorno.some(z=>z.tipo==='RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE'));
+  const profitable=returns.filter(r=>r.copertura_integrale);
+  const operational=returns.filter(r=>r.copertura_integrale&&r.turni_ok&&!r.conflitti.length&&!r.conflitti_errore&&ms(r.partenza_base)>now);
+  log('RITORNI_COMMERCIALI_CANDIDATI',{
+   combinazioni_con_ritorno:returns.length,
+   inversione_esatta:exact.length,inversione_approssimata:near.length,
+   ritorno_parziale:partial.length,riavvicinamento_alla_base:backToBase.length,
+   economicamente_positive:profitable.length,economicamente_negative:returns.length-profitable.length,
+   operativamente_preliminari_future:operational.length,
+   esempi_economicamente_positivi:profitable.slice(0,MAX_RESULTS),
+   esempi_miglior_margine:returns.slice(0,Math.min(MAX_RESULTS,3))
+  });
+  log('SCARTI_E_STATISTICHE',counters);
+  log('RIEPILOGO_SETTIMO_TEST',{richieste:requests.length,veicoli:vehicles.length,missioni:missions.length,catene:chains.length,
+   combinazioni:results.length,combinazioni_con_ritorno_candidato:returns.length,
+   ritorni_economicamente_positivi:profitable.length,
+   ritorni_operativamente_preliminari_future:operational.length,
+   con_copertura_integrale:results.filter(r=>r.copertura_integrale).length,
+   compatibili_operativamente_preliminari:viable.length,compatibili_future_preliminari:future.length,
+   confronti_separate_completi:compared.length,costo_attesa_ora_euro:COSTO_ATTESA_ORA,
+   google_chiamate:calls,google_errori:failures,google_limite_raggiunto:limitHits>0,google_richieste_oltre_limite:limitHits,
+   avvertenze:[
+    'Non certifica attivabilita: pagamenti, qualita individuale, soglie di classe e rivalidazione non verificati',
+    'Le richieste storiche non sono attivabili oggi; nessuno spostamento fittizio di date',
+    'La convenienza individuale NON e filtro: la redditivita e valutata sul ciclo completo, incluso il ritorno',
+    'Aggregazione limitata a stessa origine/destinazione e stessa partenza; non e il generatore completo del model di produzione',
+    'Capienza controllata per missione non sovrapposta; nessuna sovrapposizione passeggeri tra missioni',
+    'Attesa fra missioni valorizzata separatamente al costo orario configurabile (default zero)',
+    'Le missioni separate sono valutate sullo stesso veicolo, non su una flotta di veicoli distinti',
+    'La sovrapposizione delle missioni separate con ritorno alla base viene segnalata: un risparmio non prova fattibilita',
+    'Classi miste e nodi ripetuti non sono certificati dal percorso transazionale attuale',
+    'Raggio operativo non verificato: la semantica del campo va confermata',
+    'Ritorno commerciale classificato con euristica geografica; non certifica che la direttrice sia effettivamente di ritorno',
+    'Nessuna simulazione di prezzi aggiuntivi: i ricavi derivano solo dalle richieste gia presenti',
+    'Nessuna modifica a database, worker, frontend, pagamenti o socket'
+   ]});
+ }catch(e){console.error('[ERRORE]',e.stack||e.message);process.exitCode=1;}
+ finally{if(client){if(tx){try{await client.query('ROLLBACK');console.log('[TRANSAZIONE] ROLLBACK: nessun record modificato');}catch(e){console.error('[ERRORE ROLLBACK]',e.message);process.exitCode=1;}}client.release();}
+  try{await pool.end();}catch(e){console.error('[ERRORE POOL]',e.message);process.exitCode=1;}}
+}
+await main();

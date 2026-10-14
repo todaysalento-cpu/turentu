@@ -1,0 +1,6700 @@
+TURENTU POPBUS V2 — OTTAVO TEST OTTIMIZZAZIONE GLOBALE FLOTTA | READ ONLY
+Nessuna scrittura, nessun worker, nessuna verifica pagamento, nessun socket. Routing Google potenzialmente fatturato.
+[CONNESSIONE] {
+  "db": "corse_db",
+  "read_only": "on",
+  "now": "2026-10-13T14:21:02.326Z"
+}
+[PARAMETRI] {
+  "return_near_km": 15,
+  "return_progress_km": 10,
+  "richieste": 24,
+  "veicoli": 15,
+  "include_passate": true,
+  "max_wait_min": 180,
+  "buffer_min": 0,
+  "max_depth": 3,
+  "max_chains": 500,
+  "max_google": 150
+}
+[MISSIONI_E_COLLEGAMENTI] {
+  "missioni": 42,
+  "gruppi": 13,
+  "collegamenti_esaminati": 24,
+  "collegamenti_validi": 7,
+  "scarti_temporali": 17,
+  "routing_mancante": 0
+}
+[CATENE_GENERATE] {
+  "totale": 8,
+  "due": 7,
+  "tre": 1,
+  "limite_raggiunto": false
+}
+[ROUTING_PRIMA_SINGOLE] {
+  "invocazioni_leg": 18,
+  "limite": 150,
+  "cache_hit": 19
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_DOPO_SINGOLE] {
+  "invocazioni_leg": 111,
+  "limite": 150,
+  "cache_hit": 278,
+  "focus_362_27_28_29": [
+    {
+      "margine": 151.68,
+      "turno": true,
+      "conflitti": 0,
+      "errore": null
+    }
+  ]
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "40.6327732,17.9418724>40.6328000,17.9419000",
+  "messaggio": "Routing stradale incompleto"
+}
+[ROUTING_ERROR] {
+  "percorso": "39.9052000,18.3645000>39.9051765,18.3644653",
+  "messaggio": "Routing stradale incompleto"
+}
+[AUTOTEST_OTTIMIZZATORE] {
+  "esito": "OK",
+  "margine_atteso": 16,
+  "margine_calcolato": 16,
+  "cicli": 2
+}
+[DIAGNOSTICA_FILTRI_TEORICO] {
+  "modalita": "TEORICO",
+  "candidati_totali": 816,
+  "candidati_margine_positivo": 134,
+  "candidati_ammissibili": 134,
+  "scarti_per_motivo_non_esclusivi": {
+    "MARGINE_NON_POSITIVO": 682
+  },
+  "candidati_positivi_esclusi": 0,
+  "esempi_positivi_esclusi": []
+}
+[DIAGNOSTICA_FILTRI_ECONOMICO] {
+  "modalita": "ECONOMICO",
+  "candidati_totali": 816,
+  "candidati_margine_positivo": 134,
+  "candidati_ammissibili": 128,
+  "scarti_per_motivo_non_esclusivi": {
+    "MARGINE_NON_POSITIVO": 682,
+    "CONFLITTO_DB": 12
+  },
+  "candidati_positivi_esclusi": 6,
+  "esempi_positivi_esclusi": [
+    {
+      "veicolo": 353,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          20
+        ],
+        [
+          21
+        ]
+      ],
+      "margine_euro": 62.48,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "5"
+        }
+      ],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 353,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27,
+          29
+        ]
+      ],
+      "margine_euro": 64.67,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "6"
+        }
+      ],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 353,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          28,
+          29
+        ]
+      ],
+      "margine_euro": 64.67,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "6"
+        }
+      ],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 353,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27
+        ]
+      ],
+      "margine_euro": 0.67,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "6"
+        }
+      ],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 353,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          28
+        ]
+      ],
+      "margine_euro": 0.67,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "6"
+        }
+      ],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 353,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "margine_euro": 0.67,
+      "motivi": [
+        "CONFLITTO_DB"
+      ],
+      "conflitti": [
+        {
+          "origine": "attivazione",
+          "id": "7"
+        }
+      ],
+      "conflitti_errore": null
+    }
+  ]
+}
+[DIAGNOSTICA_FILTRI_TURNO] {
+  "modalita": "TURNO",
+  "candidati_totali": 816,
+  "candidati_margine_positivo": 134,
+  "candidati_ammissibili": 49,
+  "scarti_per_motivo_non_esclusivi": {
+    "MARGINE_NON_POSITIVO": 682,
+    "TURNO_O_INATTIVITA": 576,
+    "CONFLITTO_DB": 12
+  },
+  "candidati_positivi_esclusi": 85,
+  "esempi_positivi_esclusi": [
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 10.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 10.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 9.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    }
+  ]
+}
+[DIAGNOSTICA_FILTRI_FUTURO] {
+  "modalita": "FUTURO",
+  "candidati_totali": 816,
+  "candidati_margine_positivo": 134,
+  "candidati_ammissibili": 11,
+  "scarti_per_motivo_non_esclusivi": {
+    "MARGINE_NON_POSITIVO": 682,
+    "TURNO_O_INATTIVITA": 576,
+    "PARTENZA_TRASCORSA": 754,
+    "CONFLITTO_DB": 12
+  },
+  "candidati_positivi_esclusi": 123,
+  "esempi_positivi_esclusi": [
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 24.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 10.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 359,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 10.01,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          18
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "margine_euro": 23.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          17
+        ],
+        [
+          16
+        ]
+      ],
+      "margine_euro": 9.8,
+      "motivi": [
+        "TURNO_O_INATTIVITA",
+        "PARTENZA_TRASCORSA"
+      ],
+      "conflitti": [],
+      "conflitti_errore": null
+    }
+  ]
+}
+[OTTIMIZZAZIONE_GLOBALE_TEORICO] {
+  "modalita": "TEORICO",
+  "ottimo_dimostrato": false,
+  "nodi_esplorati": 250001,
+  "ottimo_sul_campione": false,
+  "routing_incompleto": true,
+  "limite_nodi_raggiunto": true,
+  "candidati_positivi": 134,
+  "candidati_tagliati": false,
+  "margine_totale_euro": 776.89,
+  "ricavo_totale_euro": 1873,
+  "costo_totale_euro": 1096.11,
+  "cicli_selezionati": 5,
+  "richieste_coperte": 12,
+  "richieste_ids": [
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    27,
+    28,
+    31,
+    36
+  ],
+  "veicoli_usati": [
+    362,
+    358,
+    361
+  ],
+  "cicli": [
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ]
+      ],
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T17:35:20.000Z",
+      "ricavo_euro": 513,
+      "costo_euro": 216.93,
+      "margine_euro": 296.07,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "partenza_base": "2026-10-13T11:10:02.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ricavo_euro": 372,
+      "costo_euro": 195.05,
+      "margine_euro": 176.95,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 358,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27,
+          28
+        ]
+      ],
+      "partenza_base": "2026-10-14T07:30:43.000Z",
+      "ritorno_base": "2026-10-14T12:29:04.000Z",
+      "ricavo_euro": 508,
+      "costo_euro": 337.77,
+      "margine_euro": 170.23,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          20
+        ],
+        [
+          21
+        ]
+      ],
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:02:30.000Z",
+      "ricavo_euro": 226,
+      "costo_euro": 94.17,
+      "margine_euro": 131.83,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "partenza_base": "2026-10-15T10:10:02.000Z",
+      "ritorno_base": "2026-10-15T15:14:08.000Z",
+      "ricavo_euro": 254,
+      "costo_euro": 252.19,
+      "margine_euro": 1.81,
+      "ritorno_candidato": false
+    }
+  ],
+  "nota": "Ottimizzazione sul campione enumerato; non certifica pagamenti, soglie di classe, qualita o raggio operativo"
+}
+[OTTIMIZZAZIONE_GLOBALE_ECONOMICO] {
+  "modalita": "ECONOMICO",
+  "ottimo_dimostrato": false,
+  "nodi_esplorati": 250001,
+  "ottimo_sul_campione": false,
+  "routing_incompleto": true,
+  "limite_nodi_raggiunto": true,
+  "candidati_positivi": 128,
+  "candidati_tagliati": false,
+  "margine_totale_euro": 776.89,
+  "ricavo_totale_euro": 1873,
+  "costo_totale_euro": 1096.11,
+  "cicli_selezionati": 5,
+  "richieste_coperte": 12,
+  "richieste_ids": [
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    27,
+    28,
+    31,
+    36
+  ],
+  "veicoli_usati": [
+    362,
+    358,
+    361
+  ],
+  "cicli": [
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ]
+      ],
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T17:35:20.000Z",
+      "ricavo_euro": 513,
+      "costo_euro": 216.93,
+      "margine_euro": 296.07,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "partenza_base": "2026-10-13T11:10:02.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ricavo_euro": 372,
+      "costo_euro": 195.05,
+      "margine_euro": 176.95,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 358,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27,
+          28
+        ]
+      ],
+      "partenza_base": "2026-10-14T07:30:43.000Z",
+      "ritorno_base": "2026-10-14T12:29:04.000Z",
+      "ricavo_euro": 508,
+      "costo_euro": 337.77,
+      "margine_euro": 170.23,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "CATENA",
+      "richieste": [
+        [
+          20
+        ],
+        [
+          21
+        ]
+      ],
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:02:30.000Z",
+      "ricavo_euro": 226,
+      "costo_euro": 94.17,
+      "margine_euro": 131.83,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "partenza_base": "2026-10-15T10:10:02.000Z",
+      "ritorno_base": "2026-10-15T15:14:08.000Z",
+      "ricavo_euro": 254,
+      "costo_euro": 252.19,
+      "margine_euro": 1.81,
+      "ritorno_candidato": false
+    }
+  ],
+  "nota": "Ottimizzazione sul campione enumerato; non certifica pagamenti, soglie di classe, qualita o raggio operativo"
+}
+[OTTIMIZZAZIONE_GLOBALE_TURNO] {
+  "modalita": "TURNO",
+  "ottimo_dimostrato": false,
+  "nodi_esplorati": 14197,
+  "ottimo_sul_campione": true,
+  "routing_incompleto": true,
+  "limite_nodi_raggiunto": false,
+  "candidati_positivi": 49,
+  "candidati_tagliati": false,
+  "margine_totale_euro": 709.58,
+  "ricavo_totale_euro": 1760,
+  "costo_totale_euro": 1050.42,
+  "cicli_selezionati": 5,
+  "richieste_coperte": 11,
+  "richieste_ids": [
+    17,
+    18,
+    19,
+    21,
+    22,
+    23,
+    24,
+    27,
+    28,
+    31,
+    36
+  ],
+  "veicoli_usati": [
+    362,
+    364,
+    361
+  ],
+  "cicli": [
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ]
+      ],
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T17:35:20.000Z",
+      "ricavo_euro": 513,
+      "costo_euro": 216.93,
+      "margine_euro": 296.07,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 362,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "partenza_base": "2026-10-13T11:10:02.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ricavo_euro": 372,
+      "costo_euro": 195.05,
+      "margine_euro": 176.95,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 364,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27,
+          28
+        ]
+      ],
+      "partenza_base": "2026-10-14T09:28:50.000Z",
+      "ritorno_base": "2026-10-14T14:35:20.000Z",
+      "ricavo_euro": 508,
+      "costo_euro": 338.61,
+      "margine_euro": 169.39,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          21
+        ]
+      ],
+      "partenza_base": "2026-10-13T11:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:02:30.000Z",
+      "ricavo_euro": 113,
+      "costo_euro": 47.64,
+      "margine_euro": 65.36,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "partenza_base": "2026-10-15T10:10:02.000Z",
+      "ritorno_base": "2026-10-15T15:14:08.000Z",
+      "ricavo_euro": 254,
+      "costo_euro": 252.19,
+      "margine_euro": 1.81,
+      "ritorno_candidato": false
+    }
+  ],
+  "nota": "Ottimizzazione sul campione enumerato; non certifica pagamenti, soglie di classe, qualita o raggio operativo"
+}
+[OTTIMIZZAZIONE_GLOBALE_FUTURO] {
+  "modalita": "FUTURO",
+  "ottimo_dimostrato": false,
+  "nodi_esplorati": 22,
+  "ottimo_sul_campione": true,
+  "routing_incompleto": true,
+  "limite_nodi_raggiunto": false,
+  "candidati_positivi": 11,
+  "candidati_tagliati": false,
+  "margine_totale_euro": 171.2,
+  "ricavo_totale_euro": 762,
+  "costo_totale_euro": 590.8,
+  "cicli_selezionati": 2,
+  "richieste_coperte": 3,
+  "richieste_ids": [
+    27,
+    28,
+    31
+  ],
+  "veicoli_usati": [
+    364,
+    361
+  ],
+  "cicli": [
+    {
+      "veicolo": 364,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          27,
+          28
+        ]
+      ],
+      "partenza_base": "2026-10-14T09:28:50.000Z",
+      "ritorno_base": "2026-10-14T14:35:20.000Z",
+      "ricavo_euro": 508,
+      "costo_euro": 338.61,
+      "margine_euro": 169.39,
+      "ritorno_candidato": false
+    },
+    {
+      "veicolo": 361,
+      "tipo": "MISSIONE_SINGOLA",
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "partenza_base": "2026-10-15T10:10:02.000Z",
+      "ritorno_base": "2026-10-15T15:14:08.000Z",
+      "ricavo_euro": 254,
+      "costo_euro": 252.19,
+      "margine_euro": 1.81,
+      "ritorno_candidato": false
+    }
+  ],
+  "nota": "Ottimizzazione sul campione enumerato; non certifica pagamenti, soglie di classe, qualita o raggio operativo"
+}
+[RIEPILOGO_OTTAVO_TEST_AGGIORNATO] {
+  "richieste": 24,
+  "veicoli": 15,
+  "catene": 8,
+  "combinazioni_catene": 438,
+  "candidati_singoli": 378,
+  "ritorni_candidati": 117,
+  "risultati": [
+    {
+      "modalita": "TEORICO",
+      "margine_euro": 776.89,
+      "cicli": 5,
+      "richieste": 12,
+      "ottimo_dimostrato": false
+    },
+    {
+      "modalita": "ECONOMICO",
+      "margine_euro": 776.89,
+      "cicli": 5,
+      "richieste": 12,
+      "ottimo_dimostrato": false
+    },
+    {
+      "modalita": "TURNO",
+      "margine_euro": 709.58,
+      "cicli": 5,
+      "richieste": 11,
+      "ottimo_dimostrato": false
+    },
+    {
+      "modalita": "FUTURO",
+      "margine_euro": 171.2,
+      "cicli": 2,
+      "richieste": 3,
+      "ottimo_dimostrato": false
+    }
+  ],
+  "google_chiamate": 130,
+  "google_errori": 50,
+  "google_limite_raggiunto": false,
+  "avvertenze": [
+    "TEORICO ignora turni, storicita e conflitti DB, ma rispetta vincoli interni tra richieste e veicoli: non attivabile",
+    "ECONOMICO ignora turno e storicita, ma verifica conflitti DB: scenario diagnostico, non attivabile",
+    "TURNO include turni ma ammette date passate: scenario storico",
+    "FUTURO richiede anche partenza futura: solo fattibilita preliminare",
+    "Ottimizzazione esatta solo se ottimo_dimostrato=true, entro limiti di enumerazione",
+    "Non genera nuove richieste e non sostituisce il generatore produttivo",
+    "Conflitti gia esistenti vengono esclusi; nessuna scrittura o prenotazione",
+    "Costi completi inclusivi del ritorno alla base; ricavi solo dalle richieste reali",
+    "Non verifica soglie di classe, pagamenti, qualita individuale, raggio operativo, rivalidazione transazionale"
+  ]
+}
+[MIGLIORI_CICLI_ECONOMICI] {
+  "totale": 438,
+  "esempi": [
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 372,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 485,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 208.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 208.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 210.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          14,
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:35:20.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -80.55,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 107.29,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 107.29,
+      "km_totali": 431.99,
+      "ricavo_euro": 639,
+      "costo_completo_euro": 431.99,
+      "margine_euro": 207.01,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 431.99,
+      "margine_ciclo_con_attesa_euro": 207.01,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.85,
+        "costo_euro": 433.86,
+        "margine_euro": 205.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:53:25.000Z",
+            "ritorno_base": "2026-10-12T21:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.87,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 530,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 203.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 203.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 205.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 357,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 470,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 193.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 193.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 195.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:35:20.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -80.55,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 107.29,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 107.29,
+      "km_totali": 431.99,
+      "ricavo_euro": 625,
+      "costo_completo_euro": 431.99,
+      "margine_euro": 193.01,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 431.99,
+      "margine_ciclo_con_attesa_euro": 193.01,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.85,
+        "costo_euro": 433.86,
+        "margine_euro": 191.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:53:25.000Z",
+            "ritorno_base": "2026-10-12T21:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.87,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:35:20.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -80.55,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 107.29,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 107.29,
+      "km_totali": 431.99,
+      "ricavo_euro": 625,
+      "costo_completo_euro": 431.99,
+      "margine_euro": 193.01,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 431.99,
+      "margine_ciclo_con_attesa_euro": 193.01,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.85,
+        "costo_euro": 433.86,
+        "margine_euro": 191.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:53:25.000Z",
+            "ritorno_base": "2026-10-12T21:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.87,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:35:20.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -80.55,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 107.29,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 107.29,
+      "km_totali": 431.99,
+      "ricavo_euro": 611,
+      "costo_completo_euro": 431.99,
+      "margine_euro": 179.01,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 431.99,
+      "margine_ciclo_con_attesa_euro": 179.01,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.85,
+        "costo_euro": 433.86,
+        "margine_euro": 177.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              16
+            ],
+            "partenza_base": "2026-10-12T18:53:25.000Z",
+            "ritorno_base": "2026-10-12T21:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.87,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 361,
+      "posti": 8,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          21
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:02:30.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            21
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 36.93,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": -36.88,
+          "progresso_verso_origine_km": -36.93,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        177.83
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 78.47,
+      "km_trasferimenti": 38.31,
+      "km_ritorno": 38.53,
+      "km_totali": 156.94,
+      "ricavo_euro": 226,
+      "costo_completo_euro": 94.17,
+      "margine_euro": 131.83,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 94.17,
+      "margine_ciclo_con_attesa_euro": 131.83,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 158.8,
+        "costo_euro": 95.28,
+        "margine_euro": 130.72,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 47.64,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              21
+            ],
+            "partenza_base": "2026-10-13T11:53:25.000Z",
+            "ritorno_base": "2026-10-13T13:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 47.64,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.11,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          14,
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 468,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 122.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 122.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 121.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          14,
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 468,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 122.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 122.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 121.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          14,
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 468,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 122.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 122.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 121.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          14,
+          15
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:35:20.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -80.55,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 107.29,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 107.29,
+      "km_totali": 431.99,
+      "ricavo_euro": 541,
+      "costo_completo_euro": 431.99,
+      "margine_euro": 109.01,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 431.99,
+      "margine_ciclo_con_attesa_euro": 109.01,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.85,
+        "costo_euro": 433.86,
+        "margine_euro": 107.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15
+            ],
+            "partenza_base": "2026-10-12T18:53:25.000Z",
+            "ritorno_base": "2026-10-12T21:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.87,
+      "km_risparmiati_vs_separate": 1.86,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 454,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 108.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 108.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 107.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 454,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 108.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 108.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 107.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 454,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 108.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 108.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 107.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            15,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 454,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 108.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 108.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 107.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          14,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T21:13:37.000Z",
+      "ha_ritorno_commerciale_candidato": false,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            16
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": -25.58,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 0,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 70.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 70.27,
+      "km_totali": 431.64,
+      "ricavo_euro": 454,
+      "costo_completo_euro": 345.31,
+      "margine_euro": 108.69,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 345.31,
+      "margine_ciclo_con_attesa_euro": 108.69,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 433.14,
+        "costo_euro": 346.52,
+        "margine_euro": 107.48,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              16
+            ],
+            "partenza_base": "2026-10-12T18:29:32.000Z",
+            "ritorno_base": "2026-10-12T21:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.5,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    }
+  ]
+}
+[CICLI_OPERATIVAMENTE_COMPATIBILI_PRELIMINARI] {
+  "totale": 0,
+  "futuri": 0,
+  "esempi": []
+}
+[CONFRONTO_SEPARATE_VS_CICLO] {
+  "confronti_completi": 426,
+  "cicli_con_risparmio_positivo": 395,
+  "cicli_con_risparmio_nullo": 9,
+  "cicli_con_risparmio_negativo": 22,
+  "missioni_separate_con_sovrapposizione": 82,
+  "esempi": [
+    {
+      "veicolo": 348,
+      "posti": 5,
+      "richieste": [
+        [
+          11
+        ],
+        [
+          14,
+          15
+        ]
+      ],
+      "classi": [
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T04:32:01.000Z",
+      "ritorno_base": "2026-10-13T07:02:49.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15
+          ],
+          "tipo": "RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 47.68,
+          "distanza_fine_da_origine_iniziale_km": 112.58,
+          "progresso_verso_base_km": 72.16,
+          "progresso_verso_origine_km": -63.15,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 28,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 1209.8,
+        "km_rientro_finale_ciclo": 1089.13,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        64.03
+      ],
+      "km_avvicinamento": 1218.7,
+      "km_commerciali": 112.04,
+      "km_trasferimenti": 52.28,
+      "km_ritorno": 1089.13,
+      "km_totali": 2472.16,
+      "ricavo_euro": 29,
+      "costo_completo_euro": 2224.95,
+      "margine_euro": -2195.95,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 2224.95,
+      "margine_ciclo_con_attesa_euro": -2195.95,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 4793.07,
+        "costo_euro": 4313.78,
+        "margine_euro": -4284.78,
+        "sovrapposizione_operativa": true,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              11
+            ],
+            "partenza_base": "2026-10-12T04:32:01.000Z",
+            "ritorno_base": "2026-10-13T05:09:33.000Z",
+            "km": 2432.56,
+            "costo_euro": 2189.31,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              14,
+              15
+            ],
+            "partenza_base": "2026-10-12T07:14:38.000Z",
+            "ritorno_base": "2026-10-13T07:02:49.000Z",
+            "km": 2360.52,
+            "costo_euro": 2124.47,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 2088.83,
+      "km_risparmiati_vs_separate": 2320.91,
+      "confronto_certificabile": false,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": false,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA",
+        "RICAVO_INFERIORE_COSTO_COMPLETO"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 348,
+      "posti": 5,
+      "richieste": [
+        [
+          11
+        ],
+        [
+          14
+        ]
+      ],
+      "classi": [
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T04:32:01.000Z",
+      "ritorno_base": "2026-10-13T07:02:49.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14
+          ],
+          "tipo": "RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 47.68,
+          "distanza_fine_da_origine_iniziale_km": 112.58,
+          "progresso_verso_base_km": 72.16,
+          "progresso_verso_origine_km": -63.15,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 14,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 1209.8,
+        "km_rientro_finale_ciclo": 1089.13,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        64.03
+      ],
+      "km_avvicinamento": 1218.7,
+      "km_commerciali": 112.04,
+      "km_trasferimenti": 52.28,
+      "km_ritorno": 1089.13,
+      "km_totali": 2472.16,
+      "ricavo_euro": 15,
+      "costo_completo_euro": 2224.95,
+      "margine_euro": -2209.95,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 2224.95,
+      "margine_ciclo_con_attesa_euro": -2209.95,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 4793.07,
+        "costo_euro": 4313.78,
+        "margine_euro": -4298.78,
+        "sovrapposizione_operativa": true,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              11
+            ],
+            "partenza_base": "2026-10-12T04:32:01.000Z",
+            "ritorno_base": "2026-10-13T05:09:33.000Z",
+            "km": 2432.56,
+            "costo_euro": 2189.31,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              14
+            ],
+            "partenza_base": "2026-10-12T07:14:38.000Z",
+            "ritorno_base": "2026-10-13T07:02:49.000Z",
+            "km": 2360.52,
+            "costo_euro": 2124.47,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 2088.83,
+      "km_risparmiati_vs_separate": 2320.91,
+      "confronto_certificabile": false,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": false,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA",
+        "RICAVO_INFERIORE_COSTO_COMPLETO"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 348,
+      "posti": 5,
+      "richieste": [
+        [
+          11
+        ],
+        [
+          15
+        ]
+      ],
+      "classi": [
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T04:32:01.000Z",
+      "ritorno_base": "2026-10-13T07:02:49.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            15
+          ],
+          "tipo": "RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 47.68,
+          "distanza_fine_da_origine_iniziale_km": 112.58,
+          "progresso_verso_base_km": 72.16,
+          "progresso_verso_origine_km": -63.15,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 14,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 1209.8,
+        "km_rientro_finale_ciclo": 1089.13,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        64.03
+      ],
+      "km_avvicinamento": 1218.7,
+      "km_commerciali": 112.04,
+      "km_trasferimenti": 52.28,
+      "km_ritorno": 1089.13,
+      "km_totali": 2472.16,
+      "ricavo_euro": 15,
+      "costo_completo_euro": 2224.95,
+      "margine_euro": -2209.95,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 2224.95,
+      "margine_ciclo_con_attesa_euro": -2209.95,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 4793.07,
+        "costo_euro": 4313.78,
+        "margine_euro": -4298.78,
+        "sovrapposizione_operativa": true,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              11
+            ],
+            "partenza_base": "2026-10-12T04:32:01.000Z",
+            "ritorno_base": "2026-10-13T05:09:33.000Z",
+            "km": 2432.56,
+            "costo_euro": 2189.31,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              15
+            ],
+            "partenza_base": "2026-10-12T07:14:38.000Z",
+            "ritorno_base": "2026-10-13T07:02:49.000Z",
+            "km": 2360.52,
+            "costo_euro": 2124.47,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 2088.83,
+      "km_risparmiati_vs_separate": 2320.91,
+      "confronto_certificabile": false,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": false,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA",
+        "RICAVO_INFERIORE_COSTO_COMPLETO"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    }
+  ]
+}
+[RITORNI_COMMERCIALI_CANDIDATI] {
+  "combinazioni_con_ritorno": 117,
+  "inversione_esatta": 0,
+  "inversione_approssimata": 0,
+  "ritorno_parziale": 80,
+  "riavvicinamento_alla_base": 39,
+  "economicamente_positive": 22,
+  "economicamente_negative": 95,
+  "operativamente_preliminari_future": 0,
+  "esempi_economicamente_positivi": [
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 372,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 485,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 208.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 208.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 210.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 530,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 203.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 203.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 205.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 357,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 470,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 193.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 193.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 195.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 364,
+      "posti": 16,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:28:13.000Z",
+      "ritorno_base": "2026-10-12T21:29:53.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.47,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 139.04,
+        "km_rientro_finale_ciclo": 0.39,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 31.21,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 0.39,
+      "km_totali": 326.44,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 261.16,
+      "margine_euro": 97.84,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 261.16,
+      "margine_ciclo_con_attesa_euro": 97.84,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 327.5,
+        "costo_euro": 262.01,
+        "margine_euro": 96.99,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:28:13.000Z",
+            "ritorno_base": "2026-10-12T17:56:32.000Z",
+            "km": 278.25,
+            "costo_euro": 222.61,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:31:02.000Z",
+            "ritorno_base": "2026-10-12T21:29:53.000Z",
+            "km": 49.25,
+            "costo_euro": 39.4,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 0.85,
+      "km_risparmiati_vs_separate": 1.06,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 253,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 366,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 89.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 89.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 91.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          24,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            24,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 253,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 366,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 89.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 89.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 91.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              24,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          23,
+          24,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            23,
+            24,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 253,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 366,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 89.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 89.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 91.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              23,
+              24,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 238,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 351,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 74.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 74.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 76.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          24
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            24
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 238,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 351,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 74.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 74.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 76.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              24
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          23,
+          24
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            23,
+            24
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 238,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 351,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 74.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 74.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 76.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              23,
+              24
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T22:22:42.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 20.99,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 72.55,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 72.55,
+      "km_totali": 405.69,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 324.56,
+      "margine_euro": 34.44,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 324.56,
+      "margine_ciclo_con_attesa_euro": 34.44,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 407.2,
+        "costo_euro": 325.77,
+        "margine_euro": 33.23,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T19:46:55.000Z",
+            "ritorno_base": "2026-10-12T22:22:42.000Z",
+            "km": 190.63,
+            "costo_euro": 152.51,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.51,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T22:22:42.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 20.99,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 72.55,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 72.55,
+      "km_totali": 405.69,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 324.56,
+      "margine_euro": 34.44,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 324.56,
+      "margine_ciclo_con_attesa_euro": 34.44,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 407.2,
+        "costo_euro": 325.77,
+        "margine_euro": 33.23,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T19:46:55.000Z",
+            "ritorno_base": "2026-10-12T22:22:42.000Z",
+            "km": 190.63,
+            "costo_euro": 152.51,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.51,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 360,
+      "posti": 16,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:29:32.000Z",
+      "ritorno_base": "2026-10-12T22:22:42.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 20.99,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 70.27,
+        "km_rientro_finale_ciclo": 72.55,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 38.31,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 72.55,
+      "km_totali": 405.69,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 324.56,
+      "margine_euro": 34.44,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 324.56,
+      "margine_ciclo_con_attesa_euro": 34.44,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 407.2,
+        "costo_euro": 325.77,
+        "margine_euro": 33.23,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:29:32.000Z",
+            "ritorno_base": "2026-10-12T17:13:37.000Z",
+            "km": 216.57,
+            "costo_euro": 173.26,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T19:46:55.000Z",
+            "ritorno_base": "2026-10-12T22:22:42.000Z",
+            "km": 190.63,
+            "costo_euro": 152.51,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 1.21,
+      "km_risparmiati_vs_separate": 1.51,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 32.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 32.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 34.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 32.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 32.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 34.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 359,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 32.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 32.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 34.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 361,
+      "posti": 8,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          21
+        ],
+        [
+          37
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 3,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T15:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            21
+          ],
+          "tipo": "NESSUN_RITORNO_RICONOSCIUTO",
+          "ritorno_candidato": false,
+          "distanza_inizio_da_fine_precedente_km": 36.93,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": -36.88,
+          "progresso_verso_origine_km": -36.93,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        },
+        {
+          "missione_indice": 3,
+          "richieste": [
+            37
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 15,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        177.83,
+        13.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 177.84,
+      "km_trasferimenti": 135.87,
+      "km_ritorno": 38.53,
+      "km_totali": 353.88,
+      "ricavo_euro": 241,
+      "costo_completo_euro": 212.33,
+      "margine_euro": 28.67,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 212.33,
+      "margine_ciclo_con_attesa_euro": 28.67,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 353.85,
+        "costo_euro": 212.31,
+        "margine_euro": 28.69,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 47.64,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              21
+            ],
+            "partenza_base": "2026-10-13T11:53:25.000Z",
+            "ritorno_base": "2026-10-13T13:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 47.64,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              37
+            ],
+            "partenza_base": "2026-10-13T13:10:02.000Z",
+            "ritorno_base": "2026-10-13T15:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 117.03,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -0.02,
+      "km_risparmiati_vs_separate": -0.02,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 358,
+      "posti": 16,
+      "richieste": [
+        [
+          17,
+          18
+        ],
+        [
+          14,
+          15,
+          16
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T13:15:32.000Z",
+      "ritorno_base": "2026-10-12T21:33:50.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            14,
+            15,
+            16
+          ],
+          "tipo": "RIAVVICINAMENTO_COMMERCIALE_ALLA_BASE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 80.67,
+          "distanza_fine_da_origine_iniziale_km": 80.67,
+          "progresso_verso_base_km": 60.48,
+          "progresso_verso_origine_km": -80.67,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 126,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 94.27,
+        "km_rientro_finale_ciclo": 94.27,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        85.27
+      ],
+      "km_avvicinamento": 152.62,
+      "km_commerciali": 215.98,
+      "km_trasferimenti": 107.07,
+      "km_ritorno": 94.27,
+      "km_totali": 569.94,
+      "ricavo_euro": 468,
+      "costo_completo_euro": 455.96,
+      "margine_euro": 12.04,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 455.96,
+      "margine_ciclo_con_attesa_euro": 12.04,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 709.76,
+        "costo_euro": 567.82,
+        "margine_euro": -99.82,
+        "sovrapposizione_operativa": true,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18
+            ],
+            "partenza_base": "2026-10-12T13:15:32.000Z",
+            "ritorno_base": "2026-10-12T17:33:50.000Z",
+            "km": 354.88,
+            "costo_euro": 283.91,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              14,
+              15,
+              16
+            ],
+            "partenza_base": "2026-10-12T17:15:32.000Z",
+            "ritorno_base": "2026-10-12T21:33:50.000Z",
+            "km": 354.88,
+            "costo_euro": 283.91,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": 111.86,
+      "km_risparmiati_vs_separate": 139.82,
+      "confronto_certificabile": false,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    }
+  ],
+  "esempi_miglior_margine": [
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24,
+          36
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24,
+            36
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 372,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 485,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 208.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 208.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 210.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24,
+              36
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          17,
+          18,
+          19
+        ],
+        [
+          13
+        ]
+      ],
+      "classi": [
+        "EXPRESS",
+        "SAVER"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-12T14:53:25.000Z",
+      "ritorno_base": "2026-10-12T21:56:04.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            13
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 112.58,
+          "distanza_fine_da_origine_iniziale_km": 28.08,
+          "progresso_verso_base_km": 21.35,
+          "progresso_verso_origine_km": 21.35,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 17,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 107.29,
+        "km_rientro_finale_ciclo": 30.26,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        162.65
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 132.45,
+      "km_trasferimenti": 162.39,
+      "km_ritorno": 30.26,
+      "km_totali": 326.74,
+      "ricavo_euro": 530,
+      "costo_completo_euro": 326.74,
+      "margine_euro": 203.26,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 326.74,
+      "margine_ciclo_con_attesa_euro": 203.26,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 324.85,
+        "costo_euro": 324.86,
+        "margine_euro": 205.14,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              17,
+              18,
+              19
+            ],
+            "partenza_base": "2026-10-12T14:53:25.000Z",
+            "ritorno_base": "2026-10-12T17:35:20.000Z",
+            "km": 216.92,
+            "costo_euro": 216.93,
+            "turno_ok": true
+          },
+          {
+            "richieste": [
+              13
+            ],
+            "partenza_base": "2026-10-12T20:12:02.000Z",
+            "ritorno_base": "2026-10-12T21:56:04.000Z",
+            "km": 107.93,
+            "costo_euro": 107.93,
+            "turno_ok": false
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.89,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    },
+    {
+      "veicolo": 362,
+      "posti": 30,
+      "richieste": [
+        [
+          20
+        ],
+        [
+          22,
+          23,
+          24
+        ]
+      ],
+      "classi": [
+        "EXPRESS"
+      ],
+      "missioni": 2,
+      "partenza_base": "2026-10-13T07:53:25.000Z",
+      "ritorno_base": "2026-10-13T13:48:00.000Z",
+      "ha_ritorno_commerciale_candidato": true,
+      "missioni_ritorno": [
+        {
+          "missione_indice": 2,
+          "richieste": [
+            22,
+            23,
+            24
+          ],
+          "tipo": "RITORNO_PARZIALE_VERSO_BASE_E_ORIGINE",
+          "ritorno_candidato": true,
+          "distanza_inizio_da_fine_precedente_km": 88.49,
+          "distanza_fine_da_origine_iniziale_km": 36.93,
+          "progresso_verso_base_km": 15.21,
+          "progresso_verso_origine_km": 15.31,
+          "nota": "Classificazione euristica geografica, NON certifica coincidenza direttrice o percorso di ritorno"
+        }
+      ],
+      "ricavo_missioni_ritorno_euro": 357,
+      "confronto_rientro_vuoto": {
+        "km_rientro_vuoto_dopo_prima": 38.53,
+        "km_rientro_finale_ciclo": 38.53,
+        "nota": "Confronto delle sole tratte di ritorno; NON e risparmio netto dell intero ciclo"
+      },
+      "attesa_minuti": [
+        133.02
+      ],
+      "km_avvicinamento": 1.64,
+      "km_commerciali": 138.61,
+      "km_trasferimenti": 97.56,
+      "km_ritorno": 38.53,
+      "km_totali": 276.33,
+      "ricavo_euro": 470,
+      "costo_completo_euro": 276.34,
+      "margine_euro": 193.66,
+      "costo_attesa_orario_euro": 0,
+      "costo_attesa_euro": 0,
+      "costo_ciclo_con_attesa_euro": 276.34,
+      "margine_ciclo_con_attesa_euro": 193.66,
+      "missioni_separate_stesso_veicolo": {
+        "km_totali": 274.45,
+        "costo_euro": 274.46,
+        "margine_euro": 195.54,
+        "sovrapposizione_operativa": false,
+        "turni_ok": false,
+        "partenze_future": false,
+        "conflitti": [],
+        "errore_conflitti": null,
+        "dettagli": [
+          {
+            "richieste": [
+              20
+            ],
+            "partenza_base": "2026-10-13T07:53:25.000Z",
+            "ritorno_base": "2026-10-13T09:02:30.000Z",
+            "km": 79.4,
+            "costo_euro": 79.41,
+            "turno_ok": false
+          },
+          {
+            "richieste": [
+              22,
+              23,
+              24
+            ],
+            "partenza_base": "2026-10-13T11:10:02.000Z",
+            "ritorno_base": "2026-10-13T13:48:00.000Z",
+            "km": 195.05,
+            "costo_euro": 195.05,
+            "turno_ok": true
+          }
+        ]
+      },
+      "risparmio_ciclo_vs_separate_euro": -1.88,
+      "km_risparmiati_vs_separate": -1.88,
+      "confronto_certificabile": true,
+      "turni_ok": false,
+      "conflitti": [],
+      "conflitti_errore": null,
+      "copertura_integrale": true,
+      "esito": "SCARTATO_O_NON_CERTIFICABILE",
+      "motivi": [
+        "PARTENZA_TRASCORSA",
+        "TURNO_O_INATTIVITA"
+      ],
+      "controlli_non_eseguiti": [
+        "pagamenti",
+        "qualita_individuale_e_occorrerenze",
+        "soglie_di_classe",
+        "rivalidazione_transazionale"
+      ],
+      "confronto_singole": "CALCOLATO"
+    }
+  ]
+}
+[SCARTI_E_STATISTICHE] {
+  "combinazioni_valutate": 438,
+  "capienza_o_duplicati": 24,
+  "routing_incompleto": 7,
+  "turno_non_compatibile": 428,
+  "conflitti": 3,
+  "passate": 438,
+  "economicamente_negative": 365,
+  "economicamente_positive": 73,
+  "conflitti_non_verificabili": 0
+}
+[RIEPILOGO_SETTIMO_TEST] {
+  "richieste": 24,
+  "veicoli": 15,
+  "missioni": 42,
+  "catene": 8,
+  "combinazioni": 438,
+  "combinazioni_con_ritorno_candidato": 117,
+  "ritorni_economicamente_positivi": 22,
+  "ritorni_operativamente_preliminari_future": 0,
+  "con_copertura_integrale": 73,
+  "compatibili_operativamente_preliminari": 0,
+  "compatibili_future_preliminari": 0,
+  "confronti_separate_completi": 426,
+  "costo_attesa_ora_euro": 0,
+  "google_chiamate": 130,
+  "google_errori": 50,
+  "google_limite_raggiunto": false,
+  "google_richieste_oltre_limite": 0,
+  "avvertenze": [
+    "Non certifica attivabilita: pagamenti, qualita individuale, soglie di classe e rivalidazione non verificati",
+    "Le richieste storiche non sono attivabili oggi; nessuno spostamento fittizio di date",
+    "La convenienza individuale NON e filtro: la redditivita e valutata sul ciclo completo, incluso il ritorno",
+    "Aggregazione limitata a stessa origine/destinazione e stessa partenza; non e il generatore completo del model di produzione",
+    "Capienza controllata per missione non sovrapposta; nessuna sovrapposizione passeggeri tra missioni",
+    "Attesa fra missioni valorizzata separatamente al costo orario configurabile (default zero)",
+    "Le missioni separate sono valutate sullo stesso veicolo, non su una flotta di veicoli distinti",
+    "La sovrapposizione delle missioni separate con ritorno alla base viene segnalata: un risparmio non prova fattibilita",
+    "Classi miste e nodi ripetuti non sono certificati dal percorso transazionale attuale",
+    "Raggio operativo non verificato: la semantica del campo va confermata",
+    "Ritorno commerciale classificato con euristica geografica; non certifica che la direttrice sia effettivamente di ritorno",
+    "Nessuna simulazione di prezzi aggiuntivi: i ricavi derivano solo dalle richieste gia presenti",
+    "Nessuna modifica a database, worker, frontend, pagamenti o socket"
+  ]
+}
+[TRANSAZIONE] ROLLBACK: nessun record modificato

@@ -1,37 +1,87 @@
+// ============================================================
+// TURENTU POPBUS V2 — MODEL
+// Candidate, aggregazione, qualità individuale, selezione.
+// Nessuna modifica al database. Nessuna gestione nuovi nodi.
+// ============================================================
+
 export const TOLLERANZA_MS = 30 * 60000;
-const key = nodes => nodes.map(Number).join(':');
 const MAX_SUBSETS = 500;
 const EPS = 1e-8;
-
+const key = nodes => nodes.map(Number).join(':');
 const requestId = r => Number(r.id);
 const requestClass = r => String(r.classe || 'STANDARD').trim().toUpperCase();
 
-// Candidate basate su richieste reali e concatenazioni dirette.
-// Ogni richiesta singola rimane una candidata indipendente.
+// VALORI INIZIALI DI PROGETTO: da calibrare con test reali.
+// La classe di percorrenza NON coincide con la classe commerciale
+// (EXPRESS / STANDARD / SAVER).
+export const QUALITA_PERCORRENZA = Object.freeze({
+  BASSA: Object.freeze({ maxFermate: 10, minKmTraFermate: 2, maxDeviazionePct: 30 }),
+  MEDIA: Object.freeze({ maxFermate: 5, minKmTraFermate: 10, maxDeviazionePct: 20 }),
+  LUNGA: Object.freeze({ maxFermate: 2, minKmTraFermate: 35, maxDeviazionePct: 10 })
+});
+
+export const SOGLIE_PERCORRENZA_KM = Object.freeze({ bassaMax: 40, mediaMax: 150 });
+
+function validId(v) { return Number.isSafeInteger(Number(v)) && Number(v) > 0; }
+function validNode(v) { return Number.isSafeInteger(Number(v)); }
+function uniqueIds(ids) { return [...new Set(ids.map(Number))]; }
+
+// La distanza diretta è opzionale: se manca, la classe può essere
+// esplicitamente salvata sulla richiesta oppure derivata dalla lunghezza
+// della tratta sul piano corrente (stima conservativa, NON distanza diretta).
+function directKm(r) {
+  for (const v of [r.distanza_diretta_km, r.distanzaKmDiretta, r.distanza_km_diretta]) {
+    if (v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0) return Number(v);
+  }
+  return null;
+}
+function explicitDistanceClass(r) {
+  const v = String(r.classe_percorrenza || r.tipo_percorrenza || '').trim().toUpperCase();
+  return ['BASSA', 'MEDIA', 'LUNGA'].includes(v) ? v : null;
+}
+export function classePercorrenza(r, kmPercorso = null, soglie = SOGLIE_PERCORRENZA_KM) {
+  const explicit = explicitDistanceClass(r);
+  if (explicit) return explicit;
+  const km = directKm(r) ?? kmPercorso;
+  if (!Number.isFinite(km) || km <= 0) return null;
+  if (km < soglie.bassaMax) return 'BASSA';
+  if (km <= soglie.mediaMax) return 'MEDIA';
+  return 'LUNGA';
+}
+
+// Ogni richiesta resta disponibile in TUTTE le candidate compatibili.
+// Una richiesta di ritorno non viene mai marchiata come tale.
+// La classe commerciale del candidato è quella del primo seed:
+// i seed successivi possono avere classi commerciali differenti.
+// Il worker NON deve più filtrare le richieste con r.classe === c.classe
+// quando si desiderano candidate miste.
 export function generaCandidate(requests, maxCandidate = 500) {
   const candidates = new Map();
   const queue = [];
+  const limit = Number(maxCandidate);
+  if (!Number.isSafeInteger(limit) || limit <= 0) throw new Error('maxCandidate non valido');
+
   function add(nodes, seeds, classe) {
     if (new Set(nodes).size !== nodes.length) return;
-    const uniqueSeeds = [...new Set(seeds.map(Number))];
+    const uniqueSeeds = uniqueIds(seeds);
     const k = `${classe}|${key(nodes)}|${uniqueSeeds.slice().sort((a, b) => a - b).join(',')}`;
     if (candidates.has(k)) return;
-    if (candidates.size >= maxCandidate) throw new Error(`Limite ${maxCandidate} candidate: dividere il batch`);
+    if (candidates.size >= limit) throw new Error(`Limite ${limit} candidate: dividere il batch`);
     const c = { nodes, seeds: uniqueSeeds, classe };
     candidates.set(k, c);
     queue.push(c);
   }
+
   const valid = requests.filter(r =>
-    Number.isInteger(requestId(r)) &&
-    Number.isInteger(Number(r.start_node_id)) &&
-    Number.isInteger(Number(r.end_node_id)) &&
+    validId(r.id) && validNode(r.start_node_id) && validNode(r.end_node_id) &&
     Number(r.start_node_id) !== Number(r.end_node_id)
   );
   for (const r of valid) add([Number(r.start_node_id), Number(r.end_node_id)], [requestId(r)], requestClass(r));
+
   for (let i = 0; i < queue.length; i++) {
     const c = queue[i];
     for (const r of valid) {
-      if (requestClass(r) === c.classe && Number(r.start_node_id) === c.nodes.at(-1) && !c.seeds.includes(requestId(r))) {
+      if (Number(r.start_node_id) === c.nodes.at(-1) && !c.seeds.includes(requestId(r))) {
         add([...c.nodes, Number(r.end_node_id)], [...c.seeds, requestId(r)], c.classe);
       }
     }
@@ -39,23 +89,114 @@ export function generaCandidate(requests, maxCandidate = 500) {
   return [...candidates.values()];
 }
 
-// options:
-//   mode: 'greedy' (default, compatibile con il worker esistente)
-//       oppure 'seeds_only' (valuta soltanto le richieste indicate)
-//   includeIds: elenco esplicito di richieste da valutare insieme ai seeds
-//   maxPeak: capienza fisica massima durante l'aggregazione greedy
-//   excludeIds: richieste da non aggregare
-// Nessuna richiesta viene divisa tra veicoli.
+function buildGeometry(plan) {
+  if (!Array.isArray(plan?.nodes) || !Array.isArray(plan?.legs) ||
+      plan.nodes.length < 2 || plan.legs.length !== plan.nodes.length - 1) {
+    throw new Error('Piano incoerente');
+  }
+  const times = [0];
+  const metres = [0];
+  for (const leg of plan.legs) {
+    const normal = Number.isFinite(leg.seconds) && leg.seconds > 0 &&
+      Number.isFinite(leg.metres) && leg.metres > 0;
+    const verifiedCoincident = leg.roadCoincident === true &&
+      leg.seconds === 0 && leg.metres === 0;
+    if (!normal && !verifiedCoincident) {
+      throw new Error('Routing non valido');
+    }
+    times.push(times.at(-1) + leg.seconds * 1000);
+    metres.push(metres.at(-1) + leg.metres);
+  }
+  return { times, metres };
+}
+
+function qualityLimits(r, percorsoKm, options) {
+  const config = options.qualityConfig || QUALITA_PERCORRENZA;
+  const classe = classePercorrenza(r, percorsoKm, options.sogliePercorrenza || SOGLIE_PERCORRENZA_KM);
+  if (!classe || !config[classe]) return null;
+  const defaults = config[classe];
+  const override = (value, fallback) => value == null ? fallback : Number(value);
+  return {
+    classe,
+    maxFermate: override(r.max_fermate_intermedie, defaults.maxFermate),
+    minKmTraFermate: override(r.min_km_tra_fermate, defaults.minKmTraFermate),
+    maxDeviazionePct: override(r.max_deviazione_pct, defaults.maxDeviazionePct),
+    maxRitardoMinuti: r.max_ritardo_minuti == null ? null : Number(r.max_ritardo_minuti)
+  };
+}
+
+// Fermate commerciali = nodi di salita/discesa delle richieste
+// effettivamente selezionate; i nodi di transito NON sono fermate.
+// Il controllo avviene per ogni passeggero fra salita e discesa.
+// Una distanza diretta assente NON viene inventata: il vincolo
+// percentuale di deviazione viene verificato solo quando disponibile.
+export function verificaQualitaRichieste(plan, requests, options = {}) {
+  if (options.qualityEnabled === false) return { ok: true, dettagli: [] };
+  const { metres, times } = buildGeometry(plan);
+  const index = new Map(plan.nodes.map((id, i) => [Number(id), i]));
+  // Il modello attuale richiede nodi unici; i cicli con nodi ripetuti
+  // richiederanno occorrenze di fermata e non sono ancora supportati.
+  if (index.size !== plan.nodes.length) return { ok: false, motivo: 'NODI_RIPETUTI' };
+
+  const selected = [];
+  for (const r of requests) {
+    const s = index.get(Number(r.start_node_id));
+    const e = index.get(Number(r.end_node_id));
+    if (s == null || e == null || s >= e) return { ok: false, motivo: 'TRATTA_NON_PRESENTE', richiestaId: requestId(r) };
+    selected.push({ r, s, e });
+  }
+  const stops = new Set(selected.flatMap(x => [x.s, x.e]));
+  const dettagli = [];
+  for (const x of selected) {
+    const percorsoKm = (metres[x.e] - metres[x.s]) / 1000;
+    // Una richiesta passeggeri con viaggio interamente nullo non è certificabile.
+    if (percorsoKm <= 0) return { ok: false, motivo: 'TRATTA_PASSEGGERO_ZERO', richiestaId: requestId(x.r) };
+    const limits = qualityLimits(x.r, percorsoKm, options);
+    if (!limits) return { ok: false, motivo: 'CLASSE_PERCORRENZA_NON_DETERMINABILE', richiestaId: requestId(x.r) };
+    if (![limits.maxFermate, limits.minKmTraFermate, limits.maxDeviazionePct].every(Number.isFinite) ||
+        limits.maxFermate < 0 || limits.minKmTraFermate < 0 || limits.maxDeviazionePct < 0 ||
+        (limits.maxRitardoMinuti != null && (!Number.isFinite(limits.maxRitardoMinuti) || limits.maxRitardoMinuti < 0))) {
+      return { ok: false, motivo: 'CONFIG_QUALITA_NON_VALIDA', richiestaId: requestId(x.r) };
+    }
+    const intermediate = [...stops].filter(i => i > x.s && i < x.e).sort((a, b) => a - b);
+    if (intermediate.length > limits.maxFermate) {
+      return { ok: false, motivo: 'TROPPE_FERMATE', richiestaId: requestId(x.r), fermate: intermediate.length, massimo: limits.maxFermate };
+    }
+    // Distanza minima fra fermate commerciali consecutive durante il viaggio,
+    // inclusi salita e discesa; non fra nodi puramente geometrici.
+    const sequence = [x.s, ...intermediate, x.e];
+    for (let j = 1; j < sequence.length; j++) {
+      const km = (metres[sequence[j]] - metres[sequence[j - 1]]) / 1000;
+      // Se non vi sono fermate intermedie, non penalizziamo una tratta
+      // breve solo perché inferiore alla distanza minima della classe.
+      if (intermediate.length && km + EPS < limits.minKmTraFermate) {
+        return { ok: false, motivo: 'FERMATE_TROPPO_VICINE', richiestaId: requestId(x.r), km, minimoKm: limits.minKmTraFermate };
+      }
+    }
+    const direttoKm = directKm(x.r);
+    if (direttoKm != null && percorsoKm > direttoKm * (1 + limits.maxDeviazionePct / 100) + EPS) {
+      return { ok: false, motivo: 'DEVIAZIONE_ECCESSIVA', richiestaId: requestId(x.r), percorsoKm, direttoKm };
+    }
+    // Tempo diretto disponibile soltanto se esplicitamente presente.
+    const directSeconds = Number(x.r.tempo_diretto_secondi);
+    if (limits.maxRitardoMinuti != null && x.r.tempo_diretto_secondi != null &&
+        Number.isFinite(directSeconds) && directSeconds > 0 &&
+        (times[x.e] - times[x.s]) / 1000 > directSeconds + limits.maxRitardoMinuti * 60) {
+      return { ok: false, motivo: 'RITARDO_ECCESSIVO', richiestaId: requestId(x.r) };
+    }
+    dettagli.push({ richiestaId: requestId(x.r), classe: limits.classe, fermateIntermedie: intermediate.length, percorsoKm });
+  }
+  return { ok: true, dettagli };
+}
+
+// options: mode ('greedy' | 'seeds_only'), includeIds, excludeIds,
+// maxPeak, qualityEnabled, qualityConfig, sogliePercorrenza.
+// I limiti di qualità vengono verificati su TUTTE le richieste già
+// selezionate ogni volta che si prova ad aggiungerne una nuova.
 export function valutaRichieste(plan, requests, seeds, options = {}) {
   const index = new Map(plan.nodes.map((id, i) => [Number(id), i]));
   if (index.size !== plan.nodes.length) return null;
-  const times = [0];
-  for (const segment of plan.legs) {
-    if (!Number.isFinite(segment.seconds) || segment.seconds <= 0 ||
-        !Number.isFinite(segment.metres) || segment.metres <= 0) throw new Error('Routing non valido');
-    times.push(times.at(-1) + segment.seconds * 1000);
-  }
-  if (times.length !== plan.nodes.length) throw new Error('Piano incoerente');
+  const { times } = buildGeometry(plan);
 
   const eligible = requests.map(r => {
     const s = index.get(Number(r.start_node_id));
@@ -63,7 +204,8 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
     const date = new Date(r.start_datetime).getTime();
     const posti = Number(r.posti_richiesti);
     const prezzo = Number(r.prezzo);
-    if (s == null || e == null || s >= e || !Number.isFinite(date) ||
+    if (!validId(r.id) || s == null || e == null || s >= e ||
+        plan.legs.slice(s, e).every(l => l.roadCoincident === true) || !Number.isFinite(date) ||
         !Number.isInteger(posti) || posti <= 0 || r.prezzo == null ||
         !Number.isFinite(prezzo) || prezzo < 0) return null;
     const base = date - times[s];
@@ -71,11 +213,10 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
   }).filter(Boolean);
 
   const byId = new Map(eligible.map(x => [requestId(x.r), x]));
-  const requiredIds = [...new Set([...(seeds || []), ...(options.includeIds || [])].map(Number))];
+  const requiredIds = uniqueIds([...(seeds || []), ...(options.includeIds || [])]);
   const excluded = new Set((options.excludeIds || []).map(Number));
   const maxPeak = options.maxPeak == null ? Infinity : Number(options.maxPeak);
-  if (maxPeak <= 0 || Number.isNaN(maxPeak)) return null;
-  if (requiredIds.some(id => excluded.has(id))) return null;
+  if (maxPeak <= 0 || Number.isNaN(maxPeak) || requiredIds.some(id => excluded.has(id))) return null;
 
   let lower = -Infinity;
   let upper = Infinity;
@@ -90,7 +231,7 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
     for (let i = x.s; i < x.e; i++) {
       if (occupancy[i] + Number(x.r.posti_richiesti) > maxPeak) return false;
     }
-    return true;
+    return verificaQualitaRichieste(plan, [...selected.map(v => v.r), x.r], options).ok;
   }
   function add(x) {
     lower = Math.max(lower, x.lower);
@@ -105,12 +246,10 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
     if (!x || !canAdd(x)) return null;
     add(x);
   }
-
   if (options.mode !== 'seeds_only') {
     for (const x of eligible.sort((a, b) => requestId(a.r) - requestId(b.r))) {
       const id = requestId(x.r);
-      if (selectedIds.has(id) || excluded.has(id)) continue;
-      if (canAdd(x)) add(x);
+      if (!selectedIds.has(id) && !excluded.has(id) && canAdd(x)) add(x);
     }
   }
   if (!selected.length) return null;
@@ -123,40 +262,32 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
     occupancy,
     peak: Math.max(0, ...occupancy),
     revenue: selected.reduce((sum, x) => sum + Math.round(Number(x.r.prezzo) * 100), 0) / 100,
-    requests: selected.map(x => ({ id: requestId(x.r), start: x.s, end: x.e }))
+    requests: selected.map(x => ({ id: requestId(x.r), start: x.s, end: x.e })),
+    qualita: verificaQualitaRichieste(plan, selected.map(x => x.r), options).dettagli
   };
 }
 
-// Genera alternative di aggregazione per una candidata e un piano già calcolato.
-// Mantiene obbligatori i seeds, e considera gruppi aggiuntivi in modo limitato.
-// Il worker deve chiamare questa funzione e poi associare ogni alternativa ai veicoli.
 export function generaFormazioniAlternative(plan, requests, seeds, options = {}) {
   const limit = Math.min(Math.max(1, Number(options.maxFormazioni) || 100), MAX_SUBSETS);
-  const base = valutaRichieste(plan, requests, seeds, { mode: 'seeds_only' });
+  const opts = { ...options };
+  const base = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'seeds_only' });
   if (!base) return [];
-  const eligible = valutaRichieste(plan, requests, seeds, { mode: 'greedy' });
-  const ids = (eligible?.requests || [])
-    .map(r => r.id)
-    .filter(id => !seeds.map(Number).includes(id));
+  const eligible = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'greedy' });
+  const seedSet = new Set(seeds.map(Number));
+  const ids = (eligible?.requests || []).map(r => r.id).filter(id => !seedSet.has(id));
   const alternatives = new Map();
   function record(extraIds) {
-    const evaluation = valutaRichieste(plan, requests, seeds, {
-      mode: 'seeds_only', includeIds: extraIds
-    });
+    const evaluation = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'seeds_only', includeIds: extraIds });
     if (!evaluation) return;
     const k = evaluation.requests.map(r => r.id).sort((a, b) => a - b).join(',');
     if (!alternatives.has(k)) alternatives.set(k, evaluation);
   }
   record([]);
-  // Beam limit deterministico: considera prefissi e aggiunte singole;
-  // non promette l'enumerazione completa dei sottoinsiemi.
   for (const id of ids) {
     if (alternatives.size >= limit) break;
     record([id]);
   }
-  for (let i = 1; i <= ids.length && alternatives.size < limit; i++) {
-    record(ids.slice(0, i));
-  }
+  for (let i = 1; i <= ids.length && alternatives.size < limit; i++) record(ids.slice(0, i));
   if (eligible && alternatives.size < limit) {
     const k = eligible.requests.map(r => r.id).sort((a, b) => a - b).join(',');
     if (!alternatives.has(k)) alternatives.set(k, eligible);
@@ -169,18 +300,13 @@ function busyInterval(c) {
     typeof value === 'string' && !/^\d+$/.test(value) ? new Date(value).getTime() : Number(value);
   const start = toMs(c.busyStart ?? c.busy_start ?? c.evaluation?.departure);
   const end = toMs(c.busyEnd ?? c.busy_end ?? c.evaluation?.arrival);
-  return Number.isFinite(start) && Number.isFinite(end) && start < end
-    ? { start, end } : null;
+  return Number.isFinite(start) && Number.isFinite(end) && start < end ? { start, end } : null;
 }
-function overlap(a, b) {
-  return a.start < b.end && b.start < a.end;
-}
+function overlap(a, b) { return a.start < b.end && b.start < a.end; }
 
-// Selezione greedy deterministica di missioni già valutate e sostenibili.
-// Consente più veicoli sulla stessa direttrice/fascia oraria.
-// driver_id identifica il titolare della flotta, non il conducente operativo.
-// Solo lo stesso veicolo non puo essere riutilizzato in intervalli sovrapposti
-// (avvicinamento, percorso e ritorno inclusi).
+// Mantiene la selezione greedy e la verifica economica preesistenti.
+// La soglia specifica per classe, se prevista dal worker, deve essere
+// verificata PRIMA di passare le candidate a questa funzione.
 export function scegliAttivazioni(candidates) {
   const busyRequests = new Set();
   const busyVehicles = new Map();
@@ -197,7 +323,6 @@ export function scegliAttivazioni(candidates) {
     if (c.evaluation.requests.some(r => busyRequests.has(r.id))) continue;
     const vehicleId = Number(c.vehicle.id);
     const interval = busyInterval(c);
-    // Senza intervallo operativo completo, non riutilizzare il veicolo.
     const vehicleBookings = busyVehicles.get(vehicleId) || [];
     const conflicting = vehicleBookings.some(existing =>
       !interval || !existing || overlap(existing, interval)

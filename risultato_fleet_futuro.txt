@@ -1,0 +1,122 @@
+[FLEET_REALE_CONNESSIONE] {
+  "db": "corse_db",
+  "read_only": "on",
+  "now": "2026-10-13T15:34:31.850Z"
+}
+[FLEET_REALE_INPUT] {
+  "parametri": {
+    "LIMIT": 40,
+    "MAX_ROUTES": 150,
+    "MAX_WAIT": 180,
+    "BUFFER": 0,
+    "MAX_CHAINS": 500,
+    "MAX_FORMATIONS": 40,
+    "MAX_DEPTH": 3,
+    "MAX_GROUP": 12,
+    "MAX_AGGREGATE": 2500,
+    "MAX_COMBOS": 20000,
+    "MAX_TOTAL": 100000,
+    "OPT_NODES": 250000,
+    "OPT_CANDIDATES": 5000,
+    "NEAR": 8,
+    "WAIT_COST": 0,
+    "INCLUDE_PAST": false
+  },
+  "richiesteLette": 4,
+  "richiesteUsabili": 4,
+  "nodi": 2,
+  "veicoli": 15,
+  "richiestaIds": [
+    27,
+    28,
+    29,
+    31
+  ]
+}
+[FLEET_REALE_GENERAZIONE] {
+  "richieste": 4,
+  "veicoli": 15,
+  "gruppi": 2,
+  "missioni": 8,
+  "catene": 0,
+  "combinazioniCatene": 0,
+  "candidatiPreliminari": 24,
+  "candidatiValidati": 0,
+  "routingErrori": [],
+  "limiti": [],
+  "approssimazioniTecniche": 4,
+  "nonValidati": 24,
+  "scartiTurniConflitti": 0,
+  "scartiCommerciali": 0,
+  "enumerazioneSenzaTagli": true,
+  "routingSenzaErrori": true,
+  "prontoPerOttimizzazioneProduttiva": false
+}
+[FLEET_REALE_OTTIMIZZAZIONE] {
+  "margine_euro": 172.04,
+  "cicli": 2,
+  "richieste_coperte": 3,
+  "richieste_ids": [
+    27,
+    28,
+    31
+  ],
+  "veicoli_usati": [
+    358,
+    361
+  ],
+  "nodi_esplorati": 110,
+  "candidati_valutati": 24,
+  "candidati_tagliati": 0,
+  "ottimo_sul_campione": true,
+  "cicli_selezionati": [
+    {
+      "veicolo": 358,
+      "richieste": [
+        [
+          27,
+          28
+        ]
+      ],
+      "partenza_base": "2026-10-14T07:30:43.000Z",
+      "ritorno_base": "2026-10-14T12:29:04.000Z",
+      "ricavo_euro": 508,
+      "costo_completo_euro": 337.77,
+      "costo_attesa_euro": 0,
+      "margine_euro": 170.23
+    },
+    {
+      "veicolo": 361,
+      "richieste": [
+        [
+          31
+        ]
+      ],
+      "partenza_base": "2026-10-15T10:10:02.000Z",
+      "ritorno_base": "2026-10-15T15:14:08.000Z",
+      "ricavo_euro": 254,
+      "costo_completo_euro": 252.19,
+      "costo_attesa_euro": 0,
+      "margine_euro": 1.81
+    }
+  ]
+}
+[FLEET_REALE_ROUTING] {
+  "invocazioni_leg": 13,
+  "cache_hit": 0,
+  "errori_unici": 0,
+  "limite_budget_raggiunto": false,
+  "errori": []
+}
+[FLEET_REALE_VERDETTO] {
+  "esito": "SHADOW_COMPLETATO",
+  "read_only": true,
+  "attivazioni_eseguite": 0,
+  "candidati_utilizzabili_per_attivazione": false,
+  "ottimo_sul_campione": true,
+  "enumerazione_senza_tagli": true,
+  "routing_senza_errori": true,
+  "confronto_10b": "DA_ESEGUIRE CON IDENTICO SNAPSHOT: questa esecuzione non confronta automaticamente il Test 10B",
+  "avvertenza": "Non certifica soglie di classe, pagamenti, qualità, turni, conflitti DB, raggio e transazione di attivazione. Il ritorno va incluso anche nella soglia di attivazione."
+}
+[FLEET_REALE_ROLLBACK] OK

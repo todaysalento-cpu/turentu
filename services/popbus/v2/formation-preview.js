@@ -2,6 +2,7 @@
 import { pool } from '../../../db/db.js';
 import { generaCandidate, generaFormazioniAlternative } from './model.js';
 import { pianifica, leg } from './planner.js';
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
 
 // Le classi sono distinte: STANDARD_* non viene mai convertita in STANDARD.
 const CLASSI = ['EXPRESS', 'STANDARD', 'STANDARD_ALTA', 'STANDARD_MEDIA', 'STANDARD_BASSA', 'SAVER'];
@@ -53,7 +54,9 @@ function vuoto(classe) {
         classe, stato: 'nessuna_formazione', richieste_compatibili: 0,
         posti_in_formazione: 0, picco_occupazione: 0,
         ricavo_attuale: 0, ricavo_con_richiesta: null,
-        costo_attivazione: null, ricavo_mancante: null,
+        costo_attivazione: null, soglia_attivazione_lorda: null,
+         commissione_turentu: null, ricavo_netto_con_richiesta: null,
+         margine_netto_con_richiesta: null, ricavo_mancante: null,
         ricavo_mancante_dopo_richiesta: null,
         posti_mancanti_stimati: null,
         posti_mancanti_dopo_richiesta_stimati: null,
@@ -76,7 +79,7 @@ function stimaPosti(deficitCentesimi, prezzoCentesimi, postiRichiesti) {
 
 function migliore(a, b) {
     if (!b) return true;
-    // Prima un piano che raggiunge il pareggio, poi il deficit minore.
+    // Prima un piano che copre i costi NETTI, poi il deficit lordo minore.
     if (a.soglia_raggiunta !== b.soglia_raggiunta) return a.soglia_raggiunta;
     if (a._deficitDopo !== b._deficitDopo) return a._deficitDopo < b._deficitDopo;
     if (a.posti_in_formazione !== b.posti_in_formazione)
@@ -264,18 +267,35 @@ export async function anteprimaFormazionePopbus(opts) {
                 const busyEnd = evaluation.arrival + num(returnTrip.seconds) * 1000;
                 if (busyStart <= Date.now() || !turno(v, busyStart, busyEnd)) continue;
 
-                // Identico criterio economico del worker: arrotondamento
-                // del costo all'eurocent superiore, incluso il ritorno.
-                const costCents = Math.ceil(
-                    (metres + num(approach.metres) + num(returnTrip.metres)) /
-                    1000 * num(v.euro_km) * 100
-                );
-                if (!Number.isFinite(costCents) || costCents < 0) continue;
-                const missingBefore = Math.max(0, costCents - existingCents);
-                const missingAfter = Math.max(0, costCents - totalCents);
-                const missingSeatsBefore = stimaPosti(missingBefore, cents(price), posti);
-                const missingSeatsAfter = stimaPosti(missingAfter, cents(price), posti);
-                // Solo una stima di posti ulteriori nello stesso segmento
+                                 // Pricing condiviso: lordo delle richieste, commissione 15%,
+                 // avvicinamento, missione e ritorno. Nessuna attesa tra
+                 // missioni in questa anteprima a singola formazione.
+                 // Stessa geometria/costo per scenario attuale e simulato.
+                 let before, after;
+                 const km = {
+                     kmAvvicinamento: num(approach.metres) / 1000,
+                     kmMissioni: metres / 1000,
+                     kmTrasferimenti: 0,
+                     kmRitornoBase: num(returnTrip.metres) / 1000,
+                     euroKm: num(v.euro_km)
+                 };
+                 try {
+                     before = valutaEconomiaCiclo({
+                         ...km, ricaviRichiesteEuro: formation.length
+                             ? formation.map(r => num(r.prezzo)) : [0]
+                     });
+                     after = valutaEconomiaCiclo({
+                         ...km, ricaviRichiesteEuro: [
+                             ...formation.map(r => num(r.prezzo)), price
+                         ]
+                     });
+                 } catch { continue; }
+                 const thresholdCents = after.centesimi.sogliaLorda;
+                 const missingBefore = Math.max(0, thresholdCents - before.centesimi.ricavoLordo);
+                 const missingAfter = Math.max(0, thresholdCents - after.centesimi.ricavoLordo);
+                 const missingSeatsBefore = stimaPosti(missingBefore, cents(price), posti);
+                 const missingSeatsAfter = stimaPosti(missingAfter, cents(price), posti);
+// Solo una stima di posti ulteriori nello stesso segmento
                 // della nuova richiesta, NON capienza dell'intera direttrice.
                 const postiAggiuntivi = Math.max(0, cap - evaluation.peak);
                 const candidateResult = {
@@ -283,14 +303,18 @@ export async function anteprimaFormazionePopbus(opts) {
                     posti_in_formazione: seatsExisting, picco_occupazione: peakExisting,
                     ricavo_attuale: existingCents / 100,
                     ricavo_con_richiesta: totalCents / 100,
-                    costo_attivazione: costCents / 100,
+                    costo_attivazione: after.costoCompletoEuro,
+                     soglia_attivazione_lorda: after.sogliaAttivazioneLordaEuro,
+                     commissione_turentu: after.commissioneTurentuEuro,
+                     ricavo_netto_con_richiesta: after.ricavoNettoEuro,
+                     margine_netto_con_richiesta: after.margineEuro,
                     ricavo_mancante: missingBefore / 100,
                     ricavo_mancante_dopo_richiesta: missingAfter / 100,
                     posti_mancanti_stimati: missingSeatsBefore,
                     posti_mancanti_dopo_richiesta_stimati: missingSeatsAfter,
                     posti_richiesti_utente: posti,
-                    soglia_raggiunta: totalCents >= costCents,
-                    soglia_raggiunta_attuale: existingCents >= costCents,
+                    soglia_raggiunta: after.economicamenteAttivabile,
+                    soglia_raggiunta_attuale: before.economicamenteAttivabile,
                     partenza_prevista: new Date(evaluation.departure).toISOString(),
                     veicolo_riferimento_id: num(v.id),
                     richiesta_simulata_inclusa: true,

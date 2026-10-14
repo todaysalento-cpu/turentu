@@ -7,17 +7,123 @@ import {
   valutaRichieste,
   generaFormazioniAlternative,
   verificaQualitaRichieste,
-  scegliAttivazioni
+  scegliAttivazioni,
+  economiaCandidato
 } from './model.js';
 import { pianifica, leg } from './planner.js';
 import { generaRitorniCompatibili } from './return-matching.js';
 import { verificaQualitaOccorrenze } from './service-quality.js';
+import { generaCandidatiFlotta } from './fleet-candidates.js';
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
 
 // I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
 // e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
 // Questo flag non abilita scritture per cicli composti.
 const POPBUS_CYCLE_DIAGNOSTICS = process.env.POPBUS_CYCLE_DIAGNOSTICS === '1';
 const MAX_CYCLE_DIAGNOSTICS = 40;
+
+// Integrazione controllata: il nuovo generatore NON entra nella scelta
+// delle attivazioni e NON modifica database, pagamenti o socket.
+// Abilitazione esplicita: POPBUS_FLEET_SHADOW=1
+const POPBUS_FLEET_SHADOW = process.env.POPBUS_FLEET_SHADOW === '1';
+const POPBUS_FLEET_SHADOW_MAX_REQUESTS = 30;
+const POPBUS_FLEET_SHADOW_MAX_VEHICLES = 30;
+const COMMISSIONE_TURENTU = 0.15;
+
+function riepilogaEconomiaFlotta(c) {
+  const ricavo = Number(c.ricavo_euro);
+  const costo = Number(c.costo_completo_euro) + Number(c.costo_attesa_euro || 0);
+  const commissione = Math.round(ricavo * COMMISSIONE_TURENTU * 100) / 100;
+  return {
+    ricavoLordoEuro: ricavo,
+    commissioneTurentuEuro: commissione,
+    costoCicloEuro: Math.round(costo * 100) / 100,
+    margineNettoEuro: Math.round((ricavo - commissione - costo) * 100) / 100,
+    // La soglia economica comprende esplicitamente il ritorno alla base.
+    ritornoAllaBaseIncluso: true
+  };
+}
+
+async function eseguiFleetShadow({ requests, nodes, vehicles, log, stats }) {
+  if (!POPBUS_FLEET_SHADOW) return;
+  if (!requests.length || !vehicles.length) {
+    log('FLEET SHADOW SKIP', 'Nessuna richiesta o veicolo');
+    return;
+  }
+  if (requests.length > POPBUS_FLEET_SHADOW_MAX_REQUESTS ||
+      vehicles.length > POPBUS_FLEET_SHADOW_MAX_VEHICLES) {
+    log('FLEET SHADOW SKIP', {
+      motivo: 'Limite prudenziale di carico: nessun taglio silenzioso del dataset',
+      richieste: requests.length, veicoli: vehicles.length,
+      limiteRichieste: POPBUS_FLEET_SHADOW_MAX_REQUESTS,
+      limiteVeicoli: POPBUS_FLEET_SHADOW_MAX_VEHICLES
+    });
+    return;
+  }
+  const validCoord = x => x && Number.isFinite(Number(x.lat)) &&
+    Number.isFinite(Number(x.lon)) && Math.abs(Number(x.lat)) <= 90 &&
+    Math.abs(Number(x.lon)) <= 180;
+  const nodeIds = new Set(nodes.filter(validCoord).map(n => Number(n.id)));
+  const validRequests = requests.filter(r =>
+    nodeIds.has(Number(r.start_node_id)) &&
+    nodeIds.has(Number(r.end_node_id)) &&
+    Number.isFinite(Date.parse(r.start_datetime)) &&
+    Number.isSafeInteger(Number(r.posti_richiesti)) &&
+    Number(r.posti_richiesti) > 0 &&
+    r.prezzo != null && Number.isFinite(Number(r.prezzo)) &&
+    Number(r.prezzo) >= 0
+  );
+  const validVehicles = vehicles.filter(v =>
+    validCoord(v) && Number.isSafeInteger(Number(v.posti_totali)) &&
+    Number(v.posti_totali) > 0 && Number.isFinite(Number(v.euro_km)) &&
+    Number(v.euro_km) > 0
+  );
+  if (validRequests.length !== requests.length || validVehicles.length !== vehicles.length) {
+    log('FLEET SHADOW INPUT FILTRATO', {
+      richiesteOriginali: requests.length, richiesteUsabili: validRequests.length,
+      veicoliOriginali: vehicles.length, veicoliUsabili: validVehicles.length
+    });
+  }
+  if (!validRequests.length || !validVehicles.length) return;
+
+  // Il routing usa lo stesso planner.leg del worker legacy.
+  // Non si passa validateCandidate: nessun candidato e' dichiarato validato.
+  const generated = await generaCandidatiFlotta({
+    requests: validRequests,
+    nodes: nodes.filter(validCoord),
+    vehicles: validVehicles,
+    road: (a, b) => movement(a, b)
+  }, {
+    now: Date.now(), includePast: false, strict: true,
+    maxDepth: 3, maxWaitMin: 180, bufferMin: 0,
+    maxGroupRequests: 12, maxAggregateCombos: 2500,
+    maxFormations: 2500, maxChains: 500,
+    maxCombosPerChainVehicle: 20000, maxTotalChainCombos: 100000,
+    nearTransferMetres: 0, costoAttesaOra: 0
+  });
+  stats.fleetShadowCandidati = generated.candidati.length;
+  stats.fleetShadowCatene = generated.candidati.filter(c => c.missioni > 1).length;
+  log('FLEET SHADOW DIAGNOSTICA', {
+    ...generated.diagnostica,
+    utilizzabiliPerAttivazione: generated.utilizzabiliPerAttivazione
+  });
+  for (const c of generated.candidati.slice(0, 50)) {
+    log('FLEET SHADOW CANDIDATO', {
+      veicolo: c.veicolo, tipo: c.tipo_candidato,
+      richieste: c.richieste, missioni: c.missioni,
+      partenzaBase: c.partenza_base, ritornoBase: c.ritorno_base,
+      kmTotali: c.km_totali,
+      ...riepilogaEconomiaFlotta(c),
+      utilizzabilePerAttivazione: false
+    });
+  }
+  if (generated.candidati.length > 50) {
+    log('FLEET SHADOW LOG LIMIT', {
+      candidatiTotali: generated.candidati.length, candidatiStampati: 50
+    });
+  }
+}
+
 
 
 const fmt = new Intl.DateTimeFormat('en-GB', {
@@ -418,7 +524,9 @@ export async function processaProposteDinamicheV2() {
     scartiPrenotazione: 0,
     scartiVeicolo: 0,
     scartiOccupato: 0,
-    attivazioni: 0
+    attivazioni: 0,
+    fleetShadowCandidati: 0,
+    fleetShadowCatene: 0
   };
 
   log(
@@ -1089,6 +1197,34 @@ export async function processaProposteDinamicheV2() {
             ).toISOString()
         });
 
+        const selectedIdsEconomy = new Set(evaluation.requests.map(r => Number(r.id)));
+        const selectedEconomy = requests.filter(r => selectedIdsEconomy.has(Number(r.id)));
+        let economia;
+        try {
+          if (selectedEconomy.length !== selectedIdsEconomy.size) throw new Error('Richieste incomplete');
+          economia = valutaEconomiaCiclo({
+            ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+            kmAvvicinamento: metriAvvicinamento / 1000,
+            kmMissioni: metriPercorso / 1000,
+            kmTrasferimenti: 0,
+            kmRitornoBase: metriRitorno / 1000,
+            euroKm: tariffaEuroKm
+          });
+        } catch (error) {
+          stats.veicoliCosto++;
+          log('SCARTO ECONOMIA', error.message);
+          continue;
+        }
+        if (!economia.economicamenteAttivabile) {
+          stats.veicoliCosto++;
+          log('SCARTO ECONOMIA NETTA', {
+            veicolo: vehicle.id, ricavoLordo: economia.ricavoLordoEuro,
+            commissione: economia.commissioneTurentuEuro,
+            costoCiclo: economia.costoCompletoEuro, margine: economia.margineEuro,
+            sogliaLorda: economia.sogliaAttivazioneLordaEuro
+          });
+          continue;
+        }
         if (
           evaluation.revenue < cost
         ) {
@@ -1188,6 +1324,8 @@ export async function processaProposteDinamicheV2() {
           evaluation,
           vehicle,
           cost,
+          ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+          economia,
           approach,
           returnTrip,
           busyStart,
@@ -1210,6 +1348,16 @@ export async function processaProposteDinamicheV2() {
       'MATCHING',
       JSON.stringify(stats)
     );
+
+    // Il generatore flotta e' eseguito solo in osservazione.
+    // Eventuali errori non interrompono il matching legacy.
+    if (POPBUS_FLEET_SHADOW) {
+      try {
+        await eseguiFleetShadow({ requests, nodes, vehicles, log, stats });
+      } catch (error) {
+        log('FLEET SHADOW ERROR', error.stack || error.message);
+      }
+    }
 
     // Analisi opzionale dei cicli contigui, SENZA SCRITTURE.
     // Il normale worker continua a selezionare soltanto missioni
@@ -1325,6 +1473,44 @@ export async function processaProposteDinamicheV2() {
         });
         continue;
       }
+
+       // Rivalidazione economica sulla richiesta bloccata e sulla tariffa corrente.
+       // Non attiva catene; il ritorno alla base resta obbligatorio.
+       const { rows: currentRates } = await client.query(`
+         SELECT MIN(euro_km) AS euro_km FROM tariffe
+         WHERE veicolo_id=$1 AND tipo='standard' AND euro_km>0
+       `, [c.vehicle.id]);
+       const rateNow = Number(currentRates[0]?.euro_km);
+       if (currentRates[0]?.euro_km == null || !Number.isFinite(rateNow) || rateNow <= 0) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', 'Tariffa assente o non valida');
+         continue;
+       }
+       let finalEconomy;
+       try {
+         finalEconomy = valutaEconomiaCiclo({
+           ricaviRichiesteEuro: locked.map(r => Number(r.prezzo)),
+           kmAvvicinamento: Number(c.approach.metres) / 1000,
+           kmMissioni: c.plan.legs.reduce((s, l) => s + Number(l.metres), 0) / 1000,
+           kmTrasferimenti: 0,
+           kmRitornoBase: Number(c.returnTrip.metres) / 1000,
+           euroKm: rateNow
+         });
+       } catch (error) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', error.message);
+         continue;
+       }
+       if (!finalEconomy.economicamenteAttivabile ||
+           finalEconomy.centesimi.costoCompleto !== c.economia?.centesimi.costoCompleto ||
+           finalEconomy.centesimi.ricavoLordo !== c.economia?.centesimi.ricavoLordo) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', {
+           richieste: ids, margine: finalEconomy.margineEuro,
+           costo: finalEconomy.costoCompletoEuro, soglia: finalEconomy.sogliaAttivazioneLordaEuro
+         });
+         continue;
+       }
 
       const {
         rows: reservations

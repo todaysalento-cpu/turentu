@@ -1,3 +1,5 @@
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
+
 /**
  * TURENTU POPBUS V2 — FLEET VALIDATORS / LAUNCH (SHADOW)
  * Nessuna query, scrittura, prenotazione, pagamento o attivazione.
@@ -93,26 +95,46 @@ export function creaValidatoriFlotta({
         return fail('CAPIENZA_MISSIONE');
     }
 
-    const revenue = toCents(candidate.ricavo_euro);
-    const cost = toCents(candidate.costo_completo_euro);
-    const waiting = toCents(candidate.costo_attesa_euro);
-    const margin = toCents(candidate.margine_ciclo_con_attesa_euro);
-    if (![revenue, cost, waiting, margin].every(Number.isSafeInteger) ||
-        revenue - cost - waiting !== margin) return fail('CONTABILITA_INCOERENTE');
-    // LAUNCH: nessuna soglia per classe, nessun margine positivo obbligatorio.
-    if (margin < 0) return fail('COSTO_NON_COPERTO');
-
-    // Coerenza del costo con la formula del generatore, incluso il ritorno.
-    // Non sostituisce la validazione del routing effettivo in produzione.
+    // Ricalcolo indipendente dalle cifre dichiarate dal candidato.
+    // Prezzi lordi delle richieste, trasferimenti e ritorno inclusi una sola volta.
     const duty = context.duty;
-    const commercialMetres = context.selected.reduce((s, m) => s + Number(m.trip?.metres), 0);
-    const totalMetres = Number(duty.technicalMetres) + commercialMetres;
-    if (!Number.isFinite(totalMetres) || totalMetres < 0 ||
-        !Number.isFinite(Number(context.vehicle.euro_km)) || Number(context.vehicle.euro_km) <= 0 ||
-        !duty.approach || !duty.back || !nonnegative(duty.approach.metres) ||
-        !nonnegative(duty.back.metres) ||
-        Math.abs(Number(candidate.km_totali) * 1000 - totalMetres) > 0.01 ||
-        Math.ceil(totalMetres / 1000 * Number(context.vehicle.euro_km) * 100 - 1e-9) !== cost)
+    const commercialMetres = context.selected.reduce((sum,m) => sum + Number(m.trip?.metres),0);
+    const transferMetres = (context.links || []).reduce((sum,l) => sum + Number(l.transfer?.metres),0);
+    if (!duty || !duty.approach || !duty.back ||
+        ![commercialMetres,transferMetres,duty.approach.metres,duty.back.metres,
+          duty.technicalMetres,duty.waitHours,context.vehicle.euro_km]
+          .every(v => finite(v) && Number(v) >= 0) ||
+        Number(context.vehicle.euro_km) <= 0 ||
+        Math.abs(Number(duty.technicalMetres) -
+          (Number(duty.approach.metres)+Number(duty.back.metres)+transferMetres)) > 0.01)
+      return fail('COSTO_CICLO_INCOERENTE');
+    let economy;
+    try {
+      economy = valutaEconomiaCiclo({
+        ricaviRichiesteEuro:context.selected.flatMap(m=>m.requests.map(r=>r.prezzo)),
+        kmAvvicinamento:Number(duty.approach.metres)/1000,
+        kmMissioni:commercialMetres/1000,
+        kmTrasferimenti:transferMetres/1000,
+        kmRitornoBase:Number(duty.back.metres)/1000,
+        euroKm:Number(context.vehicle.euro_km),
+        oreAttesa:Number(duty.waitHours),
+        costoAttesaOraEuro:context.costoAttesaOra ?? 0
+      });
+    } catch (err) { return fail('ECONOMIA_NON_VALIDA',err?.message); }
+    const expected = [
+      ['ricavo_euro',economy.ricavoLordoEuro],
+      ['commissione_turentu_euro',economy.commissioneTurentuEuro],
+      ['ricavo_netto_euro',economy.ricavoNettoEuro],
+      ['soglia_attivazione_lorda_euro',economy.sogliaAttivazioneLordaEuro],
+      ['costo_completo_euro',economy.costoKmEuro],
+      ['costo_attesa_euro',economy.costoAttesaEuro],
+      ['margine_ciclo_con_attesa_euro',economy.margineEuro]
+    ];
+    if (expected.some(([field,value]) => !finite(candidate[field]) || toCents(candidate[field]) !== toCents(value)))
+      return fail('CONTABILITA_INCOERENTE');
+    if (!economy.economicamenteAttivabile) return fail('COSTO_NON_COPERTO');
+    if (!finite(candidate.km_totali) ||
+        Math.abs(Number(candidate.km_totali) - economy.km.totali) > 0.00001)
       return fail('COSTO_CICLO_INCOERENTE');
 
     if (!await run(checkPayments, 'PAGAMENTI', candidate, context)) return false;

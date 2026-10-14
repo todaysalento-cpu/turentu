@@ -4,6 +4,8 @@
 // Nessuna modifica al database. Nessuna gestione nuovi nodi.
 // ============================================================
 
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
+
 export const TOLLERANZA_MS = 30 * 60000;
 const MAX_SUBSETS = 500;
 const EPS = 1e-8;
@@ -304,32 +306,61 @@ function busyInterval(c) {
 }
 function overlap(a, b) { return a.start < b.end && b.start < a.end; }
 
-// Mantiene la selezione greedy e la verifica economica preesistenti.
-// La soglia specifica per classe, se prevista dal worker, deve essere
-// verificata PRIMA di passare le candidate a questa funzione.
+// Selezione economica netta, fail-closed: ogni candidato deve contenere
+// componenti del ciclo complete e verificabili. Nessuna query o scrittura.
+export function economiaCandidato(c) {
+  if (!c || !Array.isArray(c.evaluation?.requests) || !c.evaluation.requests.length ||
+      !Array.isArray(c.plan?.legs) || !c.plan.legs.length ||
+      !c.approach || !c.returnTrip || !c.vehicle) return null;
+  const nonNegativo = x => x != null && x !== '' && Number.isFinite(Number(x)) && Number(x) >= 0;
+  if (![c.approach.metres, c.returnTrip.metres, c.vehicle.euro_km,
+        ...c.plan.legs.map(l => l.metres)].every(nonNegativo)) return null;
+  const prices = c.ricaviRichiesteEuro;
+  if (!Array.isArray(prices) || prices.length !== c.evaluation.requests.length ||
+      !prices.every(nonNegativo)) return null;
+  try {
+    const e = valutaEconomiaCiclo({
+      ricaviRichiesteEuro: prices.map(Number),
+      kmAvvicinamento: Number(c.approach.metres) / 1000,
+      kmMissioni: c.plan.legs.reduce((s, l) => s + Number(l.metres), 0) / 1000,
+      kmTrasferimenti: 0,
+      kmRitornoBase: Number(c.returnTrip.metres) / 1000,
+      euroKm: Number(c.vehicle.euro_km)
+    });
+    // I campi legacy devono coincidere con i valori ricalcolati.
+    if (!nonNegativo(c.cost) || !nonNegativo(c.evaluation.revenue) ||
+        Math.round(Number(c.cost) * 100) !== e.centesimi.costoCompleto ||
+        Math.round(Number(c.evaluation.revenue) * 100) !== e.centesimi.ricavoLordo) return null;
+    return e;
+  } catch { return null; }
+}
+
 export function scegliAttivazioni(candidates) {
   const busyRequests = new Set();
   const busyVehicles = new Map();
   const result = [];
-  const sorted = [...candidates].sort((a, b) =>
-    b.evaluation.requests.length - a.evaluation.requests.length ||
-    (b.evaluation.revenue - b.cost) - (a.evaluation.revenue - a.cost) ||
-    a.cost - b.cost ||
-    key(a.plan.nodes).localeCompare(key(b.plan.nodes))
+  const valid = candidates.map(c => ({ c, economy: economiaCandidato(c), interval: busyInterval(c) }))
+    .filter(x => x.economy?.economicamenteAttivabile && x.interval &&
+      x.interval.start > Date.now() &&
+      Number.isSafeInteger(Number(x.c.vehicle?.id)) && Number(x.c.vehicle.id) > 0 &&
+      Number.isInteger(Number(x.c.vehicle.posti_totali)) &&
+      Number.isFinite(Number(x.c.evaluation?.peak)) &&
+      Number(x.c.evaluation.peak) > 0 &&
+      Number(x.c.evaluation.peak) <= Number(x.c.vehicle.posti_totali) &&
+      x.c.evaluation.requests.every(r => Number.isSafeInteger(Number(r.id)) && Number(r.id) > 0));
+  valid.sort((a, b) =>
+    b.c.evaluation.requests.length - a.c.evaluation.requests.length ||
+    b.economy.centesimi.margine - a.economy.centesimi.margine ||
+    a.economy.centesimi.costoCompleto - b.economy.centesimi.costoCompleto ||
+    key(a.c.plan.nodes).localeCompare(key(b.c.plan.nodes))
   );
-  for (const c of sorted) {
-    if (c.evaluation.revenue + EPS < c.cost ||
-        c.evaluation.peak > Number(c.vehicle.posti_totali)) continue;
-    if (c.evaluation.requests.some(r => busyRequests.has(r.id))) continue;
+  for (const { c, interval } of valid) {
+    if (c.evaluation.requests.some(r => busyRequests.has(Number(r.id)))) continue;
     const vehicleId = Number(c.vehicle.id);
-    const interval = busyInterval(c);
     const vehicleBookings = busyVehicles.get(vehicleId) || [];
-    const conflicting = vehicleBookings.some(existing =>
-      !interval || !existing || overlap(existing, interval)
-    );
-    if (conflicting) continue;
+    if (vehicleBookings.some(existing => overlap(existing, interval))) continue;
     result.push(c);
-    c.evaluation.requests.forEach(r => busyRequests.add(r.id));
+    c.evaluation.requests.forEach(r => busyRequests.add(Number(r.id)));
     busyVehicles.set(vehicleId, [...vehicleBookings, interval]);
   }
   return result;

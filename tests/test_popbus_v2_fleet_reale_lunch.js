@@ -37,6 +37,13 @@ const OPT_CANDIDATES=bounded('POPBUS_OPT_MAX_CANDIDATES',5000,1,30000);
 const NEAR=bounded('POPBUS_NEAR_TRANSFER_METRES',8,0,30);
 const WAIT_COST=Math.max(0,Number(process.env.POPBUS_COSTO_ATTESA_ORA ?? 0)||0);
 const INCLUDE_PAST=process.env.POPBUS_CYCLE_INCLUDE_PAST==='1';
+// Snapshot esplicito: usare SOLO per simulazioni storiche, mai per attivazioni.
+const REQUEST_IDS=(process.env.POPBUS_FLEET_REQUEST_IDS||'').split(',').map(x=>x.trim())
+  .filter(Boolean).map(Number);
+if(REQUEST_IDS.some(x=>!Number.isSafeInteger(x)||x<=0))
+  throw Error('POPBUS_FLEET_REQUEST_IDS: elenco di interi positivi separati da virgola');
+const HISTORICAL=INCLUDE_PAST||REQUEST_IDS.length>0;
+
 // Importi in centesimi, stessa commissione del generatore (15% del lordo).
 const euro2cents=x=>Math.round(Number(x)*100);
 const cents2euro=x=>Math.round(x)/100;
@@ -391,11 +398,12 @@ try {
     SELECT r.* FROM public.richieste_pop_bus r
     WHERE r.stato='in_attesa' AND r.corsa_id IS NULL
       AND ($1::boolean OR r.start_datetime>NOW())
+      AND ($3::boolean OR r.id=ANY($4::int[]))
       AND NOT EXISTS (
         SELECT 1 FROM public.popbus_attivazione_richieste ar
         WHERE ar.richiesta_id=r.id AND ar.attiva
       )
-    ORDER BY r.start_datetime,r.id LIMIT $2`,[INCLUDE_PAST,LIMIT]);
+    ORDER BY r.start_datetime,r.id LIMIT $2`,[HISTORICAL,LIMIT,REQUEST_IDS.length===0,REQUEST_IDS]);
   const requests=raw.filter(r=>finite(r.posti_richiesti)&&Number(r.posti_richiesti)>0&&
     finite(r.prezzo)&&Number(r.prezzo)>=0&&Number.isFinite(new Date(r.start_datetime).getTime()));
   const ids=[...new Set(requests.flatMap(r=>[Number(r.start_node_id),Number(r.end_node_id)]))]
@@ -422,7 +430,7 @@ try {
   const vehicles=vehiclesRaw.filter(v=>validCoord(v)&&Number(v.posti_totali)>0&&Number(v.euro_km)>0);
   const params={LIMIT,MAX_ROUTES,MAX_WAIT,BUFFER,MAX_CHAINS,MAX_FORMATIONS,
     MAX_DEPTH,MAX_GROUP,MAX_AGGREGATE,MAX_COMBOS,MAX_TOTAL,OPT_NODES,
-    OPT_CANDIDATES,NEAR,WAIT_COST,INCLUDE_PAST};
+    OPT_CANDIDATES,NEAR,WAIT_COST,INCLUDE_PAST,HISTORICAL,REQUEST_IDS};
   log('FLEET_REALE_INPUT',{parametri:params,richiesteLette:raw.length,
     richiesteUsabili:usable.length,nodi:nodes.length,veicoli:vehicles.length,
     richiestaIds:usable.map(r=>Number(r.id))});
@@ -433,7 +441,7 @@ try {
       requests:usable,nodes:nodes.filter(validCoord),vehicles,road
       // Nessun validatore produttivo inventato: SOLO DIAGNOSTICA.
     },{
-      now:new Date(state.now).getTime(),includePast:INCLUDE_PAST,
+      now:new Date(state.now).getTime(),includePast:HISTORICAL,
       maxWaitMin:MAX_WAIT,bufferMin:BUFFER,maxDepth:MAX_DEPTH,
       maxChains:MAX_CHAINS,maxFormations:MAX_FORMATIONS,
       maxGroupRequests:MAX_GROUP,maxAggregateCombos:MAX_AGGREGATE,
@@ -446,7 +454,7 @@ try {
     // Una tariffa simbolica serve solo a isolare possibili esclusioni economiche.
     if (process.env.POPBUS_FLEET_DIAG_VEICOLI !== '0') {
       const diagnosticOptions={
-        now:new Date(state.now).getTime(),includePast:INCLUDE_PAST,
+        now:new Date(state.now).getTime(),includePast:HISTORICAL,
         maxWaitMin:MAX_WAIT,bufferMin:BUFFER,maxDepth:MAX_DEPTH,
         maxChains:MAX_CHAINS,maxFormations:MAX_FORMATIONS,
         maxGroupRequests:MAX_GROUP,maxAggregateCombos:MAX_AGGREGATE,
@@ -468,7 +476,7 @@ try {
           cheap=simulated.candidati.length;
           economics=simulated.candidati.map(c=>auditEconomicoControfattuale(c,v))
             .filter(Boolean).sort((a,b)=>b.margine_netto_euro-a.margine_netto_euro);
-          if(!real.length && !cheap && !INCLUDE_PAST) {
+          if(!real.length && !cheap && !HISTORICAL) {
             const past=await generaCandidatiFlotta({
               requests:usable,nodes:nodes.filter(validCoord),
               vehicles:[{...v,euro_km:0.000001}],road
@@ -521,6 +529,79 @@ try {
         },
         avvertenza:'Diagnostica non certificante. La tariffa simbolica NON deve essere applicata a corse reali. Le chiamate routing possono avere costi.',
         righe:rows
+      });
+    }
+
+    // DIAGNOSTICA AGGREGAZIONE / CONCATENAZIONE: READ ONLY, nessuna attivazione.
+    // Confronto sugli stessi dati e lo stesso istante; un solo run controfattuale
+    // con tariffa simbolica, esclusivamente per evidenziare strutture possibili.
+    function descriviCandidato(c, veicoliById, simulato=false) {
+      const missions=Array.isArray(c.richieste)?c.richieste:[];
+      const groups=missions.map(g=>Array.isArray(g)?g.map(Number):[Number(g)]);
+      const unique=[...new Set(groups.flat().filter(Number.isSafeInteger))];
+      const v=veicoliById.get(Number(c.veicolo));
+      const eco=simulato&&v?auditEconomicoControfattuale(c,v):null;
+      const margine=simulato?eco?.margine_netto_euro:Number(c.margine_ciclo_con_attesa_euro);
+      return {
+        veicolo:Number(c.veicolo),missioni:groups.length,
+        richieste_distinte:unique.length,richieste:groups,
+        categoria:groups.length>1?'CONCATENATA':unique.length>1?'CONDIVISA':'SINGOLA',
+        km_ciclo_completo:Number(c.km_totali),
+        ricavo_lordo_euro:Number(c.ricavo_euro),
+        commissione_turentu_euro:simulato?eco?.commissione_turentu_euro:Number(c.commissione_turentu_euro),
+        costo_ciclo_euro:simulato?eco?.costo_totale_euro:
+          Number(c.costo_completo_euro)+Number(c.costo_attesa_euro||0),
+        soglia_lorda_euro:simulato?eco?.soglia_lorda_teorica_euro:Number(c.soglia_attivazione_lorda_euro),
+        margine_netto_euro:margine,
+        deficit_euro:simulato?eco?.deficit_euro:Math.max(0,-margine),
+        sostenibile:Number.isFinite(margine)&&margine>=0,
+        partenza_base:c.partenza_base,ritorno_base:c.ritorno_base
+      };
+    }
+    if(process.env.POPBUS_FLEET_DIAG_AGGREGAZIONI!=='0') {
+      const vehicleMap=new Map(vehicles.map(v=>[Number(v.id),v]));
+      const opts={
+        now:new Date(state.now).getTime(),includePast:HISTORICAL,
+        maxWaitMin:MAX_WAIT,bufferMin:BUFFER,maxDepth:MAX_DEPTH,
+        maxChains:MAX_CHAINS,maxFormations:MAX_FORMATIONS,
+        maxGroupRequests:MAX_GROUP,maxAggregateCombos:MAX_AGGREGATE,
+        maxCombosPerChainVehicle:MAX_COMBOS,maxTotalChainCombos:MAX_TOTAL,
+        nearTransferMetres:NEAR,costoAttesaOra:WAIT_COST
+      };
+      const realRows=generated.candidati.map(c=>descriviCandidato(c,vehicleMap));
+      let shadowRows=[],shadowStats=null,shadowError=null;
+      try {
+        const shadow=await generaCandidatiFlotta({
+          requests:usable,nodes:nodes.filter(validCoord),
+          vehicles:vehicles.map(v=>({...v,euro_km:0.000001})),road
+        },opts);
+        shadowStats=shadow.statistiche||shadow.stats||null;
+        shadowRows=shadow.candidati.map(c=>descriviCandidato(c,vehicleMap,true));
+      } catch(e) {shadowError=String(e.stack||e.message||e);}
+      const count=rows=>({
+        totale:rows.length,
+        singole:rows.filter(x=>x.categoria==='SINGOLA').length,
+        condivise:rows.filter(x=>x.categoria==='CONDIVISA').length,
+        concatenate:rows.filter(x=>x.categoria==='CONCATENATA').length,
+        con_almeno_due_richieste:rows.filter(x=>x.richieste_distinte>=2).length,
+        sostenibili:rows.filter(x=>x.sostenibile).length
+      });
+      const rank=(a,b)=>b.richieste_distinte-a.richieste_distinte||
+        b.margine_netto_euro-a.margine_netto_euro;
+      log('FLEET_AGGREGAZIONE_CONCATENAZIONE_SHADOW',{
+        modalita:'READ_ONLY_CONTROFATTUALE',
+        richieste_ids:usable.map(r=>Number(r.id)),
+        richieste_analizzate:usable.length,
+        storico:HISTORICAL,
+        avvertenza:'La tariffa simbolica e solo diagnostica. Candidati preliminari, non validati per attivazione.',
+        reale:count(realRows),
+        simbolica_con_economia_reale:count(shadowRows),
+        migliori_reali:[...realRows].sort(rank).slice(0,20),
+        migliori_strutturali_a_tariffa_reale:[...shadowRows].sort(rank).slice(0,30),
+        statistiche_generatore_simbolico:shadowStats,
+        errore_simulazione:shadowError,
+        limiti_generatore_reale:generated.statistiche?.limiti||generated.stats?.limiti||null,
+        interpretazione:'Confrontare categoria, numero richieste, margine e deficit. Se nessuna aggregazione appare, non attribuire la causa senza audit dei vincoli.'
       });
     }
 

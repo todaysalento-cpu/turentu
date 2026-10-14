@@ -8,9 +8,7 @@
 // ATTENZIONE: candidati PRELIMINARI, NON pronti per attivazione.
 // ============================================================
 
-// Commissione sulla somma dei prezzi cliente (lordi). Non applicare a prezzi gia netti.
-const COMMISSIONE_TURENTU_BPS = 1500; // 15,00%
-const BPS = 10000;
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
 
 const DEFAULTS = Object.freeze({
   maxDepth: 3,
@@ -218,7 +216,12 @@ export async function generaCandidatiFlotta(input, options={}) {
   const preliminary=[];
   const dutyCache=new Map();
   async function vehicleDuty(v,first,last,links) {
-    const k=`${v.id}|${first.start.id}|${last.end.id}|${first.depart}|${last.arrive}`;
+    // Catene con stessi estremi temporali possono avere trasferimenti e attese diversi.
+    // La cache deve distinguere l'intera sequenza di collegamenti.
+    const k=JSON.stringify([
+      v.id,first.start.id,last.end.id,first.depart,last.arrive,
+      links.map(l=>[l.to,l.transfer.metres,l.transfer.seconds,l.wait])
+    ]);
     if(dutyCache.has(k))return dutyCache.get(k);
     const approach=await route(v,first.start),back=await route(last.end,v);
     if(!approach||!back)return null;
@@ -240,38 +243,35 @@ export async function generaCandidatiFlotta(input, options={}) {
       catch(e){diag.routingErrori.push({tipo:'VALIDATORE_VEICOLO',messaggio:String(e.message||e)});}
       if(!ok){diag.scartiTurniConflitti++;return;}
     }
-    const commercialMetres=selected.reduce((s,m)=>s+m.trip.metres,0);
-    const totalMetres=duty.technicalMetres+commercialMetres;
-    const costCents=Math.ceil(totalMetres/1000*num(v.euro_km)*100-1e-9);
-    const waitCents=cents(duty.waitHours*c.costoAttesaOra);
-    const revenueCents=selected.reduce((s,m)=>s+m.revenueCents,0);
-    // Ricavo lordo da richieste_pop_bus.prezzo. La commissione Turentu e'
-    // trattenuta sul lordo: la soglia copre il costo autista + attesa
-    // DOPO la trattenuta. Aritmetica in centesimi e basis points.
-    const commissionCents=Math.round(revenueCents*COMMISSIONE_TURENTU_BPS/BPS);
-    const netRevenueCents=revenueCents-commissionCents;
-    const fullCostCents=costCents+waitCents;
-    // Soglia lorda minima teorica (in centesimi), arrotondata verso l'alto.
-    // L'ammissibilita' viene comunque verificata sul netto effettivo
-    // arrotondato della commissione, evitando errori al centesimo.
-    const thresholdCents=Math.ceil(fullCostCents*BPS/(BPS-COMMISSIONE_TURENTU_BPS));
-    const marginCents=netRevenueCents-fullCostCents;
-    // LAUNCH: pareggio netto ammissibile, sottocosto netto escluso.
-    // Il costo include avvicinamento, trasferimenti, ritorno e attesa.
-    if(marginCents<0)return;
+    const commercialMetres=selected.reduce((sum,m)=>sum+num(m.trip.metres),0);
+    const transferMetres=links.reduce((sum,l)=>sum+num(l.transfer.metres),0);
+    // Un solo avvicinamento e un solo ritorno, anche per catene multi-missione.
+    // I prezzi sono importi TOTALI delle richieste, non prezzi unitari per posto.
+    const economy=valutaEconomiaCiclo({
+      ricaviRichiesteEuro:selected.flatMap(m=>m.requests.map(r=>num(r.prezzo))),
+      kmAvvicinamento:num(duty.approach.metres)/1000,
+      kmMissioni:commercialMetres/1000,
+      kmTrasferimenti:transferMetres/1000,
+      kmRitornoBase:num(duty.back.metres)/1000,
+      euroKm:num(v.euro_km),
+      oreAttesa:duty.waitHours,
+      costoAttesaOraEuro:c.costoAttesaOra
+    });
+    if(!economy.economicamenteAttivabile)return;
+    const totalMetres=economy.km.totali*1000;
     const candidate={
       veicolo:num(v.id),
       richieste:selected.map(m=>[...m.ids]),
       missioni:selected.length,
       partenza_base:new Date(duty.start).toISOString(),
       ritorno_base:new Date(duty.end).toISOString(),
-      ricavo_euro:euro(revenueCents),
-      commissione_turentu_euro:euro(commissionCents),
-      ricavo_netto_euro:euro(netRevenueCents),
-      soglia_attivazione_lorda_euro:euro(thresholdCents),
-      costo_completo_euro:euro(costCents),
-      costo_attesa_euro:euro(waitCents),
-      margine_ciclo_con_attesa_euro:euro(marginCents),
+      ricavo_euro:economy.ricavoLordoEuro,
+      commissione_turentu_euro:economy.commissioneTurentuEuro,
+      ricavo_netto_euro:economy.ricavoNettoEuro,
+      soglia_attivazione_lorda_euro:economy.sogliaAttivazioneLordaEuro,
+      costo_completo_euro:economy.costoKmEuro,
+      costo_attesa_euro:economy.costoAttesaEuro,
+      margine_ciclo_con_attesa_euro:economy.margineEuro,
       km_totali:totalMetres/1000,
       classe_richieste:[...new Set(selected.flatMap(m=>m.requests.map(r=>r.classe)))],
       tipo_candidato:selected.length===1?'MISSIONE_SINGOLA':'CATENA',
@@ -285,7 +285,7 @@ export async function generaCandidatiFlotta(input, options={}) {
     };
     if(typeof validateCandidate==='function') {
       let ok=false;
-      try{ok=await validateCandidate(candidate,{vehicle:v,selected,duty,links});}
+      try{ok=await validateCandidate(candidate,{vehicle:v,selected,duty,links,costoAttesaOra:c.costoAttesaOra});}
       catch(e){diag.routingErrori.push({tipo:'VALIDATORE_CANDIDATO',messaggio:String(e.message||e)});}
       if(!ok){diag.scartiCommerciali++;return;}
     }

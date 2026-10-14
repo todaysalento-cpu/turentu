@@ -1,5 +1,6 @@
 
 import { verificaPagamento } from './acceptance.js';
+import { fingerprintRichiesta } from './request-fingerprint.js';
 import { pool } from '../../../db/db.js';
 import { getIO } from '../../../socket.js';
 import {
@@ -274,29 +275,7 @@ async function movement(a, b) {
   return leg(a, b);
 }
 
-function fingerprint(r) {
-  if (!r) return null;
-  return JSON.stringify([
-    r.start_node_id,
-    r.end_node_id,
-    new Date(r.start_datetime).toISOString(),
-    r.posti_richiesti,
-    String(r.prezzo),
-    r.classe,
-    // Campi opzionali di qualità: eventuali modifiche invalidano
-    // lo snapshot già valutato.
-    r.classe_percorrenza,
-    r.tipo_percorrenza,
-    r.distanza_diretta_km,
-    r.distanzaKmDiretta,
-    r.distanza_km_diretta,
-    r.max_fermate_intermedie,
-    r.min_km_tra_fermate,
-    r.max_deviazione_pct,
-    r.max_ritardo_minuti,
-    r.tempo_diretto_secondi
-  ]);
-}
+const fingerprint = fingerprintRichiesta;
 
 // =====================================================
 // POPBUS V2 - LOCALITÀ
@@ -548,6 +527,20 @@ export async function processaProposteDinamicheV2() {
 
   const events = [];
 
+  // Collaudo controllato: in assenza della variabile nessun filtro viene applicato.
+  // La validazione avviene prima di qualunque accesso al database con scritture.
+  const richiestaTestIdRaw = process.env.POPBUS_TEST_REQUEST_ID;
+  const richiestaTestId = richiestaTestIdRaw === undefined
+    ? null
+    : Number(richiestaTestIdRaw);
+  if (richiestaTestId !== null &&
+      (!Number.isSafeInteger(richiestaTestId) ||
+       richiestaTestId <= 0 || richiestaTestId > 2147483647 ||
+       String(richiestaTestId) !== richiestaTestIdRaw)) {
+    cicliAttivi--;
+    throw new Error('POPBUS_TEST_REQUEST_ID non valido: usare un ID intero positivo');
+  }
+
   try {
     // =====================================================
     // CONNESSIONE DATABASE
@@ -579,6 +572,24 @@ export async function processaProposteDinamicheV2() {
     // =====================================================
     // PULIZIA ATTIVAZIONI SCADUTE
     // =====================================================
+
+    // In modalita collaudo, non consentire la pulizia globale.
+    // Il controllo viene eseguito sotto lo stesso advisory lock della pulizia.
+    if (richiestaTestId !== null) {
+      const { rows: scadenzeTest } = await client.query(`
+        SELECT COUNT(*)::int AS totale
+        FROM popbus_attivazioni
+        WHERE stato='in_attesa_autista'
+          AND expires_at<=NOW()
+      `);
+      if (scadenzeTest[0].totale !== 0) {
+        throw new Error(
+          `Collaudo richiesta ${richiestaTestId} bloccato: ` +
+          `${scadenzeTest[0].totale} attivazioni scadute da ripulire`
+        );
+      }
+      log('COLLAUDO ISOLATO', `Richiesta ${richiestaTestId}; nessuna scadenza pendente`);
+    }
 
     const { rows: expired } = await client.query(`
       UPDATE popbus_attivazioni
@@ -645,6 +656,7 @@ export async function processaProposteDinamicheV2() {
       WHERE r.stato='in_attesa'
         AND r.start_datetime>NOW()
         AND r.corsa_id IS NULL
+        AND ($1::int IS NULL OR r.id=$1::int)
         AND NOT EXISTS (
           SELECT 1
           FROM popbus_attivazione_richieste ar
@@ -653,7 +665,7 @@ export async function processaProposteDinamicheV2() {
         )
       ORDER BY r.start_datetime,r.id
       LIMIT 201
-    `);
+    `, [richiestaTestId]);
 
     stats.richieste = rawRequests.length;
 

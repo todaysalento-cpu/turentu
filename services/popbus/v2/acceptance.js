@@ -1,3 +1,4 @@
+import { fingerprintRichiesta } from './request-fingerprint.js';
 
 import Stripe from 'stripe';
 import polyline from 'polyline';
@@ -340,14 +341,7 @@ export async function accettaAttivazione(
   // =====================================================
 
   for (const r of requests) {
-    const fingerprint = JSON.stringify([
-      r.start_node_id,
-      r.end_node_id,
-      new Date(r.start_datetime).toISOString(),
-      r.posti_richiesti,
-      String(r.prezzo),
-      r.classe
-    ]);
+    const fingerprint = fingerprintRichiesta(r);
 
     if (
       !plan.requestSnapshot.some(

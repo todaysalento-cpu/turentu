@@ -13,6 +13,68 @@ import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 const GEOHASH_PRECISION_TRATTA = 5;
 const MAX_DISTANZA_NODO_POPBUS_METRI = 3000;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
+const MAX_DISTANZA_NODO_TERRITORIALE_METRI = 3000;
+
+// PIXEL: nodi territoriali separati dai nodi_direttrice del matching.
+async function getNearestTerritorialNode(lat, lon) {
+    const { rows } = await pool.query(`
+        SELECT id, ST_Distance(
+            posizione,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        ) AS distanza_metri
+        FROM public.nodi_territoriali
+        WHERE attivo = TRUE AND posizione IS NOT NULL
+          AND ST_DWithin(
+              posizione,
+              ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+              $3
+          )
+        ORDER BY distanza_metri ASC, id ASC
+        LIMIT 1
+    `, [lon, lat, MAX_DISTANZA_NODO_TERRITORIALE_METRI]);
+    return rows[0] ?? null;
+}
+
+async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
+    const [origine, destinazione] = await Promise.all([
+        getNearestTerritorialNode(lat, lon),
+        getNearestTerritorialNode(destLat, destLon)
+    ]);
+
+    const base = {
+        origine_nodo_territoriale_id: origine ? Number(origine.id) : null,
+        destinazione_nodo_territoriale_id: destinazione ? Number(destinazione.id) : null,
+        pixel_fermate_disponibili: false,
+        pixel_stato: 'nodi_non_disponibili'
+    };
+
+    if (!origine || !destinazione) return base;
+    if (Number(origine.id) === Number(destinazione.id)) {
+        return { ...base, pixel_stato: 'nodi_coincidenti' };
+    }
+
+    // Due fermate sono selezionabili solo se condividono un tipo veicolo.
+    const { rows } = await pool.query(`
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.pixel_fermate o
+            JOIN public.pixel_fermate d
+              ON d.nodo_territoriale_id = $2::BIGINT
+            WHERE o.nodo_territoriale_id = $1::BIGINT
+              AND o.attiva = TRUE AND o.verificata = TRUE
+              AND d.attiva = TRUE AND d.verificata = TRUE
+              AND o.tipi_veicolo_ammessi && d.tipi_veicolo_ammessi
+        ) AS disponibili
+    `, [origine.id, destinazione.id]);
+
+    const disponibili = rows[0]?.disponibili === true;
+    return {
+        ...base,
+        pixel_fermate_disponibili: disponibili,
+        pixel_stato: disponibili ? 'disponibile' : 'fermate_non_disponibili'
+    };
+}
+
 
 function determinaClasse(indice) {
     if (indice <= 0.3) return 'SAVER';
@@ -794,8 +856,24 @@ export async function cercaSlotUltra(richiesta) {
             }
         }
 
+        // La ricerca PIXEL è informativa: un errore non blocca le corse private.
+        let pixelContext = {
+            origine_nodo_territoriale_id: null,
+            destinazione_nodo_territoriale_id: null,
+            pixel_fermate_disponibili: false,
+            pixel_stato: 'non_verificato'
+        };
+        try {
+            pixelContext = await getPixelTerritorialContext(
+                lat, lon, destLat, destLon
+            );
+        } catch (err) {
+            console.error('[PIXEL] Errore associazione nodi territoriali:', err);
+        }
+
         const virtualPopSlot = {
             id: 'virtual_pop_pending',
+            ...pixelContext,
             tipo: 'pop-bus',
             is_pool: true,
             veicoli_pool_ids:

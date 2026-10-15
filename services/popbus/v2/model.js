@@ -78,12 +78,22 @@ export function generaCandidate(requests, maxCandidate = 500) {
     validId(r.id) && validNode(r.start_node_id) && validNode(r.end_node_id) &&
     Number(r.start_node_id) !== Number(r.end_node_id)
   );
+  // Indice in memoria per nodo di partenza. Conserva l'ordine di valid:
+  // la generazione e il limite candidate mantengono il comportamento originale.
+  const richiestePerOrigine = new Map();
+  for (const r of valid) {
+    const origine = Number(r.start_node_id);
+    if (!richiestePerOrigine.has(origine)) richiestePerOrigine.set(origine, []);
+    richiestePerOrigine.get(origine).push(r);
+  }
+
   for (const r of valid) add([Number(r.start_node_id), Number(r.end_node_id)], [requestId(r)], requestClass(r));
 
   for (let i = 0; i < queue.length; i++) {
     const c = queue[i];
-    for (const r of valid) {
-      if (Number(r.start_node_id) === c.nodes.at(-1) && !c.seeds.includes(requestId(r))) {
+    const richiesteCompatibiliPerNodo = richiestePerOrigine.get(c.nodes.at(-1)) || [];
+    for (const r of richiesteCompatibiliPerNodo) {
+      if (!c.seeds.includes(requestId(r))) {
         add([...c.nodes, Number(r.end_node_id)], [...c.seeds, requestId(r)], c.classe);
       }
     }

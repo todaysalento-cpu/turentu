@@ -1,0 +1,309 @@
+/**
+ * TURENTU POPBUS - SPAZIO -> TRAIETTORIE -> TEMPO -> INSIEMI
+ * Test diagnostico autonomo, sola memoria. Nessun DB, routing, worker o scrittura.
+ * node test_popbus_diagnostica_abcd_v2.mjs
+ * Optional: importa services/popbus/v2/model.js e confronta i seed-set di generaCandidate.
+ * ATTENZIONE: offset sintetico 10 minuti per arco, traiettorie lineari per corridoio.
+ */
+import { performance } from 'node:perf_hooks';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const MIN = 60_000;
+const TOL = 30;
+const MIN_PER_EDGE = 10;
+const CASES = [30, 100, 200, 500];
+const ts = (m) => new Date(Date.UTC(2027, 3, 1, 0, m)).toISOString();
+const rnd = (seed) => () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2**32);
+const nId = (corridor, pos) => corridor * 1000 + pos + 1;
+const nPos = (id) => (id - 1) % 1000;
+const corridorOf = (id) => Math.floor((id - 1) / 1000);
+const timeMinutes = (iso) => Date.parse(iso) / MIN;
+const round = (v) => Math.round(v * 1000) / 1000;
+
+function makeRequests(count, mode) {
+  const r = rnd(20261014 + count * 11 + (mode === 'concentrato' ? 7 : 0));
+  const corridors = mode === 'concentrato' ? 3 : Math.max(10, Math.ceil(count / 14));
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const corridor = mode === 'concentrato' ? i % corridors : Math.floor(r() * corridors);
+    const start = Math.floor(r() * (mode === 'concentrato' ? 14 : 22));
+    const len = 1 + Math.floor(r() * (mode === 'concentrato' ? 6 : 4));
+    const time = mode === 'concentrato' ? 9 * 60 + Math.floor(r() * 100) : 7 * 60 + Math.floor(r() * 12 * 60);
+    result.push({id:i+1,start_node_id:nId(corridor,start),end_node_id:nId(corridor,start+len),start_datetime:ts(time),classe:'STANDARD'});
+  }
+  return result;
+}
+
+function fixtures() {
+  // R1 A->C, R2 B->D (overlap), R3 D->E (sequential), R4 B->C at 11:00 (temporally distant)
+  return [
+    {id:1,start_node_id:nId(0,0),end_node_id:nId(0,2),start_datetime:ts(9*60)},
+    {id:2,start_node_id:nId(0,1),end_node_id:nId(0,3),start_datetime:ts(9*60+12)},
+    {id:3,start_node_id:nId(0,3),end_node_id:nId(0,4),start_datetime:ts(9*60+34)},
+    {id:4,start_node_id:nId(0,1),end_node_id:nId(0,2),start_datetime:ts(11*60)},
+    {id:5,start_node_id:nId(0,0),end_node_id:nId(0,4),start_datetime:ts(9*60+1)}
+  ];
+}
+
+function spatialTrajectories(reqs) {
+  const byCorridor = new Map();
+  const trajectories = new Map();
+  const add = (corridor, start, end) => {
+    if (start >= end) return;
+    const key = `${corridor}:${start}:${end}`;
+    if (!trajectories.has(key)) trajectories.set(key,{corridor,start,end,key});
+  };
+  for (const r of reqs) {
+    const c = corridorOf(r.start_node_id);
+    const start = nPos(r.start_node_id), end = nPos(r.end_node_id);
+    if (c !== corridorOf(r.end_node_id) || end <= start) throw Error(`Richiesta ${r.id} non lineare`);
+    add(c,start,end); // every request is an anchor, independent of grouping
+    if (!byCorridor.has(c)) byCorridor.set(c,[]);
+    byCorridor.get(c).push({start,end});
+  }
+  let merged = 0;
+  for (const [c, intervals] of byCorridor) {
+    intervals.sort((a,b)=>a.start-b.start || a.end-b.end);
+    let a=null,b=null;
+    for (const p of intervals) {
+      if (a===null) {a=p.start;b=p.end;continue;}
+      if (p.start<=b) b=Math.max(b,p.end); // includes end->start chains
+      else {add(c,a,b);merged++;a=p.start;b=p.end;}
+    }
+    if (a!==null) {add(c,a,b);merged++;}
+  }
+  return {trajectories:[...trajectories.values()],merged};
+}
+
+function buildGroups(reqs, trajectories) {
+  const byCorridor = new Map();
+  for (const r of reqs) {
+    const c=corridorOf(r.start_node_id);
+    if (!byCorridor.has(c)) byCorridor.set(c,[]);
+    byCorridor.get(c).push(r);
+  }
+  const groups = new Map();
+  let spatialChecks=0, covered=0, temporalWindows=0;
+  for (const tr of trajectories) {
+    const events=[];
+    for (const r of byCorridor.get(tr.corridor)||[]) {
+      spatialChecks++;
+      const start=nPos(r.start_node_id),end=nPos(r.end_node_id);
+      if (start<tr.start || end>tr.end) continue;
+      covered++;
+      // Shift the request's allowed pickup time to trajectory origin.
+      // These are REAL intervals under the SYNTHETIC fixed edge-duration model.
+      const offset=(start-tr.start)*MIN_PER_EDGE;
+      const nominal=timeMinutes(r.start_datetime)-offset;
+      events.push({t:nominal-TOL,id:r.id,delta:+1});
+      events.push({t:nominal+TOL+1e-5,id:r.id,delta:-1});
+    }
+    events.sort((a,b)=>a.t-b.t || b.delta-a.delta);
+    const active=new Set();
+    for(let i=0;i<events.length;) {
+      const t=events[i].t;
+      while(i<events.length && events[i].t===t) {
+        if(events[i].delta>0) active.add(events[i].id);
+        else active.delete(events[i].id);
+        i++;
+      }
+      const next=i<events.length?events[i].t:null;
+      if(next!==null && next>t && active.size>=2) {
+        temporalWindows++;
+        const ids=[...active].sort((a,b)=>a-b);
+        const key=tr.key+'|'+ids.join(',');
+        const old=groups.get(key);
+        if(old) {old.from=Math.min(old.from,t);old.to=Math.max(old.to,next);}
+        else groups.set(key,{tr:tr.key,ids,from:t,to:next});
+      }
+    }
+  }
+  return {groups:[...groups.values()],spatialChecks,covered,temporalWindows};
+}
+
+function countMembership(reqs,groups) {
+  const seen=new Set();
+  let biggest=0;
+  for(const g of groups) {biggest=Math.max(biggest,g.ids.length);for(const id of g.ids)seen.add(id);}
+  return {biggest,sharedRequests:seen.size,singletons:reqs.length};
+}
+
+function representation(candidates,groups) {
+  let covered=0, missing=0, singles=0, shared=0;
+  const examples=[];
+  for(const c of candidates) {
+    const seeds=[...new Set(c.seeds.map(Number))];
+    if(seeds.length===1) {singles++;covered++;continue;}
+    shared++;
+    const ok=groups.some(g=>seeds.every(id=>g.ids.includes(id)));
+    if(ok)covered++;
+    else {missing++;if(examples.length<3)examples.push({seeds,nodes:c.nodes});}
+  }
+  return {covered,missing,singles,shared,examples};
+}
+
+async function findV2() {
+  const paths=[
+    resolve(process.cwd(),'services/popbus/v2/model.js'),
+    resolve(process.cwd(),'../services/popbus/v2/model.js'),
+    resolve(process.cwd(),'../../services/popbus/v2/model.js')
+  ];
+  for(const p of paths) if(existsSync(p)) {
+    try {const mod=await import(pathToFileURL(p).href);if(typeof mod.generaCandidate==='function')return {fn:mod.generaCandidate,path:p};}
+    catch(e){return {error:`Import V2: ${e.message}`,path:p};}
+  }
+  return {error:'model.js non trovato: confronto V2 saltato'};
+}
+
+async function run(name,reqs,v2) {
+  const t0=performance.now();
+  const spatial=spatialTrajectories(reqs);
+  const t1=performance.now();
+  const temporal=buildGroups(reqs,spatial.trajectories);
+  const t2=performance.now();
+  const members=countMembership(reqs,temporal.groups);
+  const maxSeed=Math.max(0,...temporal.groups.map(g=>g.ids.length));
+  let v2info={status:'non_disponibile',candidate:null,v2_rappresentate:null,v2_non_rappresentate:null,esempi_mancanti:[],ms_v2:null};
+  if(v2.fn) {
+    const start=performance.now();
+    try {
+      // Deliberately bounded: protects test against V2 combinatorial explosion.
+      const candidates=v2.fn(reqs,10000);
+      const r=representation(candidates,temporal.groups);
+      v2info={status:'ok',candidate:candidates.length,v2_rappresentate:r.covered,v2_non_rappresentate:r.missing,v2_singole:r.singles,esempi_mancanti:r.examples,ms_v2:round(performance.now()-start)};
+    } catch(e) {
+      v2info={status:'limite_o_errore',candidate:null,v2_rappresentate:null,v2_non_rappresentate:null,esempi_mancanti:[],errore_v2:e.message,ms_v2:round(performance.now()-start)};
+    }
+  }
+  const out={scenario:name,richieste:reqs.length,candidate_singole_garantite:members.singletons,
+    traiettorie_spaziali:spatial.trajectories.length,componenti_spaziali:spatial.merged,
+    verifiche_copertura_spaziale:temporal.spatialChecks,richieste_coperte_su_traiettorie:temporal.covered,
+    finestre_temporali_condivise:temporal.temporalWindows,insiemi_spaziotemporali:temporal.groups.length,
+    gruppo_massimo:members.biggest,richieste_in_insiemi:members.sharedRequests,
+    ms_spazio:round(t1-t0),ms_tempo_insiemi:round(t2-t1),ms_totale:round(t2-t0),
+    heap_MB:round(process.memoryUsage().heapUsed/1048576),...v2info};
+  console.log(JSON.stringify(out));
+  if(members.singletons!==reqs.length)throw Error('Singole perse!');
+  return out;
+}
+
+
+// DIAGNOSTICA V2 - REVISIONE 2
+// Una singola e' sempre una candidata autonoma, anche se non e' in un gruppo condiviso.
+// La verifica dei gruppi richiede la STESSA traiettoria per copertura, tempo e gruppo.
+// Le classi B dipendono dai tempi sintetici e NON dimostrano impossibilita reale.
+function evaluateSeedSet(seeds, reqById, trajectories, groupsByTrajectory) {
+  const reqs=seeds.map(id=>reqById.get(id));
+  if(reqs.some(x=>!x))return {category:'INVALIDO',reason:'seed non trovato'};
+  if(seeds.length===1)return {category:'D',reason:'candidata singola autonoma',singleton:true};
+  const possible=[];
+  for(const tr of trajectories) {
+    let low=-Infinity, high=Infinity, fits=true;
+    for(const r of reqs) {
+      if(corridorOf(r.start_node_id)!==tr.corridor || corridorOf(r.end_node_id)!==tr.corridor || nPos(r.start_node_id)<tr.start || nPos(r.end_node_id)>tr.end) {fits=false;break;}
+      const nominal=timeMinutes(r.start_datetime)-(nPos(r.start_node_id)-tr.start)*MIN_PER_EDGE;
+      low=Math.max(low,nominal-TOL);
+      high=Math.min(high,nominal+TOL);
+    }
+    if(fits)possible.push({tr,low,high});
+  }
+  if(!possible.length)return {category:'A',reason:'nessuna traiettoria contiene integralmente tutti i seed'};
+  const feasible=possible.filter(x=>x.low<=x.high);
+  if(!feasible.length) {
+    const best=possible.reduce((a,b)=>(b.high-b.low)>(a.high-a.low)?b:a);
+    return {category:'B',reason:'finestre senza intersezione globale',margine_min:round(best.high-best.low),traiettoria:best.tr.key};
+  }
+  const group=feasible.flatMap(f=>(groupsByTrajectory.get(f.tr.key)||[]).map(g=>({f,g})))
+    .find(({g})=>seeds.every(id=>g.ids.includes(id)));
+  if(!group) {
+    const f=feasible[0];
+    return {category:'C',reason:'spazio e tempo validi ma insieme condiviso assente',traiettoria:f.tr.key,finestra_min:round(f.high-f.low)};
+  }
+  return {category:'D',traiettoria:group.f.tr.key,singleton:false};
+}
+function theoreticalSpatial(reqs) {
+  const corridors=new Set(reqs.map(r=>corridorOf(r.start_node_id)));
+  return corridors.size===1 && reqs.every(r=>corridorOf(r.start_node_id)===corridorOf(r.end_node_id));
+}
+function marginBucket(m) {
+  const gap=-m;
+  if(gap<=5)return 'entro_5_min';
+  if(gap<=30)return 'oltre_5_fino_30_min';
+  return 'oltre_30_min';
+}
+async function diagnostic(name, reqs, v2) {
+  const start=performance.now();
+  const spatial=spatialTrajectories(reqs);
+  const temporal=buildGroups(reqs,spatial.trajectories);
+  const reqById=new Map(reqs.map(r=>[Number(r.id),r]));
+  const groupsByTrajectory=new Map();
+  for(const g of temporal.groups){
+    if(!groupsByTrajectory.has(g.tr))groupsByTrajectory.set(g.tr,[]);
+    groupsByTrajectory.get(g.tr).push(g);
+  }
+  const singles=new Set(reqs.map(r=>Number(r.id)));
+  const out={scenario:name,richieste:reqs.length,traiettorie:spatial.trajectories.length,
+    insiemi:temporal.groups.length,singole_preservate:singles.size,
+    singole_mancanti:reqs.filter(r=>!singles.has(Number(r.id))).length,
+    categorie:{A:0,B:0,C:0,D:0,INVALIDO:0},
+    esempi:{A:[],B:[],C:[]},
+    categorie_condivise:{A:0,B:0,C:0,D:0,INVALIDO:0},
+    B_margini:{entro_5_min:0,oltre_5_fino_30_min:0,oltre_30_min:0},
+    C_singole:0,C_condivise:0,
+    A_stesso_corridoio:0,A_corridoi_diversi:0,
+    candidate_v2:null,status:'non_disponibile'};
+  if(out.singole_mancanti!==0)throw Error('Singole mancanti dal registro autonomo');
+  if(!v2.fn){out.errore=v2.error;console.log(JSON.stringify(out));return;}
+  let candidates;
+  try {candidates=v2.fn(reqs,10000);} catch(e) {
+    out.status='v2_non_completato';out.errore_v2=e.message;
+    out.ms_diagnostica=round(performance.now()-start);
+    console.log(JSON.stringify(out));return;
+  }
+  out.status='ok';out.candidate_v2=candidates.length;
+  const categorySets={A:new Set(),B:new Set(),C:new Set(),D:new Set()};
+  const missingShared=new Set();
+  for(const c of candidates) {
+    const seeds=[...new Set(c.seeds.map(Number))];
+    const verdict=evaluateSeedSet(seeds,reqById,spatial.trajectories,groupsByTrajectory);
+    const key=seeds.slice().sort((a,b)=>a-b).join(',');
+    out.categorie[verdict.category]++;
+    categorySets[verdict.category]?.add(key);
+    if(seeds.length>1) {
+      out.categorie_condivise[verdict.category]++;
+      if(verdict.category!=='D')missingShared.add(key);
+    }
+    if(verdict.category==='B')out.B_margini[marginBucket(verdict.margine_min)]++;
+    if(verdict.category==='C') {
+      if(seeds.length===1)out.C_singole++;
+      else out.C_condivise++;
+    }
+    if(verdict.category==='A') {
+      if(theoreticalSpatial(seeds.map(id=>reqById.get(id))))out.A_stesso_corridoio++;
+      else out.A_corridoi_diversi++;
+    }
+    if(out.esempi[verdict.category] && out.esempi[verdict.category].length<5)
+      out.esempi[verdict.category].push({seeds,nodes:c.nodes,...verdict});
+  }
+  out.seedset_unici_per_categoria=Object.fromEntries(Object.entries(categorySets).map(([k,v])=>[k,v.size]));
+  out.seedset_condivisi_non_rappresentati_unici=missingShared.size;
+  out.ms_diagnostica=round(performance.now()-start);
+  console.log(JSON.stringify(out));
+  if(out.C_singole!==0)throw Error('ERRORE DIAGNOSTICO: singola classificata C');
+  if(out.C_condivise>0)console.log('ATTENZIONE: categoria C CONDIVISA presente; verificare gruppi e traiettorie.');
+}
+console.log('TURENTU POPBUS - DIAGNOSTICA A/B/C/D REVISIONE 2');
+console.log('SOLA LETTURA; nessun DB, routing, worker. Offset SINTETICI 10 min/arco; tolleranza +/-30 min.');
+console.log('Singole: rappresentate dal registro autonomo; gruppi: stessa traiettoria per spazio, tempo e appartenenza.');
+console.log('B: intervalli temporali sintetici incompatibili; il margine negativo misura il gap.');
+console.log('Il confronto NON dimostra fattibilita planner ne parita delle rotte.');
+const v2=await findV2();
+console.log(v2.fn?`V2 importato: ${v2.path}`:`V2 non disponibile: ${v2.error}`);
+await diagnostic('fixture',fixtures(),v2);
+for(const mode of ['distribuito','concentrato']) {
+  console.log('\nSCENARIO '+mode.toUpperCase());
+  for(const count of CASES)await diagnostic(`${mode}_${count}`,makeRequests(count,mode),v2);
+}
+console.log('\nFINE. Nessun dato produttivo modificato.');

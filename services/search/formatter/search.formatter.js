@@ -511,6 +511,16 @@ export async function formatResults(
 
                                         tipo: 'pop-bus',
 
+                                        // PIXEL: informazioni territoriali, non nodi_direttrice.
+                                        origine_nodo_territoriale_id:
+                                            item.origine_nodo_territoriale_id ?? null,
+                                        destinazione_nodo_territoriale_id:
+                                            item.destinazione_nodo_territoriale_id ?? null,
+                                        pixel_fermate_disponibili:
+                                            item.pixel_fermate_disponibili === true,
+                                        pixel_stato:
+                                            item.pixel_stato ?? 'non_verificato',
+
                                         colore_ui:
                                             UI_CONFIG['pop-bus'].colore,
 

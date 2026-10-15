@@ -149,23 +149,29 @@ function uniqueNodes(nodes) {
   return map;
 }
 
-function mandatoryOrder(mandatory, offsets, map, base) {
-  let previous = -Infinity;
-  for (const id of mandatory) {
-    const offset = offsets.get(id);
-    if (!Number.isFinite(offset)) throw new Error('Proiezione nodo obbligatorio non valida');
-    if (offset <= previous + OFFSET_EPS_KM) {
-      const idx = mandatory.indexOf(id);
-      const prevId = mandatory[idx - 1];
-      const connector = base[idx - 1];
-      if (!(idx > 0 && connector?.roadCoincident === true &&
-            airMetres(map.get(prevId), map.get(id)) <= COLOCATED_MAX_METRES &&
-            offset + OFFSET_EPS_KM >= previous)) {
-        throw new Error('Ordine nodi obbligatori incompatibile con il routing');
-      }
+// Posizioni progressive dei nodi obbligatori: ricavate dalle tratte
+// effettivamente richieste al provider, non dalla proiezione globale.
+// La geometria può ripassare vicino a un nodo già attraversato.
+function baseGeometry(base) {
+  const segments = [];
+  let cumulativeKm = 0;
+  for (const route of base) {
+    const decoded = polyline.decode(route.polyline);
+    const coords = decoded.map(p => [Number(p[1]), Number(p[0])]);
+    let lengthKm = 0;
+    let line = null;
+    if (coords.length >= 2 && coords.some(p =>
+      Math.abs(p[0] - coords[0][0]) > 1e-10 ||
+      Math.abs(p[1] - coords[0][1]) > 1e-10)) {
+      line = turf.lineString(coords);
+      lengthKm = turf.length(line, { units: 'kilometers' });
+    } else if (!route.roadCoincident) {
+      throw new Error('Geometria tratta obbligatoria insufficiente');
     }
-    previous = Math.max(previous, offset);
+    segments.push({ line, startKm: cumulativeKm, lengthKm });
+    cumulativeKm += lengthKm;
   }
+  return { segments, totalKm: cumulativeKm };
 }
 
 // Pianifica un itinerario candidato attraverso i suoi nodi obbligatori.
@@ -203,40 +209,61 @@ export async function pianifica(c, nodes) {
     throw new Error('Lunghezza geometria non valida');
   }
 
-  // 2. Proiezione dei nodi sul percorso; gli obbligatori sono sempre
-  //    presenti, gli altri solo se sufficientemente vicini.
+  // 2. I nodi obbligatori sono ancorati ai confini delle tratte base.
+  // Evita falsi errori quando una strada ripassa vicino allo stesso nodo.
   const required = new Set(mandatory);
-  const offsets = new Map();
+  const { segments, totalKm } = baseGeometry(base);
   const snapped = [];
-  for (const n of map.values()) {
-    const projection = turf.nearestPointOnLine(
-      line, turf.point([n.lon, n.lat]), { units: 'kilometers' }
-    );
-    const distanceKm = Number(projection?.properties?.dist);
-    const offsetKm = Number(projection?.properties?.location);
-    if (!Number.isFinite(distanceKm) || !Number.isFinite(offsetKm)) continue;
-    if (!required.has(n.id) && distanceKm > SNAP_KM) continue;
-    // I nodi facoltativi proiettati sugli estremi possono invertire
-    // gli estremi effettivi o creare segmenti a lunghezza zero.
-    if (!required.has(n.id) &&
-        (offsetKm <= OFFSET_EPS_KM || offsetKm >= lengthKm - OFFSET_EPS_KM)) continue;
-    offsets.set(n.id, offsetKm);
-    snapped.push({ id: n.id, offsetKm, distanceKm });
+  const offsets = new Map();
+  let progressKm = 0;
+  for (let i = 0; i < mandatory.length; i++) {
+    const id = mandatory[i];
+    offsets.set(id, progressKm);
+    snapped.push({ id, offsetKm: progressKm, distanceKm: 0 });
+    if (i < segments.length) progressKm += segments[i].lengthKm;
   }
-  for (const id of mandatory) {
-    if (!offsets.has(id)) throw new Error(`Proiezione nodo obbligatorio fallita: ${id}`);
-  }
-  mandatoryOrder(mandatory, offsets, map, base);
 
-  // Conserva la posizione relativa dei nodi obbligatori in caso di
-  // proiezioni coincidenti, evitando ordinamenti arbitrari per ID.
+  // Nodi facoltativi: proiezione per singola tratta, non sull'intera
+  // geometria. Se più tratte passano vicino allo stesso nodo, non è
+  // possibile assegnare un'unica occorrenza senza ambiguità: lo si omette.
+  // Rimane una opportunità futura, non una fermata commerciale obbligatoria.
+  for (const n of map.values()) {
+    if (required.has(n.id)) continue;
+    const candidates = [];
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (!seg.line || seg.lengthKm <= OFFSET_EPS_KM) continue;
+      const projection = turf.nearestPointOnLine(
+        seg.line, turf.point([n.lon, n.lat]), { units: 'kilometers' }
+      );
+      const distanceKm = Number(projection?.properties?.dist);
+      const localKm = Number(projection?.properties?.location);
+      if (!Number.isFinite(distanceKm) || !Number.isFinite(localKm) ||
+          distanceKm > SNAP_KM) continue;
+      // I confini delle tratte corrispondono a nodi obbligatori.
+      // Non aggiungere fermate facoltative sovrapposte a tali confini.
+      if (localKm <= OFFSET_EPS_KM ||
+          localKm >= seg.lengthKm - OFFSET_EPS_KM) continue;
+      candidates.push({
+        offsetKm: seg.startKm + localKm,
+        distanceKm,
+        segmentIndex: i
+      });
+    }
+    if (candidates.length !== 1) continue;
+    const selected = candidates[0];
+    if (selected.offsetKm <= OFFSET_EPS_KM ||
+        selected.offsetKm >= totalKm - OFFSET_EPS_KM) continue;
+    offsets.set(n.id, selected.offsetKm);
+    snapped.push({ id: n.id, ...selected });
+  }
+
+  // Ordinamento deterministico: gli obbligatori precedono i facoltativi
+  // agli offset coincidenti; non dipende dall'ordine di catalogo.
   const requiredOrder = new Map(mandatory.map((id, i) => [id, i]));
   snapped.sort((a, b) =>
-    (Math.abs(a.offsetKm - b.offsetKm) <= OFFSET_EPS_KM &&
-     required.has(a.id) && required.has(b.id)
-      ? (requiredOrder.get(a.id) - requiredOrder.get(b.id))
-      : a.offsetKm - b.offsetKm) ||
-    (required.has(a.id) ? 0 : 1) - (required.has(b.id) ? 0 : 1) ||
+    a.offsetKm - b.offsetKm ||
+    Number(required.has(b.id)) - Number(required.has(a.id)) ||
     (requiredOrder.get(a.id) ?? Infinity) - (requiredOrder.get(b.id) ?? Infinity) ||
     a.id - b.id
   );

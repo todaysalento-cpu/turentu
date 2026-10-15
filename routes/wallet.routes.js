@@ -110,6 +110,8 @@ router.post('/ricarica/conferma', authMiddleware, async (req, res) => {
 
     await client.query('BEGIN');
 
+    // Serializza le conferme concorrenti dello stesso PaymentIntent.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [paymentIntentId]);
     // Controlla che questa transazione non sia già stata registrata (prevenzione doppie ricariche)
     const checkRes = await client.query(
       'SELECT id FROM transazioni_wallet WHERE riferimento_id = $1',
@@ -165,13 +167,27 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
   console.log(`👛 [WALLET-PAYMENT:${requestId}] Inizio flusso per user: ${req.user.id}`);
   console.log(`📥 [WALLET-PAYMENT:${requestId}] Payload ricevuto:`, JSON.stringify(req.body, null, 2));
 
+  let transaction = false;
   try {
     const { type, prezzo, slots } = req.body;
 
-    if (!prezzo || prezzo <= 0) return res.status(400).json({ error: 'Prezzo non valido' });
-    if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
+    if (!Number.isFinite(Number(prezzo)) || Number(prezzo) <= 0 || Math.round(Number(prezzo) * 100) < 50) return res.status(400).json({ error: 'Prezzo non valido' });
+    if (!Array.isArray(slots) || slots.length !== 1 || !slots[0] || typeof slots[0] !== 'object') return res.status(400).json({ error: 'Slots mancanti' });
 
     const clienteId = req.user.id;
+    const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
+    const onlySlot = slots[0];
+    const origin = req.body.searchOrigine ?? onlySlot.origine;
+    const destination = req.body.searchDestinazione ?? onlySlot.destinazione;
+    const validCoords = value => value && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lon)) &&
+      Math.abs(Number(value.lat)) <= 90 && Math.abs(Number(value.lon)) <= 180 &&
+      !(Number(value.lat) === 0 && Number(value.lon) === 0);
+    if (!validCoords(origin) || !validCoords(destination) ||
+        !Number.isInteger(Number(onlySlot.posti_richiesti)) || Number(onlySlot.posti_richiesti) <= 0 ||
+        !onlySlot.start_datetime || !Number.isFinite(Date.parse(onlySlot.start_datetime)) ||
+        new Date(onlySlot.start_datetime) <= new Date()) {
+      return res.status(400).json({ error: 'Coordinate, passeggeri e data futura obbligatori' });
+    }
     // PIXEL: valida tutti gli slot POPBUS prima di addebitare il wallet.
     const pixelBySlot = new Map();
     for (const slot of slots) {
@@ -181,13 +197,14 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       const fresh = await cercaSlotUltra({ coord: o, coordDest: d,
         posti_richiesti: Number(slot.posti_richiesti), start_datetime: slot.start_datetime });
       const quotation = fresh.find(x => String(x.id) === String(slot.id));
-      if (!quotation || Math.round(Number(quotation.prezzo) * 100) !== Math.round(Number(slot.prezzo ?? prezzo) * 100)) {
+      if (!quotation || Math.round(Number(quotation.prezzo) * 100) !== Math.round(Number(prezzo) * 100) || !isPopbusSlot(quotation)) {
         return res.status(409).json({ error: 'POPBUS: opzione o prezzo cambiati; ripetere la ricerca' });
       }
       pixelBySlot.set(slot, quotation);
     }
 
     await client.query('BEGIN');
+    transaction = true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE', [clienteId]);
 
     const validatedPixel = new Map();
@@ -204,6 +221,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
 
     if (saldoDisponibile < parseFloat(prezzo)) {
       await client.query('ROLLBACK');
+      transaction = false;
       console.log(`❌ [WALLET-PAYMENT:${requestId}] Credito insufficiente. Saldo: ${saldoDisponibile}, Richiesto: ${prezzo}`);
       return res.status(400).json({ 
         error: 'Credito wallet insufficiente', 
@@ -214,7 +232,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
 
     const transazioneRes = await client.query(
       'INSERT INTO transazioni_wallet (utente_id, importo, tipo, riferimento_id) VALUES ($1, $2, $3, $4) RETURNING id',
-      [clienteId, -parseFloat(prezzo), 'SCALATURA_CORSA', null]
+      [clienteId, -parseFloat(prezzo), 'SCALATURA_CORSA', requestId]
     );
     const transazioneWalletId = transazioneRes.rows[0].id;
 
@@ -233,29 +251,32 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       if (isPopBus) {
         const nodeRes = await client.query(
           `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-          [slot.origine.lat, slot.origine.lon, slot.destinazione.lat, slot.destinazione.lon]
+          [Number(origin.lat), Number(origin.lon), Number(destination.lat), Number(destination.lon)]
         );
 
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (
             cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-            start_node_id, end_node_id,
-             origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id
-          )
-            VALUES (
-            $1,
-            ST_SetSRID(ST_MakePoint($2,$3),4326),
+            start_node_id, end_node_id, classe, origine_address, destinazione_address,
+            prezzo, payment_intent_id, request_id,
+            origine_nodo_territoriale_id, destinazione_nodo_territoriale_id,
+            origine_fermata_id, destinazione_fermata_id
+          ) VALUES (
+            $1, ST_SetSRID(ST_MakePoint($2,$3),4326),
             ST_SetSRID(ST_MakePoint($4,$5),4326),
-            $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13
+            $6, $7, 'in_attesa', $8, $9, $10, $11, $12,
+            $13, $14, $15, $16, $17, $18, $19
           ) RETURNING *`,
           [
             clienteId,
-            slot.origine.lon, slot.origine.lat,
-            slot.destinazione.lon, slot.destinazione.lat,
-            slot.start_datetime,
-            slot.posti_richiesti,
-            nodeRes.rows[0].start,
-            nodeRes.rows[0].end,
+            Number(origin.lon), Number(origin.lat),
+            Number(destination.lon), Number(destination.lat),
+            slot.start_datetime, slot.posti_richiesti,
+            nodeRes.rows[0].start, nodeRes.rows[0].end,
+            slot.classe || 'STANDARD',
+            slot.origine_address || slot.localitaOrigine || 'Partenza',
+            slot.destinazione_address || slot.localitaDestinazione || 'Arrivo',
+            Number(prezzo), `wallet_${requestId}`, requestId,
             validatedPixel.get(slot).origine_nodo_territoriale_id,
             validatedPixel.get(slot).destinazione_nodo_territoriale_id,
             validatedPixel.get(slot).origine_fermata_id,
@@ -290,7 +311,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
             clienteId,
             slot.start_datetime,
             slot.posti_richiesti,
-            type,
+            sanitizedType,
             (prezzo / slots.length),
             distanza,
             durata,
@@ -305,65 +326,40 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
         );
 
         savedRow = result.rows[0];
-        await upsertPrenotazione(savedRow);
+        // Aggiornamento cache solo dopo COMMIT.
       }
       
       pendingRows.push(savedRow);
       console.log(`📝 [WALLET-PAYMENT:${requestId}] Record inserito correttamente: ${savedRow.id}`);
 
-      // ================= NOTIFICA DRIVER / ADMIN =================
-      try {
-        const adminRes = await pool.query(
-          "SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1"
-        );
-
-        const adminId = adminRes.rows[0]?.id;
-        const targetId = savedRow.autista_id || adminId;
-
-        if (!targetId || Number.isNaN(Number(targetId))) {
-          throw new Error(`targetId non valido: ${targetId}`);
-        }
-
-        const role = savedRow.autista_id ? 'driver' : 'admin';
-        console.log(`🔔 [NOTIFY_ADMIN] Invio notifica a ${role} (${targetId})...`);
-
-        await notifyUser(Number(targetId), {
-          type: 'NEW_REQUEST',
-          message: `Nuova richiesta di prenotazione pagata con Wallet`,
-          role,
-          data: { 
-            requestId, 
-            rowId: savedRow.id, 
-            type, 
-            start_datetime: slot.start_datetime 
-          }
-        });
-
-      } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY_ADMIN] Errore notifica:`, notifyErr);
-      }
-
-      // ================= NOTIFICA CLIENTE =================
-      try {
-        console.log(`🔔 [NOTIFY_CLIENT] Invio notifica a cliente (${clienteId})...`);
-        
-        await notifyUser(Number(clienteId), {
-          type: 'REQUEST_CREATED',
-          message: `La tua prenotazione è stata pagata e confermata con il wallet`,
-          role: 'cliente',
-          data: { 
-            requestId, 
-            rowId: savedRow.id, 
-            type, 
-            start_datetime: slot.start_datetime 
-          }
-        });
-      } catch (notifyErr) {
-        console.error(`⚠️ [NOTIFY_CLIENT] Errore notifica:`, notifyErr);
-      }
     }
 
     await client.query('COMMIT');
+    transaction = false;
+    // Side effect esterni SOLO dopo il COMMIT: nessuna notifica per richieste annullate.
+    for (let i = 0; i < pendingRows.length; i++) {
+      const savedRow = pendingRows[i];
+      const slot = slots[i];
+      if (!isPopbusSlot(slot)) {
+        try { await upsertPrenotazione(savedRow); }
+        catch (error) { console.error('[WALLET CACHE POSTCOMMIT]', error); }
+      }
+      try {
+        const adminRes = await pool.query("SELECT id FROM utente WHERE tipo = 'admin' ORDER BY id LIMIT 1");
+        const targetId = savedRow.autista_id || adminRes.rows[0]?.id;
+        if (targetId) await notifyUser(Number(targetId), {
+          type: 'NEW_REQUEST', message: 'Nuova richiesta di prenotazione pagata con Wallet',
+          role: savedRow.autista_id ? 'driver' : 'admin',
+          data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
+        });
+      } catch (error) { console.error('[WALLET NOTIFY ADMIN POSTCOMMIT]', error); }
+      try {
+        await notifyUser(Number(clienteId), {
+          type: 'REQUEST_CREATED', message: 'La tua prenotazione è stata pagata e confermata con il wallet',
+          role: 'cliente', data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
+        });
+      } catch (error) { console.error('[WALLET NOTIFY CLIENT POSTCOMMIT]', error); }
+    }
     console.log(`✅ [WALLET-PAYMENT:${requestId}] Transazione wallet completata con successo.`);
     
     res.json({ 
@@ -375,7 +371,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (transaction) { try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('[WALLET ROLLBACK]', rollbackError); } }
     console.error(`❌ [WALLET-PAYMENT:${requestId}] Errore critico:`, err);
     res.status(err.status || 500).json({ error: err.message });
   } finally {

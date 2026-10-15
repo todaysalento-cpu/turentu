@@ -26,11 +26,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   try {
     const { type, prezzo, slots, usaWallet, searchOrigine, searchDestinazione } = req.body;
 
-    if (!prezzo || prezzo <= 0) {
+    if (!Number.isFinite(Number(prezzo)) || Number(prezzo) <= 0 || Math.round(Number(prezzo) * 100) < 50) {
       console.warn(`⚠️ [PAYMENT:${requestId}] Prezzo non valido: ${prezzo}`);
       return res.status(400).json({ error: 'Prezzo non valido' });
     }
-    if (!slots || !Array.isArray(slots) || slots.length === 0) {
+    if (!Array.isArray(slots) || slots.length !== 1 || !slots[0] || typeof slots[0] !== 'object') {
       console.warn(`⚠️ [PAYMENT:${requestId}] Slots mancanti o non validi`);
       return res.status(400).json({ error: 'Slots mancanti' });
     }
@@ -38,11 +38,17 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const selected=slots[0];
     const o=searchOrigine||selected.origine,d=searchDestinazione||selected.destinazione;
     const count=Number(selected.posti_richiesti),when=selected.start_datetime;
+    if (!o || !d || ![o.lat, o.lon, d.lat, d.lon].every(v => Number.isFinite(Number(v))) ||
+        Math.abs(Number(o.lat)) > 90 || Math.abs(Number(d.lat)) > 90 ||
+        Math.abs(Number(o.lon)) > 180 || Math.abs(Number(d.lon)) > 180 ||
+        (Number(o.lat) === 0 && Number(o.lon) === 0) || (Number(d.lat) === 0 && Number(d.lon) === 0)) {
+      return res.status(400).json({ error: 'Coordinate di ricerca non valide' });
+    }
     if(!o||!d||!Number.isInteger(count)||count<=0||!when||!Number.isFinite(new Date(when).getTime())||new Date(when)<=new Date())return res.status(400).json({error:'Coordinate, passeggeri e data futura obbligatori'});
     const fresh=await cercaSlotUltra({coord:o,coordDest:d,posti_richiesti:count,start_datetime:when});
     const quotation=fresh.find(x=>String(x.id)===String(selected.id));
     if(!quotation||Math.round(Number(quotation.prezzo)*100)!==Math.round(Number(prezzo)*100))return res.status(409).json({error:'Prezzo/opzione cambiati: ripetere la ricerca'});
-    if(quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
+    if(isPopbusSlot(quotation) && quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
     // Mantiene i riferimenti PIXEL del client separati dai dati della quotazione.
     const pixelPayload = {
       origine_nodo_territoriale_id: selected.origine_nodo_territoriale_id,
@@ -51,6 +57,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       destinazione_fermata_id: selected.destinazione_fermata_id,
     };
     Object.assign(selected, quotation, { start_datetime: when, posti_richiesti: count }, pixelPayload);
+    // Non permettere che il tipo dichiarato dal client cambi il tipo della quotazione.
+    if (isPopbusSlot(selected) !== isPopbusSlot(quotation)) {
+      return res.status(409).json({ error: 'Tipo di opzione cambiato: ripetere la ricerca' });
+    }
     await client.query('BEGIN');transaction=true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
     const pixelValidated = isPopbusSlot(selected) ? await validatePixelStops(client, selected, quotation) : null;
@@ -82,9 +92,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if (!pagatoConWallet) {
       console.log(`💳 [PAYMENT:${requestId}] Creazione Stripe PaymentIntent per importo: €${prezzo}`);
       paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(prezzo * 100),
+        amount: Math.round(Number(prezzo) * 100),
         currency: 'eur',
-        metadata: { tipo: sanitizedType, clienteId: clienteId.toString(), requestId },
+        metadata: { tipo: isPopbusSlot(selected) ? 'popbus' : sanitizedType, clienteId: clienteId.toString(), requestId },
         capture_method: 'manual',
       });
       console.log(`💳 [PAYMENT:${requestId}}] Stripe PaymentIntent creato con ID: ${paymentIntent.id}`);
@@ -292,7 +302,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-    if(transaction&&!committed)await client.query('ROLLBACK');
+    if(transaction&&!committed){try{await client.query('ROLLBACK');}catch(rollbackError){console.error('[PAYMENT ROLLBACK]',rollbackError);}}
     if(!committed&&paymentIntent){try{await stripe.paymentIntents.cancel(paymentIntent.id);}catch(e){console.error('[PAYMENT CANCEL]',e.message);}}
     console.error(`❌ [PAYMENT:${requestId}] Errore critico intercettato. Rollback eseguito. Dettagli:`, err);
     res.status(err.status || 500).json({ error: err.message });

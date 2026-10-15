@@ -32,6 +32,33 @@ router.post("/", async (req, res) => {
 
     console.log(`🔍 Search elaborata. Risultati trovati: ${risultati?.length || 0}`);
 
+    // Diagnostica PIXEL: sola lettura, non modifica i risultati della ricerca.
+    const risultatiPopbus = Array.isArray(risultati)
+      ? risultati.filter((r) =>
+          r && (
+            r.tipo === "pop-bus" ||
+            String(r.id ?? "").includes("virtual_pop") ||
+            r.origine_nodo_territoriale_id !== undefined ||
+            r.destinazione_nodo_territoriale_id !== undefined
+          )
+        )
+      : [];
+
+    console.log("📍 [PIXEL TEST] Risultati POPBUS:", risultatiPopbus.length);
+    console.log("📍 [PIXEL TEST RISULTATI]", JSON.stringify(
+      risultatiPopbus.map((r) => ({
+        id: r.id,
+        tipo: r.tipo,
+        classe: r.classe,
+        origine_nodo_territoriale_id: r.origine_nodo_territoriale_id ?? null,
+        destinazione_nodo_territoriale_id: r.destinazione_nodo_territoriale_id ?? null,
+        pixel_fermate_disponibili: r.pixel_fermate_disponibili ?? null,
+        pixel_stato: r.pixel_stato ?? null
+      })),
+      null,
+      2
+    ));
+
     // 3. DEBUG LOGGING
     if (risultati?.length > 0) {
       console.log(`📡 [DEBUG API] Inviando ${risultati.length} elementi.`);

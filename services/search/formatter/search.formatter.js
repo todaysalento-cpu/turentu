@@ -118,135 +118,112 @@ function interoNonNegativo(value, fallback = null) {
  *   nuova richiesta, non a una corsa già attivata.
  */
 function formattaFormazione(formazione, postiUtente, prezzoEffettivo) {
+    const vuota = {
+        formazione_disponibile: false,
+        stato_formazione: 'non_disponibile',
+        richieste_compatibili: 0,
+        posti_in_formazione: 0,
+        picco_occupazione: 0,
+        posti_richiesti_utente: postiUtente,
+        posti_mancanti_stimati: null,
+        posti_mancanti_dopo_richiesta_stimati: null,
+        ricavo_attuale: null,
+        ricavo_con_richiesta: null,
+        costo_attivazione: null,
+        soglia_attivazione_lorda: null,
+        commissione_turentu: null,
+        ricavo_netto_con_richiesta: null,
+        margine_netto_con_richiesta: null,
+        ricavo_mancante: null,
+        ricavo_mancante_dopo_richiesta: null,
+        soglia_raggiunta: false,
+        partenza_prevista_formazione: null,
+        veicolo_riferimento_id: null,
+        attendibilita_formazione: 'non_disponibile'
+    };
+
     if (!formazione || formazione.stato === 'nessuna_formazione') {
-        return {
-            formazione_disponibile: false,
-            stato_formazione: 'non_disponibile',
-            richieste_compatibili: 0,
-            posti_in_formazione: 0,
-            picco_occupazione: 0,
-            posti_richiesti_utente: postiUtente,
-            posti_mancanti_stimati: null,
-            posti_mancanti_dopo_richiesta_stimati: null,
-            ricavo_attuale: null,
-            ricavo_con_richiesta: null,
-            costo_attivazione: null,
-            ricavo_mancante: null,
-            ricavo_mancante_dopo_richiesta: null,
-            soglia_raggiunta: false,
-            partenza_prevista_formazione: null,
-            veicolo_riferimento_id: null,
-            attendibilita_formazione: 'non_disponibile'
-        };
+        return vuota;
     }
 
     const ricavoAttuale = numeroValido(formazione.ricavo_attuale);
     const costoAttivazione = numeroValido(formazione.costo_attivazione);
+    const sogliaLorda = numeroValido(formazione.soglia_attivazione_lorda);
+    const ricavoOriginale = numeroValido(formazione.ricavo_con_richiesta);
 
-    const prezzoOriginale = numeroValido(formazione.ricavo_con_richiesta);
-
-    // Il prezzo del cliente è arrotondato all'euro superiore.
-    // Adeguiamo soltanto la proiezione economica, senza
-    // modificare i ricavi delle richieste già salvate.
+    // La soglia lorda è calcolata da cycle-pricing.js: include commissione
+    // Turentu e costo dell'intero ciclo (avvicinamento, missione, ritorno).
+    // Se manca, NON sostituirla con il solo costo operativo.
+    const centesimi = valore => Math.round(valore * 100);
+    const euro = valore => Math.round(valore) / 100;
     const ricavoConRichiesta =
         ricavoAttuale !== null && prezzoEffettivo !== null
-            ? Math.round((ricavoAttuale + prezzoEffettivo) * 100) / 100
-            : prezzoOriginale;
+            ? euro(centesimi(ricavoAttuale) + centesimi(prezzoEffettivo))
+            : ricavoOriginale;
 
-    const ricavoMancante =
-        costoAttivazione !== null && ricavoAttuale !== null
-            ? Math.max(
-                0,
-                Math.round(
-                    (costoAttivazione - ricavoAttuale) * 100
-                ) / 100
-            )
+    const deficit = ricavo =>
+        sogliaLorda !== null && ricavo !== null
+            ? Math.max(0, euro(centesimi(sogliaLorda) - centesimi(ricavo)))
             : null;
 
-    const ricavoMancanteDopo =
-        costoAttivazione !== null && ricavoConRichiesta !== null
-            ? Math.max(
-                0,
-                Math.round(
-                    (costoAttivazione - ricavoConRichiesta) * 100
-                ) / 100
-            )
-            : null;
+    const ricavoMancante = deficit(ricavoAttuale);
+    const ricavoMancanteDopo = deficit(ricavoConRichiesta);
 
     const prezzoUnitario =
         prezzoEffettivo !== null && postiUtente > 0
             ? prezzoEffettivo / postiUtente
             : null;
 
-    const stimaPosti = (deficit) => {
-        if (deficit === null) return null;
-        if (deficit <= 0) return 0;
-
-        if (
-            prezzoUnitario === null ||
-            !Number.isFinite(prezzoUnitario) ||
-            prezzoUnitario <= 0
-        ) {
+    const stimaPosti = mancante => {
+        if (mancante === null) return null;
+        if (mancante <= 0) return 0;
+        if (prezzoUnitario === null ||
+            !Number.isFinite(prezzoUnitario) || prezzoUnitario <= 0) {
             return null;
         }
-
-        return Math.ceil(
-            (deficit - 1e-9) / prezzoUnitario
-        );
+        return Math.ceil((mancante - 1e-9) / prezzoUnitario);
     };
 
-    const sogliaRaggiunta =
-        ricavoMancanteDopo !== null
-            ? ricavoMancanteDopo <= 0
-            : false;
+    // L'anteprima usa la soglia lorda esatta prodotta dal motore economico.
+    // Il confronto è aggiornato al prezzo effettivamente esposto al cliente.
+    const sogliaRaggiunta = ricavoMancanteDopo !== null &&
+        ricavoMancanteDopo === 0;
+
+    // Ricostruzione informativa della commissione sul prezzo finale.
+    // Il 15% è la commissione definita in cycle-pricing.js.
+    const commissioneCentesimi = ricavoConRichiesta !== null
+        ? Math.round(centesimi(ricavoConRichiesta) * 1500 / 10000)
+        : null;
+    const nettoCentesimi = commissioneCentesimi !== null
+        ? centesimi(ricavoConRichiesta) - commissioneCentesimi
+        : null;
+    const margineCentesimi = nettoCentesimi !== null && costoAttivazione !== null
+        ? nettoCentesimi - centesimi(costoAttivazione)
+        : null;
 
     return {
         formazione_disponibile: true,
         stato_formazione: sogliaRaggiunta
-            ? 'soglia_economica_raggiunta'
-            : 'in_formazione',
-
-        richieste_compatibili: interoNonNegativo(
-            formazione.richieste_compatibili,
-            0
-        ),
-
-        posti_in_formazione: interoNonNegativo(
-            formazione.posti_in_formazione,
-            0
-        ),
-
-        picco_occupazione: interoNonNegativo(
-            formazione.picco_occupazione,
-            0
-        ),
-
+            ? 'soglia_economica_raggiunta' : 'in_formazione',
+        richieste_compatibili: interoNonNegativo(formazione.richieste_compatibili, 0),
+        posti_in_formazione: interoNonNegativo(formazione.posti_in_formazione, 0),
+        picco_occupazione: interoNonNegativo(formazione.picco_occupazione, 0),
         posti_richiesti_utente: postiUtente,
-
-        posti_mancanti_stimati: stimaPosti(
-            ricavoMancante
-        ),
-
-        posti_mancanti_dopo_richiesta_stimati: stimaPosti(
-            ricavoMancanteDopo
-        ),
-
+        posti_mancanti_stimati: stimaPosti(ricavoMancante),
+        posti_mancanti_dopo_richiesta_stimati: stimaPosti(ricavoMancanteDopo),
         ricavo_attuale: ricavoAttuale,
         ricavo_con_richiesta: ricavoConRichiesta,
         costo_attivazione: costoAttivazione,
+        soglia_attivazione_lorda: sogliaLorda,
+        commissione_turentu: commissioneCentesimi === null ? null : euro(commissioneCentesimi),
+        ricavo_netto_con_richiesta: nettoCentesimi === null ? null : euro(nettoCentesimi),
+        margine_netto_con_richiesta: margineCentesimi === null ? null : euro(margineCentesimi),
         ricavo_mancante: ricavoMancante,
         ricavo_mancante_dopo_richiesta: ricavoMancanteDopo,
-
         soglia_raggiunta: sogliaRaggiunta,
-
-        partenza_prevista_formazione:
-            formazione.partenza_prevista || null,
-
-        veicolo_riferimento_id:
-            formazione.veicolo_riferimento_id ?? null,
-
-        attendibilita_formazione:
-            formazione.attendibilita || 'indicativa'
+        partenza_prevista_formazione: formazione.partenza_prevista || null,
+        veicolo_riferimento_id: formazione.veicolo_riferimento_id ?? null,
+        attendibilita_formazione: formazione.attendibilita || 'indicativa'
     };
 }
 
@@ -535,6 +512,8 @@ export async function formatResults(
                                         localitaDestinazione,
 
                                         oraPartenza:
+                                            oraPartenzaISO,
+                                        start_datetime:
                                             oraPartenzaISO,
 
                                         oraArrivo:

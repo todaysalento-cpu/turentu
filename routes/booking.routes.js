@@ -5,7 +5,8 @@ import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
-import { notifyUser } from '../services/notifications/notification.service.js'; 
+import { notifyUser } from '../services/notifications/notification.service.js';
+import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.validation.service.js'; 
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
@@ -42,9 +43,17 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const quotation=fresh.find(x=>String(x.id)===String(selected.id));
     if(!quotation||Math.round(Number(quotation.prezzo)*100)!==Math.round(Number(prezzo)*100))return res.status(409).json({error:'Prezzo/opzione cambiati: ripetere la ricerca'});
     if(quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
-    Object.assign(selected,quotation,{start_datetime:when,posti_richiesti:count});
+    // Mantiene i riferimenti PIXEL del client separati dai dati della quotazione.
+    const pixelPayload = {
+      origine_nodo_territoriale_id: selected.origine_nodo_territoriale_id,
+      destinazione_nodo_territoriale_id: selected.destinazione_nodo_territoriale_id,
+      origine_fermata_id: selected.origine_fermata_id,
+      destinazione_fermata_id: selected.destinazione_fermata_id,
+    };
+    Object.assign(selected, quotation, { start_datetime: when, posti_richiesti: count }, pixelPayload);
     await client.query('BEGIN');transaction=true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
+    const pixelValidated = isPopbusSlot(selected) ? await validatePixelStops(client, selected, quotation) : null;
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
     const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
 
@@ -106,7 +115,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
-    const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
+    const isPopBus = isPopbusSlot(slot);
 
     let savedRow;
 
@@ -123,13 +132,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-          start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id
+          start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id,
+           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
         ) RETURNING *`,
         [
           clienteId,
@@ -144,7 +154,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           destinazioneAddress,
           prezzo,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
-          requestId
+          requestId,
+          pixelValidated.origine_nodo_territoriale_id,
+          pixelValidated.destinazione_nodo_territoriale_id,
+          pixelValidated.origine_fermata_id,
+          pixelValidated.destinazione_fermata_id
         ]
       );
 
@@ -281,7 +295,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if(transaction&&!committed)await client.query('ROLLBACK');
     if(!committed&&paymentIntent){try{await stripe.paymentIntents.cancel(paymentIntent.id);}catch(e){console.error('[PAYMENT CANCEL]',e.message);}}
     console.error(`❌ [PAYMENT:${requestId}] Errore critico intercettato. Rollback eseguito. Dettagli:`, err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
     console.log(`🔌 [PAYMENT:${requestId}] Connessione al database rilasciata.`);

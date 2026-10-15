@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
 import { notifyUser } from '../services/notifications/notification.service.js'; 
 import Stripe from 'stripe';
+import { cercaSlotUltra } from '../services/search/search.service.js';
+import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 
 const router = express.Router();
 
@@ -85,16 +87,23 @@ router.post('/ricarica/conferma', authMiddleware, async (req, res) => {
   const requestId = uuidv4();
 
   try {
-    const { paymentIntentId, importo } = req.body;
+    const { paymentIntentId } = req.body;
     const clienteId = req.user.id;
 
-    if (!paymentIntentId || !importo) {
+    if (!paymentIntentId) {
       return res.status(400).json({ success: false, error: 'Dati pagamento mancanti' });
     }
 
     // Verifica lo stato direttamente da Stripe per sicurezza
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
+    if (paymentIntent.metadata?.tipo !== 'RICARICA_WALLET' ||
+        String(paymentIntent.metadata?.clienteId) !== String(clienteId) ||
+        paymentIntent.currency !== 'eur' ||
+        !Number.isSafeInteger(paymentIntent.amount_received) || paymentIntent.amount_received <= 0) {
+      return res.status(403).json({ success: false, error: 'Ricarica non associata all’utente o importo non valido' });
+    }
+    const importo = paymentIntent.amount_received / 100;
     if (paymentIntent.status !== 'succeeded') {
       return res.status(400).json({ success: false, error: 'Il pagamento non è stato completato su Stripe' });
     }
@@ -163,11 +172,31 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
     if (!slots || !Array.isArray(slots) || slots.length === 0) return res.status(400).json({ error: 'Slots mancanti' });
 
     const clienteId = req.user.id;
+    // PIXEL: valida tutti gli slot POPBUS prima di addebitare il wallet.
+    const pixelBySlot = new Map();
+    for (const slot of slots) {
+      if (!isPopbusSlot(slot)) continue;
+      const o = req.body.searchOrigine ?? slot.origine;
+      const d = req.body.searchDestinazione ?? slot.destinazione;
+      const fresh = await cercaSlotUltra({ coord: o, coordDest: d,
+        posti_richiesti: Number(slot.posti_richiesti), start_datetime: slot.start_datetime });
+      const quotation = fresh.find(x => String(x.id) === String(slot.id));
+      if (!quotation || Math.round(Number(quotation.prezzo) * 100) !== Math.round(Number(slot.prezzo ?? prezzo) * 100)) {
+        return res.status(409).json({ error: 'POPBUS: opzione o prezzo cambiati; ripetere la ricerca' });
+      }
+      pixelBySlot.set(slot, quotation);
+    }
 
     await client.query('BEGIN');
+    await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE', [clienteId]);
+
+    const validatedPixel = new Map();
+    for (const [slot, quotation] of pixelBySlot) {
+      validatedPixel.set(slot, await validatePixelStops(client, slot, quotation));
+    }
 
     const saldoRes = await client.query(
-      'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1 FOR UPDATE',
+      'SELECT COALESCE(SUM(importo), 0) AS saldo_attuale FROM transazioni_wallet WHERE utente_id = $1',
       [clienteId]
     );
 
@@ -197,7 +226,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       console.log(`⏰ [DEBUG-DATE:${requestId}] Slot ${slot.id} - start_datetime grezzo dal client:`, slot.start_datetime);
       console.log(`⏰ [DEBUG-DATE:${requestId}] Interpretato in ISO dal server:`, new Date(slot.start_datetime).toISOString());
 
-      const isPopBus = slot.is_pool === true || (slot.id && typeof slot.id === 'string' && (slot.id.startsWith('dir_') || slot.id === 'nuova_proposta' || slot.id.startsWith('virtual_pop_')));
+      const isPopBus = isPopbusSlot(slot);
 
       let savedRow;
 
@@ -210,13 +239,14 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (
             cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
-            start_node_id, end_node_id
+            start_node_id, end_node_id,
+             origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id
           )
             VALUES (
             $1,
             ST_SetSRID(ST_MakePoint($2,$3),4326),
             ST_SetSRID(ST_MakePoint($4,$5),4326),
-            $6, $7, 'in_attesa', $8, $9
+            $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13
           ) RETURNING *`,
           [
             clienteId,
@@ -225,7 +255,11 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
             slot.start_datetime,
             slot.posti_richiesti,
             nodeRes.rows[0].start,
-            nodeRes.rows[0].end
+            nodeRes.rows[0].end,
+            validatedPixel.get(slot).origine_nodo_territoriale_id,
+            validatedPixel.get(slot).destinazione_nodo_territoriale_id,
+            validatedPixel.get(slot).origine_fermata_id,
+            validatedPixel.get(slot).destinazione_fermata_id
           ]
         );
 
@@ -343,7 +377,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(`❌ [WALLET-PAYMENT:${requestId}] Errore critico:`, err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }

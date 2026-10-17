@@ -122,7 +122,10 @@ function dettagliDefault() {
  */
 export function ripartisciCondivisaModelloA(snapshot) {
     const costo = Number(snapshot?.costoCommercialeMissione);
-    const kmPrima = Number(snapshot?.kmPrimaPrenotazione);
+    // Stessa precisione di prenotazioni.km_utente (NUMERIC a 2 decimali).
+    // Il preventivo deve usare gli stessi km che saranno salvati nel DB.
+    const kmPrimaInput = Number(snapshot?.kmPrimaPrenotazione);
+    const kmPrima = Math.round((kmPrimaInput + Number.EPSILON) * 100) / 100;
     const righe = snapshot?.prenotazioni;
     if (!Number.isFinite(costo) || costo <= 0 ||
         !Number.isFinite(kmPrima) || kmPrima <= 0 ||
@@ -130,8 +133,15 @@ export function ripartisciCondivisaModelloA(snapshot) {
         throw new Error('Snapshot Modello A incompleto');
     }
     const items = righe.map((r, index) => {
-        const km = Number(r.km), posti = Number(r.posti);
-        if (!Number.isFinite(km) || km <= 0 || !Number.isInteger(posti) || posti <= 0) {
+        const kmInput = Number(r.km), posti = Number(r.posti);
+        if (!Number.isFinite(kmInput) || kmInput <= 0 || !Number.isInteger(posti) || posti <= 0) {
+            throw new Error(`Prenotazione Modello A non valida: ${index}`);
+        }
+        // Normalizzazione prima del peso: PostgreSQL persiste km_utente
+        // a due decimali. Senza questa regola, ricerca e accettazione
+        // possono attribuire il centesimo residuo a prenotazioni diverse.
+        const km = Math.round((kmInput + Number.EPSILON) * 100) / 100;
+        if (km <= 0) {
             throw new Error(`Prenotazione Modello A non valida: ${index}`);
         }
         return { id: r.id, km, posti, quotaPercentuale: km / kmPrima,

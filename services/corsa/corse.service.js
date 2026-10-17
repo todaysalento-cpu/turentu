@@ -161,12 +161,15 @@ export async function toggleCorsa(corsa_id, action) {
       console.log(`\n🚀 [CAPTURE FLOW START] Chiusura corsa ID: ${corsa_id} in corso...`);
 
       // 1. Recupero dei pagamenti e delle informazioni di tratta per ogni passeggero della corsa
+      const isModelloA = String(corsa.tipo_corsa ?? '').trim().toLowerCase() === 'condivisa'
+        && corsa.prezzo_fisso != null;
       const prenRes = await client.query(
         `SELECT
           p.id AS pagamento_id,
           p.stripe_payment_intent,
           p.prenotazione_id,
           p.importo AS importo_db,
+          p.stato AS stato_pagamento,
           pr.posti_richiesti,
           pr.cliente_id,
           pr.start_offset,
@@ -174,16 +177,14 @@ export async function toggleCorsa(corsa_id, action) {
           pr.km_utente
          FROM public.pagamenti p
          JOIN public.prenotazioni pr ON p.prenotazione_id = pr.id
-         WHERE p.corsa_id = $1 AND p.stato = 'autorizzazione'`,
-        [corsa_id]
+         WHERE p.corsa_id = $1 AND (p.stato = 'autorizzazione' OR ($2::boolean AND p.stato = 'pagato'))`,
+        [corsa_id, isModelloA]
       );
 
       console.log(`📋 [CAPTURE FLOW] Trovate ${prenRes.rows.length} autorizzazioni di pagamento da elaborare.`);
 
       // MODELLO A: verifica completa PRIMA di qualsiasi cattura esterna.
       // In caso di scopertura, non chiudere la corsa e non catturare importi parziali.
-      const isModelloA = String(corsa.tipo_corsa ?? '').trim().toLowerCase() === 'condivisa'
-        && corsa.prezzo_fisso != null;
       const quoteModelloA = new Map();
       if (isModelloA) {
         const { rows: tutteQuote } = await client.query(`
@@ -210,16 +211,29 @@ export async function toggleCorsa(corsa_id, action) {
         `, [corsa_id]);
         for (const [prenId, quota] of quoteModelloA) {
           const pagamenti = tuttiPagamenti.filter(p => Number(p.prenotazione_id) === prenId);
-          if (pagamenti.length !== 1 || pagamenti[0].stato !== 'autorizzazione') {
-            throw new Error(`Modello A: pagamento unico autorizzato mancante per prenotazione ${prenId}`);
+          if (pagamenti.length !== 1 || !['autorizzazione', 'pagato'].includes(pagamenti[0].stato)) {
+            throw new Error(`Modello A: pagamento unico valido mancante per prenotazione ${prenId}`);
           }
           const pagamento = pagamenti[0];
           if (!pagamento.stripe_payment_intent || pagamento.stripe_payment_intent.startsWith('wallet_')) {
             throw new Error(`Modello A: Stripe richiesto per prenotazione ${prenId}`);
           }
           const pi = await stripe.paymentIntents.retrieve(pagamento.stripe_payment_intent);
-          if (pi.status !== 'requires_capture' || Number(pi.amount_capturable) < quota) {
-            throw new Error(`Modello A: autorizzazione insufficiente o scaduta per prenotazione ${prenId}`);
+          if (pi.status === 'succeeded') {
+            const incassato = Number(pi.amount_received);
+            if (!Number.isSafeInteger(incassato) || incassato !== quota) {
+              throw new Error(`Modello A: importo gia incassato non coerente per prenotazione ${prenId} (atteso ${quota}, incassato ${incassato})`);
+            }
+          } else if (pi.status === 'requires_capture') {
+            if (pagamento.stato === 'pagato') {
+              throw new Error(`Modello A: pagamento DB pagato ma Stripe non incassato per prenotazione ${prenId}`);
+            }
+            const catturabile = Number(pi.amount_capturable);
+            if (pagamento.stato !== 'autorizzazione' || !Number.isSafeInteger(catturabile) || catturabile < quota) {
+              throw new Error(`Modello A: autorizzazione insufficiente o scaduta per prenotazione ${prenId}`);
+            }
+          } else {
+            throw new Error(`Modello A: stato Stripe non catturabile per prenotazione ${prenId}: ${pi.status}`);
           }
         }
         if (prenRes.rows.length !== quoteModelloA.size) {
@@ -436,6 +450,9 @@ export async function toggleCorsa(corsa_id, action) {
               if (importoEffettivoEuro <= 0) {
                 throw new Error(`PaymentIntent ${pi.id} succeeded senza importo incassato positivo`);
               }
+              if (isModelloA && Number(pi.amount_received) !== quoteModelloA.get(Number(pren.prenotazione_id))) {
+                throw new Error(`Modello A: incasso Stripe non coincide con quota finale per pagamento ${pren.pagamento_id}`);
+              }
 
               await client.query(
                 `UPDATE public.pagamenti
@@ -450,6 +467,9 @@ export async function toggleCorsa(corsa_id, action) {
               );
 
             } else if (pi.status === 'requires_capture') {
+              if (isModelloA && pren.stato_pagamento === 'pagato') {
+                throw new Error(`Modello A: DB pagato ma Stripe non incassato per pagamento ${pren.pagamento_id}`);
+              }
               const importoAutorizzatoCentesimi = Number(pi.amount_capturable ?? 0);
 
               if (
@@ -527,6 +547,9 @@ export async function toggleCorsa(corsa_id, action) {
               const importoEffettivoEuro = Number(risultato.amount_received ?? 0) / 100;
               if (importoEffettivoEuro <= 0) {
                 throw new Error(`Cattura senza importo incassato positivo per ${pi.id}`);
+              }
+              if (isModelloA && Number(risultato.amount_received) !== finalAmountToCapture) {
+                throw new Error(`Modello A: cattura Stripe non coincide con quota finale per pagamento ${pren.pagamento_id}`);
               }
 
               await client.query(

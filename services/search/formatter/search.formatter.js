@@ -716,7 +716,7 @@ export async function formatResults(
                         item.direttrice_id ?? null,
 
                     corsa_id:
-                        item.corsa_id ?? null,
+                        tipoCoerente === 'condivisa' ? Number(item.id) : (item.corsa_id ?? null),
 
                     start_node_id:
                         item.start_node_id ?? null,

@@ -10,6 +10,8 @@ export const CacheStore = {
     disponibilitaCache: new Map(),
     veicoloToDisponibilita: new Map(), 
     corseCache: new Map(),
+    tratteCache: new Map(),
+    tratteByCorsa: new Map(),
     prenotazioniCache: new Map(),
     direttriciCache: new Map(),
     nodiCache: new Map(),
@@ -107,6 +109,41 @@ export const upsertCorsa = async (c, indicizzare = false) => {
 export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
+    await syncGeoIndex('corsa', id, []);
+    for (const trattaId of [...(CacheStore.tratteByCorsa.get(id) || [])]) await removeTratta(trattaId);
+};
+
+export async function upsertTratta(t, indicizzare = false) {
+    const id = Number(t.id), corsaId = Number(t.corsa_id);
+    if (!Number.isSafeInteger(id) || !Number.isSafeInteger(corsaId)) throw new Error('ID tratta/corsa non valido');
+    if (!['andata', 'ritorno'].includes(t.direzione)) throw new Error('Direzione non valida');
+    let decodedCoords = [];
+    try {
+        if (t.percorso_polyline) decodedCoords = polyline.decode(t.percorso_polyline);
+        if (decodedCoords.length < 2) decodedCoords = [];
+    } catch (err) {
+        console.warn(`[CACHE TRATTE] Polyline non valida ${id}: ${err.message}`);
+    }
+    const old = CacheStore.tratteCache.get(id);
+    if (old && Number(old.corsa_id) !== corsaId) CacheStore.tratteByCorsa.get(Number(old.corsa_id))?.delete(id);
+    const normalized = { ...t, id, corsa_id: corsaId, decodedCoords };
+    CacheStore.tratteCache.set(id, normalized);
+    if (!CacheStore.tratteByCorsa.has(corsaId)) CacheStore.tratteByCorsa.set(corsaId, new Set());
+    CacheStore.tratteByCorsa.get(corsaId).add(id);
+    if (indicizzare) await syncGeoIndex('tratta', id, decodedCoords);
+    return normalized;
+}
+
+export async function removeTratta(trattaId) {
+    const id = Number(trattaId);
+    const t = CacheStore.tratteCache.get(id);
+    await syncGeoIndex('tratta', id, []);
+    CacheStore.tratteCache.delete(id);
+    if (t) {
+        const set = CacheStore.tratteByCorsa.get(Number(t.corsa_id));
+        set?.delete(id);
+        if (set?.size === 0) CacheStore.tratteByCorsa.delete(Number(t.corsa_id));
+    }
 };
 
 // --- SYNC ENGINE ---
@@ -142,7 +179,7 @@ export async function loadCachesUltra(force = false) {
             console.warn("⚠️ [SYNC] Nessuna disponibilità trovata.");
         }
 
-        const [vRes, cRes, dirRes, nodiRes] = await Promise.all([
+        const [vRes, cRes, dirRes, nodiRes, tratteRes] = await Promise.all([
             client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
             client.query(`
                 SELECT c.*, 
@@ -156,7 +193,9 @@ export async function loadCachesUltra(force = false) {
                 WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
             `),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
-            client.query(`SELECT id, nome, posizione, attivo FROM public.nodi_territoriali WHERE attivo = TRUE`)
+            client.query(`SELECT id, nome, posizione, attivo FROM public.nodi_territoriali WHERE attivo = TRUE`),
+            client.query(`SELECT t.* FROM public.corse_tratte t JOIN public.corse c ON c.id = t.corsa_id
+                          WHERE c.tipo_corsa = 'condivisa' AND c.stato IN ('prenotabile','in_corso','da_attivare')`)
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));
@@ -168,6 +207,15 @@ export async function loadCachesUltra(force = false) {
         });
 
         await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
+        await Promise.all(tratteRes.rows.map(t => upsertTratta(t, true)));
+        const activeTratte = new Set(tratteRes.rows.map(t => Number(t.id)));
+        for (const id of [...CacheStore.tratteCache.keys()]) {
+            if (!activeTratte.has(id)) await removeTratta(id);
+        }
+        const activeCorse = new Set(cRes.rows.map(c => Number(c.id)));
+        for (const id of [...CacheStore.corseCache.keys()]) {
+            if (!activeCorse.has(id)) await removeCorsa(id);
+        }
         
         CacheStore.direttriciCache.clear();
         dirRes.rows.forEach(dir => CacheStore.direttriciCache.set(dir.id, dir));
@@ -199,11 +247,26 @@ async function aggiornaIndiciDisponibilita(d) {
     await redisClient.sAdd(`slot:in_area:${hash}`, d.veicolo_id.toString());
 }
 
+// Indici separati: corsa:in_area:* (legacy) e tratta:in_area:* (NCC).
+// La chiave hashes permette di rimuovere le celle geografiche obsolete.
+async function syncGeoIndex(prefix, id, coords) {
+    if (!redisClient) return;
+    const hashesKey = `${prefix}:hashes:${id}`;
+    const stored = await redisClient.get(hashesKey);
+    let oldHashes = [];
+    try { oldHashes = stored ? JSON.parse(stored) : []; } catch { oldHashes = []; }
+    const previous = new Set(Array.isArray(oldHashes) ? oldHashes : []);
+    const next = new Set((coords || [])
+        .filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        .map(p => ngeohash.encode(p[0], p[1], 5)));
+    const tx = redisClient.multi();
+    for (const hash of previous) if (!next.has(hash)) tx.sRem(`${prefix}:in_area:${hash}`, String(id));
+    for (const hash of next) if (!previous.has(hash)) tx.sAdd(`${prefix}:in_area:${hash}`, String(id));
+    if (next.size) tx.set(hashesKey, JSON.stringify([...next]));
+    else tx.del(hashesKey);
+    await tx.exec();
+}
+
 async function aggiornaIndiciRedis(corsaId, coords) {
-    if (!redisClient || !coords || coords.length === 0) return;
-    const newHashes = [...new Set(coords.map(p => ngeohash.encode(p[0], p[1], 5)))];
-    const pipeline = redisClient.multi();
-    newHashes.forEach(h => pipeline.sAdd(`corsa:in_area:${h}`, corsaId.toString()));
-    pipeline.set(`corsa:hashes:${corsaId}`, JSON.stringify(newHashes));
-    await pipeline.exec();
+    return syncGeoIndex('corsa', corsaId, coords);
 }

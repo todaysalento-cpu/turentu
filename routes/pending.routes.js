@@ -1,4 +1,5 @@
 import express from 'express';
+import Stripe from 'stripe';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
@@ -8,6 +9,7 @@ import { upsertCorsa } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
 router.use(authMiddleware);
 
@@ -118,10 +120,10 @@ router.post('/:id/accetta', async (req, res) => {
 
       // AGGIORNATO: Inclusi start_offset ed end_offset per evitare offset a zero o NaN
       const segmenti = { 
-          startIdx: Number(pRow.start_index_polyline ?? 0), 
-          endIdx: Number(pRow.end_index_polyline ?? 100),
-          start_offset: Number(pRow.start_offset ?? 0),
-          end_offset: Number(pRow.end_offset ?? 0),
+          startIdx: pRow.start_index_polyline == null ? NaN : Number(pRow.start_index_polyline),
+          endIdx: pRow.end_index_polyline == null ? NaN : Number(pRow.end_index_polyline),
+          start_offset: pRow.start_offset == null ? NaN : Number(pRow.start_offset),
+          end_offset: pRow.end_offset == null ? NaN : Number(pRow.end_offset),
           latSalita: Number(pRow.origine_lat),
           lonSalita: Number(pRow.origine_lon),
           latDiscesa: Number(pRow.destinazione_lat),
@@ -133,11 +135,43 @@ router.post('/:id/accetta', async (req, res) => {
 
       // Ignoriamo il corsa_id se corrisponde al veicolo_id (evitando il falso ID veicolo scambiato per corsa)
       const validCorsaId = pRow.corsa_id ?? null;
+      const isNccCondivisa = !isPopBus && pRow.tipo_corsa === 'condivisa';
+      // Una condivisa NCC deve agganciarsi esclusivamente a una corsa esistente.
+      if (isNccCondivisa && (!Number.isSafeInteger(Number(validCorsaId)) || Number(validCorsaId) <= 0)) {
+        const error = new Error('Corsa condivisa non associata: ripetere la ricerca');
+        error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+        throw error;
+      }
+
+      // Fail-closed: gli offset devono provenire dal matching reale, non da default.
+      // Non si presume che una corsa sia compatibile solo perche' l'ID esiste.
+      if (isNccCondivisa && (
+        !Number.isSafeInteger(segmenti.startIdx) || segmenti.startIdx < 0 ||
+        !Number.isSafeInteger(segmenti.endIdx) || segmenti.endIdx <= segmenti.startIdx ||
+        !Number.isFinite(segmenti.start_offset) || segmenti.start_offset < 0 ||
+        !Number.isFinite(segmenti.end_offset) || segmenti.end_offset <= segmenti.start_offset ||
+        !Number.isFinite(segmenti.latSalita) || !Number.isFinite(segmenti.lonSalita) ||
+        !Number.isFinite(segmenti.latDiscesa) || !Number.isFinite(segmenti.lonDiscesa) ||
+        Math.abs(segmenti.latSalita) > 90 || Math.abs(segmenti.latDiscesa) > 90 ||
+        Math.abs(segmenti.lonSalita) > 180 || Math.abs(segmenti.lonDiscesa) > 180
+      )) {
+        const error = new Error('Dati di aggancio alla condivisa mancanti o non validi: ripetere la ricerca');
+        error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+        throw error;
+      }
 
       if (validCorsaId) {
         console.log(`🔍 [ACCETTA] Verifica esistenza corsa associata ID: ${validCorsaId}`);
-        const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1`, [validCorsaId]);
+        const corsaRes = await client.query(`SELECT * FROM corse WHERE id = $1 FOR UPDATE`, [validCorsaId]);
         corsa = corsaRes.rows[0];
+        if (isNccCondivisa && (!corsa ||
+            String(corsa.tipo_corsa).trim().toLowerCase() !== 'condivisa' ||
+            Number(corsa.veicolo_id) !== Number(pRow.veicolo_id) ||
+            String(corsa.stato) !== 'prenotabile')) {
+          const error = new Error('Corsa condivisa non disponibile o incompatibile: ripetere la ricerca');
+          error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+          throw error;
+        }
         
         if (!corsa) {
           console.warn(`⚠️ [ACCETTA] Corsa ID ${validCorsaId} non trovata. Creazione nuova corsa d'emergenza...`);
@@ -146,6 +180,11 @@ router.post('/:id/accetta', async (req, res) => {
 
       // Se non esiste una corsa valida associata, la creiamo da zero o la gestiamo in base al tipo
       if (!corsa) {
+        if (isNccCondivisa) {
+          const error = new Error('Corsa condivisa non trovata: non è consentito crearne una sostitutiva');
+          error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+          throw error;
+        }
         if (isPopBus) {
           console.log(`🚌 [ACCETTA] Creazione corsa PopBus da pending...`);
           const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
@@ -193,13 +232,17 @@ router.post('/:id/accetta', async (req, res) => {
       if (!corsa) throw new Error("Impossibile recuperare o creare la corsa");
 
       // 🛠️ AGGIORNAMENTO FORZATO DEGLI INDIRIZZI REALI NELLA TABELLA CORSE
-      await client.query(
-        `UPDATE corse 
-         SET origine_address = $1, 
-             destinazione_address = $2 
-         WHERE id = $3`,
-        [pRow.origine_address, pRow.destinazione_address, corsa.id]
-      );
+      // Gli indirizzi della missione condivisa non vanno sovrascritti
+      // con quelli del nuovo passeggero agganciato.
+      if (!isNccCondivisa) {
+        await client.query(
+          `UPDATE corse
+           SET origine_address = $1,
+               destinazione_address = $2
+           WHERE id = $3`,
+          [pRow.origine_address, pRow.destinazione_address, corsa.id]
+        );
+      }
 
       if (!prenotazioneEffettuata) {
           console.log(`🎟 [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
@@ -238,6 +281,46 @@ router.post('/:id/accetta', async (req, res) => {
         [pRow.cliente_id, corsa.id]
       );
       const prenotazioneId = prenotazioneRes.rows[0]?.id;
+
+      // MODELLO A: controlli di coerenza economica prima di registrare il pagamento.
+      // La prenotazione (anche se creata internamente da createCorsaFromPending)
+      // deve aver già congelato il totale e ricalcolato tutte le quote.
+      if (!isPopBus && pRow.tipo_corsa === 'condivisa') {
+        if (!prenotazioneId) {
+          const error = new Error('Modello A: prenotazione non trovata dopo accettazione');
+          error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+          throw error;
+        }
+        const { rows: quoteRows } = await client.query(`
+          SELECT pr.prezzo_totale, c.prezzo_fisso, c.prenotazione_origine_id
+          FROM prenotazioni pr JOIN corse c ON c.id = pr.corsa_id
+          WHERE pr.id = $1 AND c.id = $2
+        `, [prenotazioneId, corsa.id]);
+        const dati = quoteRows[0];
+        const quotaCent = dati?.prezzo_totale == null ? NaN : Math.round(Number(dati.prezzo_totale) * 100);
+        const fissoCent = dati?.prezzo_fisso == null ? NaN : Math.round(Number(dati.prezzo_fisso) * 100);
+        const preventivoCent = pRow.prezzo == null ? NaN : Math.round(Number(pRow.prezzo) * 100);
+        if (!Number.isSafeInteger(quotaCent) || quotaCent <= 0 ||
+            !Number.isSafeInteger(fissoCent) || fissoCent <= 0 ||
+            !Number.isSafeInteger(preventivoCent) || preventivoCent < quotaCent ||
+            !Number.isInteger(Number(dati.prenotazione_origine_id))) {
+          const error = new Error('Modello A: preventivo/autorizzazione insufficiente o snapshot non valido; ripetere la ricerca');
+          error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+          throw error;
+        }
+        if (!pRow.payment_intent_id || String(pRow.payment_intent_id).startsWith('wallet_')) {
+          const error = new Error('Modello A: autorizzazione Stripe obbligatoria');
+          error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+          throw error;
+        }
+        const pi = await stripe.paymentIntents.retrieve(String(pRow.payment_intent_id));
+        if (pi.status !== 'requires_capture' || Number(pi.amount_capturable) < quotaCent ||
+            Number(pi.amount) !== preventivoCent) {
+          const error = new Error('Modello A: Stripe non autorizzato o importo insufficiente');
+          error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+          throw error;
+        }
+      }
 
       if (pRow.payment_intent_id && prenotazioneId) {
         await client.query(
@@ -290,7 +373,7 @@ router.post('/:id/accetta', async (req, res) => {
     try {
       // Errori di validazione/routing della missione NCC: non rifiutare
       // definitivamente il pending dopo il rollback; consentire un nuovo tentativo.
-      if (err.code !== 'NCC_MISSION_GEO_INVALID') {
+      if (!['NCC_MISSION_GEO_INVALID', 'NCC_MODEL_A_PAYMENT_INVALID', 'NCC_SHARED_COURSE_UNAVAILABLE'].includes(err.code)) {
         await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
       }
     } catch (cleanupErr) {

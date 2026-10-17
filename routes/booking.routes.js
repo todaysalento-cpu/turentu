@@ -203,7 +203,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const endIndexPolyline = slot.end_index_polyline ?? slot.endIndexPolyline ?? 100;
 
       // Estraiamo l'ID della corsa dallo slot se si sta agganciando a una corsa condivisa esistente
-      const corsaIdToSave = (slot.id && !isNaN(Number(slot.id))) ? Number(slot.id) : (slot.corsa_id || null);
+      const corsaIdToSave = sanitizedType === 'condivisa'
+        ? Number(quotation.corsa_id ?? quotation.id)
+        : ((slot.id && !isNaN(Number(slot.id))) ? Number(slot.id) : (slot.corsa_id || null));
+      if (sanitizedType === 'condivisa' &&
+          (!Number.isSafeInteger(corsaIdToSave) || corsaIdToSave <= 0)) {
+        throw new Error('Corsa condivisa senza ID valido: ripetere la ricerca');
+      }
 
       console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}, corsa_id: ${corsaIdToSave}, start_offset: ${startOffset}, end_offset: ${endOffset}`);
 

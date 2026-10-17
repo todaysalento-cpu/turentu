@@ -209,7 +209,11 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
     } else {
         // --- LOGICA PRIVATE / CONDIVISA ---
         const startDatetime = new Date(pending.start_datetime || pending.startDatetime);
-        const durataMin = Number(pending.durataMinuti ?? pending.durata_minuti ?? 30);
+        const rawDurata = pending.durataMinuti ?? pending.durata_minuti ?? pending.durata;
+         const durataMin = typeof rawDurata === 'string' && rawDurata.includes(':')
+           ? rawDurata.split(':').map(Number).reduce((acc, n, i) => acc + n * [60, 1, 1/60][i], 0)
+           : Number(rawDurata);
+         if (!Number.isFinite(durataMin) || durataMin <= 0) throw new Error('Durata pending mancante o non valida');
         const arrivoDatetime = new Date(startDatetime.getTime() + durataMin * 60 * 1000);
 
         // Estrazione sicura delle coordinate con fallback multipli ed espliciti
@@ -338,6 +342,17 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         const startIdxVal = Number(pending.start_index_polyline ?? pending.startIndexPolyline ?? 0);
         const endIdxVal = Number(pending.end_index_polyline ?? pending.endIndexPolyline ?? 100);
+        let trattaInizialeId = null;
+        if (isNccCondivisa) {
+          // La prima prenotazione deve avere una tratta reale e programmata.
+          const { rows: tratteCreate } = await client.query(`
+            INSERT INTO public.corse_tratte (
+              corsa_id, direzione, percorso_polyline, distanza_km, durata_secondi,
+              partenza_prevista, arrivo_previsto, stato_temporale
+            ) VALUES ($1, 'andata', $2, $3, $4, $5, $6, 'programmato') RETURNING id
+          `, [corsa.id, polylineString, distanzaKm, Math.round(durataMin * 60), startDatetime, arrivoDatetime]);
+          trattaInizialeId = Number(tratteCreate[0].id);
+        }
 
         const segmenti = {  
             startIdx: startIdxVal,  
@@ -347,7 +362,8 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             latSalita: coordOrig.lat,   
             lonSalita: coordOrig.lon,   
             latDiscesa: coordDest.lat,  
-            lonDiscesa: coordDest.lon   
+            lonDiscesa: coordDest.lon,
+            tratta_id: trattaInizialeId
         };
 
         const prenotazione = await prenotazioneService.prenotaCorsa(
@@ -358,14 +374,19 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             client
         );
         
+        if (trattaInizialeId) {
+          await client.query(`UPDATE public.corse_tratte SET prima_prenotazione_id=$1
+            WHERE id=$2 AND corsa_id=$3`, [prenotazione.id, trattaInizialeId, corsa.id]);
+        }
         console.log(`✅ [DB] Prenotazione ID ${prenotazione?.id} creata con successo per la corsa ${corsa.id}.`);
         await client.query(`UPDATE pagamenti SET corsa_id = $1 WHERE prenotazione_id = $2`, [corsa.id, prenotazione.id]);
     }
 
-    CacheManager.corsa.update(corsa);
-    upsertCorsa(corsa);
-
-    if (localClient) await client.query('COMMIT');
+    if (localClient) {
+      await client.query('COMMIT');
+      try { CacheManager.corsa.update(corsa); upsertCorsa(corsa); }
+      catch (e) { console.error('[CORSA CACHE POSTCOMMIT]', e.message); }
+    }
     return corsa;
 
   } catch (err) {

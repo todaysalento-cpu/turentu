@@ -10,6 +10,8 @@ import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.valida
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
+const sanitizedRequestedType = type => (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
+
 
 // ======================= ROUTE =======================
 router.post('/payment-intent', authMiddleware, async (req, res) => {
@@ -66,27 +68,32 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if (isPopbusSlot(selected) !== isPopbusSlot(quotation)) {
       return res.status(409).json({ error: 'Tipo di opzione cambiato: ripetere la ricerca' });
     }
+    // Distinzione basata SOLO sulla quotazione fresca, non sul tipo manipolabile dal client.
+    const nuovaCondivisibile = !isPopbusSlot(quotation) &&
+      sanitizedRequestedType(type) === 'condivisa' &&
+      String(quotation.id).startsWith('priv_') && quotation.tipo === 'privata';
     await client.query('BEGIN');transaction=true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
     const pixelValidated = isPopbusSlot(selected) ? await validatePixelStops(client, selected, quotation) : null;
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
-    const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
+    const sanitizedType = sanitizedRequestedType(type);
      // Non permettere di convertire un risultato privato in una nuova condivisa
      // senza un preventivo Modello A calcolato e verificato dal server.
      if (!isPopbusSlot(quotation) && sanitizedType === 'condivisa' &&
-         (quotation.tipo !== 'condivisa' || quotation.modello_a !== true)) {
-       return res.status(409).json({ error: 'Modello A: opzione condivisa non quotabile; ripetere la ricerca' });
+         (!nuovaCondivisibile && (quotation.tipo !== 'condivisa' || quotation.modello_a !== true))) {
+       throw Object.assign(new Error('Modello A: opzione condivisa non quotabile; ripetere la ricerca'), { status: 409 });
      }
      if (!isPopbusSlot(quotation) && quotation.tipo === 'condivisa' && sanitizedType !== 'condivisa') {
-       return res.status(409).json({ error: 'Tipo corsa non coerente con la quotazione condivisa' });
+       throw Object.assign(new Error('Tipo corsa non coerente con la quotazione condivisa'), { status: 409 });
      }
 
+    // Nessun return con transazione aperta: un 409 e' gestito dal catch con ROLLBACK.
     const clienteId = req.user.id;
     let pagatoConWallet = false;
 
     // ================= CONTROLLO E GESTIONE WALLET =================
      if (usaWallet && sanitizedType === 'condivisa' && !isPopbusSlot(quotation)) {
-       return res.status(409).json({ error: 'Wallet non ancora disponibile per conguagli Modello A; utilizzare Stripe' });
+       throw Object.assign(new Error('Wallet non ancora disponibile per conguagli Modello A; utilizzare Stripe'), { status: 409 });
      }
     if (usaWallet) {
       console.log(`👛 [PAYMENT:${requestId}] Controllo saldo wallet per utente: ${clienteId}`);
@@ -198,8 +205,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         throw new Error(`Dato corrotto: veicolo_id mancante per lo slot ${slot.id}`);
       }
 
-      const distanza = slot.distanzaKm || 0;
-      const durata = slot.durata_minuti || 0;
+      // Unita' canoniche: distanza in km, durata in minuti. Dati dalla quotazione server.
+      const distanza = Number(quotation.distanzaKm ??
+        (quotation.distanza_metri != null ? Number(quotation.distanza_metri) / 1000 : quotation.distanza));
+      const durata = Number(quotation.durata_minuti ?? quotation.durataMinuti);
+      if (!Number.isFinite(distanza) || distanza <= 0 || !Number.isFinite(durata) || durata <= 0) {
+        throw Object.assign(new Error('Distanza/durata non quotate dal server'), { status: 409 });
+      }
 
       // Estrazione offset ed indici polyline dallo slot (con supporto a diverse nomenclature)
       const startOffset = slot.startOffset ?? slot.start_offset ?? null;
@@ -208,20 +220,19 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       const endIndexPolyline = slot.end_index_polyline ?? slot.endIndexPolyline ?? 100;
 
       // Estraiamo l'ID della corsa dallo slot se si sta agganciando a una corsa condivisa esistente
-      const corsaIdToSave = sanitizedType === 'condivisa'
-        ? Number(quotation.corsa_id ?? quotation.id)
-        : ((slot.id && !isNaN(Number(slot.id))) ? Number(slot.id) : (slot.corsa_id || null));
-      if (sanitizedType === 'condivisa' &&
+      const corsaIdToSave = nuovaCondivisibile || quotation.tipo === 'privata'
+        ? null : Number(quotation.corsa_id ?? quotation.id);
+      if (sanitizedType === 'condivisa' && !nuovaCondivisibile &&
           (!Number.isSafeInteger(corsaIdToSave) || corsaIdToSave <= 0)) {
-        throw new Error('Corsa condivisa senza ID valido: ripetere la ricerca');
+        throw Object.assign(new Error('Corsa condivisa senza ID valido'), { status: 409 });
       }
 
       // Identità della tratta ricavata dalla quotazione fresca, mai dal payload client.
       let trattaIdToSave = null;
-      if (sanitizedType === 'condivisa') {
+      if (sanitizedType === 'condivisa' && !nuovaCondivisibile) {
         trattaIdToSave = Number(quotation.tratta_id);
         if (!Number.isSafeInteger(trattaIdToSave) || trattaIdToSave <= 0) {
-          return res.status(409).json({ error: 'Tratta NCC non disponibile: ripetere la ricerca' });
+          throw Object.assign(new Error('Tratta NCC non disponibile: ripetere la ricerca'), { status: 409 });
         }
         const verificaTratta = await client.query(`
           SELECT t.id
@@ -236,11 +247,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           FOR SHARE OF t, c
         `, [trattaIdToSave, corsaIdToSave, slot.veicolo_id]);
         if (verificaTratta.rowCount !== 1) {
-          return res.status(409).json({ error: 'Tratta NCC cambiata: ripetere la ricerca' });
+          throw Object.assign(new Error('Tratta NCC cambiata: ripetere la ricerca'), { status: 409 });
         }
         if (![startOffset, endOffset].every(v => v != null && Number.isFinite(Number(v))) ||
             Number(startOffset) < 0 || Number(endOffset) <= Number(startOffset)) {
-          return res.status(409).json({ error: 'Intervallo tratta non valido: ripetere la ricerca' });
+          throw Object.assign(new Error('Intervallo tratta non valido: ripetere la ricerca'), { status: 409 });
         }
       }
 

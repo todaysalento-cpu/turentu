@@ -701,6 +701,9 @@ export async function formatResults(
                         itemId ||
                         `slot_${item.veicolo_id}`,
 
+                    origine: { lat: Number(coordOrigine.lat), lon: Number(coordOrigine.lon ?? coordOrigine.lng) },
+                    destinazione: { lat: Number(coordDestinazione.lat), lon: Number(coordDestinazione.lon ?? coordDestinazione.lng) },
+
                     veicolo_id:
                         item.veicolo_id,
 

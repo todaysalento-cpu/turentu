@@ -137,8 +137,9 @@ router.post('/:id/accetta', async (req, res) => {
       // Ignoriamo il corsa_id se corrisponde al veicolo_id (evitando il falso ID veicolo scambiato per corsa)
       const validCorsaId = pRow.corsa_id ?? null;
       const isNccCondivisa = !isPopBus && pRow.tipo_corsa === 'condivisa';
+      const primaNccCondivisibile = isNccCondivisa && pRow.corsa_id == null && pRow.tratta_id == null;
       // Una condivisa NCC deve agganciarsi esclusivamente a una corsa esistente.
-      if (isNccCondivisa && (!Number.isSafeInteger(Number(validCorsaId)) || Number(validCorsaId) <= 0)) {
+      if (isNccCondivisa && !primaNccCondivisibile && (!Number.isSafeInteger(Number(validCorsaId)) || Number(validCorsaId) <= 0)) {
         const error = new Error('Corsa condivisa non associata: ripetere la ricerca');
         error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
         throw error;
@@ -146,7 +147,7 @@ router.post('/:id/accetta', async (req, res) => {
 
       // Fail-closed: gli offset devono provenire dal matching reale, non da default.
       // Non si presume che una corsa sia compatibile solo perche' l'ID esiste.
-      if (isNccCondivisa && (
+      if (isNccCondivisa && !primaNccCondivisibile && (
         !Number.isSafeInteger(segmenti.startIdx) || segmenti.startIdx < 0 ||
         !Number.isSafeInteger(segmenti.endIdx) || segmenti.endIdx <= segmenti.startIdx ||
         !Number.isFinite(segmenti.start_offset) || segmenti.start_offset < 0 ||
@@ -161,7 +162,7 @@ router.post('/:id/accetta', async (req, res) => {
         throw error;
       }
 
-      if (isNccCondivisa) {
+      if (isNccCondivisa && !primaNccCondivisibile) {
         if (!Number.isSafeInteger(segmenti.tratta_id) || segmenti.tratta_id <= 0) {
           const error = new Error('NCC condivisa: tratta_id mancante nel pending');
           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
@@ -201,7 +202,7 @@ router.post('/:id/accetta', async (req, res) => {
 
       // Se non esiste una corsa valida associata, la creiamo da zero o la gestiamo in base al tipo
       if (!corsa) {
-        if (isNccCondivisa) {
+        if (isNccCondivisa && !primaNccCondivisibile) {
           const error = new Error('Corsa condivisa non trovata: non è consentito crearne una sostitutiva');
           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
           throw error;
@@ -255,7 +256,7 @@ router.post('/:id/accetta', async (req, res) => {
       // 🛠️ AGGIORNAMENTO FORZATO DEGLI INDIRIZZI REALI NELLA TABELLA CORSE
       // Gli indirizzi della missione condivisa non vanno sovrascritti
       // con quelli del nuovo passeggero agganciato.
-      if (!isNccCondivisa) {
+      if (!isNccCondivisa || primaNccCondivisibile) {
         await client.query(
           `UPDATE corse
            SET origine_address = $1,

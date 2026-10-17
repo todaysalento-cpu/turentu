@@ -458,6 +458,18 @@ export async function cercaSlotUltra(richiesta) {
         )
     };
 
+    console.log('[NCC 899 PRIMA FILTRO]', JSON.stringify(
+        corseCandidate
+            .filter(c => Number(c.id) === 899 && Number(c.tratta_id) === 3)
+            .map(c => ({
+                id: c.id,
+                tratta_id: c.tratta_id,
+                partenza_prevista: c.partenza_prevista,
+                durata_secondi: c.durata_secondi,
+                capacita: capacitaMap.get(c.tratta_id)
+            }))
+    ));
+
     const { corse: corseValide } =
         await filterDisponibilita(
             requestWithMetrics,
@@ -469,6 +481,17 @@ export async function cercaSlotUltra(richiesta) {
     console.log(
         `🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`
     );
+
+    console.log('[NCC 899 DOPO FILTRO]', JSON.stringify(
+        corseValide
+            .filter(c => Number(c.id) === 899 && Number(c.tratta_id) === 3)
+            .map(c => ({
+                id: c.id,
+                tratta_id: c.tratta_id,
+                calculated_start_offset: c.calculated_start_offset,
+                calculated_end_offset: c.calculated_end_offset
+            }))
+    ));
 
     const distanzaCondivisaValida = Number(distanzaKm);
 

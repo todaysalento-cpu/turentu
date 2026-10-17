@@ -302,6 +302,18 @@ router.post('/:id/accetta', async (req, res) => {
       // Usa l'ID effettivamente restituito dall'INSERT, evitando selezioni ambigue.
       // Per i percorsi legacy che creano internamente la prenotazione resta il fallback.
       let prenotazioneId = nuovaPrenotazione?.id ?? null;
+      // La prima condivisibile crea la prenotazione dentro createCorsaFromPending.
+      // Recupera il riferimento deterministico dello snapshot Modello A,
+      // non l'ultima prenotazione del cliente (potenzialmente ambigua).
+      if (prenotazioneId == null && primaNccCondivisibile) {
+        const origineId = Number(corsa.prenotazione_origine_id);
+        if (!Number.isSafeInteger(origineId) || origineId <= 0) {
+          const error = new Error('Modello A: prima prenotazione non collegata alla corsa');
+          error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+          throw error;
+        }
+        prenotazioneId = origineId;
+      }
       if (prenotazioneId == null && !isNccCondivisa) {
         const prenotazioneRes = await client.query(
           `SELECT id FROM prenotazioni WHERE cliente_id=$1 AND corsa_id=$2 ORDER BY id DESC LIMIT 1`,

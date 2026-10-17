@@ -98,13 +98,23 @@ router.post('/:id/accetta', async (req, res) => {
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
        RETURNING *, ST_X(origine::geometry) AS origine_lon, ST_Y(origine::geometry) AS origine_lat,
        ST_X(destinazione::geometry) AS destinazione_lon, ST_Y(destinazione::geometry) AS destinazione_lat,
-       start_offset, end_offset`,
+       start_offset, end_offset,
+       EXTRACT(EPOCH FROM durata) / 60 AS durata_minuti`,
       [id]
     );
 
     for (const pRow of result.rows) {
       pRow.origine_address = p.origine_address;
       pRow.destinazione_address = p.destinazione_address;
+      // Durata PostgreSQL INTERVAL normalizzata in minuti per il servizio corsa.
+      const durataMinuti = Number(pRow.durata_minuti);
+      if (!Number.isFinite(durataMinuti) || durataMinuti <= 0) {
+        const error = new Error('Durata pending non valida');
+        error.code = 'NCC_MISSION_GEO_INVALID';
+        throw error;
+      }
+      pRow.durata_minuti = durataMinuti;
+      pRow.durataMinuti = durataMinuti;
 
       const driverRes = await client.query(
         `SELECT v.driver_id, u.nome AS driver_nome FROM veicolo v 

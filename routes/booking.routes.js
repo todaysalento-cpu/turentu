@@ -265,7 +265,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id
         )
          VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9,
+          $1, $2, $3, $4, $5, $6, $7, ($8::numeric * INTERVAL '1 minute'), $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
           'pending', $14, $15, $16, $17, $18,

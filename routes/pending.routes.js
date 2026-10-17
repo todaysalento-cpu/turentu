@@ -350,6 +350,31 @@ router.post('/:id/accetta', async (req, res) => {
         const quotaCent = dati?.prezzo_totale == null ? NaN : Math.round(Number(dati.prezzo_totale) * 100);
         const fissoCent = dati?.prezzo_fisso == null ? NaN : Math.round(Number(dati.prezzo_fisso) * 100);
         const preventivoCent = pRow.prezzo == null ? NaN : Math.round(Number(pRow.prezzo) * 100);
+        // Diagnostica Modello A: valori letti nella stessa transazione, prima del rollback.
+        // Non altera prezzi, autorizzazioni Stripe o logica di validazione.
+        console.log('🔬 [MODELLO A CHECK]', {
+          pending_id: pRow.id,
+          corsa_id: corsa.id,
+          prenotazione_id: prenotazioneId,
+          tratta_id: pRow.tratta_id,
+          quota_calcolata: dati?.prezzo_totale ?? null,
+          prezzo_fisso: dati?.prezzo_fisso ?? null,
+          preventivo_autorizzato: pRow.prezzo ?? null,
+          quotaCent,
+          fissoCent,
+          preventivoCent,
+          differenzaCent: Number.isFinite(quotaCent) && Number.isFinite(preventivoCent)
+            ? quotaCent - preventivoCent : null,
+          origineId: dati?.prenotazione_origine_id ?? null,
+          quotaNonValida: !Number.isSafeInteger(quotaCent) || quotaCent <= 0,
+          fissoNonValido: !Number.isSafeInteger(fissoCent) || fissoCent <= 0,
+          preventivoInsufficiente: !Number.isSafeInteger(preventivoCent) || preventivoCent < quotaCent,
+          origineNonValida: !Number.isInteger(Number(dati?.prenotazione_origine_id)),
+          start_offset: pRow.start_offset,
+          end_offset: pRow.end_offset,
+          km_da_offset: Number.isFinite(Number(pRow.start_offset)) && Number.isFinite(Number(pRow.end_offset))
+            ? (Number(pRow.end_offset) - Number(pRow.start_offset)) / 1000 : null
+        });
         if (!Number.isSafeInteger(quotaCent) || quotaCent <= 0 ||
             !Number.isSafeInteger(fissoCent) || fissoCent <= 0 ||
             !Number.isSafeInteger(preventivoCent) || preventivoCent < quotaCent ||

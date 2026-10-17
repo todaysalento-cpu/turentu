@@ -718,6 +718,10 @@ export async function formatResults(
                     corsa_id:
                         tipoCoerente === 'condivisa' ? Number(item.id) : (item.corsa_id ?? null),
 
+                    // NCC: conserva l'identità della tratta (andata/ritorno).
+                    tratta_id: tipoCoerente === 'condivisa' ? (item.tratta_id ?? null) : null,
+                    direzione: tipoCoerente === 'condivisa' ? (item.direzione ?? null) : null,
+
                     start_node_id:
                         item.start_node_id ?? null,
 

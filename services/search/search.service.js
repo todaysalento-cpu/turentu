@@ -364,90 +364,77 @@ export async function cercaSlotUltra(richiesta) {
         ...ngeohash.neighbors(hash)
     ];
 
-    const corsaResults = await Promise.all(
-        hashes.map(h =>
-            redisClient.sMembers(`corsa:in_area:${h}`)
-        )
+    // Candidati identificati dalla singola tratta, non dalla missione.
+    const trattaResults = await Promise.all(
+        hashes.map(h => redisClient.sMembers(`tratta:in_area:${h}`))
     );
-
-    const corseCandidate = [
-        ...new Set(corsaResults.flat())
-    ].map(id => {
-        const c = CacheStore.corseCache.get(Number(id));
-
-        if (!c) return null;
-
-        c.classe = determinaClasse(
-            Number(c.indice_efficienza || 0)
-        );
-
-        return c;
+    const corseCandidate = [...new Set(trattaResults.flat())].map(rawId => {
+        const tratta = CacheStore.tratteCache.get(Number(rawId));
+        if (!tratta || tratta.stato_temporale === 'flessibile' || !tratta.partenza_prevista) return null;
+        const corsa = CacheStore.corseCache.get(Number(tratta.corsa_id));
+        if (!corsa || corsa.tipo_corsa !== 'condivisa' || corsa.stato !== 'prenotabile') return null;
+        return {
+            ...corsa,
+            tratta_id: Number(tratta.id),
+            direzione: tratta.direzione,
+            stato_temporale: tratta.stato_temporale,
+            percorso_polyline: tratta.percorso_polyline,
+            decodedCoords: tratta.decodedCoords,
+            partenza_prevista: tratta.partenza_prevista,
+            arrivo_previsto: tratta.arrivo_previsto,
+            durata_secondi: tratta.durata_secondi,
+            km_totali_percorso: Number(tratta.distanza_km),
+            distanza: Number(tratta.distanza_km),
+            classe: determinaClasse(Number(corsa.indice_efficienza || 0))
+        };
     }).filter(Boolean);
 
-    const corsaIds = corseCandidate
-        .map(c => Number(c.id))
-        .filter(Boolean);
-
+    const corsaIds = [...new Set(corseCandidate.map(c => Number(c.id)))];
     let prenotazioniBatch = [];
     const capacitaMap = new Map();
+    const modelloAMap = new Map();
 
-    if (corsaIds.length > 0) {
-        const { rows: allPrenotazioni } =
-            await pool.query(`
-                SELECT
-                    corsa_id,
-                    id,
-                    km_utente,
-                    posti_richiesti,
-                    start_offset,
-                    end_offset,
-                    start_index_polyline,
-                    end_index_polyline
-                FROM prenotazioni
-                WHERE corsa_id = ANY($1::int[])
-            `, [corsaIds]);
-
-        prenotazioniBatch = corseCandidate.map(c =>
-            allPrenotazioni.filter(
-                p => Number(p.corsa_id) === Number(c.id)
-            )
-        );
-
+    if (corsaIds.length) {
+        const { rows: allPrenotazioni } = await pool.query(`
+            SELECT corsa_id, tratta_id, id, km_utente, posti_richiesti,
+                   start_offset, end_offset, start_index_polyline, end_index_polyline
+            FROM prenotazioni
+            WHERE corsa_id = ANY($1::int[])
+        `, [corsaIds]);
+        // Le prenotazioni senza tratta_id sono legacy: non possiamo attribuirle
+        // arbitrariamente a una direzione. Escludiamo la missione per sicurezza.
+        const corseAmbigue = new Set(allPrenotazioni
+            .filter(p => p.tratta_id == null)
+            .map(p => Number(p.corsa_id)));
+        for (let i = corseCandidate.length - 1; i >= 0; i--) {
+            if (corseAmbigue.has(Number(corseCandidate[i].id))) corseCandidate.splice(i, 1);
+        }
+        prenotazioniBatch = corseCandidate.map(c => allPrenotazioni.filter(p =>
+            Number(p.tratta_id) === Number(c.tratta_id)
+        ));
         for (const c of corseCandidate) {
             const cap = c.veicolo_id
-                ? await getCapacitaDirettrice(
-                    c.veicolo_id,
-                    true
-                )
+                ? await getCapacitaDirettrice(c.veicolo_id, true)
                 : Number(c.posti_totali || 0);
-
-            capacitaMap.set(c.id, cap);
+            capacitaMap.set(c.tratta_id, cap);
+        }
+        const { rows: snapshots } = await pool.query(`
+            SELECT c.id, c.tipo_corsa, c.prezzo_fisso, c.prenotazione_origine_id,
+                   p.km_utente AS km_prima_prenotazione
+            FROM corse c LEFT JOIN prenotazioni p ON p.id = c.prenotazione_origine_id
+            WHERE c.id = ANY($1::int[])
+        `, [corsaIds]);
+        for (const snapshot of snapshots) {
+            if (snapshot.tipo_corsa !== 'condivisa') continue;
+            modelloAMap.set(Number(snapshot.id), {
+                costoCommercialeMissione: snapshot.prezzo_fisso == null ? null : Number(snapshot.prezzo_fisso),
+                kmPrimaPrenotazione: snapshot.km_prima_prenotazione == null ? null : Number(snapshot.km_prima_prenotazione),
+                prenotazioni: allPrenotazioni.filter(p => Number(p.corsa_id) === Number(snapshot.id)).map(p => ({
+                    id: Number(p.id), km: p.km_utente == null ? null : Number(p.km_utente), posti: Number(p.posti_richiesti)
+                }))
+            });
         }
     }
-
-     // Snapshot economici Modello A letti dal DB (non dalla cache potenzialmente obsoleta).
-     // Le corse storiche senza snapshot NON sono quotabili con il Modello A.
-     const modelloAMap = new Map();
-     if (corsaIds.length) {
-         const { rows: snapshots } = await pool.query(`
-             SELECT c.id, c.tipo_corsa, c.prezzo_fisso, c.prenotazione_origine_id,
-                    p.km_utente AS km_prima_prenotazione
-             FROM corse c
-             LEFT JOIN prenotazioni p ON p.id = c.prenotazione_origine_id
-             WHERE c.id = ANY($1::int[])
-         `, [corsaIds]);
-         for (const snapshot of snapshots) {
-             if (snapshot.tipo_corsa === 'condivisa') {
-                 modelloAMap.set(Number(snapshot.id), {
-                     costoCommercialeMissione: snapshot.prezzo_fisso == null ? null : Number(snapshot.prezzo_fisso),
-                     kmPrimaPrenotazione: snapshot.km_prima_prenotazione == null ? null : Number(snapshot.km_prima_prenotazione),
-                     prenotazioni: (prenotazioniBatch[corseCandidate.findIndex(c => Number(c.id) === Number(snapshot.id))] || []).map(p => ({
-                         id: Number(p.id), km: p.km_utente == null ? null : Number(p.km_utente), posti: Number(p.posti_richiesti)
-                     }))
-                 });
-             }
-         }
-     }
 
     const requestWithMetrics = {
         ...richiesta,

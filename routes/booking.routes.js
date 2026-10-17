@@ -46,7 +46,12 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     }
     if(!o||!d||!Number.isInteger(count)||count<=0||!when||!Number.isFinite(new Date(when).getTime())||new Date(when)<=new Date())return res.status(400).json({error:'Coordinate, passeggeri e data futura obbligatori'});
     const fresh=await cercaSlotUltra({coord:o,coordDest:d,posti_richiesti:count,start_datetime:when});
-    const quotation=fresh.find(x=>String(x.id)===String(selected.id));
+    // La stessa corsa può avere più tratte: l'ID corsa da solo non basta.
+    const quotation=fresh.find(x =>
+      String(x.id) === String(selected.id) &&
+      (x.tipo !== 'condivisa' ||
+        (selected.tratta_id != null && String(x.tratta_id) === String(selected.tratta_id)))
+    );
     if(!quotation||Math.round(Number(quotation.prezzo)*100)!==Math.round(Number(prezzo)*100))return res.status(409).json({error:'Prezzo/opzione cambiati: ripetere la ricerca'});
     if(isPopbusSlot(quotation) && quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
     // Mantiene i riferimenti PIXEL del client separati dai dati della quotazione.
@@ -211,6 +216,34 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         throw new Error('Corsa condivisa senza ID valido: ripetere la ricerca');
       }
 
+      // Identità della tratta ricavata dalla quotazione fresca, mai dal payload client.
+      let trattaIdToSave = null;
+      if (sanitizedType === 'condivisa') {
+        trattaIdToSave = Number(quotation.tratta_id);
+        if (!Number.isSafeInteger(trattaIdToSave) || trattaIdToSave <= 0) {
+          return res.status(409).json({ error: 'Tratta NCC non disponibile: ripetere la ricerca' });
+        }
+        const verificaTratta = await client.query(`
+          SELECT t.id
+          FROM public.corse_tratte t
+          JOIN public.corse c ON c.id = t.corsa_id
+          WHERE t.id = $1 AND t.corsa_id = $2
+            AND c.veicolo_id = $3
+            AND c.tipo_corsa = 'condivisa'
+            AND c.stato = 'prenotabile'
+            AND t.stato_temporale IS DISTINCT FROM 'flessibile'
+            AND t.partenza_prevista IS NOT NULL
+          FOR SHARE OF t, c
+        `, [trattaIdToSave, corsaIdToSave, slot.veicolo_id]);
+        if (verificaTratta.rowCount !== 1) {
+          return res.status(409).json({ error: 'Tratta NCC cambiata: ripetere la ricerca' });
+        }
+        if (![startOffset, endOffset].every(v => v != null && Number.isFinite(Number(v))) ||
+            Number(startOffset) < 0 || Number(endOffset) <= Number(startOffset)) {
+          return res.status(409).json({ error: 'Intervallo tratta non valido: ripetere la ricerca' });
+        }
+      }
+
       console.log(`🚗 [DEBUG-INSERT:${requestId}] Inserimento nella tabella pending per veicolo_id: ${slot.veicolo_id}, corsa_id: ${corsaIdToSave}, start_offset: ${startOffset}, end_offset: ${endOffset}`);
 
       const result = await client.query(
@@ -218,14 +251,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
           distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id,
           origine_address, destinazione_address, corsa_id,
-          start_offset, end_offset, start_index_polyline, end_index_polyline
+          start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id
         )
          VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
           'pending', $14, $15, $16, $17, $18,
-          $19, $20, $21, $22
+          $19, $20, $21, $22, $23
         ) RETURNING *`,
         [
           slot.veicolo_id,
@@ -249,7 +282,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           startOffset,
           endOffset,
           startIndexPolyline,
-          endIndexPolyline
+          endIndexPolyline,
+          trattaIdToSave
         ]
       );
 

@@ -127,7 +127,8 @@ router.post('/:id/accetta', async (req, res) => {
           latSalita: Number(pRow.origine_lat),
           lonSalita: Number(pRow.origine_lon),
           latDiscesa: Number(pRow.destinazione_lat),
-          lonDiscesa: Number(pRow.destinazione_lon)
+          lonDiscesa: Number(pRow.destinazione_lon),
+          tratta_id: pRow.tratta_id == null ? null : Number(pRow.tratta_id)
       };
 
       let corsa;
@@ -158,6 +159,26 @@ router.post('/:id/accetta', async (req, res) => {
         const error = new Error('Dati di aggancio alla condivisa mancanti o non validi: ripetere la ricerca');
         error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
         throw error;
+      }
+
+      if (isNccCondivisa) {
+        if (!Number.isSafeInteger(segmenti.tratta_id) || segmenti.tratta_id <= 0) {
+          const error = new Error('NCC condivisa: tratta_id mancante nel pending');
+          error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+          throw error;
+        }
+        const { rows: tratte } = await client.query(`
+          SELECT id FROM public.corse_tratte
+          WHERE id=$1 AND corsa_id=$2
+            AND stato_temporale IS DISTINCT FROM 'flessibile'
+            AND partenza_prevista IS NOT NULL
+          FOR SHARE
+        `, [segmenti.tratta_id, validCorsaId]);
+        if (tratte.length !== 1) {
+          const error = new Error('NCC condivisa: tratta non disponibile');
+          error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+          throw error;
+        }
       }
 
       if (validCorsaId) {
@@ -244,9 +265,10 @@ router.post('/:id/accetta', async (req, res) => {
         );
       }
 
+      let nuovaPrenotazione = null;
       if (!prenotazioneEffettuata) {
           console.log(`🎟 [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
-          await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
+          nuovaPrenotazione = await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
       }
       const nuoveFermate = [
         {
@@ -276,11 +298,16 @@ router.post('/:id/accetta', async (req, res) => {
 
       // Cache aggiornata dopo COMMIT.
 
-      const prenotazioneRes = await client.query(
-        `SELECT id FROM prenotazioni WHERE cliente_id = $1 AND corsa_id = $2 ORDER BY id DESC LIMIT 1`,
-        [pRow.cliente_id, corsa.id]
-      );
-      const prenotazioneId = prenotazioneRes.rows[0]?.id;
+      // Usa l'ID effettivamente restituito dall'INSERT, evitando selezioni ambigue.
+      // Per i percorsi legacy che creano internamente la prenotazione resta il fallback.
+      let prenotazioneId = nuovaPrenotazione?.id ?? null;
+      if (prenotazioneId == null && !isNccCondivisa) {
+        const prenotazioneRes = await client.query(
+          `SELECT id FROM prenotazioni WHERE cliente_id=$1 AND corsa_id=$2 ORDER BY id DESC LIMIT 1`,
+          [pRow.cliente_id, corsa.id]
+        );
+        prenotazioneId = prenotazioneRes.rows[0]?.id;
+      }
 
       // MODELLO A: controlli di coerenza economica prima di registrare il pagamento.
       // La prenotazione (anche se creata internamente da createCorsaFromPending)

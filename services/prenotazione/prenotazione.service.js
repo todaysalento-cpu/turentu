@@ -101,8 +101,28 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
         !Number.isFinite(startOffset) || !Number.isFinite(endOffset) || startOffset < 0 || endOffset <= startOffset) {
       throw new Error('Indici e offset devono essere validi e ordinati');
     }
+    const condivisaNcc = current.tipo_corsa === 'condivisa';
+    const trattaId = condivisaNcc ? Number(segmenti.tratta_id ?? segmenti.trattaId) : null;
+    if (condivisaNcc) {
+      if (!Number.isSafeInteger(trattaId) || trattaId <= 0) {
+        throw new Error('NCC condivisa: tratta_id obbligatorio');
+      }
+      const { rows: tratte } = await client.query(`
+        SELECT id FROM public.corse_tratte
+        WHERE id=$1 AND corsa_id=$2
+          AND stato_temporale IS DISTINCT FROM 'flessibile'
+          AND partenza_prevista IS NOT NULL
+        FOR SHARE
+      `, [trattaId, id]);
+      if (tratte.length !== 1) throw new Error('NCC condivisa: tratta non valida o non prenotabile');
+      const { rows: legacy } = await client.query(`
+        SELECT id FROM prenotazioni WHERE corsa_id=$1 AND tratta_id IS NULL LIMIT 1
+      `, [id]);
+      if (legacy.length) throw new Error('NCC condivisa: prenotazioni legacy senza tratta, migrazione necessaria');
+    }
     const {rows: existing} = await client.query(`SELECT start_offset,end_offset,posti_richiesti
-      FROM prenotazioni WHERE corsa_id=$1`, [id]);
+      FROM prenotazioni WHERE corsa_id=$1
+        AND ($2::BIGINT IS NULL OR tratta_id=$2::BIGINT)`, [id, trattaId]);
     const intervals = existing.map(p => {
       if (p.start_offset == null || p.end_offset == null) throw new Error('Prenotazioni storiche senza indici: verificare prima di prenotare');
       return {start:p.start_offset,end:p.end_offset,posti:p.posti_richiesti};
@@ -114,10 +134,10 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const {rows: inserted} = await client.query(`
       INSERT INTO prenotazioni (corsa_id,cliente_id,posti_richiesti,posti_prenotati,
         start_index_polyline,end_index_polyline,start_offset,end_offset,km_utente,
-        lat_salita,lon_salita,lat_discesa,lon_discesa)
-      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
+        lat_salita,lon_salita,lat_discesa,lon_discesa,tratta_id)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
     `,[id,clienteId,posti,start,end,startOffset,endOffset,km,segmenti.latSalita ?? null,
-      segmenti.lonSalita ?? null,segmenti.latDiscesa ?? null,segmenti.lonDiscesa ?? null]);
+      segmenti.lonSalita ?? null,segmenti.latDiscesa ?? null,segmenti.lonDiscesa ?? null,trattaId]);
 
     // Solo NCC condivisa. 'riempimento' (POPBUS) e 'privata' restano invariati.
     if (current.tipo_corsa === 'condivisa') {
@@ -125,6 +145,9 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       inserted[0].prezzo_totale = quota.prezzoTotale;
     }
 
+    // Campo aggregato legacy: il picco effettivo è specifico della tratta.
+    // La ricerca NCC calcola la disponibilità per tratta; non usare questo campo
+    // aggregato come prova di disponibilità su entrambe le direzioni.
     const {rows: updated} = await client.query(`UPDATE corse SET posti_prenotati=(
       SELECT COALESCE(SUM(posti_richiesti),0) FROM prenotazioni WHERE corsa_id=$1),
       posti_disponibili=posti_totali-$2 WHERE id=$1 RETURNING *`,[id,picco]);

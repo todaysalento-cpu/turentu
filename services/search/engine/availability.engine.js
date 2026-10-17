@@ -93,7 +93,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
-    const TOLLERANZA_KM = 50.0;
+    const TOLLERANZA_KM = 3.0; // Da calibrare nei test stradali
     
     const isImmediata = (() => {
         const orarioAndataUtente = new Date(richiesta.start_datetime || new Date());
@@ -106,12 +106,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const promises = corseCandidate.map(async (c, index) => {
         if (!c) return null;
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
+        if (c.tratta_id && (c.stato_temporale === 'flessibile' || !c.partenza_prevista)) return null;
 
         const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
         const isProattivo = idString.startsWith('virtual_pop_');
         
-        // --- 🛑 FILTRO RIGIDO: LA CORSA DEVE PARTIRE IL GIORNO DELLA RICHIESTA ---
-        if (!isProattivo && c.start_datetime) {
+        // Controllo legacy della data: per le tratte l'orario va verificato al punto di salita.
+        if (!isProattivo && !c.tratta_id && c.start_datetime) {
             const dataCorsaStr = new Date(c.start_datetime).toISOString().split('T')[0];
             if (dataCorsaStr !== dataRichiestaStr) {
                 console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché parte il ${dataCorsaStr} ma la richiesta è per il ${dataRichiestaStr}.`);
@@ -180,13 +181,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             const prenotazioni = Array.isArray(prenotazioniBatch?.[index]) ? prenotazioniBatch[index] : [];
             console.log(`📦 [PRENOTAZIONI BATCH] Corsa ID ${c.id} (indice ${index}): trovate ${prenotazioni.length} prenotazioni nel DB.`, prenotazioni);
 
-            const capacitaTotale = capacitaMap.get(c.id) ?? Number(c.posti_totali || 0);
+            const capacitaTotale = capacitaMap.get(c.tratta_id ?? c.id) ?? Number(c.posti_totali || 0);
 
             // Occupazione in metri, con nessun fallback agli indici.
             let postiOccupatiNelTratto;
             const percentualiEsistentiArray = [];
             const kmTotaliCorsaOriginale = Number(c.km_totali_percorso || c.distanza || 0);
-            const lunghezzaTotaleMetri = Number(c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
+            const lunghezzaTotaleMetri = c.tratta_id ? Number(c.distanza * 1000) : Number(c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
             try {
                 const intervals = prenotazioni.map(p => {
                     if (p.start_offset == null || p.end_offset == null) throw new Error('Offset storici mancanti');
@@ -197,6 +198,13 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             if (postiOccupatiNelTratto + Number(richiesta.posti_richiesti) > capacitaTotale) return null;
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
             const tipoPercorrenza = determinaTipoPercorrenza(kmUtenteTratta);
+            // Quota minima sulla missione per evitare micro-tratte su corse lunghe.
+            // Soglie provvisorie, centralizzate e verificabili nei test.
+            if (c.tratta_id) {
+                const kmMissione = Number(c.km_totali_percorso);
+                const quotaMinima = kmMissione <= 30 ? 0.70 : kmMissione <= 100 ? 0.60 : kmMissione <= 300 ? 0.50 : 0.40;
+                if (!Number.isFinite(kmMissione) || kmMissione <= 0 || kmUtenteTratta / kmMissione < quotaMinima) return null;
+            }
 
             // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO ---
             let oraPartenzaUtente = c.partenza_prevista || c.partenza;
@@ -205,7 +213,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             if (startOffset > 0 && lunghezzaTotaleMetri > 0 && c.partenza_prevista) {
                 const dPartenzaOriginale = new Date(c.partenza_prevista);
                 if (!isNaN(dPartenzaOriginale.getTime())) {
-                    const durataTotaleMs = Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
+                    const durataTotaleMs = c.tratta_id ? Number(c.durata_secondi) * 1000 : Number(c.durata_totale_ms || (kmTotaliCorsaOriginale * 60 * 1000));
                     const frazionePercorso = Math.min(1, startOffset / lunghezzaTotaleMetri);
                     const ritardoMs = durataTotaleMs * frazionePercorso;
                     

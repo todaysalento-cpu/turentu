@@ -1,0 +1,912 @@
+{
+  "test": "P0-E3A",
+  "mode": "READ ONLY",
+  "timestamp": "2026-10-16T15:14:15.962Z",
+  "checks": [
+    {
+      "status": "PASS",
+      "name": "Connessione PostgreSQL in transazione READ ONLY",
+      "detail": "corse_db"
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella corse presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella prenotazioni presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella pagamenti presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella popbus_attivazioni presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella popbus_attivazione_missioni presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella popbus_missione_richieste presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella popbus_attivazione_richieste presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella offerte_autisti presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella richieste_pop_bus presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella disponibilita_veicolo presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Tabella veicolo presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: corse",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: prenotazioni",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: pagamenti",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: popbus_attivazioni",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: offerte_autisti",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Colonne acceptance: richieste_pop_bus",
+      "detail": "compatibili"
+    },
+    {
+      "status": "PASS",
+      "name": "Trigger capacità presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Trigger protegge INSERT e UPDATE",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Funzione esclude la vecchia riga in UPDATE",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Vincolo stato attivazione presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Unicità prenotazione richiesta attiva presente",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Flag multimissione non abilitato nel processo di test",
+      "detail": ""
+    },
+    {
+      "status": "PASS",
+      "name": "Transazione READ ONLY terminata con ROLLBACK",
+      "detail": ""
+    }
+  ],
+  "observations": {
+    "columns": {
+      "corse": [
+        "id",
+        "veicolo_id",
+        "start_datetime",
+        "tipo_corsa",
+        "durata",
+        "origine",
+        "destinazione",
+        "stato",
+        "prezzo_fisso",
+        "created_at",
+        "posti_disponibili",
+        "posti_totali",
+        "arrivo_datetime",
+        "posti_prenotati",
+        "primo_posto",
+        "distanza",
+        "destinazione_address",
+        "origine_address",
+        "percorso_polyline",
+        "fermate_pianificate",
+        "max_fermate_consentite",
+        "path_geohashes",
+        "evento_id",
+        "km_avvicinamento",
+        "km_riposizionamento"
+      ],
+      "prenotazioni": [
+        "id",
+        "corsa_id",
+        "cliente_id",
+        "posti_prenotati",
+        "ticket_id",
+        "prezzo_totale",
+        "posti_richiesti",
+        "lat_salita",
+        "lon_salita",
+        "lat_discesa",
+        "lon_discesa",
+        "start_index_polyline",
+        "end_index_polyline",
+        "start_offset",
+        "end_offset",
+        "km_utente",
+        "tipo_percorrenza"
+      ],
+      "pagamenti": [
+        "id",
+        "prenotazione_id",
+        "importo",
+        "stato",
+        "stripe_payment_intent",
+        "tipo_corsa",
+        "currency",
+        "updated_at",
+        "commissione",
+        "corsa_id",
+        "guadagno_autista"
+      ],
+      "popbus_attivazioni": [
+        "id",
+        "direttrice_id",
+        "veicolo_id",
+        "autista_id",
+        "stato",
+        "partenza",
+        "arrivo",
+        "costo",
+        "ricavo",
+        "tariffa",
+        "piano",
+        "corsa_id",
+        "expires_at",
+        "created_at"
+      ],
+      "popbus_attivazione_missioni": [
+        "id",
+        "attivazione_id",
+        "ordine",
+        "direttrice_id",
+        "corridoio_pixel_id",
+        "nodi_territoriali",
+        "partenza",
+        "arrivo",
+        "piano",
+        "created_at"
+      ],
+      "popbus_missione_richieste": [
+        "missione_id",
+        "richiesta_id",
+        "indice_salita",
+        "indice_discesa"
+      ],
+      "popbus_attivazione_richieste": [
+        "attivazione_id",
+        "richiesta_id",
+        "attiva",
+        "indice_salita",
+        "indice_discesa"
+      ],
+      "offerte_autisti": [
+        "id",
+        "direttrice_id",
+        "autista_id",
+        "stato",
+        "created_at",
+        "expires_at",
+        "attivazione_id"
+      ],
+      "richieste_pop_bus": [
+        "id",
+        "cliente_id",
+        "origine",
+        "destinazione",
+        "start_datetime",
+        "posti_richiesti",
+        "stato",
+        "corsa_id",
+        "created_at",
+        "start_node_id",
+        "end_node_id",
+        "target_missione_id",
+        "classe",
+        "direttrice_id",
+        "origine_address",
+        "destinazione_address",
+        "prezzo",
+        "payment_intent_id",
+        "request_id",
+        "target_direttrice_id",
+        "origine_nodo_territoriale_id",
+        "destinazione_nodo_territoriale_id",
+        "origine_fermata_id",
+        "destinazione_fermata_id"
+      ],
+      "disponibilita_veicolo": [
+        "id",
+        "veicolo_id",
+        "start",
+        "fine",
+        "coord",
+        "manual",
+        "giorni_esclusi",
+        "inattivita"
+      ],
+      "veicolo": [
+        "id",
+        "driver_id",
+        "modello",
+        "posti_totali",
+        "servizi",
+        "raggio_km",
+        "coord",
+        "targa",
+        "rating",
+        "num_recensioni",
+        "created_at",
+        "distanza",
+        "marca",
+        "image_url",
+        "tipo",
+        "anno",
+        "numero_licenza_ncc",
+        "comune_licenza",
+        "id_flotta",
+        "stato_verifica",
+        "stato",
+        "localita",
+        "indice_efficienza"
+      ]
+    },
+    "trigger": "CREATE TRIGGER trg_check_posti BEFORE INSERT OR UPDATE OF corsa_id, start_offset, end_offset, posti_richiesti ON public.prenotazioni FOR EACH ROW EXECUTE FUNCTION check_posti_disponibili_trigger()",
+    "constraints": [
+      {
+        "table_name": "corse",
+        "name": "corse_evento_id_fkey",
+        "definition": "FOREIGN KEY (evento_id) REFERENCES eventi(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "corse",
+        "name": "corse_stato_check",
+        "definition": "CHECK (((stato)::text = ANY ((ARRAY['prenotabile'::character varying, 'in_corso'::character varying, 'completata'::character varying, 'annullata'::character varying, 'da_attivare'::character varying])::text[])))"
+      },
+      {
+        "table_name": "corse",
+        "name": "corse_tipo_corsa_check",
+        "definition": "CHECK (((tipo_corsa)::text = ANY ((ARRAY['privata'::character varying, 'condivisa'::character varying, 'riempimento'::character varying])::text[])))"
+      },
+      {
+        "table_name": "corse",
+        "name": "corse_veicolo_id_fkey",
+        "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "disponibilita_veicolo",
+        "name": "chk_manual_8h",
+        "definition": "CHECK (((manual = false) OR ((fine - start) <= '08:00:00'::interval)))"
+      },
+      {
+        "table_name": "disponibilita_veicolo",
+        "name": "chk_start_end",
+        "definition": "CHECK ((start < fine))"
+      },
+      {
+        "table_name": "disponibilita_veicolo",
+        "name": "disponibilita_veicolo_veicolo_id_fkey",
+        "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "disponibilita_veicolo",
+        "name": "unique_disponibilita_veicolo",
+        "definition": "UNIQUE (veicolo_id)"
+      },
+      {
+        "table_name": "offerte_autisti",
+        "name": "check_stato_offerta",
+        "definition": "CHECK (((stato)::text = ANY ((ARRAY['inviata'::character varying, 'accettata'::character varying, 'rifiutata'::character varying, 'scaduta'::character varying])::text[])))"
+      },
+      {
+        "table_name": "offerte_autisti",
+        "name": "offerte_autisti_attivazione_id_fkey",
+        "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)"
+      },
+      {
+        "table_name": "offerte_autisti",
+        "name": "offerte_autisti_autista_id_fkey",
+        "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "offerte_autisti",
+        "name": "offerte_autisti_direttrice_id_fkey",
+        "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "pagamenti",
+        "name": "fk_pagamenti_prenotazione",
+        "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "pagamenti",
+        "name": "pagamenti_prenotazione_id_fkey",
+        "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id)"
+      },
+      {
+        "table_name": "pagamenti",
+        "name": "pagamenti_stato_check",
+        "definition": "CHECK (((stato)::text = ANY (ARRAY['pendente'::text, 'pagato'::text, 'rimborsato'::text, 'autorizzazione'::text])))"
+      },
+      {
+        "table_name": "pagamenti",
+        "name": "unique_pagamento_per_prenotazione",
+        "definition": "UNIQUE (prenotazione_id)"
+      },
+      {
+        "table_name": "pagamenti",
+        "name": "unique_stripe_payment_intent",
+        "definition": "UNIQUE (stripe_payment_intent)"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_am_intervallo",
+        "definition": "CHECK ((arrivo > partenza))"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_am_nodi",
+        "definition": "CHECK ((cardinality(nodi_territoriali) >= 2))"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_am_ordine_unico",
+        "definition": "UNIQUE (attivazione_id, ordine)"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_am_piano_obj",
+        "definition": "CHECK ((jsonb_typeof(piano) = 'object'::text))"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_attivazione_missioni_attivazione_id_fkey",
+        "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_attivazione_missioni_direttrice_id_fkey",
+        "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)"
+      },
+      {
+        "table_name": "popbus_attivazione_missioni",
+        "name": "popbus_attivazione_missioni_ordine_check",
+        "definition": "CHECK ((ordine > 0))"
+      },
+      {
+        "table_name": "popbus_attivazione_richieste",
+        "name": "popbus_attivazione_richieste_attivazione_id_fkey",
+        "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)"
+      },
+      {
+        "table_name": "popbus_attivazione_richieste",
+        "name": "popbus_attivazione_richieste_check",
+        "definition": "CHECK ((indice_discesa > indice_salita))"
+      },
+      {
+        "table_name": "popbus_attivazione_richieste",
+        "name": "popbus_attivazione_richieste_richiesta_id_fkey",
+        "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_autista_id_fkey",
+        "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id)"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_check",
+        "definition": "CHECK ((arrivo > partenza))"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_corsa_id_fkey",
+        "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_direttrice_id_fkey",
+        "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_stato_check",
+        "definition": "CHECK ((stato = ANY (ARRAY['in_attesa_autista'::text, 'confermata'::text, 'scaduta'::text, 'rifiutata'::text])))"
+      },
+      {
+        "table_name": "popbus_attivazioni",
+        "name": "popbus_attivazioni_veicolo_id_fkey",
+        "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id)"
+      },
+      {
+        "table_name": "popbus_missione_richieste",
+        "name": "popbus_missione_richieste_check",
+        "definition": "CHECK ((indice_discesa > indice_salita))"
+      },
+      {
+        "table_name": "popbus_missione_richieste",
+        "name": "popbus_missione_richieste_indice_salita_check",
+        "definition": "CHECK ((indice_salita >= 0))"
+      },
+      {
+        "table_name": "popbus_missione_richieste",
+        "name": "popbus_missione_richieste_missione_id_fkey",
+        "definition": "FOREIGN KEY (missione_id) REFERENCES popbus_attivazione_missioni(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "popbus_missione_richieste",
+        "name": "popbus_missione_richieste_richiesta_id_fkey",
+        "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)"
+      },
+      {
+        "table_name": "prenotazioni",
+        "name": "prenotazioni_cliente_id_fkey",
+        "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "prenotazioni",
+        "name": "prenotazioni_corsa_id_fkey",
+        "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id) ON DELETE CASCADE"
+      },
+      {
+        "table_name": "prenotazioni",
+        "name": "prenotazioni_ticket_id_fkey",
+        "definition": "FOREIGN KEY (ticket_id) REFERENCES ticket_condiviso(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "check_classe_valida",
+        "definition": "CHECK (((classe)::text = ANY ((ARRAY['SAVER'::character varying, 'STANDARD'::character varying, 'EXPRESS'::character varying])::text[])))"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "check_stato_valido",
+        "definition": "CHECK (((stato)::text = ANY (ARRAY[('in_attesa'::character varying)::text, ('convertita'::character varying)::text, ('scaduta'::character varying)::text, ('annullata'::character varying)::text, ('in_lavorazione'::character varying)::text])))"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "chk_popbus_pixel_coppia_completa",
+        "definition": "CHECK ((((origine_fermata_id IS NULL) AND (destinazione_fermata_id IS NULL)) OR ((origine_fermata_id IS NOT NULL) AND (destinazione_fermata_id IS NOT NULL))))"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "chk_popbus_pixel_fermate_distinte",
+        "definition": "CHECK (((origine_fermata_id IS NULL) OR (destinazione_fermata_id IS NULL) OR (origine_fermata_id <> destinazione_fermata_id)))"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "chk_popbus_pixel_nodi_presenti",
+        "definition": "CHECK ((((origine_fermata_id IS NULL) OR (origine_nodo_territoriale_id IS NOT NULL)) AND ((destinazione_fermata_id IS NULL) OR (destinazione_nodo_territoriale_id IS NOT NULL))))"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "fk_popbus_pixel_destinazione_nodo",
+        "definition": "FOREIGN KEY (destinazione_fermata_id, destinazione_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "fk_popbus_pixel_origine_nodo",
+        "definition": "FOREIGN KEY (origine_fermata_id, origine_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "fk_richieste_direttrice",
+        "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE SET NULL"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_cliente_id_fkey",
+        "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_corsa_id_fkey",
+        "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_destinazione_fermata_id_fkey",
+        "definition": "FOREIGN KEY (destinazione_fermata_id) REFERENCES pixel_fermate(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+        "definition": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_end_node_id_fkey",
+        "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_origine_fermata_id_fkey",
+        "definition": "FOREIGN KEY (origine_fermata_id) REFERENCES pixel_fermate(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+        "definition": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_start_node_id_fkey",
+        "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_target_direttrice_id_fkey",
+        "definition": "FOREIGN KEY (target_direttrice_id) REFERENCES direttrici_virtuali(id)"
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "name": "richieste_pop_bus_target_missione_id_fkey",
+        "definition": "FOREIGN KEY (target_missione_id) REFERENCES missioni_ritorno(id)"
+      },
+      {
+        "table_name": "veicolo",
+        "name": "veicolo_rating_check",
+        "definition": "CHECK (((rating >= (0)::numeric) AND (rating <= (5)::numeric)))"
+      },
+      {
+        "table_name": "veicolo",
+        "name": "veicolo_targa_key",
+        "definition": "UNIQUE (targa)"
+      }
+    ],
+    "indexes": [
+      {
+        "tablename": "corse",
+        "indexname": "corse_pkey",
+        "indexdef": "CREATE UNIQUE INDEX corse_pkey ON public.corse USING btree (id)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_attive_prenotabili",
+        "indexdef": "CREATE INDEX idx_corse_attive_prenotabili ON public.corse USING btree (start_datetime) WHERE ((stato)::text = ANY ((ARRAY['prenotabile'::character varying, 'da_attivare'::character varying])::text[]))"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_datetime",
+        "indexdef": "CREATE INDEX idx_corse_datetime ON public.corse USING btree (start_datetime)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_destinazione_geom",
+        "indexdef": "CREATE INDEX idx_corse_destinazione_geom ON public.corse USING gist (destinazione)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_evento",
+        "indexdef": "CREATE INDEX idx_corse_evento ON public.corse USING btree (evento_id)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_fermate_nodi",
+        "indexdef": "CREATE INDEX idx_corse_fermate_nodi ON public.corse USING gin (((fermate_pianificate -> 'nodi'::text)))"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_geohash_gin",
+        "indexdef": "CREATE INDEX idx_corse_geohash_gin ON public.corse USING gin (path_geohashes)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_origine_geom",
+        "indexdef": "CREATE INDEX idx_corse_origine_geom ON public.corse USING gist (origine)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "idx_corse_veicolo_start",
+        "indexdef": "CREATE INDEX idx_corse_veicolo_start ON public.corse USING btree (veicolo_id, start_datetime)"
+      },
+      {
+        "tablename": "corse",
+        "indexname": "unique_corsa_slot",
+        "indexdef": "CREATE UNIQUE INDEX unique_corsa_slot ON public.corse USING btree (veicolo_id, start_datetime)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "disponibilita_veicolo_pkey",
+        "indexdef": "CREATE UNIQUE INDEX disponibilita_veicolo_pkey ON public.disponibilita_veicolo USING btree (id)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_coord",
+        "indexdef": "CREATE INDEX idx_disponibilita_coord ON public.disponibilita_veicolo USING gist (coord)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_fine",
+        "indexdef": "CREATE INDEX idx_disponibilita_fine ON public.disponibilita_veicolo USING btree (fine)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_giorni_esclusi",
+        "indexdef": "CREATE INDEX idx_disponibilita_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_inattivita",
+        "indexdef": "CREATE INDEX idx_disponibilita_inattivita ON public.disponibilita_veicolo USING gin (inattivita)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_start",
+        "indexdef": "CREATE INDEX idx_disponibilita_start ON public.disponibilita_veicolo USING btree (start)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_disponibilita_start_fine",
+        "indexdef": "CREATE INDEX idx_disponibilita_start_fine ON public.disponibilita_veicolo USING btree (start, fine)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_dv_giorni_esclusi",
+        "indexdef": "CREATE INDEX idx_dv_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_dv_inattivita",
+        "indexdef": "CREATE INDEX idx_dv_inattivita ON public.disponibilita_veicolo USING gin (inattivita jsonb_path_ops)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "idx_dv_veicolo",
+        "indexdef": "CREATE INDEX idx_dv_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+      },
+      {
+        "tablename": "disponibilita_veicolo",
+        "indexname": "unique_disponibilita_veicolo",
+        "indexdef": "CREATE UNIQUE INDEX unique_disponibilita_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+      },
+      {
+        "tablename": "offerte_autisti",
+        "indexname": "idx_offerte_autista_id",
+        "indexdef": "CREATE INDEX idx_offerte_autista_id ON public.offerte_autisti USING btree (autista_id)"
+      },
+      {
+        "tablename": "offerte_autisti",
+        "indexname": "idx_offerte_autisti_expires_at",
+        "indexdef": "CREATE INDEX idx_offerte_autisti_expires_at ON public.offerte_autisti USING btree (expires_at) WHERE ((stato)::text = 'inviata'::text)"
+      },
+      {
+        "tablename": "offerte_autisti",
+        "indexname": "idx_offerte_direttrice_id",
+        "indexdef": "CREATE INDEX idx_offerte_direttrice_id ON public.offerte_autisti USING btree (direttrice_id)"
+      },
+      {
+        "tablename": "offerte_autisti",
+        "indexname": "offerte_autisti_pkey",
+        "indexdef": "CREATE UNIQUE INDEX offerte_autisti_pkey ON public.offerte_autisti USING btree (id)"
+      },
+      {
+        "tablename": "offerte_autisti",
+        "indexname": "popbus_offerta_attivazione_unique",
+        "indexdef": "CREATE UNIQUE INDEX popbus_offerta_attivazione_unique ON public.offerte_autisti USING btree (attivazione_id, autista_id) WHERE (attivazione_id IS NOT NULL)"
+      },
+      {
+        "tablename": "pagamenti",
+        "indexname": "pagamenti_pkey",
+        "indexdef": "CREATE UNIQUE INDEX pagamenti_pkey ON public.pagamenti USING btree (id)"
+      },
+      {
+        "tablename": "pagamenti",
+        "indexname": "unique_pagamento_per_prenotazione",
+        "indexdef": "CREATE UNIQUE INDEX unique_pagamento_per_prenotazione ON public.pagamenti USING btree (prenotazione_id)"
+      },
+      {
+        "tablename": "pagamenti",
+        "indexname": "unique_stripe_payment_intent",
+        "indexdef": "CREATE UNIQUE INDEX unique_stripe_payment_intent ON public.pagamenti USING btree (stripe_payment_intent)"
+      },
+      {
+        "tablename": "popbus_attivazione_missioni",
+        "indexname": "idx_popbus_am_attivazione",
+        "indexdef": "CREATE INDEX idx_popbus_am_attivazione ON public.popbus_attivazione_missioni USING btree (attivazione_id)"
+      },
+      {
+        "tablename": "popbus_attivazione_missioni",
+        "indexname": "idx_popbus_am_tempo",
+        "indexdef": "CREATE INDEX idx_popbus_am_tempo ON public.popbus_attivazione_missioni USING btree (partenza, arrivo)"
+      },
+      {
+        "tablename": "popbus_attivazione_missioni",
+        "indexname": "popbus_am_ordine_unico",
+        "indexdef": "CREATE UNIQUE INDEX popbus_am_ordine_unico ON public.popbus_attivazione_missioni USING btree (attivazione_id, ordine)"
+      },
+      {
+        "tablename": "popbus_attivazione_missioni",
+        "indexname": "popbus_attivazione_missioni_pkey",
+        "indexdef": "CREATE UNIQUE INDEX popbus_attivazione_missioni_pkey ON public.popbus_attivazione_missioni USING btree (id)"
+      },
+      {
+        "tablename": "popbus_attivazione_richieste",
+        "indexname": "popbus_attivazione_richieste_pkey",
+        "indexdef": "CREATE UNIQUE INDEX popbus_attivazione_richieste_pkey ON public.popbus_attivazione_richieste USING btree (attivazione_id, richiesta_id)"
+      },
+      {
+        "tablename": "popbus_attivazione_richieste",
+        "indexname": "popbus_richiesta_riservata_unique",
+        "indexdef": "CREATE UNIQUE INDEX popbus_richiesta_riservata_unique ON public.popbus_attivazione_richieste USING btree (richiesta_id) WHERE attiva"
+      },
+      {
+        "tablename": "popbus_attivazioni",
+        "indexname": "popbus_attivazioni_pkey",
+        "indexdef": "CREATE UNIQUE INDEX popbus_attivazioni_pkey ON public.popbus_attivazioni USING btree (id)"
+      },
+      {
+        "tablename": "popbus_attivazioni",
+        "indexname": "popbus_attivazioni_stato",
+        "indexdef": "CREATE INDEX popbus_attivazioni_stato ON public.popbus_attivazioni USING btree (stato, expires_at)"
+      },
+      {
+        "tablename": "popbus_missione_richieste",
+        "indexname": "idx_popbus_mr_richiesta",
+        "indexdef": "CREATE INDEX idx_popbus_mr_richiesta ON public.popbus_missione_richieste USING btree (richiesta_id)"
+      },
+      {
+        "tablename": "popbus_missione_richieste",
+        "indexname": "popbus_missione_richieste_pkey",
+        "indexdef": "CREATE UNIQUE INDEX popbus_missione_richieste_pkey ON public.popbus_missione_richieste USING btree (missione_id, richiesta_id)"
+      },
+      {
+        "tablename": "prenotazioni",
+        "indexname": "idx_prenotazioni_corsa",
+        "indexdef": "CREATE INDEX idx_prenotazioni_corsa ON public.prenotazioni USING btree (corsa_id)"
+      },
+      {
+        "tablename": "prenotazioni",
+        "indexname": "idx_prenotazioni_tratta",
+        "indexdef": "CREATE INDEX idx_prenotazioni_tratta ON public.prenotazioni USING btree (corsa_id, start_index_polyline, end_index_polyline)"
+      },
+      {
+        "tablename": "prenotazioni",
+        "indexname": "prenotazioni_pkey",
+        "indexdef": "CREATE UNIQUE INDEX prenotazioni_pkey ON public.prenotazioni USING btree (id)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_pop_bus_classe",
+        "indexdef": "CREATE INDEX idx_pop_bus_classe ON public.richieste_pop_bus USING btree (classe)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_pop_bus_destinazione",
+        "indexdef": "CREATE INDEX idx_pop_bus_destinazione ON public.richieste_pop_bus USING gist (destinazione)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_pop_bus_matching",
+        "indexdef": "CREATE INDEX idx_pop_bus_matching ON public.richieste_pop_bus USING btree (stato, start_datetime)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_pop_bus_origine",
+        "indexdef": "CREATE INDEX idx_pop_bus_origine ON public.richieste_pop_bus USING gist (origine)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_popbus_request_id_unique",
+        "indexdef": "CREATE UNIQUE INDEX idx_popbus_request_id_unique ON public.richieste_pop_bus USING btree (request_id) WHERE (request_id IS NOT NULL)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_richieste_destinazione_territoriale",
+        "indexdef": "CREATE INDEX idx_richieste_destinazione_territoriale ON public.richieste_pop_bus USING btree (destinazione_nodo_territoriale_id)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_richieste_direttrice_id",
+        "indexdef": "CREATE INDEX idx_richieste_direttrice_id ON public.richieste_pop_bus USING btree (direttrice_id)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_richieste_origine_territoriale",
+        "indexdef": "CREATE INDEX idx_richieste_origine_territoriale ON public.richieste_pop_bus USING btree (origine_nodo_territoriale_id)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "idx_richieste_target_missione",
+        "indexdef": "CREATE INDEX idx_richieste_target_missione ON public.richieste_pop_bus USING btree (target_missione_id)"
+      },
+      {
+        "tablename": "richieste_pop_bus",
+        "indexname": "richieste_pop_bus_pkey",
+        "indexdef": "CREATE UNIQUE INDEX richieste_pop_bus_pkey ON public.richieste_pop_bus USING btree (id)"
+      },
+      {
+        "tablename": "veicolo",
+        "indexname": "idx_veicolo_coord",
+        "indexdef": "CREATE INDEX idx_veicolo_coord ON public.veicolo USING gist (coord)"
+      },
+      {
+        "tablename": "veicolo",
+        "indexname": "veicolo_pkey",
+        "indexdef": "CREATE UNIQUE INDEX veicolo_pkey ON public.veicolo USING btree (id)"
+      },
+      {
+        "tablename": "veicolo",
+        "indexname": "veicolo_targa_key",
+        "indexdef": "CREATE UNIQUE INDEX veicolo_targa_key ON public.veicolo USING btree (targa)"
+      }
+    ],
+    "status_columns": [
+      {
+        "table_name": "pagamenti",
+        "column_name": "stato",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_name": "richieste_pop_bus",
+        "column_name": "stato",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": "'in_attesa'::character varying"
+      }
+    ],
+    "multimission_flag": "unset"
+  },
+  "warnings": [
+    "prenotazioni.stato assente: chiarire cancellazioni e rilascio posti prima di acceptance live",
+    "Sorgente acceptance.js non trovata nei percorsi comuni: verifica statica non eseguita"
+  ],
+  "summary": {
+    "passes": 25,
+    "fails": 0,
+    "warnings": 2
+  }
+}

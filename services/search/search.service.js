@@ -11,11 +11,10 @@ import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
-const MAX_DISTANZA_NODO_POPBUS_METRI = 3000;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
 const MAX_DISTANZA_NODO_TERRITORIALE_METRI = 3000;
 
-// PIXEL: nodi territoriali separati dai nodi_direttrice del matching.
+// PIXEL e POPBUS V2 condividono i nodi territoriali.
 async function getNearestTerritorialNode(lat, lon) {
     const { rows } = await pool.query(`
         SELECT id, ST_Distance(
@@ -82,28 +81,6 @@ function determinaClasse(indice) {
     return 'EXPRESS';
 }
 
-async function getNearestNode(lat, lon) {
-    const { rows } = await pool.query(`
-        SELECT id,
-               ST_Distance(
-                   posizione,
-                   ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-               ) AS distanza_metri
-        FROM nodi_direttrice
-        WHERE posizione IS NOT NULL
-        ORDER BY posizione <->
-                 ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-        LIMIT 1
-    `, [lon, lat]);
-
-    const nodo = rows[0];
-
-    return nodo &&
-        Number(nodo.distanza_metri) <= MAX_DISTANZA_NODO_POPBUS_METRI
-        ? nodo
-        : null;
-}
-
 async function caricaAnteprimaFormazione({
     lat,
     lon,
@@ -114,8 +91,8 @@ async function caricaAnteprimaFormazione({
     slot
 }) {
     const [origine, destinazione] = await Promise.all([
-        getNearestNode(lat, lon),
-        getNearestNode(destLat, destLon)
+        getNearestTerritorialNode(lat, lon),
+        getNearestTerritorialNode(destLat, destLon)
     ]);
 
     if (
@@ -419,6 +396,8 @@ export async function cercaSlotUltra(richiesta) {
             await pool.query(`
                 SELECT
                     corsa_id,
+                    id,
+                    km_utente,
                     posti_richiesti,
                     start_offset,
                     end_offset,
@@ -445,6 +424,30 @@ export async function cercaSlotUltra(richiesta) {
             capacitaMap.set(c.id, cap);
         }
     }
+
+     // Snapshot economici Modello A letti dal DB (non dalla cache potenzialmente obsoleta).
+     // Le corse storiche senza snapshot NON sono quotabili con il Modello A.
+     const modelloAMap = new Map();
+     if (corsaIds.length) {
+         const { rows: snapshots } = await pool.query(`
+             SELECT c.id, c.tipo_corsa, c.prezzo_fisso, c.prenotazione_origine_id,
+                    p.km_utente AS km_prima_prenotazione
+             FROM corse c
+             LEFT JOIN prenotazioni p ON p.id = c.prenotazione_origine_id
+             WHERE c.id = ANY($1::int[])
+         `, [corsaIds]);
+         for (const snapshot of snapshots) {
+             if (snapshot.tipo_corsa === 'condivisa') {
+                 modelloAMap.set(Number(snapshot.id), {
+                     costoCommercialeMissione: snapshot.prezzo_fisso == null ? null : Number(snapshot.prezzo_fisso),
+                     kmPrimaPrenotazione: snapshot.km_prima_prenotazione == null ? null : Number(snapshot.km_prima_prenotazione),
+                     prenotazioni: (prenotazioniBatch[corseCandidate.findIndex(c => Number(c.id) === Number(snapshot.id))] || []).map(p => ({
+                         id: Number(p.id), km: p.km_utente == null ? null : Number(p.km_utente), posti: Number(p.posti_richiesti)
+                     }))
+                 });
+             }
+         }
+     }
 
     const requestWithMetrics = {
         ...richiesta,
@@ -529,6 +532,7 @@ export async function cercaSlotUltra(richiesta) {
         const slotRisultato = {
             ...c,
             tipo: 'condivisa',
+            modelloA: modelloAMap.get(Number(c.id)) ?? null,
             is_pool: false,
             distanza: kmUtenteTratta * 1000,
             distanzaKm: kmUtenteTratta,

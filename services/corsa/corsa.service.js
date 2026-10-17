@@ -158,6 +158,38 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
     return corsa;
 }
 
+// Validazioni geografiche esclusivamente per nuove missioni NCC condivise.
+function coordinateBaseValide(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) &&
+        Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+        !(lat === 0 && lon === 0);
+}
+
+function erroreGeoNcc(messaggio) {
+    const err = new Error(messaggio);
+    err.code = 'NCC_MISSION_GEO_INVALID';
+    return err;
+}
+
+function stessoPunto(a, b) {
+    return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7;
+}
+
+async function distanzaTrattaNcc(da, a, nome) {
+    if (stessoPunto(da, a)) return 0;
+    let route;
+    try {
+        route = await getRouteGeometry(da, a);
+    } catch (err) {
+        throw erroreGeoNcc(`Routing ${nome} non disponibile: ${err.message}`);
+    }
+    const km = Number(route?.distanzaKm);
+    if (!Number.isFinite(km) || km <= 0) {
+        throw erroreGeoNcc(`Distanza stradale ${nome} non valida`);
+    }
+    return km;
+}
+
 // --- FUNZIONE PRINCIPALE ---
 export async function createCorsaFromPending(pending, veicolo, client, isPopBus = false, autistaId = null) {
   let localClient = false;
@@ -199,24 +231,38 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             throw new Error(`Coordinate di origine o destinazione non valide per il pending ${pending.id}`);
         }
 
+        const isNccCondivisa = pending.tipo_corsa === 'condivisa';
         let kmAvvicinamento = 0;
         let kmRiposizionamento = 0;
 
-        try {
-            const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
-            const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
-
-            if (latBaseV && lonBaseV) {
-                const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
-                if (routeAvv?.distanzaKm) kmAvvicinamento = routeAvv.distanzaKm;
-
-                const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: latBaseV });
-                if (routeRip?.distanzaKm) kmRiposizionamento = routeRip.distanzaKm;
+        // Le missioni NCC condivise richiedono una base reale e due tratte
+        // stradali affidabili. Non usare l'origine del cliente come base fittizia.
+        if (isNccCondivisa) {
+            const latBase = veicolo?.lat_base == null ? NaN : Number(veicolo.lat_base);
+            const lonBase = veicolo?.lon_base == null ? NaN : Number(veicolo.lon_base);
+            if (!coordinateBaseValide(latBase, lonBase)) {
+                throw erroreGeoNcc(`Base operativa mancante o non valida per veicolo ${veicolo?.id ?? pending.veicolo_id}`);
             }
-            console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);
-        } catch (e) {
-            console.warn(`⚠ [ROUTING WARNING] Errore calcolo avvicinamento/riposizionamento:`, e);
+            const base = { lat: latBase, lon: lonBase };
+            kmAvvicinamento = await distanzaTrattaNcc(base, coordOrig, 'avvicinamento');
+            kmRiposizionamento = await distanzaTrattaNcc(coordDest, base, 'ritorno alla base');
+        } else {
+            // Comportamento storico delle corse private, salvo correzione
+            // della longitudine usata per il ritorno.
+            try {
+                const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
+                const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
+                if (latBaseV && lonBaseV) {
+                    const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
+                    if (routeAvv?.distanzaKm) kmAvvicinamento = routeAvv.distanzaKm;
+                    const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
+                    if (routeRip?.distanzaKm) kmRiposizionamento = routeRip.distanzaKm;
+                }
+            } catch (e) {
+                console.warn('⚠ [ROUTING WARNING] Errore calcolo avvicinamento/riposizionamento:', e);
+            }
         }
+        console.log(`📏 [MISSIONE FISSA STRADALE] Avvicinamento: ${kmAvvicinamento.toFixed(2)} km, Riposizionamento: ${kmRiposizionamento.toFixed(2)} km`);
 
         let polylineString = '';
         let pathGeohashes = [];
@@ -237,8 +283,14 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 pathGeohashes = coords.filter((_, index) => index % step === 0).map(c => ngeohash.encode(c[0], c[1], 5));
                 console.log(`✅ [ROUTE] Geometria generata. Distanza: ${distanzaKm} km`);
             }
-        } catch (e) {  
-            console.warn(`⚠ [ROUTE WARNING] Impossibile generare geometria per pending ${pending.id}:`, e);  
+        } catch (e) {
+            if (isNccCondivisa) {
+                throw erroreGeoNcc(`Routing percorso principale non disponibile per pending ${pending.id}: ${e.message}`);
+            }
+            console.warn(`⚠ [ROUTE WARNING] Impossibile generare geometria per pending ${pending.id}:`, e);
+        }
+        if (isNccCondivisa && (!Number.isFinite(distanzaKm) || distanzaKm <= 0 || !polylineString)) {
+            throw erroreGeoNcc(`Percorso stradale principale incompleto per pending ${pending.id}`);
         }
 
         const postiTotaliVeicolo = Number(veicolo?.posti_totali ?? veicolo?.posti ?? 4);

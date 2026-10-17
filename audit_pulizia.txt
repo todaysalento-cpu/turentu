@@ -1,0 +1,267 @@
+
+[TABELLE_RAGGIUNGIBILI_DA_FK]
+[
+  "public.direttrici_virtuali",
+  "public.missioni_ritorno",
+  "public.nodi_direttrice",
+  "public.offerte_autisti",
+  "public.popbus_attivazione_richieste",
+  "public.popbus_attivazione_segmenti",
+  "public.popbus_attivazioni",
+  "public.richieste_pop_bus",
+  "public.segmenti"
+]
+
+[VINCOLI_FK_ENTRANTI_RICORSIVI]
+[
+  {
+    "vincolo": "popbus_attivazione_richieste_richiesta_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "popbus_attivazione_richieste",
+    "schema_padre": "public",
+    "tabella_padre": "richieste_pop_bus",
+    "definizione": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "missioni_ritorno_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "missioni_ritorno",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+    "on_delete_codice": "c"
+  },
+  {
+    "vincolo": "nodi_direttrice_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "nodi_direttrice",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+    "on_delete_codice": "c"
+  },
+  {
+    "vincolo": "offerte_autisti_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "offerte_autisti",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+    "on_delete_codice": "c"
+  },
+  {
+    "vincolo": "popbus_attivazioni_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "popbus_attivazioni",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "fk_richieste_direttrice",
+    "schema_figlio": "public",
+    "tabella_figlia": "richieste_pop_bus",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE SET NULL",
+    "on_delete_codice": "n"
+  },
+  {
+    "vincolo": "richieste_pop_bus_target_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "richieste_pop_bus",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (target_direttrice_id) REFERENCES direttrici_virtuali(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "segmenti_direttrice_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "segmenti",
+    "schema_padre": "public",
+    "tabella_padre": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+    "on_delete_codice": "c"
+  },
+  {
+    "vincolo": "missioni_ritorno_segmento_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "missioni_ritorno",
+    "schema_padre": "public",
+    "tabella_padre": "segmenti",
+    "definizione": "FOREIGN KEY (segmento_id) REFERENCES segmenti(id) ON DELETE CASCADE",
+    "on_delete_codice": "c"
+  },
+  {
+    "vincolo": "popbus_attivazione_segmenti_segmento_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "popbus_attivazione_segmenti",
+    "schema_padre": "public",
+    "tabella_padre": "segmenti",
+    "definizione": "FOREIGN KEY (segmento_id) REFERENCES segmenti(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "richieste_pop_bus_target_missione_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "richieste_pop_bus",
+    "schema_padre": "public",
+    "tabella_padre": "missioni_ritorno",
+    "definizione": "FOREIGN KEY (target_missione_id) REFERENCES missioni_ritorno(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "direttrici_virtuali_end_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "direttrici_virtuali",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "direttrici_virtuali_start_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "direttrici_virtuali",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "missioni_ritorno_capolinea_finale_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "missioni_ritorno",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (capolinea_finale_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "missioni_ritorno_nodo_origine_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "missioni_ritorno",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (nodo_origine) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "richieste_pop_bus_end_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "richieste_pop_bus",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "richieste_pop_bus_start_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "richieste_pop_bus",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "segmenti_end_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "segmenti",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "segmenti_start_node_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "segmenti",
+    "schema_padre": "public",
+    "tabella_padre": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "offerte_autisti_attivazione_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "offerte_autisti",
+    "schema_padre": "public",
+    "tabella_padre": "popbus_attivazioni",
+    "definizione": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "popbus_attivazione_richieste_attivazione_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "popbus_attivazione_richieste",
+    "schema_padre": "public",
+    "tabella_padre": "popbus_attivazioni",
+    "definizione": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)",
+    "on_delete_codice": "a"
+  },
+  {
+    "vincolo": "popbus_attivazione_segmenti_attivazione_id_fkey",
+    "schema_figlio": "public",
+    "tabella_figlia": "popbus_attivazione_segmenti",
+    "schema_padre": "public",
+    "tabella_padre": "popbus_attivazioni",
+    "definizione": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)",
+    "on_delete_codice": "a"
+  }
+]
+
+[CONTEGGI_TABELLE_DIPENDENTI]
+[
+  {
+    "tabella": "public.direttrici_virtuali",
+    "totale": "8"
+  },
+  {
+    "tabella": "public.missioni_ritorno",
+    "totale": "4"
+  },
+  {
+    "tabella": "public.nodi_direttrice",
+    "totale": "13"
+  },
+  {
+    "tabella": "public.offerte_autisti",
+    "totale": "28"
+  },
+  {
+    "tabella": "public.popbus_attivazione_richieste",
+    "totale": "37"
+  },
+  {
+    "tabella": "public.popbus_attivazione_segmenti",
+    "totale": "23"
+  },
+  {
+    "tabella": "public.popbus_attivazioni",
+    "totale": "23"
+  },
+  {
+    "tabella": "public.richieste_pop_bus",
+    "totale": "40"
+  },
+  {
+    "tabella": "public.segmenti",
+    "totale": "9"
+  }
+]
+
+[FUNZIONI_LEGACY]
+[
+  {
+    "schema": "public",
+    "funzione": "get_or_create_node",
+    "argomenti": "lat double precision, lon double precision",
+    "definizione": "CREATE OR REPLACE FUNCTION public.get_or_create_node(lat double precision, lon double precision)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    node_id integer;\nBEGIN\n    -- 1. Cerca un nodo esistente entro una tolleranza sicura (es. 30 metri anzich‚ 500)\n    SELECT id INTO node_id FROM nodi_direttrice \n    WHERE ST_DWithin(posizione::geography, ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography, 30)\n    ORDER BY posizione <-> ST_SetSRID(ST_MakePoint(lon, lat), 4326) ASC\n    LIMIT 1;\n    \n    -- 2. Se non esiste, lo crea\n    IF node_id IS NULL THEN\n        INSERT INTO nodi_direttrice (posizione, offset_metri)\n        VALUES (ST_SetSRID(ST_MakePoint(lon, lat), 4326), 0)\n        RETURNING id INTO node_id;\n    END IF;\n    \n    RETURN node_id;\nEND;\n$function$\n"
+  }
+]
+
+FINE: audit in sola lettura, nessuna cancellazione.

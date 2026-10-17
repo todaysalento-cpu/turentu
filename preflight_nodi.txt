@@ -1,0 +1,1248 @@
+=== TURENTU — PREFLIGHT NODI TERRITORIALI (READ ONLY) ===
+
+[COLONNE_TABELLE] righe=85
+[
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('direttrici_virtuali_id_seq'::regclass)"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 2,
+    "column_name": "linea_geografica",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geometry",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 3,
+    "column_name": "stato",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'in_formazione'::character varying"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 4,
+    "column_name": "partenza_prevista",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 7,
+    "column_name": "veicolo_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 8,
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone",
+    "udt_name": "timestamp",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 9,
+    "column_name": "tipo_servizio",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'urbano'::character varying"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 10,
+    "column_name": "moltiplicatore_costo",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": "1.0"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 11,
+    "column_name": "soglia_tempo_max",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "300"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 12,
+    "column_name": "tipo_raggio",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'medio'::character varying"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 13,
+    "column_name": "is_evento",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "YES",
+    "column_default": "false"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 14,
+    "column_name": "soglia_attivazione",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 15,
+    "column_name": "distanza_totale_km",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 16,
+    "column_name": "start_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "ordinal_position": 17,
+    "column_name": "end_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('missioni_ritorno_id_seq'::regclass)"
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 2,
+    "column_name": "direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 3,
+    "column_name": "nodo_origine",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 4,
+    "column_name": "orario_previsto",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 5,
+    "column_name": "stato",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'in_attesa'::character varying"
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 6,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 7,
+    "column_name": "segmento_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 8,
+    "column_name": "capolinea_finale_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "ordinal_position": 9,
+    "column_name": "tempo_max_attesa",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "20"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('nodi_direttrice_id_seq'::regclass)"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 2,
+    "column_name": "direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 3,
+    "column_name": "nome_nodo",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 4,
+    "column_name": "posizione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 5,
+    "column_name": "offset_metri",
+    "data_type": "double precision",
+    "udt_name": "float8",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 6,
+    "column_name": "tipo_nodo",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'standard'::character varying"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 7,
+    "column_name": "ordine",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 8,
+    "column_name": "finestra_oraria_min",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "ordinal_position": 9,
+    "column_name": "finestra_oraria_max",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "NO",
+    "column_default": "nextval('nodi_territoriali_id_seq'::regclass)"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 2,
+    "column_name": "nome",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 3,
+    "column_name": "posizione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 4,
+    "column_name": "attivo",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 5,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "ordinal_position": 6,
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "NO",
+    "column_default": "nextval('pixel_fermate_id_seq'::regclass)"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 2,
+    "column_name": "nodo_territoriale_id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 3,
+    "column_name": "nome",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 4,
+    "column_name": "indirizzo",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 5,
+    "column_name": "posizione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 6,
+    "column_name": "tipi_veicolo_ammessi",
+    "data_type": "ARRAY",
+    "udt_name": "_text",
+    "is_nullable": "NO",
+    "column_default": "ARRAY[]::text[]"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 7,
+    "column_name": "verificata",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 8,
+    "column_name": "attiva",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 9,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "ordinal_position": 10,
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('richieste_pop_bus_id_seq'::regclass)"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 2,
+    "column_name": "cliente_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 3,
+    "column_name": "origine",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 4,
+    "column_name": "destinazione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 5,
+    "column_name": "start_datetime",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 6,
+    "column_name": "posti_richiesti",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 7,
+    "column_name": "stato",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'in_attesa'::character varying"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 8,
+    "column_name": "corsa_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 9,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 10,
+    "column_name": "start_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 11,
+    "column_name": "end_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 12,
+    "column_name": "target_missione_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 13,
+    "column_name": "classe",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'STANDARD'::character varying"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 14,
+    "column_name": "direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 15,
+    "column_name": "origine_address",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 16,
+    "column_name": "destinazione_address",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 17,
+    "column_name": "prezzo",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": "0.00"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 18,
+    "column_name": "payment_intent_id",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 19,
+    "column_name": "request_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 20,
+    "column_name": "target_direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 21,
+    "column_name": "origine_nodo_territoriale_id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 22,
+    "column_name": "destinazione_nodo_territoriale_id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 23,
+    "column_name": "origine_fermata_id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "ordinal_position": 24,
+    "column_name": "destinazione_fermata_id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('segmenti_id_seq'::regclass)"
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 2,
+    "column_name": "direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 3,
+    "column_name": "start_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 4,
+    "column_name": "end_node_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 5,
+    "column_name": "stato",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'in_attesa'::character varying"
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 6,
+    "column_name": "start_datetime",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 7,
+    "column_name": "posti_occupati",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 8,
+    "column_name": "ricavo_stimato",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 9,
+    "column_name": "percorso_geom",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geometry",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 10,
+    "column_name": "posti_impegnati",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 11,
+    "column_name": "tempo_stimato",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "10"
+  },
+  {
+    "table_name": "segmenti",
+    "ordinal_position": 12,
+    "column_name": "ordine_sequenziale",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  }
+]
+
+[CONSTRAINTS] righe=61
+[
+  {
+    "tabella": "direttrici_virtuali",
+    "vincolo": "direttrici_virtuali_end_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "direttrici_virtuali",
+    "vincolo": "direttrici_virtuali_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "direttrici_virtuali",
+    "vincolo": "direttrici_virtuali_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "direttrici_virtuali",
+    "vincolo": "direttrici_virtuali_start_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_capolinea_finale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (capolinea_finale_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_direttrice_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_nodo_origine_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (nodo_origine) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "vincolo": "missioni_ritorno_segmento_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (segmento_id) REFERENCES segmenti(id) ON DELETE CASCADE"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "vincolo": "nodi_direttrice_direttrice_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "vincolo": "nodi_direttrice_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "vincolo": "nodi_direttrice_offset_metri_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL offset_metri"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "vincolo": "nodi_direttrice_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_attivo_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL attivo"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_created_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL created_at"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_nome_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL nome"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_posizione_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL posizione"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "vincolo": "nodi_territoriali_updated_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL updated_at"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_attiva_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL attiva"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_attivazione_valida",
+    "tipo": "c",
+    "definizione": "CHECK (NOT attiva OR verificata)"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_created_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL created_at"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (nodo_territoriale_id) REFERENCES nodi_territoriali(id) ON DELETE RESTRICT"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_nodo_territoriale_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL nodo_territoriale_id"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_nome_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL nome"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_posizione_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL posizione"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_tipi_veicolo_ammessi_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL tipi_veicolo_ammessi"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_updated_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL updated_at"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_veicoli_validi",
+    "tipo": "c",
+    "definizione": "CHECK (tipi_veicolo_ammessi <@ ARRAY['ncc'::text, 'navetta'::text, 'autobus'::text])"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "pixel_fermate_verificata_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL verificata"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "vincolo": "uq_pixel_fermata_nodo",
+    "tipo": "u",
+    "definizione": "UNIQUE (id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "check_classe_valida",
+    "tipo": "c",
+    "definizione": "CHECK (classe::text = ANY (ARRAY['SAVER'::character varying, 'STANDARD'::character varying, 'EXPRESS'::character varying]::text[]))"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "check_stato_valido",
+    "tipo": "c",
+    "definizione": "CHECK (stato::text = ANY (ARRAY['in_attesa'::character varying::text, 'convertita'::character varying::text, 'scaduta'::character varying::text, 'annullata'::character varying::text, 'in_lavorazione'::character varying::text]))"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "chk_popbus_pixel_coppia_completa",
+    "tipo": "c",
+    "definizione": "CHECK (origine_fermata_id IS NULL AND destinazione_fermata_id IS NULL OR origine_fermata_id IS NOT NULL AND destinazione_fermata_id IS NOT NULL)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "chk_popbus_pixel_fermate_distinte",
+    "tipo": "c",
+    "definizione": "CHECK (origine_fermata_id IS NULL OR destinazione_fermata_id IS NULL OR origine_fermata_id <> destinazione_fermata_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "chk_popbus_pixel_nodi_presenti",
+    "tipo": "c",
+    "definizione": "CHECK ((origine_fermata_id IS NULL OR origine_nodo_territoriale_id IS NOT NULL) AND (destinazione_fermata_id IS NULL OR destinazione_nodo_territoriale_id IS NOT NULL))"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "fk_popbus_pixel_destinazione_nodo",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (destinazione_fermata_id, destinazione_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "fk_popbus_pixel_origine_nodo",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (origine_fermata_id, origine_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "fk_richieste_direttrice",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE SET NULL"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_cliente_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (cliente_id) REFERENCES utente(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_corsa_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_destinazione_fermata_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (destinazione_fermata_id) REFERENCES pixel_fermate(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_end_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_origine_fermata_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (origine_fermata_id) REFERENCES pixel_fermate(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_start_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_target_direttrice_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (target_direttrice_id) REFERENCES direttrici_virtuali(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "vincolo": "richieste_pop_bus_target_missione_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (target_missione_id) REFERENCES missioni_ritorno(id)"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "check_stato_segmento",
+    "tipo": "c",
+    "definizione": "CHECK (stato::text = ANY (ARRAY['in_attesa'::character varying, 'attivo'::character varying, 'completato'::character varying, 'annullato'::character varying]::text[]))"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "segmenti_direttrice_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "segmenti_end_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "segmenti_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "segmenti_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "segmenti",
+    "vincolo": "segmenti_start_node_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  }
+]
+
+[FUNZIONI_RIFERIMENTI] righe=4
+[
+  {
+    "schema": "public",
+    "funzione": "get_or_create_node",
+    "argomenti": "lat double precision, lon double precision",
+    "definizione": "CREATE OR REPLACE FUNCTION public.get_or_create_node(lat double precision, lon double precision)\n RETURNS integer\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    node_id integer;\nBEGIN\n    -- 1. Cerca un nodo esistente entro una tolleranza sicura (es. 30 metri anzich‚ 500)\n    SELECT id INTO node_id FROM nodi_direttrice \n    WHERE ST_DWithin(posizione::geography, ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography, 30)\n    ORDER BY posizione <-> ST_SetSRID(ST_MakePoint(lon, lat), 4326) ASC\n    LIMIT 1;\n    \n    -- 2. Se non esiste, lo crea\n    IF node_id IS NULL THEN\n        INSERT INTO nodi_direttrice (posizione, offset_metri)\n        VALUES (ST_SetSRID(ST_MakePoint(lon, lat), 4326), 0)\n        RETURNING id INTO node_id;\n    END IF;\n    \n    RETURN node_id;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "funzione": "pixel_fermate_candidate",
+    "argomenti": "p_posizione geography, p_tipo_veicolo text, p_raggio_metri double precision",
+    "definizione": "CREATE OR REPLACE FUNCTION public.pixel_fermate_candidate(p_posizione geography, p_tipo_veicolo text, p_raggio_metri double precision DEFAULT 1000)\n RETURNS TABLE(fermata_id bigint, nodo_territoriale_id bigint, nome text, indirizzo text, lat double precision, lon double precision, distanza_metri double precision)\n LANGUAGE plpgsql\n STABLE\nAS $function$\nBEGIN\n    IF p_posizione IS NULL\n       OR p_tipo_veicolo IS NULL\n       OR p_tipo_veicolo NOT IN ('ncc', 'navetta', 'autobus')\n       OR p_raggio_metri IS NULL\n       OR p_raggio_metri = 'Infinity'::DOUBLE PRECISION\n       OR p_raggio_metri = '-Infinity'::DOUBLE PRECISION\n       OR p_raggio_metri = 'NaN'::DOUBLE PRECISION\n       OR p_raggio_metri <= 0\n    THEN\n        RAISE EXCEPTION\n            'Parametri ricerca fermate PIXEL non validi';\n    END IF;\n\n    RETURN QUERY\n    SELECT\n        f.id,\n        f.nodo_territoriale_id,\n        f.nome::TEXT,\n        f.indirizzo,\n        ST_Y(f.posizione::geometry),\n        ST_X(f.posizione::geometry),\n        ST_Distance(p_posizione, f.posizione)\n    FROM public.pixel_fermate f\n    JOIN public.nodi_territoriali n\n        ON n.id = f.nodo_territoriale_id\n    WHERE n.attivo = TRUE\n      AND f.attiva = TRUE\n      AND f.verificata = TRUE\n      AND p_tipo_veicolo = ANY(f.tipi_veicolo_ammessi)\n      AND ST_DWithin(\n          f.posizione,\n          p_posizione,\n          p_raggio_metri\n      )\n    ORDER BY\n        ST_Distance(p_posizione, f.posizione),\n        f.id;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "funzione": "pixel_fermate_per_nodo",
+    "argomenti": "p_nodo_id bigint",
+    "definizione": "CREATE OR REPLACE FUNCTION public.pixel_fermate_per_nodo(p_nodo_id bigint)\n RETURNS TABLE(fermata_id bigint, nome text, indirizzo text, lat double precision, lon double precision, tipi_veicolo_ammessi text[])\n LANGUAGE sql\n STABLE\nAS $function$\n    SELECT\n        f.id,\n        f.nome::TEXT,\n        f.indirizzo,\n        ST_Y(f.posizione::geometry),\n        ST_X(f.posizione::geometry),\n        f.tipi_veicolo_ammessi\n    FROM public.pixel_fermate f\n    JOIN public.nodi_territoriali n\n        ON n.id = f.nodo_territoriale_id\n    WHERE f.nodo_territoriale_id = p_nodo_id\n      AND f.attiva = TRUE\n      AND f.verificata = TRUE\n      AND n.attivo = TRUE\n    ORDER BY f.nome, f.id;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "funzione": "pixel_valida_coppia_fermate",
+    "argomenti": "p_origine_fermata_id bigint, p_destinazione_fermata_id bigint",
+    "definizione": "CREATE OR REPLACE FUNCTION public.pixel_valida_coppia_fermate(p_origine_fermata_id bigint, p_destinazione_fermata_id bigint)\n RETURNS TABLE(valida boolean, motivo text, tipi_veicolo_compatibili text[])\n LANGUAGE plpgsql\n STABLE\nAS $function$\nDECLARE\n    v_origine RECORD;\n    v_destinazione RECORD;\n    v_compatibili TEXT[];\nBEGIN\n    IF p_origine_fermata_id IS NULL\n       OR p_destinazione_fermata_id IS NULL THEN\n\n        RETURN QUERY SELECT\n            FALSE,\n            'Fermate obbligatorie'::TEXT,\n            ARRAY[]::TEXT[];\n        RETURN;\n    END IF;\n\n    IF p_origine_fermata_id = p_destinazione_fermata_id THEN\n\n        RETURN QUERY SELECT\n            FALSE,\n            'Origine e destinazione coincidono'::TEXT,\n            ARRAY[]::TEXT[];\n        RETURN;\n    END IF;\n\n    SELECT f.*, n.attivo AS nodo_attivo\n    INTO v_origine\n    FROM public.pixel_fermate f\n    JOIN public.nodi_territoriali n\n        ON n.id = f.nodo_territoriale_id\n    WHERE f.id = p_origine_fermata_id;\n\n    IF NOT FOUND THEN\n        RETURN QUERY SELECT\n            FALSE,\n            'Fermata origine inesistente'::TEXT,\n            ARRAY[]::TEXT[];\n        RETURN;\n    END IF;\n\n    SELECT f.*, n.attivo AS nodo_attivo\n    INTO v_destinazione\n    FROM public.pixel_fermate f\n    JOIN public.nodi_territoriali n\n        ON n.id = f.nodo_territoriale_id\n    WHERE f.id = p_destinazione_fermata_id;\n\n    IF NOT FOUND THEN\n        RETURN QUERY SELECT\n            FALSE,\n            'Fermata destinazione inesistente'::TEXT,\n            ARRAY[]::TEXT[];\n        RETURN;\n    END IF;\n\n    IF NOT (\n        v_origine.attiva\n        AND v_origine.verificata\n        AND v_origine.nodo_attivo\n        AND v_destinazione.attiva\n        AND v_destinazione.verificata\n        AND v_destinazione.nodo_attivo\n    ) THEN\n\n        RETURN QUERY SELECT\n            FALSE,\n            'Fermata non operativa'::TEXT,\n            ARRAY[]::TEXT[];\n        RETURN;\n    END IF;\n\n    SELECT COALESCE(\n        ARRAY_AGG(DISTINCT t.tipo ORDER BY t.tipo),\n        ARRAY[]::TEXT[]\n    )\n    INTO v_compatibili\n    FROM UNNEST(v_origine.tipi_veicolo_ammessi)\n         AS t(tipo)\n    WHERE t.tipo = ANY(\n        v_destinazione.tipi_veicolo_ammessi\n    );\n\n    IF CARDINALITY(v_compatibili) = 0 THEN\n        RETURN QUERY SELECT\n            FALSE,\n            'Nessun tipo di veicolo compatibile'::TEXT,\n            v_compatibili;\n        RETURN;\n    END IF;\n\n    RETURN QUERY SELECT\n        TRUE,\n        'Coppia fermate valida'::TEXT,\n        v_compatibili;\nEND;\n$function$\n"
+  }
+]
+
+[TRIGGER_NON_INTERNI] righe=0
+[]
+
+[CONTEGGI] righe=7
+[
+  {
+    "tabella": "nodi_territoriali",
+    "righe": "9"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "righe": "13"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "righe": "40"
+  },
+  {
+    "tabella": "direttrici_virtuali",
+    "righe": "8"
+  },
+  {
+    "tabella": "segmenti",
+    "righe": "9"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "righe": "4"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "righe": "1"
+  }
+]
+
+[RICHIESTE_STATO_NODI] righe=1
+[
+  {
+    "totale": "40",
+    "origine_territoriale_null": "3",
+    "destinazione_territoriale_null": "3",
+    "origine_legacy_presente": "40",
+    "destinazione_legacy_presente": "40",
+    "coppie_territoriali_complete": "37"
+  }
+]
+
+[RICHIESTE_DIVERGENZE_GEOGRAFICHE] righe=1
+[
+  {
+    "coppie_confrontabili": "37",
+    "origini_divergenti": "0",
+    "destinazioni_divergenti": "0"
+  }
+]
+
+[RIFERIMENTI_LEGACY_USATI] righe=3
+[
+  {
+    "tabella": "direttrici_virtuali",
+    "righe": "8",
+    "con_nodi": "8"
+  },
+  {
+    "tabella": "segmenti",
+    "righe": "9",
+    "con_nodi": "9"
+  },
+  {
+    "tabella": "missioni_ritorno",
+    "righe": "4",
+    "con_nodi": "4"
+  }
+]
+
+[DIPENDENZE_VISTE] righe=0
+[]
+
+FINE: nessuna modifica effettuata.

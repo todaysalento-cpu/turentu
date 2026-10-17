@@ -1,0 +1,1355 @@
+=== TURENTU — AUDIT UNIFICAZIONE NODI (READ ONLY) ===
+
+[COLONNE_NODI] righe=15
+[
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": "nextval('nodi_direttrice_id_seq'::regclass)"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "direttrice_id",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "nome_nodo",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "posizione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "offset_metri",
+    "data_type": "double precision",
+    "udt_name": "float8",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "tipo_nodo",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "YES",
+    "column_default": "'standard'::character varying"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "ordine",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "finestra_oraria_min",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "finestra_oraria_max",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "NO",
+    "column_default": "nextval('nodi_territoriali_id_seq'::regclass)"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "nome",
+    "data_type": "character varying",
+    "udt_name": "varchar",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "posizione",
+    "data_type": "USER-DEFINED",
+    "udt_name": "geography",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "attivo",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "nodi_territoriali",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  }
+]
+
+[FOREIGN_KEYS] righe=12
+[
+  {
+    "vincolo": "direttrici_virtuali_end_node_id_fkey",
+    "tabella": "direttrici_virtuali",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "direttrici_virtuali_start_node_id_fkey",
+    "tabella": "direttrici_virtuali",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "missioni_ritorno_capolinea_finale_id_fkey",
+    "tabella": "missioni_ritorno",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (capolinea_finale_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "missioni_ritorno_nodo_origine_fkey",
+    "tabella": "missioni_ritorno",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (nodo_origine) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "nodi_direttrice_direttrice_id_fkey",
+    "tabella": "nodi_direttrice",
+    "riferisce": "direttrici_virtuali",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+  },
+  {
+    "vincolo": "pixel_fermate_nodo_territoriale_id_fkey",
+    "tabella": "pixel_fermate",
+    "riferisce": "nodi_territoriali",
+    "definizione": "FOREIGN KEY (nodo_territoriale_id) REFERENCES nodi_territoriali(id) ON DELETE RESTRICT"
+  },
+  {
+    "vincolo": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+    "tabella": "richieste_pop_bus",
+    "riferisce": "nodi_territoriali",
+    "definizione": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  },
+  {
+    "vincolo": "richieste_pop_bus_end_node_id_fkey",
+    "tabella": "richieste_pop_bus",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+    "tabella": "richieste_pop_bus",
+    "riferisce": "nodi_territoriali",
+    "definizione": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  },
+  {
+    "vincolo": "richieste_pop_bus_start_node_id_fkey",
+    "tabella": "richieste_pop_bus",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "segmenti_end_node_id_fkey",
+    "tabella": "segmenti",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (end_node_id) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "vincolo": "segmenti_start_node_id_fkey",
+    "tabella": "segmenti",
+    "riferisce": "nodi_direttrice",
+    "definizione": "FOREIGN KEY (start_node_id) REFERENCES nodi_direttrice(id)"
+  }
+]
+
+[COLONNE_ID_NODO] righe=12
+[
+  {
+    "table_name": "direttrici_virtuali",
+    "column_name": "end_node_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "direttrici_virtuali",
+    "column_name": "start_node_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "missioni_ritorno",
+    "column_name": "nodo_origine",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "nome_nodo",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "nodi_direttrice",
+    "column_name": "tipo_nodo",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "pixel_fermate",
+    "column_name": "nodo_territoriale_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "column_name": "destinazione_nodo_territoriale_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "column_name": "end_node_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "column_name": "origine_nodo_territoriale_id",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "richieste_pop_bus",
+    "column_name": "start_node_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "segmenti",
+    "column_name": "end_node_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "segmenti",
+    "column_name": "start_node_id",
+    "data_type": "integer"
+  }
+]
+
+[VINCOLI_CORRELATI] righe=20
+[
+  {
+    "tabella": "missioni_ritorno",
+    "nome": "missioni_ritorno_nodo_origine_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (nodo_origine) REFERENCES nodi_direttrice(id)"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "nome": "nodi_direttrice_direttrice_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "nome": "nodi_direttrice_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "nome": "nodi_direttrice_offset_metri_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL offset_metri"
+  },
+  {
+    "tabella": "nodi_direttrice",
+    "nome": "nodi_direttrice_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_attivo_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL attivo"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_created_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL created_at"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL id"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_nome_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL nome"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_pkey",
+    "tipo": "p",
+    "definizione": "PRIMARY KEY (id)"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_posizione_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL posizione"
+  },
+  {
+    "tabella": "nodi_territoriali",
+    "nome": "nodi_territoriali_updated_at_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL updated_at"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "nome": "pixel_fermate_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (nodo_territoriale_id) REFERENCES nodi_territoriali(id) ON DELETE RESTRICT"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "nome": "pixel_fermate_nodo_territoriale_id_not_null",
+    "tipo": "n",
+    "definizione": "NOT NULL nodo_territoriale_id"
+  },
+  {
+    "tabella": "pixel_fermate",
+    "nome": "uq_pixel_fermata_nodo",
+    "tipo": "u",
+    "definizione": "UNIQUE (id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "nome": "chk_popbus_pixel_nodi_presenti",
+    "tipo": "c",
+    "definizione": "CHECK ((((origine_fermata_id IS NULL) OR (origine_nodo_territoriale_id IS NOT NULL)) AND ((destinazione_fermata_id IS NULL) OR (destinazione_nodo_territoriale_id IS NOT NULL))))"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "nome": "fk_popbus_pixel_destinazione_nodo",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (destinazione_fermata_id, destinazione_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "nome": "fk_popbus_pixel_origine_nodo",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (origine_fermata_id, origine_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "nome": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  },
+  {
+    "tabella": "richieste_pop_bus",
+    "nome": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+    "tipo": "f",
+    "definizione": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+  }
+]
+
+[VIEW_DIPENDENTI] righe=0
+[]
+
+[INDICI_NODI] righe=8
+[
+  {
+    "tablename": "direttrici_virtuali",
+    "indexname": "idx_unique_direttrice",
+    "indexdef": "CREATE UNIQUE INDEX idx_unique_direttrice ON public.direttrici_virtuali USING btree (start_node_id, end_node_id, partenza_prevista)"
+  },
+  {
+    "tablename": "nodi_direttrice",
+    "indexname": "idx_nodi_direttrice_id",
+    "indexdef": "CREATE INDEX idx_nodi_direttrice_id ON public.nodi_direttrice USING btree (direttrice_id)"
+  },
+  {
+    "tablename": "nodi_direttrice",
+    "indexname": "idx_nodi_direttrice_ordine",
+    "indexdef": "CREATE INDEX idx_nodi_direttrice_ordine ON public.nodi_direttrice USING btree (direttrice_id, ordine)"
+  },
+  {
+    "tablename": "nodi_direttrice",
+    "indexname": "idx_nodi_posizione_gist",
+    "indexdef": "CREATE INDEX idx_nodi_posizione_gist ON public.nodi_direttrice USING gist (posizione)"
+  },
+  {
+    "tablename": "nodi_direttrice",
+    "indexname": "nodi_direttrice_pkey",
+    "indexdef": "CREATE UNIQUE INDEX nodi_direttrice_pkey ON public.nodi_direttrice USING btree (id)"
+  },
+  {
+    "tablename": "nodi_territoriali",
+    "indexname": "idx_nodi_territoriali_posizione",
+    "indexdef": "CREATE INDEX idx_nodi_territoriali_posizione ON public.nodi_territoriali USING gist (posizione)"
+  },
+  {
+    "tablename": "nodi_territoriali",
+    "indexname": "nodi_territoriali_pkey",
+    "indexdef": "CREATE UNIQUE INDEX nodi_territoriali_pkey ON public.nodi_territoriali USING btree (id)"
+  },
+  {
+    "tablename": "segmenti",
+    "indexname": "idx_segmenti_stato_nodes",
+    "indexdef": "CREATE INDEX idx_segmenti_stato_nodes ON public.segmenti USING btree (stato, start_node_id, end_node_id)"
+  }
+]
+[FUNZIONI_DIPENDENTI] ERRORE: "array_agg" is an aggregate function
+
+[TRIGGER] righe=0
+[]
+
+[DB] Transazione READ ONLY terminata con ROLLBACK
+
+[SORGENTI LOCALI — riferimenti potenzialmente da migrare]
+{
+  "filesInspected": 181,
+  "oversizeSkipped": 0,
+  "matchesShown": 180,
+  "matches": [
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 2,
+      "text": "// Nessun DB, HTTP o assegnazione missioni. I nodi sono ID di nodi_territoriali."
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 12,
+      "text": "const a = input.origine_nodo_territoriale_id;"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 13,
+      "text": "const b = input.destinazione_nodo_territoriale_id;"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 15,
+      "text": "// Adattamento esplicito: non interpretiamo start_node_id come ID territoriale."
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 16,
+      "text": "const r = normalizzaRichiesta({ ...input, start_node_id: a, end_node_id: b });"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 17,
+      "text": "return Object.freeze({ ...r, origine_nodo_territoriale_id: r.start_node_id,"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 18,
+      "text": "destinazione_nodo_territoriale_id: r.end_node_id });"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 41,
+      "text": "const a = nodes.indexOf(r.start_node_id), b = nodes.indexOf(r.end_node_id);"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 45,
+      "text": "const a = nodes.indexOf(r.start_node_id), b = nodes.indexOf(r.end_node_id);"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 48,
+      "text": "if (a === -1 && b !== -1) out.push({ tipo: 'retroestensione', nodes: [r.start_node_id, ...nodes] });"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 50,
+      "text": "if (a !== -1 && b === -1) out.push({ tipo: 'estensione', nodes: [...nodes, r.end_node_id] });"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 82,
+      "text": "const a = r.start_node_id, b = r.end_node_id;"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 104,
+      "text": "offsetSecondi: offsetSeconds(c, requests.get(id).start_node_id), tolleranzaMinuti })));"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 111,
+      "text": "const sorted = [...c.richiestaIds].sort((a,b) => requests.get(a).start_datetime_ms - offsetSeconds(c, requests.get(a).start_node_id)*1000 - (requests.get(b).start_datetime_ms - offsetSeconds"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 127,
+      "text": "offsetSecondi: r => offsetSeconds(c, r.start_node_id),"
+    },
+    {
+      "file": "services\\pixel\\incremental-corridor-engine.js",
+      "line": 272,
+      "text": "const nodes = [r.start_node_id, r.end_node_id];"
+    },
+    {
+      "file": "services\\pixel\\model.js",
+      "line": 40,
+      "text": "const start_node_id = positiveId(input.start_node_id, 'start_node_id');"
+    },
+    {
+      "file": "services\\pixel\\model.js",
+      "line": 41,
+      "text": "const end_node_id = positiveId(input.end_node_id, 'end_node_id');"
+    },
+    {
+      "file": "services\\pixel\\model.js",
+      "line": 42,
+      "text": "assert(start_node_id !== end_node_id, 'origine e destinazione coincidono');"
+    },
+    {
+      "file": "services\\pixel\\model.js",
+      "line": 46,
+      "text": "id, start_node_id, end_node_id,"
+    },
+    {
+      "file": "services\\pixel\\node-routing.js",
+      "line": 30,
+      "text": "* @param {(id:number)=>object|Promise<object>} config.getNode - lookup nodi_territoriali"
+    },
+    {
+      "file": "services\\pixel\\pixel-node-return-windows.js",
+      "line": 55,
+      "text": "const s = route.nodes.findIndex(n=>Number(n)===node(r,'origine_nodo_territoriale_id'));"
+    },
+    {
+      "file": "services\\pixel\\pixel-node-return-windows.js",
+      "line": 56,
+      "text": "const e = route.nodes.findIndex(n=>Number(n)===node(r,'destinazione_nodo_territoriale_id'));"
+    },
+    {
+      "file": "services\\pixel\\pixel-popbus-cycle-adapter.js",
+      "line": 33,
+      "text": "if (Number(px.start_node_id)!==Number(r.start_node_id) || Number(px.end_node_id)!==Number(r.end_node_id))"
+    },
+    {
+      "file": "services\\pixel\\pixel-popbus-v2-adapter.js",
+      "line": 35,
+      "text": "Number(r.start_node_id ?? r.origine_nodo_territoriale_id) !== Number(engine.getRequest(r.id)?.start_node_id) ||"
+    },
+    {
+      "file": "services\\pixel\\pixel-popbus-v2-adapter.js",
+      "line": 36,
+      "text": "Number(r.end_node_id ?? r.destinazione_nodo_territoriale_id) !== Number(engine.getRequest(r.id)?.end_node_id));"
+    },
+    {
+      "file": "services\\pixel\\pixel-popbus-v2-adapter.js",
+      "line": 40,
+      "text": "start_node_id: Number(r.start_node_id ?? r.origine_nodo_territoriale_id),"
+    },
+    {
+      "file": "services\\pixel\\pixel-popbus-v2-adapter.js",
+      "line": 41,
+      "text": "end_node_id: Number(r.end_node_id ?? r.destinazione_nodo_territoriale_id) }));"
+    },
+    {
+      "file": "services\\pixel\\pixel-temporal-complete.js",
+      "line": 18,
+      "text": "const territorial = r.start_node_id != null ? r : {"
+    },
+    {
+      "file": "services\\pixel\\pixel-temporal-complete.js",
+      "line": 19,
+      "text": "...r, start_node_id:r.origine_nodo_territoriale_id,"
+    },
+    {
+      "file": "services\\pixel\\pixel-temporal-complete.js",
+      "line": 20,
+      "text": "end_node_id:r.destinazione_nodo_territoriale_id"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 62,
+      "text": "const originNode = integerId(slot?.origine_nodo_territoriale_id);"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 63,
+      "text": "const destNode = integerId(slot?.destinazione_nodo_territoriale_id);"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 72,
+      "text": "const quotedOrigin = integerId(quotation.origine_nodo_territoriale_id);"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 73,
+      "text": "const quotedDestination = integerId(quotation.destinazione_nodo_territoriale_id);"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 117,
+      "text": "FROM public.nodi_territoriali"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 130,
+      "text": "origine_nodo_territoriale_id: originNode,"
+    },
+    {
+      "file": "services\\pixel\\pixel.validation.service.js",
+      "line": 131,
+      "text": "destinazione_nodo_territoriale_id: destNode,"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 4,
+      "text": "SELECT r.id, r.start_node_id, r.end_node_id, r.start_datetime,"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 8,
+      "text": "JOIN nodi_direttrice n1 ON n1.id = r.start_node_id"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 9,
+      "text": "JOIN nodi_direttrice n2 ON n2.id = r.end_node_id"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 11,
+      "text": "AND r.start_node_id <> r.end_node_id AND r.start_datetime IS NOT NULL"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 21,
+      "text": "const key = `${slot.toISOString()}_${fascia}_${r.start_node_id}_${r.end_node_id}_${r.classe}`;"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 23,
+      "text": "start_node_id: Number(r.start_node_id), end_node_id: Number(r.end_node_id),"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 28,
+      "text": "c.richieste.push({ ...r, start_node_id: Number(r.start_node_id),"
+    },
+    {
+      "file": "services\\popbus\\clusterService.js",
+      "line": 29,
+      "text": "end_node_id: Number(r.end_node_id), posti_richiesti: Number(r.posti_richiesti) });"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 7,
+      "text": "const nodes = [Number(segmenti[0].start_node_id)];"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 14,
+      "text": "Number(s.start_node_id) !== nodes[i] || !Number.isFinite(durata) || durata <= 0) return null;"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 17,
+      "text": "nodes.push(Number(s.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 21,
+      "text": "const start = nodes.indexOf(Number(richiesta.start_node_id));"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 22,
+      "text": "const end = nodes.indexOf(Number(richiesta.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 33,
+      "text": "FROM nodi_direttrice WHERE id = ANY($1::int[])"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 62,
+      "text": "SELECT id, start_node_id, end_node_id, start_datetime, posti_richiesti, classe, target_direttrice_id"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 68,
+      "text": "const start = Number(r.start_node_id), end = Number(r.end_node_id), posti = Number(r.posti_richiesti);"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 81,
+      "text": "SELECT id, start_node_id, end_node_id, ordine_sequenziale,"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 89,
+      "text": "if (Number(segments.at(-1).end_node_id) === start &&"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 90,
+      "text": "!segments.some(s => Number(s.start_node_id) === end || Number(s.end_node_id) === end)) {"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 102,
+      "text": "append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 116,
+      "text": "INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 118,
+      "text": "ON CONFLICT (start_node_id, end_node_id, partenza_prevista) DO NOTHING RETURNING id, partenza_prevista"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 122,
+      "text": "const append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 132,
+      "text": "INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati,"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 135,
+      "text": "`, [d.id, s.start_node_id, s.end_node_id, s.ordine_sequenziale, s.tempo_stimato, segmentStart]);"
+    },
+    {
+      "file": "services\\popbus\\directiveMatcher.js",
+      "line": 137,
+      "text": "await client.query('UPDATE direttrici_virtuali SET end_node_id = $1 WHERE id = $2', [end, d.id]);"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 9,
+      "text": "const nodi = [Number(segmenti[0].start_node_id)];"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 22,
+      "text": "Number(s.start_node_id) !== nodi[i] ||"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 46,
+      "text": "nodi.push(Number(s.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 57,
+      "text": "const start = nodi.indexOf(Number(r.start_node_id));"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 58,
+      "text": "const end = nodi.indexOf(Number(r.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 160,
+      "text": "s.start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 161,
+      "text": "s.end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 186,
+      "text": "JOIN nodi_direttrice no"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 188,
+      "text": "JOIN nodi_direttrice ne"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 194,
+      "text": "JOIN nodi_direttrice n1"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 195,
+      "text": "ON n1.id = s.start_node_id"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 196,
+      "text": "JOIN nodi_direttrice n2"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 197,
+      "text": "ON n2.id = s.end_node_id"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 219,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 220,
+      "text": "end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\economicEngine.js",
+      "line": 357,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\fleetAllocator.js",
+      "line": 26,
+      "text": "FROM segmenti s JOIN nodi_direttrice a ON a.id=s.start_node_id JOIN nodi_direttrice b ON b.id=s.end_node_id"
+    },
+    {
+      "file": "services\\popbus\\v2\\fleet-candidates.js",
+      "line": 74,
+      "text": "if (!nodeMap.has(num(r.start_node_id)) || !nodeMap.has(num(r.end_node_id)) ||"
+    },
+    {
+      "file": "services\\popbus\\v2\\fleet-candidates.js",
+      "line": 75,
+      "text": "num(r.start_node_id) === num(r.end_node_id) || !Number.isFinite(dateMs(r.start_datetime)) ||"
+    },
+    {
+      "file": "services\\popbus\\v2\\fleet-candidates.js",
+      "line": 171,
+      "text": "const k=`${r.start_node_id}|${r.end_node_id}|${dateMs(r.start_datetime)}`;"
+    },
+    {
+      "file": "services\\popbus\\v2\\fleet-candidates.js",
+      "line": 179,
+      "text": "const first=group[0],start=nodeMap.get(num(first.start_node_id)),"
+    },
+    {
+      "file": "services\\popbus\\v2\\fleet-candidates.js",
+      "line": 180,
+      "text": "end=nodeMap.get(num(first.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 99,
+      "text": "const startId = num(opts?.start_node_id);"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 100,
+      "text": "const endId = num(opts?.end_node_id);"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 138,
+      "text": "Number.isInteger(num(r.start_node_id)) &&"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 139,
+      "text": "Number.isInteger(num(r.end_node_id)) &&"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 140,
+      "text": "num(r.start_node_id) !== num(r.end_node_id);"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 144,
+      "text": "...valid.flatMap(r => [num(r.start_node_id), num(r.end_node_id)])])];"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 148,
+      "text": "FROM nodi_direttrice WHERE id = ANY($1::int[])"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 185,
+      "text": "id: fakeId, start_node_id: startId, end_node_id: endId,"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 229,
+      "text": "const s = indexes.get(num(r.start_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\formation-preview.js",
+      "line": 230,
+      "text": "const e = indexes.get(num(r.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 78,
+      "text": "validId(r.id) && validNode(r.start_node_id) && validNode(r.end_node_id) &&"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 79,
+      "text": "Number(r.start_node_id) !== Number(r.end_node_id)"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 85,
+      "text": "const origine = Number(r.start_node_id);"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 90,
+      "text": "for (const r of valid) add([Number(r.start_node_id), Number(r.end_node_id)], [requestId(r)], requestClass(r));"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 97,
+      "text": "add([...c.nodes, Number(r.end_node_id)], [...c.seeds, requestId(r)], c.classe);"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 155,
+      "text": "const s = index.get(Number(r.start_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 156,
+      "text": "const e = index.get(Number(r.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 214,
+      "text": "const s = index.get(Number(r.start_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\model.js",
+      "line": 215,
+      "text": "const e = index.get(Number(r.end_node_id));"
+    },
+    {
+      "file": "services\\popbus\\v2\\request-fingerprint.js",
+      "line": 4,
+      "text": "r.start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\request-fingerprint.js",
+      "line": 5,
+      "text": "r.end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\return-matching.js",
+      "line": 40,
+      "text": "if(Number(plan.nodes[start])!==Number(richiesta.start_node_id))continue;"
+    },
+    {
+      "file": "services\\popbus\\v2\\return-matching.js",
+      "line": 43,
+      "text": "if(Number(plan.nodes[end])!==Number(richiesta.end_node_id))continue;"
+    },
+    {
+      "file": "services\\popbus\\v2\\service-quality.js",
+      "line": 56,
+      "text": "num(a.richiesta.start_node_id)!==num(plan.nodes[a.start]) ||"
+    },
+    {
+      "file": "services\\popbus\\v2\\service-quality.js",
+      "line": 57,
+      "text": "num(a.richiesta.end_node_id)!==num(plan.nodes[a.end]))"
+    },
+    {
+      "file": "services\\popbus\\v2\\temporal-experiment.js",
+      "line": 44,
+      "text": "const start = Number(r?.start_node_id);"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 69,
+      "text": "nodeIds.has(Number(r.start_node_id)) &&"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 70,
+      "text": "nodeIds.has(Number(r.end_node_id)) &&"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 331,
+      "text": "r.start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 337,
+      "text": "r.end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 722,
+      "text": "r.start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 723,
+      "text": "r.end_node_id"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 734,
+      "text": "FROM nodi_direttrice"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1651,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1652,
+      "text": "end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1660,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1661,
+      "text": "end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1682,
+      "text": "WHERE start_node_id=$1"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1683,
+      "text": "AND end_node_id=$2"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1727,
+      "text": "Number(s.start_node_id) !=="
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1729,
+      "text": "Number(s.end_node_id) !=="
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1754,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 1755,
+      "text": "end_node_id,"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 2026,
+      "text": "start_node_id:"
+    },
+    {
+      "file": "services\\popbus\\v2\\worker.js",
+      "line": 2029,
+      "text": "end_node_id:"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 4,
+      "text": "SELECT r.id, r.start_node_id, r.end_node_id, r.start_datetime,"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 8,
+      "text": "JOIN nodi_direttrice n1 ON n1.id = r.start_node_id"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 9,
+      "text": "JOIN nodi_direttrice n2 ON n2.id = r.end_node_id"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 11,
+      "text": "AND r.start_node_id <> r.end_node_id AND r.start_datetime IS NOT NULL"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 21,
+      "text": "const key = `${slot.toISOString()}_${fascia}_${r.start_node_id}_${r.end_node_id}`;"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 23,
+      "text": "start_node_id: Number(r.start_node_id), end_node_id: Number(r.end_node_id),"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 28,
+      "text": "c.richieste.push({ ...r, start_node_id: Number(r.start_node_id),"
+    },
+    {
+      "file": "services\\popbus1\\clusterService.js",
+      "line": 29,
+      "text": "end_node_id: Number(r.end_node_id), posti_richiesti: Number(r.posti_richiesti) });"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 7,
+      "text": "const nodes = [Number(segmenti[0].start_node_id)];"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 14,
+      "text": "Number(s.start_node_id) !== nodes[i] || !Number.isFinite(durata) || durata <= 0) return null;"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 17,
+      "text": "nodes.push(Number(s.end_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 21,
+      "text": "const start = nodes.indexOf(Number(richiesta.start_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 22,
+      "text": "const end = nodes.indexOf(Number(richiesta.end_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 33,
+      "text": "FROM nodi_direttrice WHERE id = ANY($1::int[])"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 62,
+      "text": "SELECT id, start_node_id, end_node_id, start_datetime, posti_richiesti"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 68,
+      "text": "const start = Number(r.start_node_id), end = Number(r.end_node_id), posti = Number(r.posti_richiesti);"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 79,
+      "text": "SELECT id, start_node_id, end_node_id, ordine_sequenziale,"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 87,
+      "text": "if (Number(segments.at(-1).end_node_id) === start &&"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 88,
+      "text": "!segments.some(s => Number(s.start_node_id) === end || Number(s.end_node_id) === end)) {"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 100,
+      "text": "append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 113,
+      "text": "INSERT INTO direttrici_virtuali (stato, partenza_prevista, start_node_id, end_node_id, tipo_servizio)"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 115,
+      "text": "ON CONFLICT (start_node_id, end_node_id, partenza_prevista) DO NOTHING RETURNING id, partenza_prevista"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 119,
+      "text": "const append = {start_node_id:start, end_node_id:end, tempo_stimato:durata,"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 129,
+      "text": "INSERT INTO segmenti (direttrice_id, start_node_id, end_node_id, posti_occupati,"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 132,
+      "text": "`, [d.id, s.start_node_id, s.end_node_id, s.ordine_sequenziale, s.tempo_stimato, segmentStart]);"
+    },
+    {
+      "file": "services\\popbus1\\directiveMatcher.js",
+      "line": 134,
+      "text": "await client.query('UPDATE direttrici_virtuali SET end_node_id = $1 WHERE id = $2', [end, d.id]);"
+    },
+    {
+      "file": "services\\popbus1\\dispatchService.js",
+      "line": 27,
+      "text": "SELECT d.tipo_servizio, s.posti_occupati, s.id as segmento_id, d.start_node_id, d.end_node_id, d.partenza_prevista"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 9,
+      "text": "const nodi = [Number(segmenti[0].start_node_id)];"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 22,
+      "text": "Number(s.start_node_id) !== nodi[i] ||"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 46,
+      "text": "nodi.push(Number(s.end_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 57,
+      "text": "const start = nodi.indexOf(Number(r.start_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 58,
+      "text": "const end = nodi.indexOf(Number(r.end_node_id));"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 160,
+      "text": "s.start_node_id,"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 161,
+      "text": "s.end_node_id,"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 186,
+      "text": "JOIN nodi_direttrice no"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 188,
+      "text": "JOIN nodi_direttrice ne"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 194,
+      "text": "JOIN nodi_direttrice n1"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 195,
+      "text": "ON n1.id = s.start_node_id"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 196,
+      "text": "JOIN nodi_direttrice n2"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 197,
+      "text": "ON n2.id = s.end_node_id"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 219,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 220,
+      "text": "end_node_id,"
+    },
+    {
+      "file": "services\\popbus1\\economicEngine.js",
+      "line": 357,
+      "text": "start_node_id,"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 6,
+      "text": "console.log(`\\n   🔹 Elaborazione Direttrice ID: ${seg.direttrice_id} (Segmento ID attivo: ${seg.id}, Start Node: ${seg.start_node_id})`);"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 18,
+      "text": "console.log(`      - Ricerca veicolo libero più vicino al nodo ${seg.start_node_id}...`);"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 24,
+      "text": "CROSS JOIN nodi_direttrice n_partenza"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 32,
+      "text": "`, [seg.start_node_id]);"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 61,
+      "text": "JOIN nodi_direttrice n1 ON s.start_node_id = n1.id"
+    },
+    {
+      "file": "services\\popbus1\\fleetAllocator.js",
+      "line": 62,
+      "text": "JOIN nodi_direttrice n2 ON s.end_node_id = n2.id"
+    }
+  ]
+}
+
+[NOTA] La scansione testuale non dimostra che tutti i riferimenti siano attivi; verificare SQL dinamico e servizi esterni.
+
+NESSUNA MODIFICA AL DATABASE O AI FILE DEL PROGETTO.

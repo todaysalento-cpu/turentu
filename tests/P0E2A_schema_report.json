@@ -1,0 +1,3922 @@
+{
+  "test": "P0-E2A",
+  "mode": "READ ONLY",
+  "generated_at": "2026-10-16T14:15:25.911Z",
+  "connection": {
+    "database": "corse_db",
+    "username": "corse_db_user",
+    "schema": "public",
+    "pg_version": "18.6 (Debian 18.6-1.pgdg12+2)"
+  },
+  "tables": [
+    {
+      "table_name": "corse",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "pagamenti",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "prenotazioni",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "segmenti",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    },
+    {
+      "table_name": "veicolo",
+      "row_security": false,
+      "force_row_security": false,
+      "persistence": "p"
+    }
+  ],
+  "columns": [
+    {
+      "table_name": "corse",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('corse_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 2,
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 3,
+      "column_name": "start_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 4,
+      "column_name": "tipo_corsa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 5,
+      "column_name": "durata",
+      "data_type": "interval",
+      "udt_name": "interval",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 6,
+      "column_name": "origine",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 7,
+      "column_name": "destinazione",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 8,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'prenotabile'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 9,
+      "column_name": "prezzo_fisso",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 10,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 11,
+      "column_name": "posti_disponibili",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 12,
+      "column_name": "posti_totali",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 13,
+      "column_name": "arrivo_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 14,
+      "column_name": "posti_prenotati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 15,
+      "column_name": "primo_posto",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 16,
+      "column_name": "distanza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 17,
+      "column_name": "destinazione_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": "'N/D'::text",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 18,
+      "column_name": "origine_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": "'N/D'::text",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 19,
+      "column_name": "percorso_polyline",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 20,
+      "column_name": "fermate_pianificate",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": "'[]'::jsonb",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 21,
+      "column_name": "max_fermate_consentite",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "3",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 22,
+      "column_name": "path_geohashes",
+      "data_type": "ARRAY",
+      "udt_name": "_text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 23,
+      "column_name": "evento_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 24,
+      "column_name": "km_avvicinamento",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "corse",
+      "ordinal_position": 25,
+      "column_name": "km_riposizionamento",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('direttrici_virtuali_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 2,
+      "column_name": "linea_geografica",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geometry",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 3,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'in_formazione'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 4,
+      "column_name": "partenza_prevista",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 7,
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 8,
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "udt_name": "timestamp",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 9,
+      "column_name": "tipo_servizio",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'urbano'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 10,
+      "column_name": "moltiplicatore_costo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "1.0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 11,
+      "column_name": "soglia_tempo_max",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "300",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 12,
+      "column_name": "tipo_raggio",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'medio'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 13,
+      "column_name": "is_evento",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "YES",
+      "column_default": "false",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 14,
+      "column_name": "soglia_attivazione",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 15,
+      "column_name": "distanza_totale_km",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 16,
+      "column_name": "start_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "ordinal_position": 17,
+      "column_name": "end_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('disponibilita_veicolo_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 2,
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 3,
+      "column_name": "start",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 4,
+      "column_name": "fine",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 5,
+      "column_name": "coord",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 6,
+      "column_name": "manual",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "YES",
+      "column_default": "false",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 7,
+      "column_name": "giorni_esclusi",
+      "data_type": "ARRAY",
+      "udt_name": "_int4",
+      "is_nullable": "YES",
+      "column_default": "'{}'::integer[]",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "ordinal_position": 8,
+      "column_name": "inattivita",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": "'[]'::jsonb",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('offerte_autisti_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 2,
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 3,
+      "column_name": "autista_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 4,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'inviata'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 5,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 6,
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "(now() + '00:15:00'::interval)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "ordinal_position": 7,
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('pagamenti_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 2,
+      "column_name": "prenotazione_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 3,
+      "column_name": "importo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 4,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 5,
+      "column_name": "stripe_payment_intent",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 255,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 6,
+      "column_name": "tipo_corsa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 7,
+      "column_name": "currency",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'eur'::character varying",
+      "character_maximum_length": 10,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 8,
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 9,
+      "column_name": "commissione",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 10,
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "pagamenti",
+      "ordinal_position": 11,
+      "column_name": "guadagno_autista",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "YES",
+      "identity_generation": "BY DEFAULT",
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 2,
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 3,
+      "column_name": "ordine",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 4,
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 5,
+      "column_name": "corridoio_pixel_id",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 6,
+      "column_name": "nodi_territoriali",
+      "data_type": "ARRAY",
+      "udt_name": "_int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 7,
+      "column_name": "partenza",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 8,
+      "column_name": "arrivo",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 9,
+      "column_name": "piano",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "ordinal_position": 10,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "ordinal_position": 1,
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "ordinal_position": 2,
+      "column_name": "richiesta_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "ordinal_position": 3,
+      "column_name": "attiva",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "true",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "ordinal_position": 4,
+      "column_name": "indice_salita",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "ordinal_position": 5,
+      "column_name": "indice_discesa",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": "nextval('popbus_attivazioni_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 2,
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 3,
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 4,
+      "column_name": "autista_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 5,
+      "column_name": "stato",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 6,
+      "column_name": "partenza",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 7,
+      "column_name": "arrivo",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 8,
+      "column_name": "costo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 9,
+      "column_name": "ricavo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 10,
+      "column_name": "tariffa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 11,
+      "column_name": "piano",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 12,
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 13,
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "ordinal_position": 14,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "ordinal_position": 1,
+      "column_name": "missione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "ordinal_position": 2,
+      "column_name": "richiesta_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "ordinal_position": 3,
+      "column_name": "indice_salita",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "ordinal_position": 4,
+      "column_name": "indice_discesa",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('prenotazioni_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 2,
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 3,
+      "column_name": "cliente_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 4,
+      "column_name": "posti_prenotati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 5,
+      "column_name": "ticket_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 6,
+      "column_name": "prezzo_totale",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 7,
+      "column_name": "posti_richiesti",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "1",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 8,
+      "column_name": "lat_salita",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 9,
+      "column_name": "lon_salita",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 10,
+      "column_name": "lat_discesa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 11,
+      "column_name": "lon_discesa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 12,
+      "column_name": "start_index_polyline",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 13,
+      "column_name": "end_index_polyline",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 14,
+      "column_name": "start_offset",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 15,
+      "column_name": "end_offset",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 16,
+      "column_name": "km_utente",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "prenotazioni",
+      "ordinal_position": 17,
+      "column_name": "tipo_percorrenza",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('richieste_pop_bus_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 2,
+      "column_name": "cliente_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 3,
+      "column_name": "origine",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 4,
+      "column_name": "destinazione",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 5,
+      "column_name": "start_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 6,
+      "column_name": "posti_richiesti",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 7,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'in_attesa'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 8,
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 9,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 10,
+      "column_name": "start_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 11,
+      "column_name": "end_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 12,
+      "column_name": "target_missione_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 13,
+      "column_name": "classe",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'STANDARD'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 14,
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 15,
+      "column_name": "origine_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 16,
+      "column_name": "destinazione_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 17,
+      "column_name": "prezzo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0.00",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 18,
+      "column_name": "payment_intent_id",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 255,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 19,
+      "column_name": "request_id",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 20,
+      "column_name": "target_direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 21,
+      "column_name": "origine_nodo_territoriale_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 22,
+      "column_name": "destinazione_nodo_territoriale_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 23,
+      "column_name": "origine_fermata_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "ordinal_position": 24,
+      "column_name": "destinazione_fermata_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('segmenti_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 2,
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 3,
+      "column_name": "start_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 4,
+      "column_name": "end_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 5,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'in_attesa'::character varying",
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 6,
+      "column_name": "start_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 7,
+      "column_name": "posti_occupati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 8,
+      "column_name": "ricavo_stimato",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 9,
+      "column_name": "percorso_geom",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geometry",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 10,
+      "column_name": "posti_impegnati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 11,
+      "column_name": "tempo_stimato",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "10",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "segmenti",
+      "ordinal_position": 12,
+      "column_name": "ordine_sequenziale",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 1,
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('veicolo_id_seq'::regclass)",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 2,
+      "column_name": "driver_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 3,
+      "column_name": "modello",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": 100,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 4,
+      "column_name": "posti_totali",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 5,
+      "column_name": "servizi",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 6,
+      "column_name": "raggio_km",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "50",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 7,
+      "column_name": "coord",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 8,
+      "column_name": "targa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 9,
+      "column_name": "rating",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 10,
+      "column_name": "num_recensioni",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 11,
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 12,
+      "column_name": "distanza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 13,
+      "column_name": "marca",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 100,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 14,
+      "column_name": "image_url",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 15,
+      "column_name": "tipo",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 50,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 16,
+      "column_name": "anno",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 17,
+      "column_name": "numero_licenza_ncc",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 100,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 18,
+      "column_name": "comune_licenza",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 100,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 19,
+      "column_name": "id_flotta",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 20,
+      "column_name": "stato_verifica",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 21,
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": 20,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 22,
+      "column_name": "localita",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    },
+    {
+      "table_name": "veicolo",
+      "ordinal_position": 23,
+      "column_name": "indice_efficienza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "character_maximum_length": null,
+      "is_identity": "NO",
+      "identity_generation": null,
+      "is_generated": "NEVER"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_evento_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (evento_id) REFERENCES eventi(id) ON DELETE SET NULL",
+      "references_table": "eventi",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_posti_disponibili_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL posti_disponibili",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_posti_totali_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL posti_totali",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_start_datetime_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL start_datetime",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_stato_check",
+      "constraint_type": "c",
+      "definition": "CHECK (stato::text = ANY (ARRAY['prenotabile'::character varying, 'in_corso'::character varying, 'completata'::character varying, 'annullata'::character varying, 'da_attivare'::character varying]::text[]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_tipo_corsa_check",
+      "constraint_type": "c",
+      "definition": "CHECK (tipo_corsa::text = ANY (ARRAY['privata'::character varying, 'condivisa'::character varying, 'riempimento'::character varying]::text[]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_tipo_corsa_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL tipo_corsa",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_veicolo_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE",
+      "references_table": "veicolo",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_veicolo_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL veicolo_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_end_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_start_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "chk_manual_8h",
+      "constraint_type": "c",
+      "definition": "CHECK (manual = false OR (fine - start) <= '08:00:00'::interval)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "chk_start_end",
+      "constraint_type": "c",
+      "definition": "CHECK (start < fine)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_fine_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL fine",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_start_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL start",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_veicolo_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE",
+      "references_table": "veicolo",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_veicolo_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL veicolo_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "unique_disponibilita_veicolo",
+      "constraint_type": "u",
+      "definition": "UNIQUE (veicolo_id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "check_stato_offerta",
+      "constraint_type": "c",
+      "definition": "CHECK (stato::text = ANY (ARRAY['inviata'::character varying, 'accettata'::character varying, 'rifiutata'::character varying, 'scaduta'::character varying]::text[]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "offerte_autisti_attivazione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)",
+      "references_table": "popbus_attivazioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "offerte_autisti_autista_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id) ON DELETE CASCADE",
+      "references_table": "utente",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "offerte_autisti_direttrice_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "offerte_autisti_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "offerte_autisti",
+      "constraint_name": "offerte_autisti_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "fk_pagamenti_prenotazione",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id) ON DELETE CASCADE",
+      "references_table": "prenotazioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_importo_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL importo",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_prenotazione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id)",
+      "references_table": "prenotazioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_stato_check",
+      "constraint_type": "c",
+      "definition": "CHECK (stato::text = ANY (ARRAY['pendente'::text, 'pagato'::text, 'rimborsato'::text, 'autorizzazione'::text]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_stato_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL stato",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "unique_pagamento_per_prenotazione",
+      "constraint_type": "u",
+      "definition": "UNIQUE (prenotazione_id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "unique_stripe_payment_intent",
+      "constraint_type": "u",
+      "definition": "UNIQUE (stripe_payment_intent)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_intervallo",
+      "constraint_type": "c",
+      "definition": "CHECK (arrivo > partenza)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_nodi",
+      "constraint_type": "c",
+      "definition": "CHECK (cardinality(nodi_territoriali) >= 2)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_ordine_unico",
+      "constraint_type": "u",
+      "definition": "UNIQUE (attivazione_id, ordine)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_piano_obj",
+      "constraint_type": "c",
+      "definition": "CHECK (jsonb_typeof(piano) = 'object'::text)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_arrivo_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL arrivo",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_attivazione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id) ON DELETE CASCADE",
+      "references_table": "popbus_attivazioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_attivazione_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL attivazione_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_created_at_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL created_at",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_direttrice_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_nodi_territoriali_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL nodi_territoriali",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_ordine_check",
+      "constraint_type": "c",
+      "definition": "CHECK (ordine > 0)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_ordine_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL ordine",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_partenza_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL partenza",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_piano_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL piano",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attiva_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL attiva",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attivazione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)",
+      "references_table": "popbus_attivazioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attivazione_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL attivazione_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_check",
+      "constraint_type": "c",
+      "definition": "CHECK (indice_discesa > indice_salita)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_indice_discesa_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL indice_discesa",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_indice_salita_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL indice_salita",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (attivazione_id, richiesta_id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_richiesta_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)",
+      "references_table": "richieste_pop_bus",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_richiesta_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL richiesta_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_arrivo_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL arrivo",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_autista_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id)",
+      "references_table": "utente",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_autista_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL autista_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_check",
+      "constraint_type": "c",
+      "definition": "CHECK (arrivo > partenza)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_corsa_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)",
+      "references_table": "corse",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_costo_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL costo",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_created_at_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL created_at",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_direttrice_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_direttrice_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL direttrice_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_expires_at_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL expires_at",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_partenza_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL partenza",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_piano_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL piano",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_ricavo_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL ricavo",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_stato_check",
+      "constraint_type": "c",
+      "definition": "CHECK (stato = ANY (ARRAY['in_attesa_autista'::text, 'confermata'::text, 'scaduta'::text, 'rifiutata'::text]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_stato_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL stato",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_tariffa_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL tariffa",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_veicolo_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id)",
+      "references_table": "veicolo",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_veicolo_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL veicolo_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_check",
+      "constraint_type": "c",
+      "definition": "CHECK (indice_discesa > indice_salita)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_discesa_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL indice_discesa",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_salita_check",
+      "constraint_type": "c",
+      "definition": "CHECK (indice_salita >= 0)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_salita_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL indice_salita",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_missione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (missione_id) REFERENCES popbus_attivazione_missioni(id) ON DELETE CASCADE",
+      "references_table": "popbus_attivazione_missioni",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_missione_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL missione_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (missione_id, richiesta_id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_richiesta_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)",
+      "references_table": "richieste_pop_bus",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_richiesta_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL richiesta_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_cliente_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id) ON DELETE CASCADE",
+      "references_table": "utente",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_cliente_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL cliente_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_corsa_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id) ON DELETE CASCADE",
+      "references_table": "corse",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_corsa_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL corsa_id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_posti_prenotati_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL posti_prenotati",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_posti_richiesti_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL posti_richiesti",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_ticket_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (ticket_id) REFERENCES ticket_condiviso(id)",
+      "references_table": "ticket_condiviso",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "check_classe_valida",
+      "constraint_type": "c",
+      "definition": "CHECK (classe::text = ANY (ARRAY['SAVER'::character varying, 'STANDARD'::character varying, 'EXPRESS'::character varying]::text[]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "check_stato_valido",
+      "constraint_type": "c",
+      "definition": "CHECK (stato::text = ANY (ARRAY['in_attesa'::character varying::text, 'convertita'::character varying::text, 'scaduta'::character varying::text, 'annullata'::character varying::text, 'in_lavorazione'::character varying::text]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "chk_popbus_pixel_coppia_completa",
+      "constraint_type": "c",
+      "definition": "CHECK (origine_fermata_id IS NULL AND destinazione_fermata_id IS NULL OR origine_fermata_id IS NOT NULL AND destinazione_fermata_id IS NOT NULL)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "chk_popbus_pixel_fermate_distinte",
+      "constraint_type": "c",
+      "definition": "CHECK (origine_fermata_id IS NULL OR destinazione_fermata_id IS NULL OR origine_fermata_id <> destinazione_fermata_id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "chk_popbus_pixel_nodi_presenti",
+      "constraint_type": "c",
+      "definition": "CHECK ((origine_fermata_id IS NULL OR origine_nodo_territoriale_id IS NOT NULL) AND (destinazione_fermata_id IS NULL OR destinazione_nodo_territoriale_id IS NOT NULL))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "fk_popbus_pixel_destinazione_nodo",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (destinazione_fermata_id, destinazione_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)",
+      "references_table": "pixel_fermate",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "fk_popbus_pixel_origine_nodo",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (origine_fermata_id, origine_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)",
+      "references_table": "pixel_fermate",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "fk_richieste_direttrice",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE SET NULL",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_cliente_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id)",
+      "references_table": "utente",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_corsa_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)",
+      "references_table": "corse",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_destinazione_fermata_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (destinazione_fermata_id) REFERENCES pixel_fermate(id)",
+      "references_table": "pixel_fermate",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_end_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_origine_fermata_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (origine_fermata_id) REFERENCES pixel_fermate(id)",
+      "references_table": "pixel_fermate",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_start_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_target_direttrice_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (target_direttrice_id) REFERENCES direttrici_virtuali(id)",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "constraint_name": "richieste_pop_bus_target_missione_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (target_missione_id) REFERENCES missioni_ritorno(id)",
+      "references_table": "missioni_ritorno",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "check_stato_segmento",
+      "constraint_type": "c",
+      "definition": "CHECK (stato::text = ANY (ARRAY['in_attesa'::character varying, 'attivo'::character varying, 'completato'::character varying, 'annullato'::character varying]::text[]))",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_direttrice_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE",
+      "references_table": "direttrici_virtuali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_end_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_start_node_id_fkey",
+      "constraint_type": "f",
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)",
+      "references_table": "nodi_territoriali",
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_id_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL id",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_modello_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL modello",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_pkey",
+      "constraint_type": "p",
+      "definition": "PRIMARY KEY (id)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_posti_totali_not_null",
+      "constraint_type": "n",
+      "definition": "NOT NULL posti_totali",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_rating_check",
+      "constraint_type": "c",
+      "definition": "CHECK (rating >= 0::numeric AND rating <= 5::numeric)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_targa_key",
+      "constraint_type": "u",
+      "definition": "UNIQUE (targa)",
+      "references_table": null,
+      "deferrable": false,
+      "initially_deferred": false
+    }
+  ],
+  "indexes": [
+    {
+      "table_name": "corse",
+      "index_name": "corse_pkey",
+      "definition": "CREATE UNIQUE INDEX corse_pkey ON public.corse USING btree (id)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_attive_prenotabili",
+      "definition": "CREATE INDEX idx_corse_attive_prenotabili ON public.corse USING btree (start_datetime) WHERE ((stato)::text = ANY ((ARRAY['prenotabile'::character varying, 'da_attivare'::character varying])::text[]))"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_datetime",
+      "definition": "CREATE INDEX idx_corse_datetime ON public.corse USING btree (start_datetime)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_destinazione_geom",
+      "definition": "CREATE INDEX idx_corse_destinazione_geom ON public.corse USING gist (destinazione)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_evento",
+      "definition": "CREATE INDEX idx_corse_evento ON public.corse USING btree (evento_id)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_fermate_nodi",
+      "definition": "CREATE INDEX idx_corse_fermate_nodi ON public.corse USING gin (((fermate_pianificate -> 'nodi'::text)))"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_geohash_gin",
+      "definition": "CREATE INDEX idx_corse_geohash_gin ON public.corse USING gin (path_geohashes)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_origine_geom",
+      "definition": "CREATE INDEX idx_corse_origine_geom ON public.corse USING gist (origine)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_veicolo_start",
+      "definition": "CREATE INDEX idx_corse_veicolo_start ON public.corse USING btree (veicolo_id, start_datetime)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "unique_corsa_slot",
+      "definition": "CREATE UNIQUE INDEX unique_corsa_slot ON public.corse USING btree (veicolo_id, start_datetime)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "direttrici_virtuali_pkey",
+      "definition": "CREATE UNIQUE INDEX direttrici_virtuali_pkey ON public.direttrici_virtuali USING btree (id)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "idx_direttrici_linea",
+      "definition": "CREATE INDEX idx_direttrici_linea ON public.direttrici_virtuali USING gist (linea_geografica)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "idx_unique_direttrice",
+      "definition": "CREATE UNIQUE INDEX idx_unique_direttrice ON public.direttrici_virtuali USING btree (start_node_id, end_node_id, partenza_prevista)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "disponibilita_veicolo_pkey",
+      "definition": "CREATE UNIQUE INDEX disponibilita_veicolo_pkey ON public.disponibilita_veicolo USING btree (id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_coord",
+      "definition": "CREATE INDEX idx_disponibilita_coord ON public.disponibilita_veicolo USING gist (coord)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_fine",
+      "definition": "CREATE INDEX idx_disponibilita_fine ON public.disponibilita_veicolo USING btree (fine)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_giorni_esclusi",
+      "definition": "CREATE INDEX idx_disponibilita_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_inattivita",
+      "definition": "CREATE INDEX idx_disponibilita_inattivita ON public.disponibilita_veicolo USING gin (inattivita)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_start",
+      "definition": "CREATE INDEX idx_disponibilita_start ON public.disponibilita_veicolo USING btree (start)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_start_fine",
+      "definition": "CREATE INDEX idx_disponibilita_start_fine ON public.disponibilita_veicolo USING btree (start, fine)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_giorni_esclusi",
+      "definition": "CREATE INDEX idx_dv_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_inattivita",
+      "definition": "CREATE INDEX idx_dv_inattivita ON public.disponibilita_veicolo USING gin (inattivita jsonb_path_ops)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_veicolo",
+      "definition": "CREATE INDEX idx_dv_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "unique_disponibilita_veicolo",
+      "definition": "CREATE UNIQUE INDEX unique_disponibilita_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "index_name": "idx_offerte_autista_id",
+      "definition": "CREATE INDEX idx_offerte_autista_id ON public.offerte_autisti USING btree (autista_id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "index_name": "idx_offerte_autisti_expires_at",
+      "definition": "CREATE INDEX idx_offerte_autisti_expires_at ON public.offerte_autisti USING btree (expires_at) WHERE ((stato)::text = 'inviata'::text)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "index_name": "idx_offerte_direttrice_id",
+      "definition": "CREATE INDEX idx_offerte_direttrice_id ON public.offerte_autisti USING btree (direttrice_id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "index_name": "offerte_autisti_pkey",
+      "definition": "CREATE UNIQUE INDEX offerte_autisti_pkey ON public.offerte_autisti USING btree (id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "index_name": "popbus_offerta_attivazione_unique",
+      "definition": "CREATE UNIQUE INDEX popbus_offerta_attivazione_unique ON public.offerte_autisti USING btree (attivazione_id, autista_id) WHERE (attivazione_id IS NOT NULL)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "pagamenti_pkey",
+      "definition": "CREATE UNIQUE INDEX pagamenti_pkey ON public.pagamenti USING btree (id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "unique_pagamento_per_prenotazione",
+      "definition": "CREATE UNIQUE INDEX unique_pagamento_per_prenotazione ON public.pagamenti USING btree (prenotazione_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "unique_stripe_payment_intent",
+      "definition": "CREATE UNIQUE INDEX unique_stripe_payment_intent ON public.pagamenti USING btree (stripe_payment_intent)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "idx_popbus_am_attivazione",
+      "definition": "CREATE INDEX idx_popbus_am_attivazione ON public.popbus_attivazione_missioni USING btree (attivazione_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "idx_popbus_am_tempo",
+      "definition": "CREATE INDEX idx_popbus_am_tempo ON public.popbus_attivazione_missioni USING btree (partenza, arrivo)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "popbus_am_ordine_unico",
+      "definition": "CREATE UNIQUE INDEX popbus_am_ordine_unico ON public.popbus_attivazione_missioni USING btree (attivazione_id, ordine)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "popbus_attivazione_missioni_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazione_missioni_pkey ON public.popbus_attivazione_missioni USING btree (id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "index_name": "popbus_attivazione_richieste_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazione_richieste_pkey ON public.popbus_attivazione_richieste USING btree (attivazione_id, richiesta_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "index_name": "popbus_richiesta_riservata_unique",
+      "definition": "CREATE UNIQUE INDEX popbus_richiesta_riservata_unique ON public.popbus_attivazione_richieste USING btree (richiesta_id) WHERE attiva"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "index_name": "popbus_attivazioni_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazioni_pkey ON public.popbus_attivazioni USING btree (id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "index_name": "popbus_attivazioni_stato",
+      "definition": "CREATE INDEX popbus_attivazioni_stato ON public.popbus_attivazioni USING btree (stato, expires_at)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "index_name": "idx_popbus_mr_richiesta",
+      "definition": "CREATE INDEX idx_popbus_mr_richiesta ON public.popbus_missione_richieste USING btree (richiesta_id)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "index_name": "popbus_missione_richieste_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_missione_richieste_pkey ON public.popbus_missione_richieste USING btree (missione_id, richiesta_id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "idx_prenotazioni_corsa",
+      "definition": "CREATE INDEX idx_prenotazioni_corsa ON public.prenotazioni USING btree (corsa_id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "idx_prenotazioni_tratta",
+      "definition": "CREATE INDEX idx_prenotazioni_tratta ON public.prenotazioni USING btree (corsa_id, start_index_polyline, end_index_polyline)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "prenotazioni_pkey",
+      "definition": "CREATE UNIQUE INDEX prenotazioni_pkey ON public.prenotazioni USING btree (id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_pop_bus_classe",
+      "definition": "CREATE INDEX idx_pop_bus_classe ON public.richieste_pop_bus USING btree (classe)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_pop_bus_destinazione",
+      "definition": "CREATE INDEX idx_pop_bus_destinazione ON public.richieste_pop_bus USING gist (destinazione)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_pop_bus_matching",
+      "definition": "CREATE INDEX idx_pop_bus_matching ON public.richieste_pop_bus USING btree (stato, start_datetime)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_pop_bus_origine",
+      "definition": "CREATE INDEX idx_pop_bus_origine ON public.richieste_pop_bus USING gist (origine)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_popbus_request_id_unique",
+      "definition": "CREATE UNIQUE INDEX idx_popbus_request_id_unique ON public.richieste_pop_bus USING btree (request_id) WHERE (request_id IS NOT NULL)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_richieste_destinazione_territoriale",
+      "definition": "CREATE INDEX idx_richieste_destinazione_territoriale ON public.richieste_pop_bus USING btree (destinazione_nodo_territoriale_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_richieste_direttrice_id",
+      "definition": "CREATE INDEX idx_richieste_direttrice_id ON public.richieste_pop_bus USING btree (direttrice_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_richieste_origine_territoriale",
+      "definition": "CREATE INDEX idx_richieste_origine_territoriale ON public.richieste_pop_bus USING btree (origine_nodo_territoriale_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "idx_richieste_target_missione",
+      "definition": "CREATE INDEX idx_richieste_target_missione ON public.richieste_pop_bus USING btree (target_missione_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "index_name": "richieste_pop_bus_pkey",
+      "definition": "CREATE UNIQUE INDEX richieste_pop_bus_pkey ON public.richieste_pop_bus USING btree (id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_direttrice",
+      "definition": "CREATE INDEX idx_segmenti_direttrice ON public.segmenti USING btree (direttrice_id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_direttrice_ordine",
+      "definition": "CREATE INDEX idx_segmenti_direttrice_ordine ON public.segmenti USING btree (direttrice_id, ordine_sequenziale)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_stato",
+      "definition": "CREATE INDEX idx_segmenti_stato ON public.segmenti USING btree (stato)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_stato_nodes",
+      "definition": "CREATE INDEX idx_segmenti_stato_nodes ON public.segmenti USING btree (stato, start_node_id, end_node_id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_time_stato",
+      "definition": "CREATE INDEX idx_segmenti_time_stato ON public.segmenti USING btree (start_datetime, stato)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "segmenti_pkey",
+      "definition": "CREATE UNIQUE INDEX segmenti_pkey ON public.segmenti USING btree (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "idx_veicolo_coord",
+      "definition": "CREATE INDEX idx_veicolo_coord ON public.veicolo USING gist (coord)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "veicolo_pkey",
+      "definition": "CREATE UNIQUE INDEX veicolo_pkey ON public.veicolo USING btree (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "veicolo_targa_key",
+      "definition": "CREATE UNIQUE INDEX veicolo_targa_key ON public.veicolo USING btree (targa)"
+    }
+  ],
+  "triggers": [
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "trg_check_posti",
+      "event": "INSERT",
+      "timing": "BEFORE",
+      "action": "EXECUTE FUNCTION check_posti_disponibili_trigger()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "trg_veicolo_trig",
+      "event": "INSERT",
+      "timing": "AFTER",
+      "action": "EXECUTE FUNCTION trg_refresh_indice_veicolo()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "trg_veicolo_trig",
+      "event": "UPDATE",
+      "timing": "AFTER",
+      "action": "EXECUTE FUNCTION trg_refresh_indice_veicolo()"
+    }
+  ],
+  "functions": []
+}

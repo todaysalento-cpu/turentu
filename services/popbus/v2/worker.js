@@ -16,6 +16,11 @@ import { generaRitorniCompatibili } from './return-matching.js';
 import { verificaQualitaOccorrenze } from './service-quality.js';
 import { generaCandidatiFlotta } from './fleet-candidates.js';
 import { valutaEconomiaCiclo } from './cycle-pricing.js';
+import { createIncrementalCorridorEngine } from '../../pixel/incremental-corridor-engine.js';
+import { diagnosticaCicloPixelPopbus } from '../../pixel/pixel-popbus-cycle-adapter.js';
+import { ottimizzaFlotta } from './fleet-optimizer.js';
+import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
+import { componiCicloInCorsa } from './popbus-single-corsa-assembler.js';
 
 // I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
 // e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
@@ -30,6 +35,206 @@ const POPBUS_FLEET_SHADOW = process.env.POPBUS_FLEET_SHADOW === '1';
 const POPBUS_FLEET_SHADOW_MAX_REQUESTS = 30;
 const POPBUS_FLEET_SHADOW_MAX_VEHICLES = 30;
 const COMMISSIONE_TURENTU = 0.15;
+const POPBUS_PIXEL_SHADOW = process.env.POPBUS_PIXEL_SHADOW === '1';
+const POPBUS_PIXEL_MAX_REQUESTS = 100;
+const POPBUS_PIXEL_CYCLE_SHADOW = process.env.POPBUS_PIXEL_CYCLE_SHADOW === '1';
+const POPBUS_PIXEL_MAX_MISSIONI = 24;
+const POPBUS_PIXEL_MAX_CICLI = 180;
+const POPBUS_PIXEL_MAX_VEICOLI = 20;
+// Configurabile ma limitato a 3: il generatore attuale rifiuta profondita superiori.
+const POPBUS_MAX_MISSIONI_PER_CICLO = Number(process.env.POPBUS_MAX_MISSIONI_PER_CICLO ?? 3);
+if (!Number.isSafeInteger(POPBUS_MAX_MISSIONI_PER_CICLO) ||
+    POPBUS_MAX_MISSIONI_PER_CICLO < 1 || POPBUS_MAX_MISSIONI_PER_CICLO > 3) {
+  throw new Error('POPBUS_MAX_MISSIONI_PER_CICLO: supportati valori da 1 a 3; oltre 3 serve estendere e collaudare il generatore');
+}
+
+// Fase 2: PIXEL riceve esclusivamente nodi territoriali e routing verificato.
+// NON crea attivazioni, NON cambia la scelta legacy e NON scrive nel database.
+async function eseguiPixelShadow({ requests, nodes, vehicles, client, log, stats }) {
+  if (!POPBUS_PIXEL_SHADOW) return;
+  if (requests.length > POPBUS_PIXEL_MAX_REQUESTS) {
+    log('PIXEL SHADOW SKIP', { motivo: 'limite senza troncamento', richieste: requests.length });
+    return;
+  }
+  const nodeMap = new Map(nodes.map(n => [Number(n.id), n]));
+  const engine = createIncrementalCorridorEngine({
+    routeNodes: async ids => {
+      const legs = [];
+      for (let i = 0; i < ids.length - 1; i++) {
+        const a = nodeMap.get(Number(ids[i]));
+        const b = nodeMap.get(Number(ids[i + 1]));
+        if (!a || !b) throw new Error(`PIXEL: nodo territoriale assente ${ids[i]} o ${ids[i + 1]}`);
+        // Usa il provider stradale reale. Non inventa distanze o polilinee.
+        const result = await movement(a, b);
+        if (!Number.isFinite(result.metres) || !Number.isFinite(result.seconds) ||
+            (result.metres > 0 && (!result.polyline || result.seconds <= 0))) {
+          throw new Error('PIXEL: routing senza geometria/durata verificata');
+        }
+        if (result.metres === 0) {
+          // Il motore richiede geometria verificata anche per nodi coincidenti.
+          throw new Error('PIXEL: nodi distinti con coordinate coincidenti: routing non rappresentabile');
+        }
+        legs.push({ metres: result.metres, seconds: result.seconds,
+          polyline: result.polyline, roadCoincident: false });
+      }
+      return { verificataRouting: true, legs };
+    }
+  });
+  let inserite = 0;
+  const errori = [];
+  for (const r of requests) {
+    try {
+      await engine.processRequest(r);
+      inserite++;
+    } catch (error) {
+      errori.push({ richiestaId: r.id, motivo: error.message });
+    }
+  }
+  const corridors = engine.listCorridors();
+  stats.pixelRichieste = inserite;
+  stats.pixelCorridoi = corridors.length;
+  stats.pixelErrori = errori.length;
+  log('PIXEL SHADOW RIEPILOGO', {
+    richiesteValide: requests.length, richiesteInserite: inserite,
+    corridoi: corridors.length, errori: errori.slice(0, 20),
+    soloLettura: true, utilizzabiliPerAttivazione: false
+  });
+  for (const c of corridors.slice(0, 30)) {
+    log('PIXEL SHADOW CORRIDOIO', {
+      id: c.id, nodes: c.nodes, richieste: c.richiestaIds,
+      metri: c.legs.reduce((sum, leg) => sum + leg.metres, 0),
+      versione: c.versione, verificataRouting: c.verificataRouting
+    });
+  }
+  if (POPBUS_PIXEL_CYCLE_SHADOW) {
+    await eseguiCicliPixelShadow({ engine, corridors, requests, nodes, vehicles, client, log, stats });
+  }
+}
+
+// Diagnostica integrata: PIXEL -> adapter -> ottimizzatore indicizzato.
+// Ogni candidata viene verificata dal vero adapter, non da stime sintetiche.
+// Non scrive su DB e NON abilita attivazioni.
+async function eseguiCicliPixelShadow({ engine, corridors, requests, nodes, vehicles, client, log, stats }) {
+  if (corridors.length > POPBUS_PIXEL_MAX_MISSIONI || vehicles.length > POPBUS_PIXEL_MAX_VEICOLI) {
+    log('PIXEL CICLI SKIP', { corridoi: corridors.length, veicoli: vehicles.length,
+      motivo: 'Limiti di carico senza troncamento del dataset' });
+    return;
+  }
+  const missioni = corridors.filter(c => c.verificataRouting && c.richiestaIds.length)
+    .map(c => ({ corridorId: c.id, requestIds: [...c.richiestaIds] }));
+  const byRequest = new Map(requests.map(r => [Number(r.id), r]));
+  const proposte = [];
+  // La sequenza dei corridoi non determina da sola la compatibilita:
+  // l'adapter controlla tutti i tempi, trasferimenti, posti ed economia.
+  function* catene(prefix, used) {
+    if (prefix.length) yield prefix;
+    if (prefix.length >= POPBUS_MAX_MISSIONI_PER_CICLO) return;
+    for (const m of missioni) {
+      if (prefix.some(p => p.corridorId === m.corridorId)) continue;
+      if (m.requestIds.some(id => used.has(Number(id)))) continue;
+      const next = new Set(used);
+      for (const id of m.requestIds) next.add(Number(id));
+      yield* catene([...prefix, m], next);
+    }
+  }
+  let esaminate = 0, valide = 0;
+  const motivi = {};
+  outer: for (const chain of catene([], new Set())) {
+    for (const vehicle of vehicles) {
+      if (esaminate >= POPBUS_PIXEL_MAX_CICLI) break outer;
+      esaminate++;
+      const esito = await diagnosticaCicloPixelPopbus({
+        engine, missioni: chain, richieste: requests, vehicle, nodes,
+        road: movement, now: Date.now(),
+        validateVehicle: async (v, start, end) => {
+          if (!turno(v, start, end)) return false;
+          return (await conflittiVeicolo(client, v.id, start, end)).length === 0;
+        },
+        validateCandidate: async (result) =>
+          result.richieste.every(id => byRequest.has(Number(id)))
+      });
+      if (!esito.ok || !esito.validazionePreliminare) {
+        const motivo = esito.motivo || 'NON_VALIDATO';
+        motivi[motivo] = (motivi[motivo] || 0) + 1;
+        continue;
+      }
+      // Prova la costruzione di UNA corsa globale per tutte le missioni.
+      // Se geometria o orari non sono coerenti, non entra neppure nell'ottimizzatore shadow.
+      let corsaGlobale;
+      try {
+        corsaGlobale = componiCicloInCorsa({
+          missioni: esito.missioni, trasferimenti: esito.trasferimenti,
+          nodi: nodes, veicoloId: vehicle.id, postiTotali: vehicle.posti_totali,
+          busyStart: esito.busyStart,
+          busyEnd: esito.busyEnd, approach: esito.approach, returnTrip: esito.returnTrip
+        });
+      } catch (error) {
+        const motivo = `CORSA_GLOBALE_${error.message}`;
+        motivi[motivo] = (motivi[motivo] || 0) + 1;
+        continue;
+      }
+      valide++;
+      proposte.push({
+        _corsaGlobale: corsaGlobale,
+        _pianoCiclo: { missioni: esito.missioni, trasferimenti: esito.trasferimenti,
+          approach: esito.approach, returnTrip: esito.returnTrip,
+          busyStart: esito.busyStart, busyEnd: esito.busyEnd,
+          economia: esito.economia, richiestaIds: esito.richieste },
+        veicolo: Number(vehicle.id),
+        richieste: [esito.richieste],
+        partenza_base: esito.busyStart,
+        ritorno_base: esito.busyEnd,
+        margine_ciclo_con_attesa_euro: esito.economia.margineEuro,
+        _diagnostica: { missioni: chain.length, corridorIds: chain.map(m => m.corridorId),
+          titolareId: vehicle.driver_id, economia: esito.economia }
+      });
+    }
+  }
+  const scelta = ottimizzaFlotta(proposte, { maxCandidati: 500, maxNodi: 100000 });
+  stats.pixelCicliEsaminati = esaminate;
+  stats.pixelCicliValidi = valide;
+  stats.pixelCicliSelezionati = scelta.selezionati?.length ?? 0;
+  log('PIXEL CICLI OTTIMIZZAZIONE SHADOW', {
+    esaminate, valide, motivi, candidati: proposte.length,
+    scelta: { margine: scelta.margineTotaleEuro, selezionate: scelta.selezionati?.length,
+      limiteNodiRaggiunto: scelta.limiteNodiRaggiunto,
+      candidatiTagliati: scelta.candidatiTagliati },
+    selezionati: (scelta.selezionati || []).slice(0, 20).map(c => ({
+      veicolo: c.veicolo, missioni: c._pianoCiclo?.missioni?.length,
+      richieste: c._pianoCiclo?.richiestaIds,
+      margineEuro: c._pianoCiclo?.economia?.margineEuro,
+      busyStart: c._pianoCiclo?.busyStart, busyEnd: c._pianoCiclo?.busyEnd
+    })),
+    nota: 'Piani completi in memoria, non attivabili: servono rivalidazione e acceptance multi-missione'
+  });
+}
+
+
+// PIXEL usa esclusivamente i nodi territoriali. Il mapping verso i campi
+// start/end e' interno al worker e NON aggiorna le colonne legacy nel DB.
+// Una richiesta senza entrambi gli ID territoriali non puo' entrare nel
+// nuovo percorso: non e' lecito reinterpretare ID legacy come territoriali.
+function normalizzaRichiesteTerritoriali(rawRequests, log) {
+  const valide = [];
+  const scartate = [];
+  for (const r of rawRequests) {
+    const a = Number(r.origine_nodo_territoriale_id);
+    const b = Number(r.destinazione_nodo_territoriale_id);
+    if (r.origine_nodo_territoriale_id == null ||
+        r.destinazione_nodo_territoriale_id == null ||
+        !Number.isSafeInteger(a) || !Number.isSafeInteger(b) ||
+        a <= 0 || b <= 0 || a === b) {
+      scartate.push(r.id);
+      continue;
+    }
+    valide.push({ ...r, start_node_id: a, end_node_id: b });
+  }
+  if (scartate.length) log('NODI TERRITORIALI NON VALIDI', {
+    richiesteScartate: scartate,
+    motivo: 'ID territoriali assenti, non sicuri o coincidenti; nessun fallback legacy'
+  });
+  return { valide, scartate };
+}
 
 function riepilogaEconomiaFlotta(c) {
   const ricavo = Number(c.ricavo_euro);
@@ -96,7 +301,7 @@ async function eseguiFleetShadow({ requests, nodes, vehicles, log, stats }) {
     road: (a, b) => movement(a, b)
   }, {
     now: Date.now(), includePast: false, strict: true,
-    maxDepth: 3, maxWaitMin: 180, bufferMin: 0,
+    maxDepth: POPBUS_MAX_MISSIONI_PER_CICLO, maxWaitMin: 180, bufferMin: 0,
     maxGroupRequests: 12, maxAggregateCombos: 2500,
     maxFormations: 2500, maxChains: 500,
     maxCombosPerChainVehicle: 20000, maxTotalChainCombos: 100000,
@@ -505,7 +710,10 @@ export async function processaProposteDinamicheV2() {
     scartiOccupato: 0,
     attivazioni: 0,
     fleetShadowCandidati: 0,
-    fleetShadowCatene: 0
+    fleetShadowCatene: 0,
+    pixelRichieste: 0,
+    pixelCorridoi: 0,
+    pixelErrori: 0
   };
 
   log(
@@ -685,8 +893,10 @@ export async function processaProposteDinamicheV2() {
     // =====================================================
 
     const requests = [];
+    const territoriali = normalizzaRichiesteTerritoriali(rawRequests, log);
+    stats.richiesteSenzaNodiTerritoriali = territoriali.scartate.length;
 
-    for (const r of rawRequests) {
+    for (const r of territoriali.valide) {
       try {
         await verificaPagamento(client, r);
 
@@ -728,12 +938,25 @@ export async function processaProposteDinamicheV2() {
     const { rows: nodes } = await client.query(`
       SELECT
         id,
-        nome_nodo,
+        nome AS nome_nodo,
         ST_Y(posizione::geometry) AS lat,
         ST_X(posizione::geometry) AS lon
-      FROM nodi_direttrice
-      WHERE id=ANY($1::int[])
+      FROM public.nodi_territoriali
+      WHERE id=ANY($1::bigint[])
+        AND attivo = TRUE
     `, [nodeIds]);
+
+    // Gli ID geografici sono BIGINT in PostgreSQL. I modelli JS usano Number:
+    // rifiutare identificativi fuori dall'intervallo esatto anziche' corromperli.
+    if (nodeIds.some(id => !Number.isSafeInteger(Number(id)) || Number(id) <= 0) ||
+        nodes.some(n => !Number.isSafeInteger(Number(n.id)) || Number(n.id) <= 0)) {
+      throw new Error('POPBUS V2: ID nodo territoriale non rappresentabile in sicurezza come Number');
+    }
+    if (nodes.length !== nodeIds.length) {
+      const found = new Set(nodes.map(n => String(n.id)));
+      const missing = nodeIds.filter(id => !found.has(String(id)));
+      throw new Error(`POPBUS V2: nodi territoriali assenti o inattivi: ${missing.join(', ')}`);
+    }
 
     const nodeMap = new Map(
       nodes.map(n => [
@@ -1361,6 +1584,15 @@ export async function processaProposteDinamicheV2() {
       JSON.stringify(stats)
     );
 
+    // PIXEL P2.1: esecuzione isolata sullo snapshot territoriale.
+    if (POPBUS_PIXEL_SHADOW) {
+      try {
+        await eseguiPixelShadow({ requests, nodes, vehicles, client, log, stats });
+      } catch (error) {
+        log('PIXEL SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
     // Il generatore flotta e' eseguito solo in osservazione.
     // Eventuali errori non interrompono il matching legacy.
     if (POPBUS_FLEET_SHADOW) {
@@ -1887,6 +2119,22 @@ export async function processaProposteDinamicheV2() {
       ]);
 
       const act = as[0];
+
+      // FASE 5: registra anche la missione relazionale nella stessa transazione.
+      // L'attivazione corrente rimane mono-missione e conserva integralmente
+      // il formato precedente del piano per acceptance.js.
+      // Un errore qui causa il rollback di tutta la transazione.
+      await registraMissioniAttivazione(client, {
+        attivazioneId: act.id,
+        missioni: [{
+          direttriceId: dirId,
+          nodes: c.plan.nodes,
+          legs: c.plan.legs,
+          departure: c.evaluation.departure,
+          arrival: c.evaluation.arrival,
+          requests: c.evaluation.requests
+        }]
+      });
 
       stats.attivazioni++;
 

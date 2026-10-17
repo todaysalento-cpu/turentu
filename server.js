@@ -77,6 +77,11 @@ const isAllowedOrigin = (origin, callback) => {
 app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
 
+// ======================= STRIPE WEBHOOK =======================
+// Deve essere registrato prima di express.json(): Stripe richiede il body raw
+// originale per verificare la firma del webhook.
+app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
+
 // ======================= MIDDLEWARE PARSING JSON =======================
 app.use(express.json({ limit: '50mb' }));
 
@@ -102,7 +107,6 @@ app.use('/api/veicolo', (req, res, next) => {
 }, veicoloRouter);
 
 // ======================= ROUTES =======================
-app.use('/webhook-stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);

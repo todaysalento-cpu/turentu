@@ -156,7 +156,7 @@ export async function loadCachesUltra(force = false) {
                 WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
             `),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
-            client.query(`SELECT * FROM nodi_direttrice`)
+            client.query(`SELECT id, nome, posizione, attivo FROM public.nodi_territoriali WHERE attivo = TRUE`)
         ]);
         
         vRes.rows.forEach(v => upsertVeicolo(v));
@@ -172,16 +172,16 @@ export async function loadCachesUltra(force = false) {
         CacheStore.direttriciCache.clear();
         dirRes.rows.forEach(dir => CacheStore.direttriciCache.set(dir.id, dir));
         CacheStore.nodiCache.clear();
+        // Chiave canonica: ID del nodo territoriale, non ID della direttrice.
         nodiRes.rows.forEach(nodo => {
-            const list = CacheStore.nodiCache.get(nodo.direttrice_id) || [];
-            list.push(nodo);
-            CacheStore.nodiCache.set(nodo.direttrice_id, list);
+            CacheStore.nodiCache.set(String(nodo.id), nodo);
         });
 
         CacheStore.lastSync = Date.now();
         console.log(`✅ [SYNC] Completata con successo. Totale veicoli attivi in memoria (veicoloToDisponibilita): ${CacheStore.veicoloToDisponibilita.size}`);
     } catch (err) {
         console.error("❌ [SYNC] Errore critico durante il caricamento delle cache:", err);
+        throw err;
     } finally {
         client.release();
     }

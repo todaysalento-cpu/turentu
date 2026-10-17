@@ -1,0 +1,23 @@
+services\popbus\clusterService.js:8:    JOIN nodi_direttrice n1 ON n1.id = r.start_node_id
+services\popbus\clusterService.js:9:    JOIN nodi_direttrice n2 ON n2.id = r.end_node_id
+services\popbus\directiveMatcher.js:33:    FROM nodi_direttrice WHERE id = ANY($1::int[])
+services\popbus\economicEngine.js:186:          JOIN nodi_direttrice no
+services\popbus\economicEngine.js:188:          JOIN nodi_direttrice ne
+services\popbus\economicEngine.js:194:      JOIN nodi_direttrice n1
+services\popbus\economicEngine.js:196:      JOIN nodi_direttrice n2
+services\popbus\fleetAllocator.js:26:      FROM segmenti s JOIN nodi_direttrice a ON a.id=s.start_node_id JOIN nodi_direttrice b ON b.id=s.end_node_id
+services\popbus1\clusterService.js:8:    JOIN nodi_direttrice n1 ON n1.id = r.start_node_id
+services\popbus1\clusterService.js:9:    JOIN nodi_direttrice n2 ON n2.id = r.end_node_id
+services\popbus1\directiveMatcher.js:33:    FROM nodi_direttrice WHERE id = ANY($1::int[])
+services\popbus1\economicEngine.js:186:          JOIN nodi_direttrice no
+services\popbus1\economicEngine.js:188:          JOIN nodi_direttrice ne
+services\popbus1\economicEngine.js:194:      JOIN nodi_direttrice n1
+services\popbus1\economicEngine.js:196:      JOIN nodi_direttrice n2
+services\popbus1\fleetAllocator.js:24:          CROSS JOIN nodi_direttrice n_partenza
+services\popbus1\fleetAllocator.js:61:        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+services\popbus1\fleetAllocator.js:62:        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+services\search\formatter\search.formatter.js:491:                                        // PIXEL: informazioni territoriali, non nodi_direttrice.
+services\search\search.cache.js:159:            client.query(`SELECT * FROM nodi_direttrice`)
+services\search\search.service - Copia (2).js:20:        SELECT id FROM nodi_direttrice 
+services\search\search.service.js:18:// PIXEL: nodi territoriali separati dai nodi_direttrice del matching.
+services\search\search.service.js:92:        FROM nodi_direttrice

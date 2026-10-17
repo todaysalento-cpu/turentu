@@ -1,0 +1,2018 @@
+{
+  "test": "P0-E2B",
+  "mode": "READ ONLY",
+  "generated_at": "2026-10-16T14:20:21.504Z",
+  "triggers": [
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_19301",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19301\" AFTER DELETE ON corse FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_19302",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19302\" AFTER UPDATE ON corse FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_19326",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19326\" AFTER DELETE ON corse FROM ticket_condiviso NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_19327",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19327\" AFTER UPDATE ON corse FROM ticket_condiviso NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_49284",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49284\" AFTER DELETE ON corse FROM messaggi NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_49285",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49285\" AFTER UPDATE ON corse FROM messaggi NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_49616",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49616\" AFTER DELETE ON corse FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_49617",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49617\" AFTER UPDATE ON corse FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_52901",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52901\" AFTER DELETE ON corse FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_a_52902",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52902\" AFTER UPDATE ON corse FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_c_19258",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19258\" AFTER INSERT ON corse FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_c_19259",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19259\" AFTER UPDATE ON corse FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_c_49941",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_49941\" AFTER INSERT ON corse FROM eventi NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "corse",
+      "trigger_name": "RI_ConstraintTrigger_c_49942",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_49942\" AFTER UPDATE ON corse FROM eventi NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49693",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49693\" AFTER DELETE ON direttrici_virtuali FROM nodi_direttrice NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49694",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49694\" AFTER UPDATE ON direttrici_virtuali FROM nodi_direttrice NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49725",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49725\" AFTER DELETE ON direttrici_virtuali FROM segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49726",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49726\" AFTER UPDATE ON direttrici_virtuali FROM segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49763",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49763\" AFTER DELETE ON direttrici_virtuali FROM offerte_autisti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49764",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49764\" AFTER UPDATE ON direttrici_virtuali FROM offerte_autisti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49846",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49846\" AFTER DELETE ON direttrici_virtuali FROM missioni_ritorno NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_49847",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49847\" AFTER UPDATE ON direttrici_virtuali FROM missioni_ritorno NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_50003",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_setnull_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_50003\" AFTER DELETE ON direttrici_virtuali FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_setnull_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_50004",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_50004\" AFTER UPDATE ON direttrici_virtuali FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_52855",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52855\" AFTER DELETE ON direttrici_virtuali FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_52856",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52856\" AFTER UPDATE ON direttrici_virtuali FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_52886",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52886\" AFTER DELETE ON direttrici_virtuali FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_52887",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52887\" AFTER UPDATE ON direttrici_virtuali FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_53313",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53313\" AFTER DELETE ON direttrici_virtuali FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_a_53314",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53314\" AFTER UPDATE ON direttrici_virtuali FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_c_53247",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53247\" AFTER INSERT ON direttrici_virtuali FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_c_53248",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53248\" AFTER UPDATE ON direttrici_virtuali FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_c_53252",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53252\" AFTER INSERT ON direttrici_virtuali FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "trigger_name": "RI_ConstraintTrigger_c_53253",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53253\" AFTER UPDATE ON direttrici_virtuali FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "trigger_name": "RI_ConstraintTrigger_c_19263",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19263\" AFTER INSERT ON disponibilita_veicolo FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "trigger_name": "RI_ConstraintTrigger_c_19264",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19264\" AFTER UPDATE ON disponibilita_veicolo FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "pagamenti",
+      "trigger_name": "RI_ConstraintTrigger_c_19268",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19268\" AFTER INSERT ON pagamenti FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "pagamenti",
+      "trigger_name": "RI_ConstraintTrigger_c_19269",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19269\" AFTER UPDATE ON pagamenti FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "pagamenti",
+      "trigger_name": "RI_ConstraintTrigger_c_19278",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19278\" AFTER INSERT ON pagamenti FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "pagamenti",
+      "trigger_name": "RI_ConstraintTrigger_c_19279",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19279\" AFTER UPDATE ON pagamenti FROM prenotazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_a_53331",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53331\" AFTER DELETE ON popbus_attivazione_missioni FROM popbus_missione_richieste NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_a_53332",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53332\" AFTER UPDATE ON popbus_attivazione_missioni FROM popbus_missione_richieste NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_c_53310",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53310\" AFTER INSERT ON popbus_attivazione_missioni FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_c_53311",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53311\" AFTER UPDATE ON popbus_attivazione_missioni FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_c_53315",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53315\" AFTER INSERT ON popbus_attivazione_missioni FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "trigger_name": "RI_ConstraintTrigger_c_53316",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53316\" AFTER UPDATE ON popbus_attivazione_missioni FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_52920",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52920\" AFTER INSERT ON popbus_attivazione_richieste FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_52921",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52921\" AFTER UPDATE ON popbus_attivazione_richieste FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_52925",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52925\" AFTER INSERT ON popbus_attivazione_richieste FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_52926",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52926\" AFTER UPDATE ON popbus_attivazione_richieste FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52918",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52918\" AFTER DELETE ON popbus_attivazioni FROM popbus_attivazione_richieste NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52919",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52919\" AFTER UPDATE ON popbus_attivazioni FROM popbus_attivazione_richieste NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52939",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52939\" AFTER DELETE ON popbus_attivazioni FROM popbus_attivazione_segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52940",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52940\" AFTER UPDATE ON popbus_attivazioni FROM popbus_attivazione_segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52949",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52949\" AFTER DELETE ON popbus_attivazioni FROM offerte_autisti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_52950",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52950\" AFTER UPDATE ON popbus_attivazioni FROM offerte_autisti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_53308",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53308\" AFTER DELETE ON popbus_attivazioni FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_53309",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_53309\" AFTER UPDATE ON popbus_attivazioni FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52888",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52888\" AFTER INSERT ON popbus_attivazioni FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52889",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52889\" AFTER UPDATE ON popbus_attivazioni FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52893",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52893\" AFTER INSERT ON popbus_attivazioni FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52894",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52894\" AFTER UPDATE ON popbus_attivazioni FROM veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52898",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52898\" AFTER INSERT ON popbus_attivazioni FROM utente NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52899",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52899\" AFTER UPDATE ON popbus_attivazioni FROM utente NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52903",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52903\" AFTER INSERT ON popbus_attivazioni FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_52904",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_52904\" AFTER UPDATE ON popbus_attivazioni FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_53333",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53333\" AFTER INSERT ON popbus_missione_richieste FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_53334",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53334\" AFTER UPDATE ON popbus_missione_richieste FROM popbus_attivazione_missioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_53338",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53338\" AFTER INSERT ON popbus_missione_richieste FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "trigger_name": "RI_ConstraintTrigger_c_53339",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53339\" AFTER UPDATE ON popbus_missione_richieste FROM richieste_pop_bus NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_19266",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19266\" AFTER DELETE ON prenotazioni FROM pagamenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_19267",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19267\" AFTER UPDATE ON prenotazioni FROM pagamenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_19276",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19276\" AFTER DELETE ON prenotazioni FROM pagamenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_19277",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19277\" AFTER UPDATE ON prenotazioni FROM pagamenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_50591",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_50591\" AFTER DELETE ON prenotazioni FROM prenotazione_fermate NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_a_50592",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_50592\" AFTER UPDATE ON prenotazioni FROM prenotazione_fermate NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19298",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19298\" AFTER INSERT ON prenotazioni FROM utente NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19299",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19299\" AFTER UPDATE ON prenotazioni FROM utente NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19303",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19303\" AFTER INSERT ON prenotazioni FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19304",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19304\" AFTER UPDATE ON prenotazioni FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19308",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19308\" AFTER INSERT ON prenotazioni FROM ticket_condiviso NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "RI_ConstraintTrigger_c_19309",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_19309\" AFTER UPDATE ON prenotazioni FROM ticket_condiviso NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "trg_check_posti",
+      "enabled_mode": "O",
+      "internal": false,
+      "function_signature": "check_posti_disponibili_trigger()",
+      "definition": "CREATE TRIGGER trg_check_posti BEFORE INSERT ON prenotazioni FOR EACH ROW EXECUTE FUNCTION check_posti_disponibili_trigger()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_a_49863",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49863\" AFTER DELETE ON segmenti FROM missioni_ritorno NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_a_49864",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49864\" AFTER UPDATE ON segmenti FROM missioni_ritorno NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_a_52944",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52944\" AFTER DELETE ON segmenti FROM popbus_attivazione_segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_a_52945",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52945\" AFTER UPDATE ON segmenti FROM popbus_attivazione_segmenti NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_49727",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_49727\" AFTER INSERT ON segmenti FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_49728",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_49728\" AFTER UPDATE ON segmenti FROM direttrici_virtuali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_53267",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53267\" AFTER INSERT ON segmenti FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_53268",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53268\" AFTER UPDATE ON segmenti FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_53272",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_ins\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53272\" AFTER INSERT ON segmenti FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_ins\"()"
+    },
+    {
+      "table_name": "segmenti",
+      "trigger_name": "RI_ConstraintTrigger_c_53273",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_check_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_c_53273\" AFTER UPDATE ON segmenti FROM nodi_territoriali NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_check_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19256",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19256\" AFTER DELETE ON veicolo FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19257",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19257\" AFTER UPDATE ON veicolo FROM corse NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19261",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19261\" AFTER DELETE ON veicolo FROM disponibilita_veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19262",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19262\" AFTER UPDATE ON veicolo FROM disponibilita_veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19286",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19286\" AFTER DELETE ON veicolo FROM pending NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19287",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19287\" AFTER UPDATE ON veicolo FROM pending NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19291",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19291\" AFTER DELETE ON veicolo FROM posizione_veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19292",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19292\" AFTER UPDATE ON veicolo FROM posizione_veicolo NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19316",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19316\" AFTER DELETE ON veicolo FROM recensioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19317",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19317\" AFTER UPDATE ON veicolo FROM recensioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19321",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19321\" AFTER DELETE ON veicolo FROM tariffe NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_19322",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_19322\" AFTER UPDATE ON veicolo FROM tariffe NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_24677",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_cascade_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_24677\" AFTER DELETE ON veicolo FROM documenti_autista NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_24678",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_24678\" AFTER UPDATE ON veicolo FROM documenti_autista NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_52891",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_del\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52891\" AFTER DELETE ON veicolo FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "RI_ConstraintTrigger_a_52892",
+      "enabled_mode": "O",
+      "internal": true,
+      "function_signature": "\"RI_FKey_noaction_upd\"()",
+      "definition": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_52892\" AFTER UPDATE ON veicolo FROM popbus_attivazioni NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "trg_veicolo_trig",
+      "enabled_mode": "O",
+      "internal": false,
+      "function_signature": "trg_refresh_indice_veicolo()",
+      "definition": "CREATE TRIGGER trg_veicolo_trig AFTER INSERT OR UPDATE OF posti_totali ON veicolo FOR EACH ROW EXECUTE FUNCTION trg_refresh_indice_veicolo()"
+    }
+  ],
+  "functions": [
+    {
+      "schema_name": "public",
+      "function_name": "check_posti_disponibili_trigger",
+      "signature": "check_posti_disponibili_trigger()",
+      "language": "plpgsql",
+      "security_definer": false,
+      "definition": "CREATE OR REPLACE FUNCTION public.check_posti_disponibili_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$DECLARE capacita integer; picco bigint;BEGIN  SELECT posti_totali INTO capacita FROM public.corse WHERE id=NEW.corsa_id FOR UPDATE;  IF capacita IS NULL OR capacita <= 0 OR NEW.posti_richiesti IS NULL OR NEW.posti_richiesti <= 0    OR NEW.start_offset IS NULL OR NEW.end_offset IS NULL    OR NEW.start_offset < 0 OR NEW.end_offset <= NEW.start_offset THEN    RAISE EXCEPTION 'Capacit… o indici prenotazione non validi';  END IF;  IF EXISTS (SELECT 1 FROM public.prenotazioni WHERE corsa_id=NEW.corsa_id    AND (start_offset IS NULL OR end_offset IS NULL      OR start_offset < 0 OR end_offset <= start_offset OR posti_richiesti <= 0)) THEN    RAISE EXCEPTION 'Prenotazioni storiche con segmenti non validi';  END IF;  WITH tratte AS (    SELECT start_offset AS s,end_offset AS e,posti_richiesti AS p    FROM public.prenotazioni WHERE corsa_id=NEW.corsa_id    UNION ALL SELECT NEW.start_offset,NEW.end_offset,NEW.posti_richiesti  ), eventi AS (    SELECT s AS punto,p AS delta FROM tratte    UNION ALL SELECT e,-p FROM tratte  ), delta AS (SELECT punto,SUM(delta) AS valore FROM eventi GROUP BY punto),  occupazione AS (SELECT SUM(valore) OVER (ORDER BY punto) AS posti FROM delta)  SELECT COALESCE(MAX(posti),0) INTO picco FROM occupazione;  IF picco > capacita THEN RAISE EXCEPTION 'Capacit… insufficiente: %/%',picco,capacita; END IF;  RETURN NEW;END;$function$\n"
+    },
+    {
+      "schema_name": "public",
+      "function_name": "trg_refresh_indice_veicolo",
+      "signature": "trg_refresh_indice_veicolo()",
+      "language": "plpgsql",
+      "security_definer": false,
+      "definition": "CREATE OR REPLACE FUNCTION public.trg_refresh_indice_veicolo()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    UPDATE veicolo SET indice_efficienza = calcola_indice_veicolo_id(id) WHERE id = NEW.id;\n    RETURN NEW;\nEND;\n$function$\n"
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_evento_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (evento_id) REFERENCES eventi(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_posti_disponibili_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL posti_disponibili"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_posti_totali_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL posti_totali"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_start_datetime_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL start_datetime"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_stato_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (stato::text = ANY (ARRAY['prenotabile'::character varying, 'in_corso'::character varying, 'completata'::character varying, 'annullata'::character varying, 'da_attivare'::character varying]::text[]))"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_tipo_corsa_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (tipo_corsa::text = ANY (ARRAY['privata'::character varying, 'condivisa'::character varying, 'riempimento'::character varying]::text[]))"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_tipo_corsa_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL tipo_corsa"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_veicolo_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "corse",
+      "constraint_name": "corse_veicolo_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_end_node_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "constraint_name": "direttrici_virtuali_start_node_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "chk_manual_8h",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (manual = false OR (fine - start) <= '08:00:00'::interval)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "chk_start_end",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (start < fine)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_fine_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL fine"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_start_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL start"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_veicolo_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "disponibilita_veicolo_veicolo_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "constraint_name": "unique_disponibilita_veicolo",
+      "constraint_type": "u",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "UNIQUE (veicolo_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "fk_pagamenti_prenotazione",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_importo_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL importo"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_prenotazione_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_stato_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (stato::text = ANY (ARRAY['pendente'::text, 'pagato'::text, 'rimborsato'::text, 'autorizzazione'::text]))"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "pagamenti_stato_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "unique_pagamento_per_prenotazione",
+      "constraint_type": "u",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "UNIQUE (prenotazione_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "constraint_name": "unique_stripe_payment_intent",
+      "constraint_type": "u",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "UNIQUE (stripe_payment_intent)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_intervallo",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (arrivo > partenza)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_nodi",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (cardinality(nodi_territoriali) >= 2)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_ordine_unico",
+      "constraint_type": "u",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "UNIQUE (attivazione_id, ordine)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_am_piano_obj",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (jsonb_typeof(piano) = 'object'::text)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_arrivo_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL arrivo"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_attivazione_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_attivazione_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL attivazione_id"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_created_at_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_direttrice_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_nodi_territoriali_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL nodi_territoriali"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_ordine_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (ordine > 0)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_ordine_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL ordine"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_partenza_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL partenza"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_piano_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL piano"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "constraint_name": "popbus_attivazione_missioni_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attiva_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL attiva"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attivazione_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_attivazione_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL attivazione_id"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (indice_discesa > indice_salita)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_indice_discesa_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL indice_discesa"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_indice_salita_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL indice_salita"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (attivazione_id, richiesta_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_richiesta_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "constraint_name": "popbus_attivazione_richieste_richiesta_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL richiesta_id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_arrivo_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL arrivo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_autista_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_autista_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL autista_id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (arrivo > partenza)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_corsa_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_costo_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL costo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_created_at_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_direttrice_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_direttrice_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL direttrice_id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_expires_at_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_partenza_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL partenza"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_piano_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL piano"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_ricavo_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL ricavo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_stato_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (stato = ANY (ARRAY['in_attesa_autista'::text, 'confermata'::text, 'scaduta'::text, 'rifiutata'::text]))"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_stato_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_tariffa_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL tariffa"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_veicolo_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "constraint_name": "popbus_attivazioni_veicolo_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (indice_discesa > indice_salita)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_discesa_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL indice_discesa"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_salita_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (indice_salita >= 0)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_indice_salita_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL indice_salita"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_missione_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (missione_id) REFERENCES popbus_attivazione_missioni(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_missione_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL missione_id"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (missione_id, richiesta_id)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_richiesta_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "constraint_name": "popbus_missione_richieste_richiesta_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL richiesta_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_cliente_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_cliente_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL cliente_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_corsa_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_corsa_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL corsa_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_posti_prenotati_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL posti_prenotati"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_posti_richiesti_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL posti_richiesti"
+    },
+    {
+      "table_name": "prenotazioni",
+      "constraint_name": "prenotazioni_ticket_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (ticket_id) REFERENCES ticket_condiviso(id)"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "check_stato_segmento",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (stato::text = ANY (ARRAY['in_attesa'::character varying, 'attivo'::character varying, 'completato'::character varying, 'annullato'::character varying]::text[]))"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_direttrice_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_end_node_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "segmenti",
+      "constraint_name": "segmenti_start_node_id_fkey",
+      "constraint_type": "f",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_id_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_modello_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL modello"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_pkey",
+      "constraint_type": "p",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_posti_totali_not_null",
+      "constraint_type": "n",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "NOT NULL posti_totali"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_rating_check",
+      "constraint_type": "c",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "CHECK (rating >= 0::numeric AND rating <= 5::numeric)"
+    },
+    {
+      "table_name": "veicolo",
+      "constraint_name": "veicolo_targa_key",
+      "constraint_type": "u",
+      "deferrable": false,
+      "initially_deferred": false,
+      "definition": "UNIQUE (targa)"
+    }
+  ],
+  "indexes": [
+    {
+      "table_name": "corse",
+      "index_name": "corse_pkey",
+      "definition": "CREATE UNIQUE INDEX corse_pkey ON public.corse USING btree (id)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_attive_prenotabili",
+      "definition": "CREATE INDEX idx_corse_attive_prenotabili ON public.corse USING btree (start_datetime) WHERE ((stato)::text = ANY ((ARRAY['prenotabile'::character varying, 'da_attivare'::character varying])::text[]))"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_datetime",
+      "definition": "CREATE INDEX idx_corse_datetime ON public.corse USING btree (start_datetime)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_destinazione_geom",
+      "definition": "CREATE INDEX idx_corse_destinazione_geom ON public.corse USING gist (destinazione)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_evento",
+      "definition": "CREATE INDEX idx_corse_evento ON public.corse USING btree (evento_id)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_fermate_nodi",
+      "definition": "CREATE INDEX idx_corse_fermate_nodi ON public.corse USING gin (((fermate_pianificate -> 'nodi'::text)))"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_geohash_gin",
+      "definition": "CREATE INDEX idx_corse_geohash_gin ON public.corse USING gin (path_geohashes)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_origine_geom",
+      "definition": "CREATE INDEX idx_corse_origine_geom ON public.corse USING gist (origine)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "idx_corse_veicolo_start",
+      "definition": "CREATE INDEX idx_corse_veicolo_start ON public.corse USING btree (veicolo_id, start_datetime)"
+    },
+    {
+      "table_name": "corse",
+      "index_name": "unique_corsa_slot",
+      "definition": "CREATE UNIQUE INDEX unique_corsa_slot ON public.corse USING btree (veicolo_id, start_datetime)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "direttrici_virtuali_pkey",
+      "definition": "CREATE UNIQUE INDEX direttrici_virtuali_pkey ON public.direttrici_virtuali USING btree (id)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "idx_direttrici_linea",
+      "definition": "CREATE INDEX idx_direttrici_linea ON public.direttrici_virtuali USING gist (linea_geografica)"
+    },
+    {
+      "table_name": "direttrici_virtuali",
+      "index_name": "idx_unique_direttrice",
+      "definition": "CREATE UNIQUE INDEX idx_unique_direttrice ON public.direttrici_virtuali USING btree (start_node_id, end_node_id, partenza_prevista)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "disponibilita_veicolo_pkey",
+      "definition": "CREATE UNIQUE INDEX disponibilita_veicolo_pkey ON public.disponibilita_veicolo USING btree (id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_coord",
+      "definition": "CREATE INDEX idx_disponibilita_coord ON public.disponibilita_veicolo USING gist (coord)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_fine",
+      "definition": "CREATE INDEX idx_disponibilita_fine ON public.disponibilita_veicolo USING btree (fine)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_giorni_esclusi",
+      "definition": "CREATE INDEX idx_disponibilita_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_inattivita",
+      "definition": "CREATE INDEX idx_disponibilita_inattivita ON public.disponibilita_veicolo USING gin (inattivita)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_start",
+      "definition": "CREATE INDEX idx_disponibilita_start ON public.disponibilita_veicolo USING btree (start)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_disponibilita_start_fine",
+      "definition": "CREATE INDEX idx_disponibilita_start_fine ON public.disponibilita_veicolo USING btree (start, fine)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_giorni_esclusi",
+      "definition": "CREATE INDEX idx_dv_giorni_esclusi ON public.disponibilita_veicolo USING gin (giorni_esclusi)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_inattivita",
+      "definition": "CREATE INDEX idx_dv_inattivita ON public.disponibilita_veicolo USING gin (inattivita jsonb_path_ops)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "idx_dv_veicolo",
+      "definition": "CREATE INDEX idx_dv_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "index_name": "unique_disponibilita_veicolo",
+      "definition": "CREATE UNIQUE INDEX unique_disponibilita_veicolo ON public.disponibilita_veicolo USING btree (veicolo_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "pagamenti_pkey",
+      "definition": "CREATE UNIQUE INDEX pagamenti_pkey ON public.pagamenti USING btree (id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "unique_pagamento_per_prenotazione",
+      "definition": "CREATE UNIQUE INDEX unique_pagamento_per_prenotazione ON public.pagamenti USING btree (prenotazione_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "index_name": "unique_stripe_payment_intent",
+      "definition": "CREATE UNIQUE INDEX unique_stripe_payment_intent ON public.pagamenti USING btree (stripe_payment_intent)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "idx_popbus_am_attivazione",
+      "definition": "CREATE INDEX idx_popbus_am_attivazione ON public.popbus_attivazione_missioni USING btree (attivazione_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "idx_popbus_am_tempo",
+      "definition": "CREATE INDEX idx_popbus_am_tempo ON public.popbus_attivazione_missioni USING btree (partenza, arrivo)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "popbus_am_ordine_unico",
+      "definition": "CREATE UNIQUE INDEX popbus_am_ordine_unico ON public.popbus_attivazione_missioni USING btree (attivazione_id, ordine)"
+    },
+    {
+      "table_name": "popbus_attivazione_missioni",
+      "index_name": "popbus_attivazione_missioni_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazione_missioni_pkey ON public.popbus_attivazione_missioni USING btree (id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "index_name": "popbus_attivazione_richieste_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazione_richieste_pkey ON public.popbus_attivazione_richieste USING btree (attivazione_id, richiesta_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "index_name": "popbus_richiesta_riservata_unique",
+      "definition": "CREATE UNIQUE INDEX popbus_richiesta_riservata_unique ON public.popbus_attivazione_richieste USING btree (richiesta_id) WHERE attiva"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "index_name": "popbus_attivazioni_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_attivazioni_pkey ON public.popbus_attivazioni USING btree (id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "index_name": "popbus_attivazioni_stato",
+      "definition": "CREATE INDEX popbus_attivazioni_stato ON public.popbus_attivazioni USING btree (stato, expires_at)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "index_name": "idx_popbus_mr_richiesta",
+      "definition": "CREATE INDEX idx_popbus_mr_richiesta ON public.popbus_missione_richieste USING btree (richiesta_id)"
+    },
+    {
+      "table_name": "popbus_missione_richieste",
+      "index_name": "popbus_missione_richieste_pkey",
+      "definition": "CREATE UNIQUE INDEX popbus_missione_richieste_pkey ON public.popbus_missione_richieste USING btree (missione_id, richiesta_id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "idx_prenotazioni_corsa",
+      "definition": "CREATE INDEX idx_prenotazioni_corsa ON public.prenotazioni USING btree (corsa_id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "idx_prenotazioni_tratta",
+      "definition": "CREATE INDEX idx_prenotazioni_tratta ON public.prenotazioni USING btree (corsa_id, start_index_polyline, end_index_polyline)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "index_name": "prenotazioni_pkey",
+      "definition": "CREATE UNIQUE INDEX prenotazioni_pkey ON public.prenotazioni USING btree (id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_direttrice",
+      "definition": "CREATE INDEX idx_segmenti_direttrice ON public.segmenti USING btree (direttrice_id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_direttrice_ordine",
+      "definition": "CREATE INDEX idx_segmenti_direttrice_ordine ON public.segmenti USING btree (direttrice_id, ordine_sequenziale)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_stato",
+      "definition": "CREATE INDEX idx_segmenti_stato ON public.segmenti USING btree (stato)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_stato_nodes",
+      "definition": "CREATE INDEX idx_segmenti_stato_nodes ON public.segmenti USING btree (stato, start_node_id, end_node_id)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "idx_segmenti_time_stato",
+      "definition": "CREATE INDEX idx_segmenti_time_stato ON public.segmenti USING btree (start_datetime, stato)"
+    },
+    {
+      "table_name": "segmenti",
+      "index_name": "segmenti_pkey",
+      "definition": "CREATE UNIQUE INDEX segmenti_pkey ON public.segmenti USING btree (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "idx_veicolo_coord",
+      "definition": "CREATE INDEX idx_veicolo_coord ON public.veicolo USING gist (coord)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "veicolo_pkey",
+      "definition": "CREATE UNIQUE INDEX veicolo_pkey ON public.veicolo USING btree (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "index_name": "veicolo_targa_key",
+      "definition": "CREATE UNIQUE INDEX veicolo_targa_key ON public.veicolo USING btree (targa)"
+    }
+  ]
+}

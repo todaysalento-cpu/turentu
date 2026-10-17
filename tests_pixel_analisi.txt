@@ -1,0 +1,363 @@
+import assert from 'node:assert/strict';
+import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+
+let calls = 0;
+const routeNodes = async nodes => {
+  calls++;
+  return { verificataRouting: true, legs: nodes.slice(1).map((n, i) => ({
+    metres: 12000, seconds: 1200, polyline: `mock-${nodes[i]}-${n}`
+  })) };
+};
+const r = (id, from, to, time = '2026-10-16T09:00:00Z') => ({ id,
+  origine_nodo_territoriale_id: from, destinazione_nodo_territoriale_id: to,
+  start_datetime: time, posti_richiesti: 1 });
+const engine = createIncrementalCorridorEngine({ routeNodes });
+let tests = 0;
+async function test(name, fn) { await fn(); console.log(`OK ${++tests}: ${name}`); }
+await test('nuova richiesta genera direttrice con routing', async () => {
+  const x = await engine.processRequest(r(1,7,8));
+  assert.equal(x.azione,'creazione'); assert.deepEqual(engine.getCorridor(x.direttrici[0]).nodes,[7,8]);
+});
+await test('richiesta identica e idempotente', async () => {
+  const before = calls; assert.equal((await engine.processRequest(r(1,7,8))).azione,'gia_presente'); assert.equal(calls,before);
+});
+await test('estensione genera variante, preserva originale', async () => {
+  const x = await engine.processRequest(r(2,7,6));
+  assert.equal(x.azione,'estensione'); assert.deepEqual(engine.getCorridor(x.direttrici[0]).nodes,[7,8,6]);
+  assert.deepEqual(engine.getCorridor('px-1').nodes,[7,8]);
+});
+await test('aggancio diretto senza nuove chiamate routing', async () => {
+  const before=calls; const x=await engine.processRequest(r(3,8,6));
+  assert.equal(x.azione,'aggancio'); assert.equal(calls,before);
+});
+await test('retroestensione crea variante', async () => {
+  const x=await engine.processRequest(r(4,3,7)); assert.equal(x.azione,'retroestensione');
+});
+await test('origine e destinazione invertite non agganciate', async () => {
+  const x=await engine.processRequest(r(5,8,7)); assert.equal(x.azione,'creazione');
+});
+await test('stesso ID con dati diversi viene rifiutato', async () => {
+  await assert.rejects(engine.processRequest(r(1,7,5)),/gia presente/);
+});
+await test('fasce con offset stradali', async () => {
+  const groups=engine.temporalCandidates('px-2');
+  assert(groups.length>=1); assert(groups.every(g => g.preliminare && g.finestraPartenza));
+});
+await test('annullamento sgancia senza eliminare direttrice', async () => {
+  assert.equal(engine.detachRequest(3),true); assert.equal(engine.getRequest(3),null);
+  assert(engine.getCorridor('px-2')); assert.equal(engine.detachRequest(3),false);
+});
+await test('routing non verificato non crea nuove direttrici', async () => {
+  const fail=createIncrementalCorridorEngine({routeNodes:async()=>({verificataRouting:false,legs:[]})});
+  await assert.rejects(fail.processRequest(r(90,4,3)),/routing non verificato/);
+  assert.equal(fail.listCorridors().length,0);
+});
+console.log(`\nPIXEL INCREMENTAL: ${tests} test superati. Routing simulato, DB intatto.`);
+import assert from 'node:assert/strict';
+import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+
+let routingCalls = 0;
+const routeNodes = async nodes => {
+  routingCalls++;
+  return { verificataRouting:true, legs:nodes.slice(1).map((n,i)=>({
+    metres:15000, seconds:1800, polyline:`mock-${nodes[i]}-${n}`
+  })) };
+};
+const r = (id, a, b, time) => ({id, origine_nodo_territoriale_id:a,
+  destinazione_nodo_territoriale_id:b,
+  start_datetime:`2026-10-16T${time}:00Z`, posti_richiesti:1});
+const e = createIncrementalCorridorEngine({routeNodes,tolleranzaMinuti:15});
+let passed = 0;
+async function test(label, fn) { await fn(); console.log(`OK ${++passed}: ${label}`); }
+await e.processRequest(r(1,6,5,'09:00'));
+await e.processRequest(r(2,6,7,'09:00'));
+await e.processRequest(r(3,5,6,'09:45'));
+await e.processRequest(r(4,5,6,'10:45'));
+const corridor = e.listCorridors().find(c=>c.nodes.join('>')==='6>5>7');
+assert.ok(corridor);
+await test('cache temporale riutilizzata senza modifiche', async()=>{
+  const first=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  const calls=routingCalls;
+  const second=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  assert.strictEqual(second,first);
+  assert.equal(routingCalls,calls);
+});
+await test('finestre distinte per inversione Maglie e Lecce', async()=>{
+  const v=(await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10}))
+    .flatMap(x=>x.finestreRitornoPerNodo[5]);
+  assert.ok(v.some(x=>x.inversioneNodoId===5&&x.richiestaIds.includes(3)));
+  assert.ok(v.some(x=>x.inversioneNodoId===7&&x.richiestaIds.includes(4)));
+});
+await test('nessuna finestra identica duplicata', async()=>{
+  const instances=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  for (const instance of instances) for (const entries of Object.values(instance.finestreRitornoPerNodo)) {
+    const keys=entries.map(w=>JSON.stringify([w.inversioneNodoId,w.nodoSalitaId,
+      w.finestraInizioRitorno,w.richiestaIds]));
+    assert.equal(new Set(keys).size,keys.length);
+  }
+});
+await test('richieste temporalmente incompatibili mantengono opportunita distinte',async()=>{
+  const windows=(await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10}))
+    .flatMap(x=>x.finestreRitornoPerNodo[5]).filter(x=>x.inversioneNodoId===7);
+  assert.ok(windows.length>=1);
+  assert.ok(windows.every(w=>w.finestraPassaggio.inizioMs<=w.finestraPassaggio.fineMs));
+});
+await test('annullamento invalida cache e aggiorna opportunita',async()=>{
+  const before=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  const revision=e.opportunityRevision(corridor.id);
+  assert.equal(e.detachRequest(3),true);
+  assert.ok(e.opportunityRevision(corridor.id)>revision);
+  const after=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  assert.notStrictEqual(after,before);
+  assert.ok(after.flatMap(x=>x.finestreRitornoPerNodo[5]).every(w=>!w.richiestaIds.includes(3)));
+});
+await test('una direttrice indipendente non invalida la cache',async()=>{
+  const before=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  await e.processRequest(r(20,100,101,'11:00'));
+  const after=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  assert.strictEqual(before,after);
+});
+await test('richiesta inversa pertinente invalida solo istanze coinvolte',async()=>{
+  const before=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  await e.processRequest(r(21,5,6,'11:45'));
+  const after=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  assert.notStrictEqual(before,after);
+});
+await test('eventi revisioni deduplicati e consumabili',async()=>{
+  const changes=e.consumeOpportunityChanges();
+  assert.ok(changes.some(x=>x.direttriceId===corridor.id));
+  assert.equal(new Set(changes.map(x=>x.direttriceId)).size,changes.length);
+  assert.deepEqual(e.consumeOpportunityChanges(),[]);
+});
+await test('richiesta identica non invalida cache',async()=>{
+  const before=await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10});
+  const revision=e.opportunityRevision(corridor.id);
+  const result=await e.processRequest(r(21,5,6,'11:45'));
+  assert.equal(result.azione,'gia_presente');
+  assert.equal(e.opportunityRevision(corridor.id),revision);
+  assert.strictEqual(await e.temporalCandidatesWithReturns(corridor.id,{bufferMinuti:10}),before);
+});
+console.log(`PIXEL INCREMENTAL CACHE: ${passed} test superati; nessuna scrittura DB`);
+import assert from 'node:assert/strict';
+import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+let routingCalls = 0;
+let failOnce = false;
+const routeNodes = async nodes => {
+  routingCalls++;
+  await delay(8);
+  if (failOnce) { failOnce = false; throw Error('routing failure'); }
+  return {verificataRouting:true, legs:nodes.slice(1).map((n,i)=>({metres:15000,seconds:1800,polyline:`route-${nodes[i]}-${n}`}))};
+};
+const req = (id,a,b,time='09:00') => ({id,origine_nodo_territoriale_id:a,destinazione_nodo_territoriale_id:b,start_datetime:`2026-10-16T${time}:00Z`,posti_richiesti:1});
+let passed=0;
+const test=async (name,fn)=>{await fn();console.log(`OK ${++passed}: ${name}`);};
+await test('richieste simultanee stessa tratta non creano doppia direttrice',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  await Promise.all(Array.from({length:15},(_,i)=>e.processRequest(req(i+1,6,5))));
+  assert.equal(e.listCorridors().length,1);
+  assert.equal(e.listCorridors()[0].richiestaIds.length,15);
+});
+await test('duplicati concorrenti sono idempotenti',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  const results=await Promise.all(Array.from({length:8},()=>e.processRequest(req(100,6,5))));
+  assert.equal(results.filter(x=>x.azione==='creazione').length,1);
+  assert.equal(results.filter(x=>x.azione==='gia_presente').length,7);
+});
+await test('ID concorrente con dati differenti rifiutato',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  const results=await Promise.allSettled([e.processRequest(req(101,6,5)),e.processRequest(req(101,6,7))]);
+  assert.equal(results[0].status,'fulfilled');
+  assert.equal(results[1].status,'rejected');
+});
+await test('coda prosegue dopo errore di routing',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  failOnce=true;
+  const results=await Promise.allSettled([e.processRequest(req(201,9,10)),e.processRequest(req(202,6,5))]);
+  assert.equal(results[0].status,'rejected');
+  assert.equal(results[1].status,'fulfilled');
+  assert.equal(e.listCorridors().length,1);
+});
+await test('annullamento asincrono rispetta la sequenza',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  const add=e.processRequest(req(301,6,5));
+  const remove=e.detachRequestAsync(301);
+  await add;
+  assert.equal(await remove,true);
+  assert.equal(e.getRequest(301),null);
+});
+await test('annullamento sincrono bloccato durante mutazioni in corso',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  await e.processRequest(req(401,6,5));
+  const add=e.processRequest(req(402,5,7));
+  assert.throws(()=>e.detachRequest(401),/detachRequestAsync/);
+  await add;
+  assert.equal(e.detachRequest(401),true);
+});
+await test('lettura asincrona riparte dopo invalidazione',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  await e.processRequest(req(501,6,5));
+  await e.processRequest(req(502,6,7));
+  await e.processRequest(req(503,5,6,'09:45'));
+  const c=e.listCorridors().find(x=>x.nodes.join('>')==='6>5>7');
+  const promise=e.temporalCandidatesCompleteWithReturns(c.id,{bufferMinuti:10});
+  await delay(2);
+  assert.equal(e.detachRequest(503),true);
+  const result=await promise;
+  assert.ok(result.every(inst=>Object.values(inst.finestreRitornoPerNodo).flat().every(w=>!w.richiestaIds.includes(503))));
+});
+await test('coda svuotata dopo operazioni concorrenti',async()=>{
+  const e=createIncrementalCorridorEngine({routeNodes});
+  await Promise.all([e.processRequest(req(601,6,5)),e.processRequest(req(602,5,7)),e.detachRequestAsync(601)]);
+  assert.equal(e.mutationQueueState().pending,0);
+  assert.equal(e.getRequest(601),null);
+});
+console.log(`PIXEL CONCURRENCY: ${passed} test superati; DB intatto`);
+// TURENTU PIXEL — test di integrazione con routing POPBUS reale.
+// Esecuzione: node tests/pixel_test-real-routing.mjs <id_Tiggiano> <id_Maglie> <id_Lecce>
+// DB: sola lettura (transazione READ ONLY). Nessuna creazione corsa/prenotazione.
+import assert from 'node:assert/strict';
+import { createPixelNodeRouter } from '../services/pixel/node-routing.js';
+import { leg } from '../services/popbus/v2/planner.js';
+import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+
+const ids = process.argv.slice(2).map(Number);
+if (ids.length !== 3 || ids.some(n => !Number.isSafeInteger(n) || n <= 0) || new Set(ids).size !== 3) {
+  console.error('Uso: node tests\\pixel_test-real-routing.mjs <ID_Tiggiano> <ID_Maglie> <ID_Lecce>');
+  process.exitCode = 2;
+} else {
+  const [tiggiano, maglie, lecce] = ids;
+  const quote = x => `"${x.replaceAll('"', '""')}"`;
+  const fmt = ms => new Date(ms).toISOString();
+  const mins = ms => (ms / 60000).toFixed(2);
+  let passed = 0;
+  const check = (label, fn) => { fn(); console.log(`OK ${++passed}: ${label}`); };
+
+  try {
+    // Importiamo la connessione gia' configurata nel progetto.
+    const { pool } = await import('../db/db.js');
+    const client = await pool.connect();
+    const nodeMap = new Map();
+    try {
+      await client.query('BEGIN READ ONLY');
+      const meta = await client.query(`SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'nodi_territoriali'`);
+      const columns = new Set(meta.rows.map(x => x.column_name));
+      assert.ok(columns.has('id'), 'nodi_territoriali.id assente');
+      let latExpr, lonExpr;
+      if (columns.has('lat') && columns.has('lon')) {
+        latExpr = 'lat::double precision'; lonExpr = 'lon::double precision';
+      } else {
+        const geo = ['posizione', 'coord', 'geom', 'geometry', 'geometria'].find(c => columns.has(c));
+        assert.ok(geo, 'Coordinate non individuate: attese lat/lon o posizione/coord/geom/geometry/geometria');
+        latExpr = `ST_Y(${quote(geo)}::geometry)`;
+        lonExpr = `ST_X(${quote(geo)}::geometry)`;
+      }
+      const nameCol = ['nome', 'name', 'localita', 'denominazione'].find(c => columns.has(c));
+      const nameExpr = nameCol ? `${quote(nameCol)}::text` : 'NULL::text';
+      const sql = `SELECT id, ${latExpr} AS lat, ${lonExpr} AS lon, ${nameExpr} AS nome
+        FROM public.nodi_territoriali WHERE id = ANY($1::bigint[])`;
+      const result = await client.query(sql, [ids]);
+      for (const n of result.rows) nodeMap.set(Number(n.id), n);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+      await pool.end();
+    }
+
+    check('tre nodi territoriali letti dal DB', () => {
+      assert.equal(nodeMap.size, 3, 'Uno o piu ID non sono presenti in nodi_territoriali');
+      for (const id of ids) {
+        const n = nodeMap.get(id);
+        assert.ok(Number.isFinite(Number(n.lat)) && Number.isFinite(Number(n.lon)));
+      }
+    });
+    for (const [label, id] of [['Tiggiano', tiggiano], ['Maglie', maglie], ['Lecce', lecce]]) {
+      const n = nodeMap.get(id);
+      console.log(`${label}: id=${id}, DB_nome=${n.nome ?? '(non disponibile)'}, lat=${n.lat}, lon=${n.lon}`);
+    }
+    console.log('ATTENZIONE: verifica che gli ID corrispondano davvero alle localita indicate.');
+
+    let legCalls = 0;
+    const routeNodes = createPixelNodeRouter({
+      leg: async (a, b) => { legCalls++; return leg(a, b); },
+      getNode: id => nodeMap.get(id) ?? null
+    });
+    const outbound = await routeNodes([tiggiano, maglie, lecce]);
+    check('routing reale Tiggiano > Maglie > Lecce', () => {
+      assert.equal(outbound.verificataRouting, true);
+      assert.equal(outbound.legs.length, 2);
+      assert.ok(outbound.cumulativeSeconds[2] > outbound.cumulativeSeconds[1]);
+    });
+    const reverseMaglie = await routeNodes([maglie, tiggiano]);
+    check('routing reale Maglie > Tiggiano', () => assert.equal(reverseMaglie.verificataRouting, true));
+    const reverseLecce = await routeNodes([lecce, maglie, tiggiano]);
+    check('routing reale Lecce > Maglie > Tiggiano', () => assert.equal(reverseLecce.verificataRouting, true));
+
+    console.log('\nTEMPI STRADALI (minuti):');
+    console.table([
+      { tratta: 'Tiggiano > Maglie', minuti: mins(outbound.legs[0].seconds * 1000), metri: outbound.legs[0].metres },
+      { tratta: 'Maglie > Lecce', minuti: mins(outbound.legs[1].seconds * 1000), metri: outbound.legs[1].metres },
+      { tratta: 'Maglie > Tiggiano', minuti: mins(reverseMaglie.legs[0].seconds * 1000), metri: reverseMaglie.legs[0].metres },
+      { tratta: 'Lecce > Maglie', minuti: mins(reverseLecce.legs[0].seconds * 1000), metri: reverseLecce.legs[0].metres },
+      { tratta: 'Maglie > Tiggiano (da Lecce)', minuti: mins(reverseLecce.legs[1].seconds * 1000), metri: reverseLecce.legs[1].metres }
+    ]);
+
+    // Le richieste sono sintetiche e vengono inserite SOLO nel motore in memoria.
+    // Scegliamo gli orari a partire dai tempi stradali reali appena ricevuti.
+    const base = Date.parse('2027-04-01T09:00:00.000Z');
+    const bufferMs = 10 * 60000;
+    const atMaglie = base + outbound.cumulativeSeconds[1] * 1000;
+    const atLecce = base + outbound.cumulativeSeconds[2] * 1000;
+    const firstReturn = atMaglie + bufferMs;
+    const secondReturn = atLecce + bufferMs + reverseLecce.legs[0].seconds * 1000;
+    const request = (id, from, to, ms) => ({
+      id, origine_nodo_territoriale_id: from, destinazione_nodo_territoriale_id: to,
+      start_datetime: fmt(ms), posti_richiesti: 1
+    });
+    const engine = createIncrementalCorridorEngine({
+      routeNodes, tolleranzaMinuti: 5,
+      initialCorridors: [{ id: 'pixel-real-tiggiano-maglie-lecce',
+        nodes: [tiggiano, maglie, lecce], legs: outbound.legs, richiestaIds: [] }]
+    });
+    await engine.processRequest(request(900001, tiggiano, lecce, base));
+    await engine.processRequest(request(900002, maglie, tiggiano, firstReturn));
+    await engine.processRequest(request(900003, maglie, tiggiano, secondReturn));
+
+    const corridorId = 'pixel-real-tiggiano-maglie-lecce';
+    const candidates = await engine.temporalCandidatesCompleteWithReturns(corridorId, { bufferMinuti: 10 });
+    const maglieWindows = candidates.flatMap(c => c.finestreRitornoPerNodo?.[maglie] ?? []);
+    check('Maglie ha opportunita con inversione a Maglie e Lecce', () => {
+      assert.ok(maglieWindows.some(w => w.inversioneNodoId === maglie && w.richiestaIds.includes(900002)));
+      assert.ok(maglieWindows.some(w => w.inversioneNodoId === lecce && w.richiestaIds.includes(900003)));
+    });
+    check('finestre con orari stradali coerenti', () => {
+      const a = maglieWindows.find(w => w.inversioneNodoId === maglie && w.richiestaIds.includes(900002));
+      const b = maglieWindows.find(w => w.inversioneNodoId === lecce && w.richiestaIds.includes(900003));
+      const contains = (w, t) => w.finestraPassaggio.inizioMs <= t && t <= w.finestraPassaggio.fineMs;
+      assert.ok(contains(a, firstReturn));
+      assert.ok(contains(b, secondReturn));
+      assert.ok(b.finestraPassaggio.inizioMs > a.finestraPassaggio.inizioMs);
+    });
+    const before = legCalls;
+    const cached = await engine.temporalCandidatesCompleteWithReturns(corridorId, { bufferMinuti: 10 });
+    check('seconda lettura sfrutta cache senza nuove chiamate leg', () => {
+      assert.equal(legCalls, before);
+      assert.equal(cached, candidates);
+    });
+    console.log('\nFINESTRE A MAGLIE:');
+    console.table(maglieWindows.map(w => ({
+      inversione: w.inversioneNodoId,
+      inizio: fmt(w.finestraPassaggio.inizioMs),
+      fine: fmt(w.finestraPassaggio.fineMs),
+      richieste: w.richiestaIds.join(',')
+    })));
+    console.log(`\nPIXEL REAL ROUTING: ${passed} test superati; solo lettura DB; richieste sintetiche in memoria`);
+  } catch (error) {
+    console.error('\nPIXEL REAL ROUTING FALLITO:', error?.stack ?? error);
+    process.exitCode = 1;
+  }
+}

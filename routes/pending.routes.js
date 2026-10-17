@@ -165,8 +165,23 @@ router.post('/:id/accetta', async (req, res) => {
           }
 
           console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
-          const vRes = await client.query('SELECT posti_totali FROM veicolo WHERE id = $1', [pRow.veicolo_id]);
-          const resCorsa = await createCorsaFromPending(pRow, { id: pRow.veicolo_id, posti: vRes.rows[0]?.posti_totali ?? 4 }, client, false);
+          // Base operativa dichiarata del veicolo (PostGIS geography, WGS84).
+          const vRes = await client.query(`
+            SELECT id, posti_totali,
+                   ST_Y(coord::geometry) AS lat_base,
+                   ST_X(coord::geometry) AS lon_base
+            FROM veicolo
+            WHERE id = $1
+          `, [pRow.veicolo_id]);
+          if (!vRes.rows.length) throw new Error(`Veicolo ${pRow.veicolo_id} non trovato`);
+          const v = vRes.rows[0];
+          const resCorsa = await createCorsaFromPending(pRow, {
+            id: v.id,
+            posti: v.posti_totali,
+            posti_totali: v.posti_totali,
+            lat_base: v.lat_base,
+            lon_base: v.lon_base
+          }, client, false);
           corsa = resCorsa.corsa ?? resCorsa;
           prenotazioneEffettuata = true; 
         }
@@ -273,7 +288,11 @@ router.post('/:id/accetta', async (req, res) => {
     console.error(err.stack);
 
     try {
-      await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
+      // Errori di validazione/routing della missione NCC: non rifiutare
+      // definitivamente il pending dopo il rollback; consentire un nuovo tentativo.
+      if (err.code !== 'NCC_MISSION_GEO_INVALID') {
+        await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
+      }
     } catch (cleanupErr) {
       console.error('❌ Impossibile pulire lo stato della richiesta fallita:', cleanupErr);
     }

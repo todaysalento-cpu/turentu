@@ -1,5 +1,5 @@
 
-import { calcolaPrezzo } from '../../../utils/pricing.util.js';
+import { calcolaPrezzo, ripartisciCondivisaModelloA } from '../../../utils/pricing.util.js';
 import {
     getLocalitaSafe,
     getDurataDistanza
@@ -632,7 +632,34 @@ export async function formatResults(
                     );
                 }
 
-                const p = await calcolaPrezzo(
+                 // NCC condivisa: quota PROIETTATA aggiungendo il richiedente
+                 // alle sole prenotazioni già confermate. Non modifica il DB.
+                 let prezzoModelloA = null;
+                 if (tipoCoerente === 'condivisa') {
+                     const snapshot = item.modelloA;
+                     if (!snapshot || !Number.isFinite(snapshot.costoCommercialeMissione) ||
+                         snapshot.costoCommercialeMissione <= 0 ||
+                         !Number.isFinite(snapshot.kmPrimaPrenotazione) ||
+                         snapshot.kmPrimaPrenotazione <= 0 ||
+                         !Number.isFinite(kmTrattaUtente) || kmTrattaUtente <= 0) {
+                         console.warn(`[MODELLO A SEARCH] Corsa ${itemId} senza snapshot valido: omessa`);
+                         return [];
+                     }
+                     const nuovoId = '__nuova_richiesta__';
+                     const proiezione = ripartisciCondivisaModelloA({
+                         ...snapshot,
+                         prenotazioni: [
+                             ...snapshot.prenotazioni,
+                             { id: nuovoId, km: kmTrattaUtente, posti: postiUtenteRichiesti }
+                         ]
+                     });
+                     prezzoModelloA = proiezione.prenotazioni.find(r => r.id === nuovoId)?.prezzoTotale;
+                     if (!Number.isFinite(prezzoModelloA) || prezzoModelloA < 0.50) return [];
+                 }
+
+                const p = tipoCoerente === 'condivisa'
+                     ? { prezzo: prezzoModelloA }
+                     : await calcolaPrezzo(
                     item,
                     postiUtenteRichiesti,
                     tipoCoerente,
@@ -654,8 +681,9 @@ export async function formatResults(
                     return [];
                 }
 
-                const prezzoVal =
-                    arrotondaPrezzo(p.prezzo);
+                const prezzoVal = tipoCoerente === 'condivisa'
+                    ? Math.round(Number(p.prezzo) * 100) / 100
+                    : arrotondaPrezzo(p.prezzo);
 
                 if (prezzoVal === null) {
                     return [];
@@ -743,8 +771,10 @@ export async function formatResults(
                     prezzo:
                         prezzoVal,
 
-                    prezzo_display:
-                        `${prezzoVal}€`,
+                     modello_a: tipoCoerente === 'condivisa',
+                     prezzo_provvisorio: tipoCoerente === 'condivisa',
+                     prezzo_display:
+                         `${prezzoVal.toFixed(tipoCoerente === 'condivisa' ? 2 : 0)}€`,
 
                     postiDisponibili:
                         item.posti_disponibili ??

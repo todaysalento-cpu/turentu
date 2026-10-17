@@ -137,6 +137,13 @@ router.post('/register', async (req, res) => {
   const { nome, email, password, tipo } = req.body;
   if (!nome || !email || !password) return res.status(400).json({ message: 'Nome, email e password richiesti' });
 
+  // La registrazione pubblica può creare solo clienti e autisti.
+  // I privilegi amministrativi devono essere assegnati separatamente.
+  const tipoConsentito = tipo == null ? 'cliente' : tipo;
+  if (!['cliente', 'autista'].includes(tipoConsentito)) {
+    return res.status(403).json({ message: 'Ruolo non consentito per la registrazione pubblica' });
+  }
+
   const client = await pool.connect();
   try {
     const exists = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
@@ -145,7 +152,7 @@ router.post('/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const insert = await client.query(
       `INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome`,
-      [nome, email, hashed, tipo || 'cliente']
+      [nome, email, hashed, tipoConsentito]
     );
 
     const user = insert.rows[0];

@@ -1,0 +1,21 @@
+// TURENTU P0-C — test puro, nessun DB o Stripe.
+import { readFileSync } from 'node:fs';
+import { strict as assert } from 'node:assert';
+import { pathToFileURL } from 'node:url';
+const src=readFileSync('services/popbus/v2/acceptance.js','utf8');
+assert.match(src,/validaPianoMultiMissione\(plan/);
+assert.match(src,/Accettazione ciclo multi-missione non ancora abilitata/);
+console.log('PASS Acceptance usa preflight e mantiene guardia');
+const { validaPianoMultiMissione, validaOccupazioneMultiMissione }=await import(pathToFileURL(process.cwd()+'/services/popbus/v2/popbus-multimission-preflight.js').href);
+const nodes=Array.from({length:8},(_,i)=>i+1);
+const legs=Array.from({length:7},()=>({seconds:60,metres:100,polyline:'??_ibE_ibE'}));
+const departure=Date.parse('2027-04-01T10:00:00Z');
+const plan={tipoPiano:'CICLO_PIXEL_CORSA_UNICA_V1',veicoloId:353,nodes,coordinates:nodes.map(id=>({id,lat:40,lon:18})),legs,busyStart:new Date(departure-60000).toISOString(),busyEnd:new Date(departure+480000).toISOString(),evaluation:{departure,arrival:departure+420000,times:nodes.map((_,i)=>i*60000),requests:[{id:101,start:0,end:1},{id:102,start:3,end:4},{id:103,start:6,end:7}]},missioni:[{ordine:1,startIndex:0,endIndex:1,partenza:departure,arrivo:departure+60000},{ordine:2,startIndex:3,endIndex:4,partenza:departure+180000,arrivo:departure+240000},{ordine:3,startIndex:6,endIndex:7,partenza:departure+360000,arrivo:departure+420000}]};
+const ok=validaPianoMultiMissione(plan,{veicoloId:353,postiTotali:4});
+assert.equal(ok.numeroMissioni,3);console.log('PASS Piano globale tre missioni valido');
+const occupancy=validaOccupazioneMultiMissione(plan,[{id:101,posti_richiesti:2},{id:102,posti_richiesti:3},{id:103,posti_richiesti:2}],4);
+assert.deepEqual([occupancy.peak,occupancy.totalePasseggeri],[3,7]);console.log('PASS Picco 3, trasportati 7');
+assert.throws(()=>validaOccupazioneMultiMissione(plan,[{id:101,posti_richiesti:2},{id:102,posti_richiesti:5},{id:103,posti_richiesti:2}],4));console.log('PASS Sovracapienza respinta');
+assert.throws(()=>validaPianoMultiMissione({...plan,nodes:[...nodes.slice(0,7),99]},{veicoloId:353}));console.log('PASS Geometria incoerente respinta');
+assert.throws(()=>validaPianoMultiMissione({...plan,busyEnd:new Date(departure).toISOString()},{veicoloId:353}));console.log('PASS Busy interval incompleto respinto');
+console.log('ESITO: 6 PASS, 0 FAIL. Test puro; multi-missione NON abilitata.');

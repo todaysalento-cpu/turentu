@@ -112,6 +112,52 @@ function dettagliDefault() {
     };
 }
 
+
+/**
+ * Modello A: ripartizione deterministica in centesimi.
+ * snapshot: { costoCommercialeMissione, kmPrimaPrenotazione,
+ *   prenotazioni: [{ id, km, posti }] }
+ * Ogni passeggero pesa km/kmPrimaPrenotazione; il fattore comune si semplifica.
+ * Non modifica DB o Stripe e non ricalcola il costo della missione.
+ */
+export function ripartisciCondivisaModelloA(snapshot) {
+    const costo = Number(snapshot?.costoCommercialeMissione);
+    const kmPrima = Number(snapshot?.kmPrimaPrenotazione);
+    const righe = snapshot?.prenotazioni;
+    if (!Number.isFinite(costo) || costo <= 0 ||
+        !Number.isFinite(kmPrima) || kmPrima <= 0 ||
+        !Array.isArray(righe) || righe.length === 0) {
+        throw new Error('Snapshot Modello A incompleto');
+    }
+    const items = righe.map((r, index) => {
+        const km = Number(r.km), posti = Number(r.posti);
+        if (!Number.isFinite(km) || km <= 0 || !Number.isInteger(posti) || posti <= 0) {
+            throw new Error(`Prenotazione Modello A non valida: ${index}`);
+        }
+        return { id: r.id, km, posti, quotaPercentuale: km / kmPrima,
+            pesoRipartizione: km * posti, index };
+    });
+    const totalePesi = items.reduce((s, r) => s + r.pesoRipartizione, 0);
+    const centesimi = Math.round(costo * 100);
+    const raw = items.map(r => centesimi * r.pesoRipartizione / totalePesi);
+    const interi = raw.map(Math.floor);
+    let residuo = centesimi - interi.reduce((s, n) => s + n, 0);
+    const ordine = items.map((r, i) => i).sort((a,b) =>
+        (raw[b] - interi[b]) - (raw[a] - interi[a]) || a-b);
+    for (let k=0; k<residuo; k++) interi[ordine[k]]++;
+    return {
+        costoCommercialeMissione: centesimi / 100,
+        kmPrimaPrenotazione: kmPrima,
+        prenotazioni: items.map((r,i) => ({
+            id: r.id, km: r.km, posti: r.posti,
+            quotaPercentuale: r.quotaPercentuale,
+            pesoRipartizione: r.pesoRipartizione,
+            prezzoTotale: interi[i]/100,
+            prezzoMedioPasseggero: interi[i]/100/r.posti
+        }))
+    };
+}
+
 /**
  * Recupera la tariffa di un singolo veicolo.
  *
@@ -352,6 +398,36 @@ export async function calcolaPrezzo(
             // 2. CORSA CONDIVISA
             // ---------------------------------
             case 'condivisa': {
+                // Modello A esplicito: richiede snapshot completo e persistito
+                // dal flusso prenotazioni; non modifica il vecchio percorso.
+                if (corsa?.modelloA) {
+                    try {
+                        const ripartizione = ripartisciCondivisaModelloA(corsa.modelloA);
+                        const id = corsa.modelloA.prenotazioneCorrenteId;
+                        const riga = ripartizione.prenotazioni.find(r =>
+                            String(r.id) === String(id));
+                        if (!riga || id === undefined || id === null) {
+                            throw new Error('prenotazioneCorrenteId non presente nello snapshot');
+                        }
+                        const prezzoFinale = riga.prezzoTotale;
+                        const commissioneImporto = arrotondaEuro(prezzoFinale * COMMISSIONE_TURENTU);
+                        return {
+                            prezzo: prezzoFinale,
+                            targetPasseggeri: 1,
+                            ...dettagli,
+                            costoCommercialeMissione: ripartizione.costoCommercialeMissione,
+                            prezzoCommerciale: prezzoFinale,
+                            commissionePercentuale: COMMISSIONE_TURENTU * 100,
+                            commissioneImporto,
+                            compensoAutista: arrotondaEuro(prezzoFinale - commissioneImporto),
+                            ripartizioneModelloA: ripartizione
+                        };
+                    } catch (error) {
+                        console.error('[MODELLO A] Snapshot non valido:', error);
+                        return null;
+                    }
+                }
+
                 const info = corsa?.veicolo_id
                     ? await getTariffe(
                         corsa.veicolo_id

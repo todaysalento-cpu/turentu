@@ -100,7 +100,7 @@ export async function anteprimaFormazionePopbus(opts) {
     const endId = num(opts?.end_node_id);
     const when = new Date(opts?.start_datetime).getTime();
     const posti = num(opts?.posti_richiesti);
-    if (!Number.isInteger(startId) || !Number.isInteger(endId) || startId <= 0 ||
+    if (!Number.isSafeInteger(startId) || !Number.isSafeInteger(endId) || startId <= 0 ||
         endId <= 0 || startId === endId || !Number.isFinite(when) ||
         when <= Date.now() || !Number.isInteger(posti) || posti <= 0) {
         throw new Error('Anteprima POPBUS: nodi, orario o posti non validi');
@@ -108,7 +108,7 @@ export async function anteprimaFormazionePopbus(opts) {
 
     const output = Object.fromEntries(CLASSI.map(c => [c, vuoto(c)]));
     const excluded = opts?.richiesta_id == null ? null : num(opts.richiesta_id);
-    if (excluded !== null && !Number.isInteger(excluded))
+    if (excluded !== null && !Number.isSafeInteger(excluded))
         throw new Error('Anteprima POPBUS: richiesta_id non valido');
 
     // Conservata la stessa query della versione ricevuta: verificare che
@@ -135,8 +135,8 @@ export async function anteprimaFormazionePopbus(opts) {
         const p = num(r.prezzo), n = num(r.posti_richiesti);
         return c && r.prezzo != null && Number.isFinite(p) && p >= 0 &&
             Number.isInteger(n) && n > 0 &&
-            Number.isInteger(num(r.start_node_id)) &&
-            Number.isInteger(num(r.end_node_id)) &&
+            Number.isSafeInteger(num(r.start_node_id)) &&
+            Number.isSafeInteger(num(r.end_node_id)) &&
             num(r.start_node_id) !== num(r.end_node_id);
     }).map(r => ({ ...r, classe: validClass(r.classe || 'STANDARD') }));
 
@@ -145,11 +145,17 @@ export async function anteprimaFormazionePopbus(opts) {
     const { rows: nodes } = await pool.query(`
         SELECT id, ST_Y(posizione::geometry) AS lat,
                ST_X(posizione::geometry) AS lon
-        FROM nodi_direttrice WHERE id = ANY($1::int[])
+        FROM nodi_territoriali WHERE id = ANY($1::bigint[])
     `, [ids]);
+    // PostgreSQL bigint viene restituito come stringa da pg: usare Number
+    // soltanto quando l'identificativo e' rappresentabile senza perdita.
+    if (nodes.some(n => !Number.isSafeInteger(num(n.id))))
+        throw new Error('Anteprima POPBUS: ID nodo territoriale fuori intervallo sicuro JavaScript');
     const nodeMap = new Map(nodes.map(n => [num(n.id), n]));
     if (!nodeMap.has(startId) || !nodeMap.has(endId))
         throw new Error('Anteprima POPBUS: nodo origine o destinazione inesistente');
+    if (valid.some(r => !nodeMap.has(num(r.start_node_id)) || !nodeMap.has(num(r.end_node_id))))
+        throw new Error('Anteprima POPBUS: richieste con nodi territoriali mancanti');
 
     const { rows: vehicles } = await pool.query(`
         SELECT v.id, v.driver_id, v.posti_totali, t.euro_km,

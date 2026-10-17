@@ -66,11 +66,23 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     const pixelValidated = isPopbusSlot(selected) ? await validatePixelStops(client, selected, quotation) : null;
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
     const sanitizedType = (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
+     // Non permettere di convertire un risultato privato in una nuova condivisa
+     // senza un preventivo Modello A calcolato e verificato dal server.
+     if (!isPopbusSlot(quotation) && sanitizedType === 'condivisa' &&
+         (quotation.tipo !== 'condivisa' || quotation.modello_a !== true)) {
+       return res.status(409).json({ error: 'Modello A: opzione condivisa non quotabile; ripetere la ricerca' });
+     }
+     if (!isPopbusSlot(quotation) && quotation.tipo === 'condivisa' && sanitizedType !== 'condivisa') {
+       return res.status(409).json({ error: 'Tipo corsa non coerente con la quotazione condivisa' });
+     }
 
     const clienteId = req.user.id;
     let pagatoConWallet = false;
 
     // ================= CONTROLLO E GESTIONE WALLET =================
+     if (usaWallet && sanitizedType === 'condivisa' && !isPopbusSlot(quotation)) {
+       return res.status(409).json({ error: 'Wallet non ancora disponibile per conguagli Modello A; utilizzare Stripe' });
+     }
     if (usaWallet) {
       console.log(`👛 [PAYMENT:${requestId}] Controllo saldo wallet per utente: ${clienteId}`);
       const saldoRes = await client.query(

@@ -1,0 +1,121 @@
+routes\booking.routes - Copia.js:100:      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${finalOrigine.lat}, ${finalOrigine.lon}) e destinazione: (${finalDestinazione.lat}, ${finalDestinazione.lon})`);
+routes\booking.routes - Copia.js:103:        `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
+routes\booking.routes.js:133:      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${finalOrigine.lat}, ${finalOrigine.lon}) e destinazione: (${finalDestinazione.lat}, ${finalDestinazione.lon})`);
+routes\booking.routes.js:136:        `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
+routes\popbus.routes - Copia.js:52:      LEFT JOIN nodi_direttrice n_start ON COALESCE(s.start_node_id, d.start_node_id) = n_start.id
+routes\popbus.routes - Copia.js:53:      LEFT JOIN nodi_direttrice n_end ON COALESCE(s.end_node_id, d.end_node_id) = n_end.id
+routes\wallet.routes.js:253:          `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
+services\popbus\clusterService.js:8:    JOIN nodi_direttrice n1 ON n1.id = r.start_node_id
+services\popbus\clusterService.js:9:    JOIN nodi_direttrice n2 ON n2.id = r.end_node_id
+services\popbus\directiveMatcher.js:33:    FROM nodi_direttrice WHERE id = ANY($1::int[])
+services\popbus\economicEngine.js:186:          JOIN nodi_direttrice no
+services\popbus\economicEngine.js:188:          JOIN nodi_direttrice ne
+services\popbus\economicEngine.js:194:      JOIN nodi_direttrice n1
+services\popbus\economicEngine.js:196:      JOIN nodi_direttrice n2
+services\popbus\fleetAllocator.js:26:      FROM segmenti s JOIN nodi_direttrice a ON a.id=s.start_node_id JOIN nodi_direttrice b ON b.id=s.end_node_id
+services\popbus1\clusterService.js:8:    JOIN nodi_direttrice n1 ON n1.id = r.start_node_id
+services\popbus1\clusterService.js:9:    JOIN nodi_direttrice n2 ON n2.id = r.end_node_id
+services\popbus1\directiveMatcher.js:33:    FROM nodi_direttrice WHERE id = ANY($1::int[])
+services\popbus1\economicEngine.js:186:          JOIN nodi_direttrice no
+services\popbus1\economicEngine.js:188:          JOIN nodi_direttrice ne
+services\popbus1\economicEngine.js:194:      JOIN nodi_direttrice n1
+services\popbus1\economicEngine.js:196:      JOIN nodi_direttrice n2
+services\popbus1\fleetAllocator.js:24:          CROSS JOIN nodi_direttrice n_partenza
+services\popbus1\fleetAllocator.js:61:        JOIN nodi_direttrice n1 ON s.start_node_id = n1.id
+services\popbus1\fleetAllocator.js:62:        JOIN nodi_direttrice n2 ON s.end_node_id = n2.id
+services\search\formatter\search.formatter.js:491:                                        // PIXEL: informazioni territoriali, non nodi_direttrice.
+services\search\search.cache.js:159:            client.query(`SELECT * FROM nodi_direttrice`)
+services\search\search.service - Copia (2).js:20:        SELECT id FROM nodi_direttrice 
+services\search\search.service.js:18:// PIXEL: nodi territoriali separati dai nodi_direttrice del matching.
+services\search\search.service.js:92:        FROM nodi_direttrice
+tests\01_simulazione_pulizia_popbus.sql:19:  public.nodi_direttrice
+tests\01_simulazione_pulizia_popbus.sql:37:    ('nodi_direttrice',13::bigint)
+tests\01_simulazione_pulizia_popbus.sql:58:DELETE FROM public.nodi_direttrice;
+tests\01_simulazione_pulizia_popbus.sql:68:    'segmenti','direttrici_virtuali','nodi_direttrice'
+tests\02_migrazione_popbus_nodi_territoriali.sql:5:-- Mantiene nodi_direttrice (vuota) e get_or_create_node per fase applicativa successiva.
+tests\02_migrazione_popbus_nodi_territoriali.sql:21:  public.nodi_direttrice,
+tests\02_migrazione_popbus_nodi_territoriali.sql:38:    ('nodi_direttrice',13::bigint),
+tests\02_migrazione_popbus_nodi_territoriali.sql:63:    IF actual IS DISTINCT FROM format('FOREIGN KEY (%I) REFERENCES nodi_direttrice(id)',rec.colonna) THEN
+tests\02_migrazione_popbus_nodi_territoriali.sql:79:DELETE FROM public.nodi_direttrice;
+tests\02_migrazione_popbus_nodi_territoriali.sql:129:    'direttrici_virtuali','nodi_direttrice'
+tests\audit_pulizia_popbus.mjs:7:  'missioni_ritorno', 'nodi_direttrice',
+tests\audit_pulizia_popbus.mjs:80:      AND (pg_get_functiondef(p.oid) ILIKE '%nodi_direttrice%'
+tests\audit_pulizia_popbus.mjs:81:        OR pg_get_functiondef(p.oid) ILIKE '%get_or_create_node%')
+tests\pixel_popbus_audit-unificazione-nodi.mjs:9:const TOKENS = /\b(nodi_direttrice|nodi_territoriali|start_node_id|end_node_id|origine_nodo_territoriale_id|destinazione_nodo_territoriale_id)\b/gi;
+tests\pixel_popbus_audit-unificazione-nodi.mjs:40:     AND table_name IN ('nodi_direttrice','nodi_territoriali') ORDER BY table_name,ordinal_position`],
+tests\pixel_popbus_audit-unificazione-nodi.mjs:45:     AND (con.conrelid IN (SELECT oid FROM pg_class WHERE relname IN ('nodi_direttrice','nodi_territoriali'))
+tests\pixel_popbus_audit-unificazione-nodi.mjs:46:       OR con.confrelid IN (SELECT oid FROM pg_class WHERE relname IN ('nodi_direttrice','nodi_territoriali')))
+tests\pixel_popbus_audit-unificazione-nodi.mjs:55:     AND (pg_get_constraintdef(con.oid) ILIKE '%nodo%' OR con.conrelid::regclass::text IN ('nodi_direttrice','nodi_territoriali'))
+tests\pixel_popbus_audit-unificazione-nodi.mjs:59:     AND (definition ILIKE '%nodi_direttrice%' OR definition ILIKE '%nodi_territoriali%')
+tests\pixel_popbus_audit-unificazione-nodi.mjs:62:   WHERE schemaname='public' AND (tablename IN ('nodi_direttrice','nodi_territoriali')
+tests\pixel_popbus_audit-unificazione-nodi.mjs:68:   WHERE n.nspname='public' AND (pg_get_functiondef(p.oid) ILIKE '%nodi_direttrice%'
+tests\pixel_popbus_audit-unificazione-nodi.mjs:72:     AND (event_object_table IN ('nodi_direttrice','nodi_territoriali')
+tests\pixel_popbus_audit-unificazione-nodi.mjs:73:       OR action_statement ILIKE '%nodi_direttrice%' OR action_statement ILIKE '%nodi_territoriali%')
+tests\pixel_test-mapping-nodi-db.mjs:6:const TABLES = ['nodi_territoriali', 'nodi_direttrice'];
+tests\preflight_nodi_territoriali.mjs:27:  `, [['nodi_territoriali','nodi_direttrice','richieste_pop_bus',
+tests\preflight_nodi_territoriali.mjs:36:        'public.nodi_territoriali'::regclass, 'public.nodi_direttrice'::regclass,
+tests\preflight_nodi_territoriali.mjs:40:      OR c.confrelid IN ('public.nodi_direttrice'::regclass,
+tests\preflight_nodi_territoriali.mjs:51:      AND (pg_get_functiondef(p.oid) ILIKE '%nodi_direttrice%'
+tests\preflight_nodi_territoriali.mjs:64:        'public.nodi_direttrice'::regclass,'public.nodi_territoriali'::regclass)
+tests\preflight_nodi_territoriali.mjs:70:    UNION ALL SELECT 'nodi_direttrice',count(*) FROM public.nodi_direttrice
+tests\preflight_nodi_territoriali.mjs:94:    LEFT JOIN public.nodi_direttrice a ON a.id=r.start_node_id
+tests\preflight_nodi_territoriali.mjs:96:    LEFT JOIN public.nodi_direttrice c ON c.id=r.end_node_id
+tests\preflight_nodi_territoriali.mjs:118:      AND (v.definition ILIKE '%nodi_direttrice%'
+tests\test_machine_completo.js:18:    await client.query('DELETE FROM nodi_direttrice');
+tests\test_machine_completo.js:31:      INSERT INTO nodi_direttrice (nome_nodo, posizione, offset_metri) VALUES 
+tests\test_machine_disponibilita.js:18:    await client.query('DELETE FROM nodi_direttrice');
+tests\test_machine_disponibilita.js:30:      INSERT INTO nodi_direttrice (nome_nodo, posizione, offset_metri) VALUES 
+tests\test_machine_distanza.js:18:    await client.query('DELETE FROM nodi_direttrice');
+tests\test_machine_distanza.js:30:      INSERT INTO nodi_direttrice (nome_nodo, posizione, offset_metri) VALUES 
+tests\test_machine_distanza.js:72:        (SELECT posizione FROM nodi_direttrice WHERE id = $1)::geography,
+tests\test_machine_distanza.js:73:        (SELECT posizione FROM nodi_direttrice WHERE id = $2)::geography
+tests\test_model_v2.js:406:      if (q.includes('FROM nodi_direttrice WHERE')) {
+tests\test_popbus_aggregazione_27_28_29.js:74:      FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[nodeIds]);
+tests\test_popbus_aggregazione_39_40_readonly.mjs:67:    const {rows:nodes} = await client.query(`SELECT id, nome_nodo, ST_Y(posizione::geometry) AS lat, ST_X(posizione::geometry) AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])`, [nodeIds]);
+tests\test_popbus_diagnostica_ordine_pixel_readonly.mjs:96: const {rows}=await client.query('SELECT id, ST_Y(posizione::geometry)::float8 AS lat, ST_X(posizione::geometry)::float8 AS lon FROM nodi_direttrice WHERE posizione IS NOT NULL ORDER BY id LIMIT 500');
+tests\test_popbus_diagnostica_valutazione_readonly.mjs:122: const {rows}=await client.query('SELECT id, ST_Y(posizione::geometry)::float8 AS lat, ST_X(posizione::geometry)::float8 AS lon FROM nodi_direttrice WHERE posizione IS NOT NULL ORDER BY id LIMIT 500');
+tests\test_popbus_fixture_parziale_readonly.mjs:19: if(list){const {rows}=await client.query('SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM nodi_direttrice ORDER BY id LIMIT 80');log('NODI_DISPONIBILI',{nodi:rows});process.exitCode=0;}
+tests\test_popbus_fixture_parziale_readonly.mjs:23: const {rows:nodes}=await client.query('SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])',[ids]);
+tests\test_popbus_integrazione_reale_readonly.mjs:86:      FROM nodi_direttrice WHERE id=ANY($1::int[])
+tests\test_popbus_multicorridoio_scalabilita_readonly.mjs:70: const {rows}=await client.query('SELECT id, ST_Y(posizione::geometry)::float8 AS lat, ST_X(posizione::geometry)::float8 AS lon FROM nodi_direttrice WHERE posizione IS NOT NULL ORDER BY id LIMIT 500');
+tests\test_popbus_offset_mandatory_readonly.mjs:20:    FROM public.nodi_direttrice WHERE id = ANY($1::int[])
+tests\test_popbus_pixel_autonomo_readonly.mjs:25: const {rows}=await client.query('SELECT id, ST_Y(posizione::geometry)::float8 AS lat, ST_X(posizione::geometry)::float8 AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])',[ids]);
+tests\test_popbus_pixel_fixture_reale_readonly.mjs:28: const {rows:nodes}=await client.query('SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])',[ids]);
+tests\test_popbus_routing_27_28_29.js:134:      FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[[num(req[0].start_node_id),num(req[0].end_node_id)]]);
+tests\test_popbus_sovrapposizioni_v2_readonly.mjs:36: const {rows:nodes}=await client.query('SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])',[nodeIds]);
+tests\test_popbus_trace_27_28_29_362.js:196:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_cache_priorita_singole.js:196:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_catene_reali_diagnostico_shadow.js:58:    ST_X(posizione::geometry) AS lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[nodeIds]);
+tests\test_popbus_v2_cicli.js:82:      FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_cicli_flotta.js:108:      FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[nodeIds]);
+tests\test_popbus_v2_concorrenza.js:49:      'SELECT COUNT(*)::int AS n FROM public.nodi_direttrice WHERE id IN (13,12)'
+tests\test_popbus_v2_confronto_economico.js:156:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_database.js:40:    const required = ['richieste_pop_bus','nodi_direttrice','veicolo','disponibilita_veicolo','tariffe','popbus_attivazioni','popbus_attivazione_richieste','direttrici_virtuali','segmenti'];
+tests\test_popbus_v2_database.js:75:    const { rows: nodes } = await db.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`, [ids]);
+tests\test_popbus_v2_fleet_reale.js:90:    FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_fleet_reale_lunch.js:413:    FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_formation_preview_pricing.js:25:      if (sql.includes('FROM nodi_direttrice')) return {rows:[
+tests\test_popbus_v2_matching_ciclico.js:155:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_ottimizzazione_flotta.js:192:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_ottimizzazione_flotta_aggiornato.js:192:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_ritorni_commerciali.js:188:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_test10b_catene_complete.js:228:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_test10_completezza.js:225:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_test9_routing_diagnostico.js:220:  const {rows:rawNodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) lat,ST_X(posizione::geometry) lon FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[ids]);
+tests\test_popbus_v2_transazione.js:50:    const { rows: n } = await client.query('SELECT id FROM public.nodi_direttrice WHERE id = ANY($1::int[])', [[13, 11, 12]]);
+tests\test_popbus_v2_validatore.js:159:      FROM public.nodi_direttrice WHERE id=ANY($1::int[])`,[nodeIds]);
+tests\test_popbus_v2_worker_dryrun.js:21:  const {rows:nodes}=await client.query(`SELECT id,nome_nodo,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon FROM nodi_direttrice WHERE id=ANY($1::int[])`,[[13,11,12]]);
+tests\test_segmenti_contenuti.js:20:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_segmenti_contenuti.js:87:    await client.query(`DELETE FROM nodi_direttrice WHERE id BETWEEN 301 AND 304;`);
+tests\test_worker1_direttrici.js:13:      TRUNCATE TABLE missioni_ritorno, richieste_pop_bus, segmenti, direttrici_virtuali, nodi_direttrice 
+tests\test_worker1_direttrici.js:20:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES
+tests\test_worker_direttrici.js:29:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_worker_direttrici.js:78:    await client.query(`DELETE FROM nodi_direttrice WHERE id IN (101, 102, 103, 104);`);
+tests\test_worker_pool.js:20:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_worker_pool.js:131:    await client.query(`DELETE FROM nodi_direttrice WHERE id BETWEEN 501 AND 504;`);
+tests\test_worker_richiesta_compatibile.js:29:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_worker_richiesta_compatibile.js:89:    await client.query(`DELETE FROM nodi_direttrice WHERE id IN (101, 102);`);
+tests\test_worker_richieste_sovrapposte.js:20:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_worker_richieste_sovrapposte.js:100:    await client.query(`DELETE FROM nodi_direttrice WHERE id BETWEEN 501 AND 504;`);
+tests\test_worker_ritorno.js:20:      INSERT INTO nodi_direttrice (id, posizione, offset_metri) VALUES 
+tests\test_

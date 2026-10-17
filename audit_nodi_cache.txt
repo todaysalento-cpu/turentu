@@ -1,0 +1,3 @@
+services\search\search.cache.js:15:    nodiCache: new Map(),
+services\search\search.cache.js:174:        CacheStore.nodiCache.clear();
+services\search\search.cache.js:177:            CacheStore.nodiCache.set(String(nodo.id), nodo);

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { normalizzaRichiesta, normalizzaNodo, finestraSalita, intersezionePartenze, creaDirettriceCandidata } from '../services/pixel/model.js';
+const r1 = { id: 1, start_node_id: 10, end_node_id: 20, start_datetime: '2027-04-01T09:00:00Z', posti_richiesti: 2 };
+const r2 = { id: 2, start_node_id: 15, end_node_id: 30, start_datetime: '2027-04-01T09:35:00Z', posti_richiesti: 1 };
+assert.equal(normalizzaRichiesta(r1).posti_richiesti, 2);
+assert.equal(normalizzaNodo({id:10,lat:40.35,lon:18.17}).id,10);
+assert.equal((finestraSalita(r1).fine_ms-finestraSalita(r1).inizio_ms)/60000,60);
+assert.ok(intersezionePartenze([{richiesta:r1,offsetSecondi:0},{richiesta:r2,offsetSecondi:35*60}]));
+assert.equal(intersezionePartenze([{richiesta:r1,offsetSecondi:0},{richiesta:r2,offsetSecondi:3*3600}]),null);
+const c = creaDirettriceCandidata({id:'px-1',nodes:[10,15,30],legs:[{metres:5000,seconds:600},{metres:20000,seconds:1800}],richiestaIds:[1,2],fasciaOraria:{inizio:'2027-04-01T08:30:00Z',fine:'2027-04-01T09:30:00Z'}});
+assert.equal(c.distanza_metri,25000);
+assert.equal(c.verificataRouting,false);
+assert.throws(()=>creaDirettriceCandidata({id:'px-2',nodes:[10,15,10],legs:[{metres:1,seconds:1},{metres:1,seconds:1}],richiestaIds:[1],fasciaOraria:{inizio:'2027-04-01T09:00:00Z',fine:'2027-04-01T10:00:00Z'}}),/ripetuti/);
+console.log('PIXEL MODEL: 8 controlli superati; nessuna operazione DB/HTTP.');

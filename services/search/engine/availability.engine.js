@@ -105,9 +105,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     const promises = corseCandidate.map(async (c, index) => {
         if (!c) return null;
+        const diag924 = Number(c.id) === 924 && Number(c.tratta_id) === 13;
+        const diag = (fase, dettagli = {}) => {
+            if (diag924) console.log('[NCC RETURN 924/13]', JSON.stringify({ fase, ...dettagli }));
+        };
+        diag('CANDIDATA', { id: c.id, tratta_id: c.tratta_id, direzione: c.direzione, stato_temporale: c.stato_temporale, durata_secondi: c.durata_secondi, km_totali_percorso: c.km_totali_percorso, distanza_andata_missione: c.distanza_andata_missione, arrivo_andata_missione: c.arrivo_andata_missione, richiesta_start_datetime: richiesta.start_datetime });
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
-        if (c.tratta_id && c.stato_temporale === 'flessibile' && c.direzione !== 'ritorno') return null;
-        if (c.tratta_id && c.stato_temporale !== 'flessibile' && !c.partenza_prevista) return null;
+        if (c.tratta_id && c.stato_temporale === 'flessibile' && c.direzione !== 'ritorno') { diag('SCARTO_DIREZIONE'); return null; }
+        if (c.tratta_id && c.stato_temporale !== 'flessibile' && !c.partenza_prevista) { diag('SCARTO_PARTENZA_MANCANTE'); return null; }
 
         const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
         const isProattivo = idString.startsWith('virtual_pop_');
@@ -162,6 +167,7 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
         const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0, offset_metri: 0 };
         const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999, offset_metri: Number(c.lunghezza_metri_totali || 1000) };
 
+        diag('SNAP', { startSnap, endSnap, tolleranzaKm: TOLLERANZA_KM });
         if (!isProattivo && (!startSnap || !endSnap)) {
             console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
             return null;
@@ -174,7 +180,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             
             console.log(`👥 [CHECK CONDIVISA] Corsa ID ${c.id} | Start Offset: ${startOffset.toFixed(2)}m | End Offset: ${endOffset.toFixed(2)}m`);
 
+            diag('OFFSET', { startOffset, endOffset, kmUtenteTratta: (endOffset - startOffset) / 1000 });
             if (startOffset >= endOffset || (endOffset - startOffset) < 500) {  
+                diag('SCARTO_OFFSET', { startOffset, endOffset });
                 console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: offset non validi o tratto troppo corto (start: ${startOffset}, end: ${endOffset}).`);
                 return null;
             }
@@ -198,8 +206,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                     return {start:Number(p.start_offset),end:Number(p.end_offset),posti:Number(p.posti_richiesti)};
                 });
                 postiOccupatiNelTratto = calcolaPicco(intervals,startOffset,endOffset);
-            } catch(err) { console.warn('[SEARCH] Corsa esclusa:',c.id,err.message); return null; }
-            if (postiOccupatiNelTratto + Number(richiesta.posti_richiesti) > capacitaTotale) return null;
+            } catch(err) { diag('SCARTO_OCCUPAZIONE_ERRORE', { errore: err.message }); console.warn('[SEARCH] Corsa esclusa:',c.id,err.message); return null; }
+            diag('CAPACITA', { postiOccupatiNelTratto, postiRichiesti: Number(richiesta.posti_richiesti), capacitaTotale });
+            if (postiOccupatiNelTratto + Number(richiesta.posti_richiesti) > capacitaTotale) { diag('SCARTO_CAPACITA'); return null; }
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
             const tipoPercorrenza = determinaTipoPercorrenza(kmUtenteTratta);
             // Quota minima sulla missione per evitare micro-tratte su corse lunghe.
@@ -207,7 +216,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             if (c.tratta_id) {
                 const kmMissione = Number(c.km_totali_percorso);
                 const quotaMinima = kmMissione <= 30 ? 0.70 : kmMissione <= 100 ? 0.60 : kmMissione <= 300 ? 0.50 : 0.40;
-                if (!Number.isFinite(kmMissione) || kmMissione <= 0 || kmUtenteTratta / kmMissione < quotaMinima) return null;
+                diag('QUOTA_MINIMA', { kmMissione, kmUtenteTratta, quotaMinima, quotaEffettiva: kmUtenteTratta / kmMissione, lunghezzaTotaleMetri });
+                if (!Number.isFinite(kmMissione) || kmMissione <= 0 || kmUtenteTratta / kmMissione < quotaMinima) { diag('SCARTO_QUOTA_MINIMA'); return null; }
             }
 
             // --- ⏱️ LOGICA CALCOLO ORARIO DI PARTENZA DINAMICO ---
@@ -244,17 +254,19 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 if (!Number.isFinite(kmAndata) || kmAndata <= 0 ||
                     !Number.isFinite(arrivoAndataMs) || !Number.isFinite(richiestaSalitaMs) ||
                     !Number.isFinite(durataMs) || durataMs <= 0 ||
-                    !Number.isFinite(lunghezzaTotaleMetri) || lunghezzaTotaleMetri <= 0) return null;
+                    !Number.isFinite(lunghezzaTotaleMetri) || lunghezzaTotaleMetri <= 0) { diag('SCARTO_DATI_TEMPORALI', { kmAndata, arrivoAndataMs, richiestaSalitaMs, durataMs, lunghezzaTotaleMetri }); return null; }
                 const bufferMin = kmAndata <= 15 ? 20 : kmAndata <= 30 ? 30 :
                     kmAndata <= 60 ? 45 : kmAndata <= 100 ? 60 :
                     kmAndata <= 150 ? 90 : 120;
                 const anticipoSalitaMs = durataMs * Math.min(1, startOffset / lunghezzaTotaleMetri);
                 const partenzaMs = richiestaSalitaMs - anticipoSalitaMs;
-                if (partenzaMs < arrivoAndataMs || partenzaMs > arrivoAndataMs + bufferMin * 60000) return null;
+                diag('TEMPO_RITORNO', { kmAndata, arrivoAndata: new Date(arrivoAndataMs).toISOString(), richiestaSalita: new Date(richiestaSalitaMs).toISOString(), durataMs, startOffset, lunghezzaTotaleMetri, anticipoSalitaMs, partenzaProposta: new Date(partenzaMs).toISOString(), bufferMin, limiteMassimo: new Date(arrivoAndataMs + bufferMin * 60000).toISOString() });
+                if (partenzaMs < arrivoAndataMs || partenzaMs > arrivoAndataMs + bufferMin * 60000) { diag('SCARTO_FINESTRA_RITORNO'); return null; }
                 partenzaPropostaRitorno = new Date(partenzaMs).toISOString();
                 oraPartenzaUtente = new Date(richiestaSalitaMs).toISOString();
             }
-            if (!oraPartenzaUtente || Math.abs(new Date(oraPartenzaUtente).getTime()-new Date(richiesta.start_datetime).getTime()) > 1800000) return null;
+            if (!oraPartenzaUtente || Math.abs(new Date(oraPartenzaUtente).getTime()-new Date(richiesta.start_datetime).getTime()) > 1800000) { diag('SCARTO_TOLLERANZA_30_MIN', { oraPartenzaUtente, richiesta_start_datetime: richiesta.start_datetime }); return null; }
+            diag('VALIDA', { startOffset, endOffset, partenzaPropostaRitorno, oraPartenzaUtente });
             return {
                 ...c,
                 km_avvicinamento: kmAvvicinamento,

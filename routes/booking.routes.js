@@ -269,10 +269,16 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
               ? 'STATO_TEMPORALE_NON_COINCIDE'
               : 'VALIDAZIONE_OK'
         }));
-        if (verificaTratta.rowCount !== 1 ||
-             (quotation.stato_temporale === 'flessibile') !==
-             (verificaTratta.rows[0].stato_temporale === 'flessibile')) {
-          throw Object.assign(new Error('Tratta NCC cambiata: ripetere la ricerca'), { status: 409 });
+        // La query SQL verifica lo stato reale della tratta sotto lock.
+        // Una quotazione priva di stato_temporale non deve essere interpretata
+        // come "programmato" e causare un falso conflitto sul ritorno flessibile.
+        if (verificaTratta.rowCount !== 1) {
+          throw Object.assign(new Error('Tratta NCC non più disponibile: ripetere la ricerca'), { status: 409 });
+        }
+        const statoTemporaleDB = verificaTratta.rows[0].stato_temporale;
+        const statoTemporaleQuotazione = quotation.stato_temporale;
+        if (statoTemporaleQuotazione != null && statoTemporaleQuotazione !== statoTemporaleDB) {
+          throw Object.assign(new Error('Stato temporale NCC cambiato: ripetere la ricerca'), { status: 409 });
         }
         if (![startOffset, endOffset].every(v => v != null && Number.isFinite(Number(v))) ||
             Number(startOffset) < 0 || Number(endOffset) <= Number(startOffset)) {

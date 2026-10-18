@@ -24,6 +24,23 @@ function determinaTipoPercorrenza(km) {
 }
 
 /**
+ * Tolleranza geografica per punto di salita/discesa delle tratte NCC.
+ * Basata sui km percorsi dal passeggero lungo la polilinea (non sui km della missione).
+ * Il passeggero raggiunge la fermata territoriale esistente: nessuna deviazione veicolo.
+ * Soglie iniziali da validare con i test operativi.
+ */
+function tolleranzaDinamicaTrattaKm(kmUtente) {
+    if (kmUtente <= 8) return 0.5;
+    if (kmUtente <= 25) return 1.5;
+    if (kmUtente <= 50) return 3.0;
+    if (kmUtente <= 100) return 5.0;
+    if (kmUtente <= 200) return 8.0;
+    return 10.0;
+}
+
+const TOLLERANZA_PRELIMINARE_TRATTE_KM = 10.0;
+
+/**
  * SNAP LOGIC CORRETTA (Sulla tratta principale della corsa)
  */
 function getSnapResult(point, corsa, tolleranzaKm, corsaId, latV, lonV, latBaseV, lonBaseV) {
@@ -174,10 +191,14 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             }
         }
 
-        const startSnap = !isProattivo ? getSnapResult(pStart, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0, offset_metri: 0 };
-        const endSnap = !isProattivo ? getSnapResult(pEnd, c, TOLLERANZA_KM, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999, offset_metri: Number(c.lunghezza_metri_totali || 1000) };
+        // Per le tratte NCC, snap preliminare entro il massimo consentito:
+        // la soglia effettiva si verifica DOPO il calcolo dei km della sottotratta.
+        // Tutte le altre corse conservano la tolleranza precedente di 3 km.
+        const tolleranzaSnapKm = c.tratta_id ? TOLLERANZA_PRELIMINARE_TRATTE_KM : TOLLERANZA_KM;
+        const startSnap = !isProattivo ? getSnapResult(pStart, c, tolleranzaSnapKm, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 0, offset_metri: 0 };
+        const endSnap = !isProattivo ? getSnapResult(pEnd, c, tolleranzaSnapKm, c.id, latV, lonV, latBaseV, lonBaseV) : { ordine_sequenziale: 999, offset_metri: Number(c.lunghezza_metri_totali || 1000) };
 
-        diag('SNAP', { startSnap, endSnap, tolleranzaKm: TOLLERANZA_KM });
+        diag('SNAP', { startSnap, endSnap, tolleranzaKm: tolleranzaSnapKm });
         if (!isProattivo && (!startSnap || !endSnap)) {
             console.log(`❌ [SCARTO FILTER] Corsa ID ${c.id}: scartata perché startSnap o endSnap sono nulli.`);
             return null;
@@ -220,6 +241,20 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             diag('CAPACITA', { postiOccupatiNelTratto, postiRichiesti: Number(richiesta.posti_richiesti), capacitaTotale });
             if (postiOccupatiNelTratto + Number(richiesta.posti_richiesti) > capacitaTotale) { diag('SCARTO_CAPACITA'); return null; }
             const kmUtenteTratta = (endOffset - startOffset) / 1000;
+            if (c.tratta_id) {
+                const tolleranzaEffettivaKm = tolleranzaDinamicaTrattaKm(kmUtenteTratta);
+                const distanzaOrigineKm = Number(startSnap.dist);
+                const distanzaDestinazioneKm = Number(endSnap.dist);
+                diag('TOLLERANZA_DINAMICA', {
+                    kmUtenteTratta, tolleranzaEffettivaKm,
+                    distanzaOrigineKm, distanzaDestinazioneKm
+                });
+                if (!Number.isFinite(distanzaOrigineKm) || !Number.isFinite(distanzaDestinazioneKm) ||
+                    distanzaOrigineKm > tolleranzaEffettivaKm || distanzaDestinazioneKm > tolleranzaEffettivaKm) {
+                    diag('SCARTO_TOLLERANZA_DINAMICA');
+                    return null;
+                }
+            }
             const tipoPercorrenza = determinaTipoPercorrenza(kmUtenteTratta);
             // Quota minima sulla missione per evitare micro-tratte su corse lunghe.
             // Soglie provvisorie, centralizzate e verificabili nei test.

@@ -175,19 +175,46 @@ function stessoPunto(a, b) {
     return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7;
 }
 
+// Per la sola tratta di avvicinamento NCC, distanze geodetiche <= 50 m
+// sono trascurabili. Oltre la soglia e' obbligatorio il routing stradale.
+function distanzaAriaMetriNcc(a, b) {
+    const rad = Math.PI / 180;
+    const lat1 = a.lat * rad, lat2 = b.lat * rad;
+    const deltaLat = (b.lat - a.lat) * rad;
+    const deltaLon = (b.lon - a.lon) * rad;
+    const h = Math.sin(deltaLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) ** 2;
+    return 6371000 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
 async function distanzaTrattaNcc(da, a, nome) {
-    if (stessoPunto(da, a)) return 0;
+    if (!coordinateBaseValide(Number(da?.lat), Number(da?.lon)) ||
+        !coordinateBaseValide(Number(a?.lat), Number(a?.lon))) {
+        throw erroreGeoNcc(`Coordinate ${nome} non valide`);
+    }
+    const metriAria = distanzaAriaMetriNcc(da, a);
+    // Entro 50 m l'avvicinamento e' trascurabile: non serve interrogare il routing.
+    if (nome === 'avvicinamento' && metriAria <= 50) {
+        console.log(`[NCC ROUTING] Avvicinamento trascurabile: ${metriAria.toFixed(2)} m (soglia 50 m).`);
+        return 0;
+    }
     let route;
     try {
         route = await getRouteGeometry(da, a);
     } catch (err) {
         throw erroreGeoNcc(`Routing ${nome} non disponibile: ${err.message}`);
     }
-    const km = Number(route?.distanzaKm);
-    if (!Number.isFinite(km) || km <= 0) {
-        throw erroreGeoNcc(`Distanza stradale ${nome} non valida`);
-    }
-    return km;
+    // Number(null) e Number('') sono zero: non confonderli con una risposta valida.
+    const rawKm = route?.distanzaKm;
+    const km = rawKm == null || rawKm === '' ? NaN : Number(rawKm);
+    if (Number.isFinite(km) && km > 0) return km;
+    console.error('[NCC ROUTING] Distanza non valida', {
+        nome, da, a, metriAria: Number(metriAria.toFixed(2)),
+        distanzaKmRicevuta: rawKm ?? null,
+        durataRicevuta: route?.durata ?? null,
+        polylinePresente: Boolean(route?.polyline)
+    });
+    throw erroreGeoNcc(`Distanza stradale ${nome} non valida`);
 }
 
 // --- FUNZIONE PRINCIPALE ---

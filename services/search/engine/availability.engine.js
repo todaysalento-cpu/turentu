@@ -105,9 +105,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
 
     const promises = corseCandidate.map(async (c, index) => {
         if (!c) return null;
-        const diag924 = Number(c.id) === 924 && Number(c.tratta_id) === 13;
+        const diag924 = Number(c.id) === 925 && Number(c.tratta_id) === 15;
         const diag = (fase, dettagli = {}) => {
-            if (diag924) console.log('[NCC RETURN 924/13]', JSON.stringify({ fase, ...dettagli }));
+            if (diag924) console.log('[NCC RETURN 925/15]', JSON.stringify({ fase, ...dettagli }));
         };
         diag('CANDIDATA', { id: c.id, tratta_id: c.tratta_id, direzione: c.direzione, stato_temporale: c.stato_temporale, durata_secondi: c.durata_secondi, km_totali_percorso: c.km_totali_percorso, distanza_andata_missione: c.distanza_andata_missione, arrivo_andata_missione: c.arrivo_andata_missione, richiesta_start_datetime: richiesta.start_datetime });
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));

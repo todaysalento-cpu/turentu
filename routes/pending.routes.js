@@ -5,7 +5,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
-import { upsertCorsa } from '../services/search/search.cache.js';
+import { upsertCorsa, upsertTratta } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 
@@ -48,6 +48,7 @@ router.get('/autista/:veicolo_id', async (req, res) => {
 router.post('/:id/accetta', async (req, res) => {
   const client = await pool.connect();
   const notificheDaInviare = [];
+  const tratteDaAggiornare = [];
   const id = Number(req.params.id);
 
   console.log(`🔍 [ACCETTA] Ricevuta richiesta per accettare il pending ID: ${id}`);
@@ -178,18 +179,7 @@ router.post('/:id/accetta', async (req, res) => {
           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
           throw error;
         }
-        const { rows: tratte } = await client.query(`
-          SELECT id FROM public.corse_tratte
-          WHERE id=$1 AND corsa_id=$2
-            AND stato_temporale IS DISTINCT FROM 'flessibile'
-            AND partenza_prevista IS NOT NULL
-          FOR SHARE
-        `, [segmenti.tratta_id, validCorsaId]);
-        if (tratte.length !== 1) {
-          const error = new Error('NCC condivisa: tratta non disponibile');
-          error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
-          throw error;
-        }
+
       }
 
       if (validCorsaId) {
@@ -209,6 +199,76 @@ router.post('/:id/accetta', async (req, res) => {
           console.warn(`⚠️ [ACCETTA] Corsa ID ${validCorsaId} non trovata. Creazione nuova corsa d'emergenza...`);
         }
       }
+
+       // Blocchiamo prima la missione (sopra), poi la tratta: ordine coerente con prenotaCorsa.
+       // La programmazione flessibile avviene solo dopo che la prenotazione e Stripe
+       // sono stati verificati, sempre nella medesima transazione.
+       let ritornoFlessibile = null;
+       if (isNccCondivisa && !primaNccCondivisibile) {
+         const { rows: tratte } = await client.query(`
+           SELECT t.*, a.arrivo_previsto AS arrivo_andata,
+                  a.distanza_km AS km_andata
+           FROM public.corse_tratte t
+           JOIN public.corse_tratte a
+             ON a.corsa_id=t.corsa_id AND a.direzione='andata'
+           WHERE t.id=$1 AND t.corsa_id=$2
+           FOR UPDATE OF t
+         `, [segmenti.tratta_id, validCorsaId]);
+         if (tratte.length !== 1) {
+           const error = new Error('NCC condivisa: tratta non disponibile o andata assente');
+           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+           throw error;
+         }
+         const t = tratte[0];
+         if (t.stato_temporale === 'flessibile' && t.direzione === 'ritorno' &&
+             t.partenza_prevista == null && t.prima_prenotazione_id == null) {
+           const kmAndata = Number(t.km_andata);
+           const arrivoAndata = new Date(t.arrivo_andata).getTime();
+           const salita = new Date(pRow.start_datetime).getTime();
+           const durataMs = Number(t.durata_secondi) * 1000;
+           const distanzaMetri = Number(t.distanza_km) * 1000;
+           const startOffset = segmenti.start_offset;
+           const bufferMin = kmAndata <= 15 ? 20 : kmAndata <= 30 ? 30 :
+             kmAndata <= 60 ? 45 : kmAndata <= 100 ? 60 :
+             kmAndata <= 150 ? 90 : 120;
+           if (![kmAndata, arrivoAndata, salita, durataMs, distanzaMetri].every(Number.isFinite) ||
+               kmAndata <= 0 || durataMs <= 0 || distanzaMetri <= 0 ||
+               startOffset > distanzaMetri || segmenti.end_offset > distanzaMetri * 1.05) {
+             const error = new Error('NCC ritorno: dati temporali o distanze non validi');
+             error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+             throw error;
+           }
+           // Stessa formula del matching: orario richiesto al punto di salita.
+           const partenza = salita - durataMs * Math.min(1, startOffset / distanzaMetri);
+           if (partenza < arrivoAndata || partenza > arrivoAndata + bufferMin * 60000) {
+             const error = new Error('NCC ritorno: richiesta fuori dalla finestra temporale');
+             error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+             throw error;
+           }
+           ritornoFlessibile = {
+             trattaId: Number(t.id),
+             partenza: new Date(partenza),
+             arrivo: new Date(partenza + durataMs)
+           };
+         } else if (t.stato_temporale !== 'programmato' || !t.partenza_prevista) {
+           const error = new Error('NCC condivisa: tratta temporale non disponibile');
+           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+           throw error;
+         } else {
+           // Ricontrollo dell'orario al punto di salita anche per ritorni già programmati.
+           const partenza = new Date(t.partenza_prevista).getTime();
+           const salita = new Date(pRow.start_datetime).getTime();
+           const durataMs = Number(t.durata_secondi) * 1000;
+           const distanzaMetri = Number(t.distanza_km) * 1000;
+           if (![partenza, salita, durataMs, distanzaMetri].every(Number.isFinite) ||
+               durataMs <= 0 || distanzaMetri <= 0 ||
+               Math.abs(partenza + durataMs * Math.min(1, segmenti.start_offset / distanzaMetri) - salita) > 30 * 60000) {
+             const error = new Error('NCC condivisa: orario di salita non più compatibile');
+             error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+             throw error;
+           }
+         }
+       }
 
       // Se non esiste una corsa valida associata, la creiamo da zero o la gestiamo in base al tipo
       if (!corsa) {
@@ -397,6 +457,33 @@ router.post('/:id/accetta', async (req, res) => {
         }
       }
 
+       // Solo la prima prenotazione ACCETTATA del ritorno fissa l'orario.
+       // Se il controllo Stripe o Modello A fallisce, il rollback annulla tutto.
+       if (ritornoFlessibile) {
+         if (!Number.isSafeInteger(Number(prenotazioneId)) || Number(prenotazioneId) <= 0) {
+           const error = new Error('NCC ritorno: prima prenotazione non creata');
+           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+           throw error;
+         }
+         const aggiornamento = await client.query(`
+           UPDATE public.corse_tratte
+           SET stato_temporale='programmato', partenza_prevista=$2,
+               arrivo_previsto=$3, prima_prenotazione_id=$4
+           WHERE id=$1 AND stato_temporale='flessibile'
+             AND partenza_prevista IS NULL AND prima_prenotazione_id IS NULL
+           RETURNING id
+         `, [ritornoFlessibile.trattaId, ritornoFlessibile.partenza,
+             ritornoFlessibile.arrivo, prenotazioneId]);
+         if (aggiornamento.rowCount !== 1) {
+           const error = new Error('NCC ritorno: programmazione concorrente, ripetere la ricerca');
+           error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+           throw error;
+         }
+         const { rows: aggiornata } = await client.query(
+           'SELECT * FROM public.corse_tratte WHERE id=$1', [ritornoFlessibile.trattaId]);
+         tratteDaAggiornare.push(aggiornata[0]);
+       }
+
       if (pRow.payment_intent_id && prenotazioneId) {
         await client.query(
           `INSERT INTO pagamenti (prenotazione_id, importo, stato, stripe_payment_intent, corsa_id, updated_at)
@@ -418,7 +505,11 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     await client.query('COMMIT');committed=true;
-    console.log(`✅ [ACCETTA SUCCESS] Richiesta ${id} accettata con successo.`);
+     console.log(`✅ [ACCETTA SUCCESS] Richiesta ${id} accettata con successo.`);
+     for (const tratta of tratteDaAggiornare) {
+       try { await upsertTratta(tratta, false); }
+       catch (err) { console.error('[CACHE TRATTA POSTCOMMIT]', err.message); }
+     }
     
     const io = getIO();
     for (const data of notificheDaInviare) {

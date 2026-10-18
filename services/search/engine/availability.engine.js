@@ -106,7 +106,8 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const promises = corseCandidate.map(async (c, index) => {
         if (!c) return null;
         c.classe = determinaClasse(Number(c.indice_efficienza || 0));
-        if (c.tratta_id && (c.stato_temporale === 'flessibile' || !c.partenza_prevista)) return null;
+        if (c.tratta_id && c.stato_temporale === 'flessibile' && c.direzione !== 'ritorno') return null;
+        if (c.tratta_id && c.stato_temporale !== 'flessibile' && !c.partenza_prevista) return null;
 
         const idString = typeof c.id === 'string' ? c.id : String(c.id || '');
         const isProattivo = idString.startsWith('virtual_pop_');
@@ -187,7 +188,10 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
             let postiOccupatiNelTratto;
             const percentualiEsistentiArray = [];
             const kmTotaliCorsaOriginale = Number(c.km_totali_percorso || c.distanza || 0);
-            const lunghezzaTotaleMetri = c.tratta_id ? Number(c.distanza * 1000) : Number(c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
+            // Gli offset dello snap sono metri lungo la polyline (Turf), non i km stradali del router.
+            const lunghezzaTotaleMetri = c.tratta_id && c.percorso_polyline
+                ? turf.length(turf.lineString(polyline.decode(c.percorso_polyline).map(p => [p[1], p[0]])), { units: 'meters' })
+                : Number(c.lunghezza_metri_totali || kmTotaliCorsaOriginale * 1000);
             try {
                 const intervals = prenotazioni.map(p => {
                     if (p.start_offset == null || p.end_offset == null) throw new Error('Offset storici mancanti');
@@ -230,6 +234,26 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 console.log(`ℹ️ [ORARIO DINAMICO - INFO] Partenza dall'origine o dati mancanti. Orario invariato.`);
             }
 
+            let partenzaPropostaRitorno = null;
+            if (c.tratta_id && c.stato_temporale === 'flessibile') {
+                // La prima richiesta determina l'orario della tratta, non la prima prenotazione dell'andata.
+                const kmAndata = Number(c.distanza_andata_missione);
+                const arrivoAndataMs = new Date(c.arrivo_andata_missione).getTime();
+                const richiestaSalitaMs = new Date(richiesta.start_datetime).getTime();
+                const durataMs = Number(c.durata_secondi) * 1000;
+                if (!Number.isFinite(kmAndata) || kmAndata <= 0 ||
+                    !Number.isFinite(arrivoAndataMs) || !Number.isFinite(richiestaSalitaMs) ||
+                    !Number.isFinite(durataMs) || durataMs <= 0 ||
+                    !Number.isFinite(lunghezzaTotaleMetri) || lunghezzaTotaleMetri <= 0) return null;
+                const bufferMin = kmAndata <= 15 ? 20 : kmAndata <= 30 ? 30 :
+                    kmAndata <= 60 ? 45 : kmAndata <= 100 ? 60 :
+                    kmAndata <= 150 ? 90 : 120;
+                const anticipoSalitaMs = durataMs * Math.min(1, startOffset / lunghezzaTotaleMetri);
+                const partenzaMs = richiestaSalitaMs - anticipoSalitaMs;
+                if (partenzaMs < arrivoAndataMs || partenzaMs > arrivoAndataMs + bufferMin * 60000) return null;
+                partenzaPropostaRitorno = new Date(partenzaMs).toISOString();
+                oraPartenzaUtente = new Date(richiestaSalitaMs).toISOString();
+            }
             if (!oraPartenzaUtente || Math.abs(new Date(oraPartenzaUtente).getTime()-new Date(richiesta.start_datetime).getTime()) > 1800000) return null;
             return {
                 ...c,
@@ -245,7 +269,9 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
                 km_utente: kmUtenteTratta,
                 tipo_percorrenza: tipoPercorrenza,
                 percentuali_passeggeri_esistenti: percentualiEsistentiArray,
-                partenza_effettiva: oraPartenzaUtente
+                partenza_effettiva: oraPartenzaUtente,
+                // Proposta NON consolidata: va verificata nuovamente sotto lock all'accettazione.
+                partenza_proposta_ritorno: partenzaPropostaRitorno
             };
         }
 

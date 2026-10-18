@@ -108,13 +108,32 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
         throw new Error('NCC condivisa: tratta_id obbligatorio');
       }
       const { rows: tratte } = await client.query(`
-        SELECT id FROM public.corse_tratte
+        SELECT id, direzione, stato_temporale, partenza_prevista,
+               prima_prenotazione_id
+        FROM public.corse_tratte
         WHERE id=$1 AND corsa_id=$2
-          AND stato_temporale IS DISTINCT FROM 'flessibile'
-          AND partenza_prevista IS NOT NULL
         FOR SHARE
       `, [trattaId, id]);
-      if (tratte.length !== 1) throw new Error('NCC condivisa: tratta non valida o non prenotabile');
+      const tratta = tratte[0];
+      // Il ritorno flessibile viene validato e bloccato da pending.routes
+      // nella medesima transazione, prima di chiamare prenotaCorsa.
+      // Questo servizio consente solo l'inserimento della prima prenotazione;
+      // la programmazione definitiva resta responsabilità del chiamante.
+      const programmata = tratta?.stato_temporale === 'programmato' &&
+        tratta.partenza_prevista != null;
+      const primoRitornoFlessibile = tratta?.direzione === 'ritorno' &&
+        tratta.stato_temporale === 'flessibile' &&
+        tratta.partenza_prevista == null &&
+        tratta.prima_prenotazione_id == null;
+      if (!programmata && !primoRitornoFlessibile) {
+        throw new Error('NCC condivisa: tratta non valida o non prenotabile');
+      }
+      // Nessun inserimento diretto di ritorni flessibili con transazione
+      // autonoma: serve il controllo temporale e il consolidamento atomico
+      // effettuato dal flusso di accettazione pending.
+      if (primoRitornoFlessibile && owned) {
+        throw new Error('NCC ritorno flessibile: accettazione pending obbligatoria');
+      }
       const { rows: legacy } = await client.query(`
         SELECT id FROM prenotazioni WHERE corsa_id=$1 AND tratta_id IS NULL LIMIT 1
       `, [id]);

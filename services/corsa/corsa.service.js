@@ -238,6 +238,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         const isNccCondivisa = pending.tipo_corsa === 'condivisa';
         let kmAvvicinamento = 0;
         let kmRiposizionamento = 0;
+        let percorsoRitornoNcc = null;
 
         // Le missioni NCC condivise richiedono una base reale e due tratte
         // stradali affidabili. Non usare l'origine del cliente come base fittizia.
@@ -249,7 +250,23 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             }
             const base = { lat: latBase, lon: lonBase };
             kmAvvicinamento = await distanzaTrattaNcc(base, coordOrig, 'avvicinamento');
-            kmRiposizionamento = await distanzaTrattaNcc(coordDest, base, 'ritorno alla base');
+            // La tratta di ritorno e' una direzione commerciale autonoma della stessa missione.
+            // Conserviamo geometria e durata, oltre ai km gia' conteggiati nel costo fisso.
+            if (stessoPunto(coordDest, base)) {
+                throw erroreGeoNcc('Ritorno commerciale assente: destinazione coincidente con la base');
+            }
+            try {
+                percorsoRitornoNcc = await getRouteGeometry(coordDest, base);
+            } catch (err) {
+                throw erroreGeoNcc(`Routing ritorno alla base non disponibile: ${err.message}`);
+            }
+            const kmRitorno = Number(percorsoRitornoNcc?.distanzaKm);
+            const durataRitorno = Number(percorsoRitornoNcc?.durata);
+            if (!percorsoRitornoNcc?.polyline || !Number.isFinite(kmRitorno) || kmRitorno <= 0 ||
+                !Number.isFinite(durataRitorno) || durataRitorno <= 0) {
+                throw erroreGeoNcc('Geometria, distanza o durata del ritorno non valide');
+            }
+            kmRiposizionamento = kmRitorno;
         } else {
             // Comportamento storico delle corse private, salvo correzione
             // della longitudine usata per il ritorno.
@@ -352,6 +369,21 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             ) VALUES ($1, 'andata', $2, $3, $4, $5, $6, 'programmato') RETURNING id
           `, [corsa.id, polylineString, distanzaKm, Math.round(durataMin * 60), startDatetime, arrivoDatetime]);
           trattaInizialeId = Number(tratteCreate[0].id);
+
+          // Ritorno indipendente: nessun orario definitivo e nessuna prima prenotazione.
+          // Il buffer dinamico verra' verificato dal matching prima della prima accettazione.
+          // Il passaggio a "programmato" deve avvenire nella transazione di accettazione.
+          await client.query(`
+            INSERT INTO public.corse_tratte (
+              corsa_id, direzione, percorso_polyline, distanza_km, durata_secondi,
+              partenza_prevista, arrivo_previsto, stato_temporale, prima_prenotazione_id
+            ) VALUES ($1, 'ritorno', $2, $3, $4, NULL, NULL, 'flessibile', NULL)
+          `, [
+            corsa.id,
+            percorsoRitornoNcc.polyline,
+            Number(percorsoRitornoNcc.distanzaKm),
+            Math.round(Number(percorsoRitornoNcc.durata))
+          ]);
         }
 
         const segmenti = {  

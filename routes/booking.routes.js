@@ -235,18 +235,23 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           throw Object.assign(new Error('Tratta NCC non disponibile: ripetere la ricerca'), { status: 409 });
         }
         const verificaTratta = await client.query(`
-          SELECT t.id
+          SELECT t.id, t.direzione, t.stato_temporale, t.partenza_prevista
           FROM public.corse_tratte t
           JOIN public.corse c ON c.id = t.corsa_id
           WHERE t.id = $1 AND t.corsa_id = $2
             AND c.veicolo_id = $3
             AND c.tipo_corsa = 'condivisa'
             AND c.stato = 'prenotabile'
-            AND t.stato_temporale IS DISTINCT FROM 'flessibile'
-            AND t.partenza_prevista IS NOT NULL
+            AND (
+               (t.stato_temporale = 'programmato' AND t.partenza_prevista IS NOT NULL)
+               OR (t.direzione = 'ritorno' AND t.stato_temporale = 'flessibile'
+                  AND t.partenza_prevista IS NULL AND t.prima_prenotazione_id IS NULL)
+             )
           FOR SHARE OF t, c
         `, [trattaIdToSave, corsaIdToSave, slot.veicolo_id]);
-        if (verificaTratta.rowCount !== 1) {
+        if (verificaTratta.rowCount !== 1 ||
+             (quotation.stato_temporale === 'flessibile') !==
+             (verificaTratta.rows[0].stato_temporale === 'flessibile')) {
           throw Object.assign(new Error('Tratta NCC cambiata: ripetere la ricerca'), { status: 409 });
         }
         if (![startOffset, endOffset].every(v => v != null && Number.isFinite(Number(v))) ||

@@ -370,7 +370,8 @@ export async function cercaSlotUltra(richiesta) {
     );
     const corseCandidate = [...new Set(trattaResults.flat())].map(rawId => {
         const tratta = CacheStore.tratteCache.get(Number(rawId));
-        if (!tratta || tratta.stato_temporale === 'flessibile' || !tratta.partenza_prevista) return null;
+        if (!tratta || (tratta.stato_temporale !== 'flessibile' && !tratta.partenza_prevista)) return null;
+        if (tratta.stato_temporale === 'flessibile' && tratta.direzione !== 'ritorno') return null;
         const corsa = CacheStore.corseCache.get(Number(tratta.corsa_id));
         if (!corsa || corsa.tipo_corsa !== 'condivisa' || corsa.stato !== 'prenotabile') return null;
         return {
@@ -383,6 +384,9 @@ export async function cercaSlotUltra(richiesta) {
             partenza_prevista: tratta.partenza_prevista,
             arrivo_previsto: tratta.arrivo_previsto,
             durata_secondi: tratta.durata_secondi,
+            // Ancora temporale della missione: il ritorno flessibile non ha una partenza fissata.
+            arrivo_andata_missione: corsa.arrivo_datetime,
+            distanza_andata_missione: Number(corsa.distanza),
             km_totali_percorso: Number(tratta.distanza_km),
             distanza: Number(tratta.distanza_km),
             classe: determinaClasse(Number(corsa.indice_efficienza || 0))

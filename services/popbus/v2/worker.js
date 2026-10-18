@@ -21,6 +21,7 @@ import { diagnosticaCicloPixelPopbus } from '../../pixel/pixel-popbus-cycle-adap
 import { ottimizzaFlotta } from './fleet-optimizer.js';
 import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
 import { componiCicloInCorsa } from './popbus-single-corsa-assembler.js';
+import { leggiOpportunitaPixel } from '../../pixel/pixel.persistence.service.js';
 
 // I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
 // e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
@@ -36,6 +37,8 @@ const POPBUS_FLEET_SHADOW_MAX_REQUESTS = 30;
 const POPBUS_FLEET_SHADOW_MAX_VEHICLES = 30;
 const COMMISSIONE_TURENTU = 0.15;
 const POPBUS_PIXEL_SHADOW = process.env.POPBUS_PIXEL_SHADOW === '1';
+// Fase controllata: lettura delle opportunita PIXEL persistenti, senza attivazioni.
+const POPBUS_PIXEL_DB_SHADOW = process.env.POPBUS_PIXEL_DB_SHADOW === '1';
 const POPBUS_PIXEL_MAX_REQUESTS = 100;
 const POPBUS_PIXEL_CYCLE_SHADOW = process.env.POPBUS_PIXEL_CYCLE_SHADOW === '1';
 const POPBUS_PIXEL_MAX_MISSIONI = 24;
@@ -209,6 +212,66 @@ async function eseguiCicliPixelShadow({ engine, corridors, requests, nodes, vehi
   });
 }
 
+
+// Diagnostica DB PIXEL -> POPBUS. Non crea candidate territoriali e non scrive.
+// Nessuna opportunita e' assegnata a una missione in questa fase.
+async function verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, stats }) {
+  if (!POPBUS_PIXEL_DB_SHADOW) return;
+  const opportunita = await leggiOpportunitaPixel({ limit: 1000 });
+  const byRequest = new Map(requests.map(r => [Number(r.id), r]));
+  const esiti = { lette: opportunita.length, utilizzabili: 0, fuoriSnapshot: 0,
+    nodiMancanti: 0, richiesteIncompatibili: 0, geometrieNonValide: 0 };
+  for (const o of opportunita) {
+    const nodes = (o.nodi || []).map(Number);
+    const legs = o.legs;
+    const ids = (o.richiesta_ids || []).map(Number);
+    if (nodes.length < 2 || !Array.isArray(legs) || legs.length !== nodes.length - 1 ||
+        !nodes.every(n => Number.isSafeInteger(n) && n > 0) ||
+        !legs.every(l => Number.isFinite(Number(l.metres)) && Number(l.metres) >= 0 &&
+          Number.isFinite(Number(l.seconds)) && Number(l.seconds) >= 0)) {
+      esiti.geometrieNonValide++;
+      continue;
+    }
+    if (nodes.some(n => !nodeMap.has(n))) {
+      esiti.nodiMancanti++;
+      continue;
+    }
+    if (!ids.length || ids.some(id => !byRequest.has(id))) {
+      esiti.fuoriSnapshot++;
+      continue;
+    }
+    // Compatibilita territoriale minima; quella temporale/operativa resta
+    // di competenza dei validatori POPBUS, non di questa diagnostica.
+    if (ids.some(id => {
+      const r = byRequest.get(id);
+      const a = nodes.indexOf(Number(r.origine_nodo_territoriale_id));
+      const b = nodes.indexOf(Number(r.destinazione_nodo_territoriale_id));
+      return a < 0 || b <= a;
+    })) {
+      esiti.richiesteIncompatibili++;
+      continue;
+    }
+    esiti.utilizzabili++;
+    log('PIXEL DB OPPORTUNITA', {
+      pixelOpportunitaId: o.pixel_opportunita_id,
+      pixelDirettriceId: o.pixel_direttrice_id,
+      versione: o.versione,
+      nodi: nodes,
+      richieste: ids,
+      finestraInizio: o.inizio_finestra,
+      finestraFine: o.fine_finestra,
+      stato: 'CANDIDATA_NON_ATTIVABILE_DA_SHADOW'
+    });
+  }
+  stats.pixelDb = esiti;
+  log('PIXEL DB RIEPILOGO', {
+    ...esiti,
+    limiteLettura: 1000,
+    potenzialmenteTroncato: opportunita.length === 1000,
+    soloLettura: true,
+    nota: 'La generazione e attivazione legacy restano indipendenti in questa fase'
+  });
+}
 
 // PIXEL usa esclusivamente i nodi territoriali. Il mapping verso i campi
 // start/end e' interno al worker e NON aggiorna le colonne legacy nel DB.
@@ -964,6 +1027,16 @@ export async function processaProposteDinamicheV2() {
         n
       ])
     );
+
+    // Opportunita PIXEL persistenti: controllo in sola lettura.
+    // Nessuna modifica alla scelta o alla persistenza delle attivazioni.
+    if (POPBUS_PIXEL_DB_SHADOW) {
+      try {
+        await verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, stats });
+      } catch (error) {
+        log('PIXEL DB SHADOW ERROR', error.stack || error.message);
+      }
+    }
 
     // =====================================================
     // CARICAMENTO VEICOLI

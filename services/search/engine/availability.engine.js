@@ -94,6 +94,16 @@ export async function filterDisponibilita(richiesta, corseCandidate, prenotazion
     const pStart = turf.point([richiesta.coord.lon, richiesta.coord.lat]);
     const pEnd = turf.point([richiesta.coordDest.lon, richiesta.coordDest.lat]);
     const TOLLERANZA_KM = 3.0; // Da calibrare nei test stradali
+    // Diagnostica temporanea NCC 925/15: coordinate effettive ricevute dalla ricerca.
+    // Sola lettura: non modifica snapping, filtri o risultati.
+    if (corseCandidate?.some(c => Number(c?.id) === 925 && Number(c?.tratta_id) === 15)) {
+        console.log('[NCC 925/15 COORD RICHIESTA]', JSON.stringify({
+            origine: { lat: richiesta.coord.lat, lon: richiesta.coord.lon },
+            destinazione: { lat: richiesta.coordDest.lat, lon: richiesta.coordDest.lon },
+            start_datetime: richiesta.start_datetime
+        }));
+    }
+
     
     const isImmediata = (() => {
         const orarioAndataUtente = new Date(richiesta.start_datetime || new Date());

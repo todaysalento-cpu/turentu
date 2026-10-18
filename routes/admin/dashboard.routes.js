@@ -19,11 +19,22 @@ router.get('/', async (req, res) => {
       ),
       corse_totali AS (SELECT COUNT(*) AS totale FROM corse),
       corse_oggi AS (SELECT COUNT(*) AS totale FROM corse WHERE DATE(created_at) = CURRENT_DATE),
-      fatturato AS (SELECT COALESCE(SUM(prezzo_fisso)::numeric(20,2),0) AS totale FROM corse WHERE stato = 'completata'),
-      guadagno AS (SELECT COALESCE(SUM(guadagno_autista)::numeric(20,2),0) AS totale FROM pagamenti WHERE stato='rilasciato')
+      fatturato AS (SELECT COALESCE(SUM(importo),0)::numeric(20,2) AS totale FROM pagamenti WHERE stato = 'pagato'),
+      guadagno AS (SELECT COALESCE(SUM(guadagno_autista),0)::numeric(20,2) AS totale FROM pagamenti WHERE stato = 'pagato'),
+      commissioni AS (SELECT COALESCE(SUM(commissione),0)::numeric(20,2) AS totale FROM pagamenti WHERE stato = 'pagato'),
+      pagamenti_non_contabilizzati AS (
+        SELECT COUNT(*) AS totale FROM pagamenti
+        WHERE stato = 'pagato' AND (
+          commissione IS NULL OR guadagno_autista IS NULL
+          OR (COALESCE(commissione,0) = 0 AND COALESCE(guadagno_autista,0) = 0 AND importo > 0)
+          OR ABS(importo - COALESCE(commissione,0) - COALESCE(guadagno_autista,0)) > 0.009
+        )
+      )
       SELECT (SELECT totale FROM clienti) AS clienti, (SELECT totale FROM autisti) AS autisti, (SELECT totale FROM veicoli) AS veicoli, 
              (SELECT totale FROM veicoli_disponibili) AS veicoli_disponibili, (SELECT totale FROM corse_totali) AS corse_totali, 
-             (SELECT totale FROM corse_oggi) AS corse_oggi, (SELECT totale FROM fatturato) AS fatturato, (SELECT totale FROM guadagno) AS guadagno
+             (SELECT totale FROM corse_oggi) AS corse_oggi, (SELECT totale FROM fatturato) AS fatturato, (SELECT totale FROM guadagno) AS guadagno,
+             (SELECT totale FROM commissioni) AS commissioni_turentu,
+             (SELECT totale FROM pagamenti_non_contabilizzati) AS pagamenti_non_contabilizzati
     `;
 
     // ===================== Parallel fetch =====================
@@ -38,17 +49,17 @@ router.get('/', async (req, res) => {
       pool.query(`
         SELECT DATE(updated_at) AS giorno, COALESCE(SUM(importo)::numeric(20,2),0) AS ricavi
         FROM pagamenti
-        WHERE stato='rilasciato' AND updated_at >= CURRENT_DATE - INTERVAL '7 days'
+        WHERE stato='pagato' AND updated_at >= CURRENT_DATE - INTERVAL '7 days'
         GROUP BY giorno ORDER BY giorno
       `),
       pool.query(`
-        SELECT u.nome, COUNT(c.id) AS corse, COALESCE(SUM(p.guadagno_autista)::numeric(20,2),0) AS guadagno
+        SELECT u.id AS operatore_id, u.nome, COUNT(DISTINCT c.id) AS corse, COALESCE(SUM(p.guadagno_autista),0)::numeric(20,2) AS guadagno
         FROM pagamenti p
         LEFT JOIN corse c ON c.id = p.corsa_id
         LEFT JOIN veicolo v ON v.id = c.veicolo_id
         LEFT JOIN utente u ON u.id = v.driver_id
-        WHERE p.stato='rilasciato'
-        GROUP BY u.nome ORDER BY guadagno DESC LIMIT 5
+        WHERE p.stato='pagato'
+        GROUP BY u.id, u.nome ORDER BY guadagno DESC LIMIT 5
       `),
       // ===================== Query corretta con DISTINCT ON =====================
       pool.query(`
@@ -98,10 +109,14 @@ router.get('/', async (req, res) => {
       corse_oggi: Number(data.corse_oggi),
       fatturato: Number(data.fatturato),
       guadagno: Number(data.guadagno),
+      incassi_clienti: Number(data.fatturato),
+      commissioni_turentu: Number(data.commissioni_turentu),
+      competenze_operatori: Number(data.guadagno),
+      pagamenti_non_contabilizzati: Number(data.pagamenti_non_contabilizzati),
       prezzo_medio_corsa: corseTotali > 0 ? parseFloat((Number(data.fatturato)/corseTotali).toFixed(2)) : 0,
       guadagno_medio_autista: autistiTotali > 0 ? parseFloat((Number(data.guadagno)/autistiTotali).toFixed(2)) : 0,
       crescita: crescitaRes.rows.map(r => ({ giorno: r.giorno, ricavi: Number(r.ricavi) })),
-      top_autisti: topAutistiRes.rows.map(a => ({ nome: a.nome, corse: Number(a.corse), guadagno: Number(a.guadagno) })),
+      top_autisti: topAutistiRes.rows.map(a => ({ operatore_id: a.operatore_id, nome: a.nome, corse: Number(a.corse), guadagno: Number(a.guadagno) })),
       corse: corseLiveRes.rows.map(r => ({
         id: r.id,
         cliente: r.cliente,

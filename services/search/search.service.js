@@ -393,6 +393,31 @@ export async function cercaSlotUltra(richiesta) {
         };
     }).filter(Boolean);
 
+    // Diagnostica temporanea NCC 924 / tratta 13: sola lettura, nessuna modifica al matching.
+    console.log('[NCC 924/13 CACHE DIAG]', JSON.stringify({
+        hashRicerca: hash,
+        hashesControllati: hashes,
+        idsTratteRedis: [...new Set(trattaResults.flat())],
+        tratta13InRedis: trattaResults.flat().some(id => Number(id) === 13),
+        tratta13InCache: CacheStore.tratteCache.has(13),
+        corsa924InCache: CacheStore.corseCache.has(924),
+        tratta13Cache: (() => {
+            const t = CacheStore.tratteCache.get(13);
+            return t ? {
+                id: t.id, corsa_id: t.corsa_id, direzione: t.direzione,
+                stato_temporale: t.stato_temporale,
+                haPolyline: Boolean(t.percorso_polyline),
+                partenza_prevista: t.partenza_prevista
+            } : null;
+        })(),
+        corsa924Cache: (() => {
+            const c = CacheStore.corseCache.get(924);
+            return c ? { id: c.id, tipo_corsa: c.tipo_corsa, stato: c.stato,
+                arrivo_datetime: c.arrivo_datetime, distanza: c.distanza } : null;
+        })(),
+        tratta13TraCandidate: corseCandidate.some(c => Number(c.id) === 924 && Number(c.tratta_id) === 13)
+    }));
+
     const corsaIds = [...new Set(corseCandidate.map(c => Number(c.id)))];
     let prenotazioniBatch = [];
     const capacitaMap = new Map();
@@ -413,6 +438,12 @@ export async function cercaSlotUltra(richiesta) {
         for (let i = corseCandidate.length - 1; i >= 0; i--) {
             if (corseAmbigue.has(Number(corseCandidate[i].id))) corseCandidate.splice(i, 1);
         }
+        console.log('[NCC 924/13 PRENOTAZIONI DIAG]', JSON.stringify({
+            prenotazioni924: allPrenotazioni.filter(p => Number(p.corsa_id) === 924)
+                .map(p => ({ id: p.id, tratta_id: p.tratta_id })),
+            corsa924EsclusaPerAmbiguita: corseAmbigue.has(924),
+            tratta13AncoraCandidata: corseCandidate.some(c => Number(c.id) === 924 && Number(c.tratta_id) === 13)
+        }));
         prenotazioniBatch = corseCandidate.map(c => allPrenotazioni.filter(p =>
             Number(p.tratta_id) === Number(c.tratta_id)
         ));
@@ -496,6 +527,14 @@ export async function cercaSlotUltra(richiesta) {
                 calculated_end_offset: c.calculated_end_offset
             }))
     ));
+
+    console.log('[NCC 924/13 FILTRO DIAG]', JSON.stringify({
+        candidataPrimaFiltro: corseCandidate.some(c => Number(c.id) === 924 && Number(c.tratta_id) === 13),
+        validaDopoFiltro: corseValide.some(c => Number(c.id) === 924 && Number(c.tratta_id) === 13),
+        dettagliValidi: corseValide.filter(c => Number(c.id) === 924 && Number(c.tratta_id) === 13)
+            .map(c => ({ start_offset: c.calculated_start_offset, end_offset: c.calculated_end_offset,
+                partenza_proposta_ritorno: c.partenza_proposta_ritorno }))
+    }));
 
     const distanzaCondivisaValida = Number(distanzaKm);
 

@@ -249,6 +249,26 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
              )
           FOR SHARE OF t, c
         `, [trattaIdToSave, corsaIdToSave, slot.veicolo_id]);
+        // Diagnostica di sola lettura: identifica quale condizione genera il 409 NCC.
+        console.log('[NCC PAYMENT VALIDATION]', JSON.stringify({
+          requestId,
+          corsaIdToSave,
+          trattaIdToSave,
+          veicoloId: slot.veicolo_id,
+          quotation_stato_temporale: quotation.stato_temporale ?? null,
+          quotation_stato_temporale_presente: Object.prototype.hasOwnProperty.call(quotation, 'stato_temporale'),
+          quotation_tratta_id: quotation.tratta_id ?? null,
+          rowCount: verificaTratta.rowCount,
+          db_stato_temporale: verificaTratta.rows[0]?.stato_temporale ?? null,
+          db_direzione: verificaTratta.rows[0]?.direzione ?? null,
+          db_partenza_prevista: verificaTratta.rows[0]?.partenza_prevista ?? null,
+          motivo_potenziale: verificaTratta.rowCount !== 1
+            ? 'QUERY_NON_RESTITUISCE_UNA_RIGA'
+            : ((quotation.stato_temporale === 'flessibile') !==
+               (verificaTratta.rows[0].stato_temporale === 'flessibile'))
+              ? 'STATO_TEMPORALE_NON_COINCIDE'
+              : 'VALIDAZIONE_OK'
+        }));
         if (verificaTratta.rowCount !== 1 ||
              (quotation.stato_temporale === 'flessibile') !==
              (verificaTratta.rows[0].stato_temporale === 'flessibile')) {

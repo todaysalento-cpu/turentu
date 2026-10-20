@@ -54,8 +54,41 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       (x.tipo !== 'condivisa' ||
         (selected.tratta_id != null && String(x.tratta_id) === String(selected.tratta_id)))
     );
-    if(!quotation||Math.round(Number(quotation.prezzo)*100)!==Math.round(Number(prezzo)*100))return res.status(409).json({error:'Prezzo/opzione cambiati: ripetere la ricerca'});
-    if(isPopbusSlot(quotation) && quotation.is_pool && !String(selected.id).startsWith('virtual_pop_'))return res.status(409).json({error:'PopBus V2: usare richiesta virtuale o prenotazione su corsa reale'});
+    // Il prezzo deve essere quotato dal server: null/undefined/NaN non sono prezzi.
+    // Number(null) === 0: non utilizzare conversioni permissive per i pagamenti.
+    const prezzoQuotato = quotation?.prezzo;
+    const prezzoQuotatoValido = prezzoQuotato !== null && prezzoQuotato !== undefined &&
+      prezzoQuotato !== '' && Number.isFinite(Number(prezzoQuotato)) &&
+      Math.round(Number(prezzoQuotato) * 100) >= 50;
+    if (!quotation || !prezzoQuotatoValido ||
+        Math.round(Number(prezzoQuotato) * 100) !== Math.round(Number(prezzo) * 100)) {
+      return res.status(409).json({ error: 'Prezzo/opzione cambiati o quotazione assente: ripetere la ricerca' });
+    }
+
+    // POPBUS confermata = corsa reale, non nuova richiesta di formazione.
+    // Fail-closed: il percorso Booking diretto non e' ancora implementato.
+    // Non creare richieste_pop_bus, pending o PaymentIntent per questa corsa.
+    const popbusConfermata = isPopbusSlot(quotation) &&
+      (quotation.tipo_corsa === 'riempimento' || quotation.attivazione_stato === 'confermata' ||
+       (quotation.corsa_id != null && !String(quotation.id).startsWith('virtual_pop_')));
+    if (popbusConfermata) {
+      console.warn(`[POPBUS BOOKING] Corsa confermata non ancora prenotabile: corsa_id=${quotation.corsa_id ?? quotation.id}`);
+      return res.status(409).json({
+        error: 'POPBUS confermata: prenotazione diretta non ancora abilitata',
+        code: 'POPBUS_ACTIVE_BOOKING_NOT_READY'
+      });
+    }
+    // Conserva il blocco preesistente per ogni POPBUS non virtuale.
+    if (isPopbusSlot(quotation) && quotation.is_pool &&
+        !String(quotation.id).startsWith('virtual_pop_')) {
+      return res.status(409).json({ error: 'POPBUS: opzione non virtuale non prenotabile tramite formazione' });
+    }
+    // Il cliente non puo' selezionare un ID virtuale e ottenere una corsa reale,
+    // o viceversa, riutilizzando dati di ricerca precedenti.
+    if (isPopbusSlot(quotation) &&
+        String(selected.id).startsWith('virtual_pop_') !== String(quotation.id).startsWith('virtual_pop_')) {
+      return res.status(409).json({ error: 'Identita POPBUS cambiata: ripetere la ricerca' });
+    }
     // Mantiene i riferimenti PIXEL del client separati dai dati della quotazione.
     const pixelPayload = {
       origine_nodo_territoriale_id: selected.origine_nodo_territoriale_id,

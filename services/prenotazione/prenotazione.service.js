@@ -16,7 +16,7 @@ async function applicaModelloA(client, current, prenotazione, prenotazioniPreced
     ? null : Number(current.prenotazione_origine_id);
 
   if (prezzoFisso === null) {
-    // Una corsa condivisa già prenotata senza snapshot non può essere
+    // Una corsa condivisa gi├á prenotata senza snapshot non pu├▓ essere
     // convertita silenziosamente: i pagamenti precedenti usano il legacy.
     if (prenotazioniPrecedenti.length > 0 || origineId !== null) {
       throw new Error(`Modello A: corsa ${corsaId} preesistente senza prezzo fisso; migrazione necessaria`);
@@ -83,7 +83,7 @@ async function applicaModelloA(client, current, prenotazione, prenotazioniPreced
   return ripartizione.prenotazioni.find(p => Number(p.id) === Number(prenotazione.id));
 }
 
-export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, client) {
+export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, client, options = {}) {
   const owned = !client;
   if (owned) client = await pool.connect();
   let committed = false;
@@ -118,7 +118,7 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       // Il ritorno flessibile viene validato e bloccato da pending.routes
       // nella medesima transazione, prima di chiamare prenotaCorsa.
       // Questo servizio consente solo l'inserimento della prima prenotazione;
-      // la programmazione definitiva resta responsabilità del chiamante.
+      // la programmazione definitiva resta responsabilit├á del chiamante.
       const programmata = tratta?.stato_temporale === 'programmato' &&
         tratta.partenza_prevista != null;
       const primoRitornoFlessibile = tratta?.direzione === 'ritorno' &&
@@ -146,6 +146,43 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       if (p.start_offset == null || p.end_offset == null) throw new Error('Prenotazioni storiche senza indici: verificare prima di prenotare');
       return {start:p.start_offset,end:p.end_offset,posti:p.posti_richiesti};
     });
+    // POPBUS: le riserve temporanee condividono il lock della corsa.
+    // In fase di conversione si esclude soltanto la riserva che sta diventando
+    // prenotazione: i suoi posti vengono gia' conteggiati qui sotto.
+    if (current.tipo_corsa === 'riempimento') {
+      const reservationId = options?.popbusRiservaId == null
+        ? null : Number(options.popbusRiservaId);
+      if (reservationId !== null && (!Number.isSafeInteger(reservationId) || reservationId <= 0)) {
+        throw new Error('ID riserva POPBUS non valido');
+      }
+      if (reservationId !== null) {
+        const { rows: ownReservations } = await client.query(`
+          SELECT id, cliente_id, posti_richiesti, start_offset, end_offset,
+                 start_index_polyline, end_index_polyline, stato, expires_at
+          FROM public.popbus_riserve
+          WHERE id=$1 AND corsa_id=$2 FOR UPDATE
+        `, [reservationId, id]);
+        const own = ownReservations[0];
+        if (!own || own.stato !== 'riservata' || new Date(own.expires_at) <= new Date() ||
+            Number(own.cliente_id) !== Number(clienteId) ||
+            Number(own.posti_richiesti) !== posti ||
+            Number(own.start_offset) !== startOffset ||
+            Number(own.end_offset) !== endOffset ||
+            Number(own.start_index_polyline) !== start ||
+            Number(own.end_index_polyline) !== end) {
+          throw new Error('Riserva POPBUS non valida, scaduta o non coerente');
+        }
+      }
+      const { rows: reserved } = await client.query(`
+        SELECT start_offset, end_offset, posti_richiesti
+        FROM public.popbus_riserve
+        WHERE corsa_id=$1 AND stato='riservata' AND expires_at > NOW()
+          AND ($2::BIGINT IS NULL OR id <> $2::BIGINT)
+      `, [id, reservationId]);
+      for (const r of reserved) {
+        intervals.push({start:Number(r.start_offset), end:Number(r.end_offset), posti:Number(r.posti_richiesti)});
+      }
+    }
     intervals.push({start:startOffset,end:endOffset,posti});
     const picco = calcolaPicco(intervals), capacita = Number(current.posti_totali);
     if (!Number.isInteger(capacita) || capacita <= 0 || picco > capacita) throw new Error(`Capienza insufficiente (${picco}/${capacita})`);
@@ -164,9 +201,9 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
       inserted[0].prezzo_totale = quota.prezzoTotale;
     }
 
-    // Campo aggregato legacy: il picco effettivo è specifico della tratta.
-    // La ricerca NCC calcola la disponibilità per tratta; non usare questo campo
-    // aggregato come prova di disponibilità su entrambe le direzioni.
+    // Campo aggregato legacy: il picco effettivo ├¿ specifico della tratta.
+    // La ricerca NCC calcola la disponibilit├á per tratta; non usare questo campo
+    // aggregato come prova di disponibilit├á su entrambe le direzioni.
     const {rows: updated} = await client.query(`UPDATE corse SET posti_prenotati=(
       SELECT COALESCE(SUM(posti_richiesti),0) FROM prenotazioni WHERE corsa_id=$1),
       posti_disponibili=posti_totali-$2 WHERE id=$1 RETURNING *`,[id,picco]);

@@ -9,6 +9,7 @@ import { formatResults } from './formatter/search.formatter.js';
 import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
+import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -793,6 +794,37 @@ export async function cercaSlotUltra(richiesta) {
     // Le nuove richieste sono virtuali e pianificate dal worker V2.
 
     const risultatiPool = [];
+
+    // POPBUS confermate: verifica diagnostica in sola lettura.
+    // Non esponiamo ancora queste corse finché prezzo e Booking non sono validati.
+    // Il flag è disabilitato per impostazione predefinita.
+    const popbusActiveSearchEnabled =
+        process.env.POPBUS_ACTIVE_SEARCH_ENABLED === '1';
+
+    if (popbusActiveSearchEnabled) {
+        try {
+            const popbusConfermate = await cercaPopbusAttivate({
+                pool,
+                richiesta: {
+                    lat,
+                    lon,
+                    destLat,
+                    destLon,
+                    start_datetime: orarioAndataUtente.toISOString(),
+                    posti_richiesti: postiRichiesti
+                }
+            });
+
+            console.log('[POPBUS ACTIVE SEARCH]', {
+                confermate_compatibili: popbusConfermate.length,
+                corsa_ids: popbusConfermate.map(c => c.corsa_id)
+            });
+            // Intenzionalmente nessun push in risultatiPool.
+        } catch (err) {
+            console.error('[POPBUS ACTIVE SEARCH] Errore:', err.message);
+        }
+    }
+
 
     let risultatiFinali = [
         ...risultatiCondivise,

@@ -60,7 +60,7 @@ import { eventiRouter } from './routes/eventi.routes.js';
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
 import { loadCachesUltra } from './services/search/search.cache.js';
-import { startPopbusWorker } from './workers/popbus.worker.js'; 
+import { startPixelFirstWorker } from './workers/popbus-pixel-first.worker.js'; 
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -174,8 +174,8 @@ const startServer = async () => {
     
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
-    startPopbusWorker();
-    console.log('⚙️ [WORKER] Scheduler PopBus avviato.');
+    startPixelFirstWorker();
+    console.log('⚙️ [WORKER] Scheduler PIXEL-first avviato.');
     
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {

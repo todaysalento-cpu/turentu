@@ -1,0 +1,13 @@
+PIXEL_WORKER_E2E_PREFLIGHT_JSON:{"db":"corse_db","opportunita":6,"richieste":12,"factor":1.5}
+PIXEL_FEASIBILITY_READONLY_JSON:{"formazioni":141,"veicoli":15,"fattibili":24,"selezionate":0,"scarti":{"soglia_economica":1950,"turno":141},"scelta":[]}
+PIXEL_WORKER_E2E_ROLLBACK_OK: ramo diagnostico terminato (finally ROLLBACK)
+PIXEL_WORKER_E2E_SIMULATO_JSON:{"source":"worker_diagnostico_reale","multiplier":1.5,"formazioni":141,"veicoli":15,"candidatiEconomici":24,"missioniSelezionate":0,"richiesteServite":0,"uniqueRequests":true,"economicamenteFattibili":false,"scarti":{"soglia_economica":1950,"turno":141},"scelte":[],"passed":false,"limiti":["Non attiva o persiste missioni","Conflitti DB verificati dal worker ma non necessariamente presenti nella fixture","Non dimostra ottimalita globale o cutover operativo"]}
+file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_worker_reale_ricavi_simulati_readonly.js:12
+const fail = msg => { throw new Error('PIXEL_WORKER_E2E: ' + msg); };
+                            ^
+
+Error: PIXEL_WORKER_E2E: risultato sotto le attese; consultare JSON e scarti
+    at fail (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_worker_reale_ricavi_simulati_readonly.js:12:29)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_worker_reale_ricavi_simulati_readonly.js:102:25
+
+Node.js v22.23.1

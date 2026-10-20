@@ -230,8 +230,20 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
   const maxPeak = options.maxPeak == null ? Infinity : Number(options.maxPeak);
   if (maxPeak <= 0 || Number.isNaN(maxPeak) || requiredIds.some(id => excluded.has(id))) return null;
 
+  // Vincolo opzionale sulla partenza della direttrice (es. finestra PIXEL).
+  // Senza departureWindow il comportamento preesistente resta invariato.
+  const departureWindow = options.departureWindow;
   let lower = -Infinity;
   let upper = Infinity;
+  if (departureWindow != null) {
+    const start = Number(departureWindow.start);
+    const end = Number(departureWindow.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+      throw new Error('departureWindow non valida');
+    }
+    lower = start;
+    upper = end;
+  }
   const selected = [];
   const selectedIds = new Set();
   const occupancy = plan.legs.map(() => 0);
@@ -274,7 +286,16 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
     occupancy,
     peak: Math.max(0, ...occupancy),
     revenue: selected.reduce((sum, x) => sum + Math.round(Number(x.r.prezzo) * 100), 0) / 100,
-    requests: selected.map(x => ({ id: requestId(x.r), start: x.s, end: x.e })),
+    // Metadati A/R trasportati senza alterare matching, ricavi o selezione.
+    // Il vincolo di attivazione congiunta resta responsabilita' di POPBUS.
+    requests: selected.map(x => ({
+      id: requestId(x.r),
+      start: x.s,
+      end: x.e,
+      ar_group_id: x.r.ar_group_id ?? null,
+      ar_tratta: x.r.ar_tratta ?? null,
+      ar_vincolata: x.r.ar_vincolata === true
+    })),
     qualita: verificaQualitaRichieste(plan, selected.map(x => x.r), options).dettagli
   };
 }

@@ -1,0 +1,3 @@
+PIXEL_ATTIVAZIONE_TX_JSON:{"db":"corse_db","passed":true,"attivazioneId":"32","missionIds":["6"],"pixelOpportunitaId":"115","veicoloId":361,"richiestaId":196,"legacyDirettriceCreata":false,"associazioneUnivocaNelTest":true,"limiti":["Non certifica fattibilita operativa","Non certifica concorrenza o idempotenza fra transazioni","Non attiva il worker PIXEL-first"]}
+PIXEL_ATTIVAZIONE_TX_ROLLBACK_OK
+PIXEL_ATTIVAZIONE_TX_PERSISTENZA_JSON:{"id":"32","assenteDopoRollback":true,"passed":true}

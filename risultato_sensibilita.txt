@@ -1,0 +1,912 @@
+
+=== SCENARIO 14:00 EUROPE/ROME — 01/11/2026 ===
+ASSEGNAZIONE MULTI-VEICOLO DIAGNOSTICA OK: {
+  orarioRoma: '14:00',
+  operatore: 2,
+  missioneA: {
+    opportunita: '83',
+    richieste: [ 143, 146 ],
+    veicolo: 363,
+    costoCiclo: 29.55
+  },
+  missioneB: {
+    opportunita: '86',
+    richieste: [ 144, 145 ],
+    veicolo: 361,
+    costoCiclo: 65.62
+  },
+  candidatiBPrima: 14,
+  candidatiBDopoEsclusione: 13,
+  stessoVeicoloRespinto: true,
+  terzaMissioneStessoVeicoloRespinta: true,
+  veicoliDistintiStessoOperatore: true,
+  richiesteNonDuplicate: true,
+  formazioniBDisgiunte: 10,
+  entrambeEconomichePrezziFixture: false,
+  entrambeEconomicheRicaviSimulati: true,
+  assegnazioniPersistite: 0,
+  limite: 'Simulazione isolata: NON certifica il selettore operativo o conflitti DB.'
+}
+OTTIMIZZAZIONE MULTI-MISSIONE DIAGNOSTICA: {
+  "domanda": [
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    149,
+    150,
+    151,
+    152,
+    153,
+    154
+  ],
+  "soloFattibilita": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "nessuna",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 408,
+    "espansioniValutate": 122808,
+    "richiesteTotali": 12,
+    "richiesteServite": 12,
+    "richiesteNonServite": [],
+    "missioni": 2,
+    "costoTotaleEuro": 131.57,
+    "assegnazioni": [
+      {
+        "opportunita": "86",
+        "richieste": [
+          143,
+          144,
+          145,
+          146,
+          147,
+          148
+        ],
+        "veicolo": 361,
+        "operatore": 2,
+        "costoCiclo": 65.62,
+        "inizioCiclo": "2026-11-01T12:27:14.000Z",
+        "fineCiclo": "2026-11-01T14:16:49.000Z"
+      },
+      {
+        "opportunita": "88",
+        "richieste": [
+          149,
+          150,
+          151,
+          152,
+          153,
+          154
+        ],
+        "veicolo": 363,
+        "operatore": 2,
+        "costoCiclo": 65.95,
+        "inizioCiclo": "2026-11-01T14:16:02.000Z",
+        "fineCiclo": "2026-11-01T16:12:02.000Z"
+      }
+    ]
+  },
+  "economiaFixture": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "fixture",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 0,
+    "espansioniValutate": 0,
+    "richiesteTotali": 12,
+    "richiesteServite": 0,
+    "richiesteNonServite": [
+      143,
+      144,
+      145,
+      146,
+      147,
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      154
+    ],
+    "missioni": 0,
+    "costoTotaleEuro": 0,
+    "assegnazioni": []
+  },
+  "ricaviSimulati": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "simulata",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 408,
+    "espansioniValutate": 122808,
+    "richiesteTotali": 12,
+    "richiesteServite": 12,
+    "richiesteNonServite": [],
+    "missioni": 2,
+    "costoTotaleEuro": 131.57,
+    "assegnazioni": [
+      {
+        "opportunita": "86",
+        "richieste": [
+          143,
+          144,
+          145,
+          146,
+          147,
+          148
+        ],
+        "veicolo": 361,
+        "operatore": 2,
+        "costoCiclo": 65.62,
+        "inizioCiclo": "2026-11-01T12:27:14.000Z",
+        "fineCiclo": "2026-11-01T14:16:49.000Z"
+      },
+      {
+        "opportunita": "88",
+        "richieste": [
+          149,
+          150,
+          151,
+          152,
+          153,
+          154
+        ],
+        "veicolo": 363,
+        "operatore": 2,
+        "costoCiclo": 65.95,
+        "inizioCiclo": "2026-11-01T14:16:02.000Z",
+        "fineCiclo": "2026-11-01T16:12:02.000Z"
+      }
+    ]
+  },
+  "limite": "Beam search euristica; nessuna scrittura missioni, nessuna garanzia di ottimo globale."
+}
+SENSIBILITA ECONOMICA 12 RICHIESTE: {
+  "ricavoDomandaBaseEuro": 120,
+  "costoCicloPianoOperativoEuro": 131.57,
+  "moltiplicatoreMinimoSingolaCoppia": 1.28667,
+  "sogliaCoperturaCompleta": {
+    "moltiplicatoreStimato": 1.29318,
+    "incrementoPercentoStimato": 29.32,
+    "precisioneIntervallo": 0.000030517578125,
+    "metodo": "bisezione euristica su copertura beam search, non ottimo certificato"
+  },
+  "scenari": [
+    {
+      "moltiplicatore": 1,
+      "incrementoPercento": 0,
+      "ricavoTotaleDomandaEuro": 120,
+      "richiesteServite": 0,
+      "missioni": 0,
+      "costoCicliEuro": 0,
+      "richiesteNonServite": [
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154
+      ],
+      "assegnazioni": []
+    },
+    {
+      "moltiplicatore": 1.25,
+      "incrementoPercento": 25,
+      "ricavoTotaleDomandaEuro": 150,
+      "richiesteServite": 0,
+      "missioni": 0,
+      "costoCicliEuro": 0,
+      "richiesteNonServite": [
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154
+      ],
+      "assegnazioni": []
+    },
+    {
+      "moltiplicatore": 1.5,
+      "incrementoPercento": 50,
+      "ricavoTotaleDomandaEuro": 180,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 2,
+      "incrementoPercento": 100,
+      "ricavoTotaleDomandaEuro": 240,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 3,
+      "incrementoPercento": 200,
+      "ricavoTotaleDomandaEuro": 360,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 4,
+      "incrementoPercento": 300,
+      "ricavoTotaleDomandaEuro": 480,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 5,
+      "incrementoPercento": 400,
+      "ricavoTotaleDomandaEuro": 600,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 7.5,
+      "incrementoPercento": 650,
+      "ricavoTotaleDomandaEuro": 900,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 10,
+      "incrementoPercento": 900,
+      "ricavoTotaleDomandaEuro": 1200,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 15,
+      "incrementoPercento": 1400,
+      "ricavoTotaleDomandaEuro": 1800,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 20,
+      "incrementoPercento": 1900,
+      "ricavoTotaleDomandaEuro": 2400,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 30,
+      "incrementoPercento": 2900,
+      "ricavoTotaleDomandaEuro": 3600,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 50,
+      "incrementoPercento": 4900,
+      "ricavoTotaleDomandaEuro": 6000,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 100,
+      "incrementoPercento": 9900,
+      "ricavoTotaleDomandaEuro": 12000,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "86",
+          "richieste": [
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T12:27:14.000Z",
+          "fineCiclo": "2026-11-01T14:16:49.000Z"
+        },
+        {
+          "opportunita": "88",
+          "richieste": [
+            149,
+            150,
+            151,
+            152,
+            153,
+            154
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T14:16:02.000Z",
+          "fineCiclo": "2026-11-01T16:12:02.000Z"
+        }
+      ]
+    }
+  ],
+  "nota": "Soglia lorda gia calcolata con ritorno; moltiplicazione dei soli ricavi. Nessuna modifica worker o database."
+}
+RIEPILOGO: {
+  formazioni: 141,
+  coppie: 2115,
+  compatibili: 1962,
+  scartiTurno: 138,
+  motivi: { fuori_fascia: 138 },
+  veicoliCompatibili: [
+    347, 352, 353, 356,
+    357, 358, 359, 360,
+    361, 362, 363, 364,
+    365, 366
+  ],
+  multiVeicoloOsservato: true,
+  attivabiliPrezziFixture: 0,
+  rollback: true
+}
+┌─────────┬─────────────┬─────────────────────────────────────┬────────────┬────────────────┬────────────────┬───────────────┐
+│ (index) │ opportunita │ richieste                           │ postiPicco │ candidatiTurno │ migliorVeicolo │ costoMigliore │
+├─────────┼─────────────┼─────────────────────────────────────┼────────────┼────────────────┼────────────────┼───────────────┤
+│ 0       │ '83'        │ [ 143 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 1       │ '83'        │ [ 143, 146 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 2       │ '83'        │ [ 146 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 3       │ '83'        │ [ 143, 146 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 4       │ '86'        │ [ 143 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 5       │ '86'        │ [ 143, 144 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 6       │ '86'        │ [ 143, 145 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 7       │ '86'        │ [ 143, 146 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 8       │ '86'        │ [ 143, 147 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 9       │ '86'        │ [ 143, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 10      │ '86'        │ [ 143, 144, 145 ]                   │ 4          │ 14             │ 361            │ 65.62         │
+│ 11      │ '86'        │ [ 143, 144, 145, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 12      │ '86'        │ [ 143, 144, 145, ... 2 more items ] │ 5          │ 13             │ 361            │ 65.62         │
+│ 13      │ '86'        │ [ 143, 144, 145, ... 3 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 14      │ '86'        │ [ 144 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 15      │ '86'        │ [ 144, 145 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 16      │ '86'        │ [ 144, 146 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 17      │ '86'        │ [ 144, 147 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 18      │ '86'        │ [ 144, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 19      │ '86'        │ [ 145 ]                             │ 3          │ 14             │ 361            │ 65.62         │
+│ 20      │ '86'        │ [ 145, 146 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 21      │ '86'        │ [ 145, 147 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 22      │ '86'        │ [ 145, 148 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 23      │ '86'        │ [ 146 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 24      │ '86'        │ [ 143, 146 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 25      │ '86'        │ [ 144, 146 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 26      │ '86'        │ [ 145, 146 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 27      │ '86'        │ [ 146, 147 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 28      │ '86'        │ [ 146, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 29      │ '86'        │ [ 143, 144, 146 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 30      │ '86'        │ [ 143, 144, 145, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 31      │ '86'        │ [ 143, 144, 145, ... 2 more items ] │ 5          │ 13             │ 361            │ 65.62         │
+│ 32      │ '86'        │ [ 143, 144, 145, ... 3 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 33      │ '86'        │ [ 147 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 34      │ '86'        │ [ 143, 147 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 35      │ '86'        │ [ 144, 147 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 36      │ '86'        │ [ 145, 147 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 37      │ '86'        │ [ 147, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 38      │ '86'        │ [ 143, 144, 147 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 39      │ '86'        │ [ 143, 144, 145, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 40      │ '86'        │ [ 148 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 41      │ '86'        │ [ 143, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 42      │ '86'        │ [ 144, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 43      │ '86'        │ [ 145, 148 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 44      │ '86'        │ [ 143, 144, 148 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 45      │ '86'        │ [ 143, 144, 145, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 46      │ '86'        │ [ 143, 144, 145, ... 2 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 47      │ '84'        │ [ 146 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 48      │ '84'        │ [ 146, 149 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 49      │ '84'        │ [ 149 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 50      │ '84'        │ [ 146, 149 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 51      │ '87'        │ [ 146 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 52      │ '87'        │ [ 146, 147 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 53      │ '87'        │ [ 146, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 54      │ '87'        │ [ 146, 149 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 55      │ '87'        │ [ 146, 150 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 56      │ '87'        │ [ 146, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 57      │ '87'        │ [ 146, 147, 148 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 58      │ '87'        │ [ 146, 147, 148, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 59      │ '87'        │ [ 146, 147, 148, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 60      │ '87'        │ [ 146, 147, 148, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 61      │ '87'        │ [ 147 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 62      │ '87'        │ [ 147, 148 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 63      │ '87'        │ [ 147, 149 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 64      │ '87'        │ [ 147, 150 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 65      │ '87'        │ [ 147, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 66      │ '87'        │ [ 148 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 67      │ '87'        │ [ 148, 149 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 68      │ '87'        │ [ 148, 150 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 69      │ '87'        │ [ 148, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 70      │ '87'        │ [ 149 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 71      │ '87'        │ [ 146, 149 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 72      │ '87'        │ [ 147, 149 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 73      │ '87'        │ [ 148, 149 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 74      │ '87'        │ [ 149, 150 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 75      │ '87'        │ [ 149, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 76      │ '87'        │ [ 146, 147, 149 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 77      │ '87'        │ [ 146, 147, 148, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 78      │ '87'        │ [ 146, 147, 148, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 79      │ '87'        │ [ 146, 147, 148, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 80      │ '87'        │ [ 150 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 81      │ '87'        │ [ 146, 150 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 82      │ '87'        │ [ 147, 150 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 83      │ '87'        │ [ 148, 150 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 84      │ '87'        │ [ 150, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 85      │ '87'        │ [ 146, 147, 150 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 86      │ '87'        │ [ 146, 147, 148, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 87      │ '87'        │ [ 151 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 88      │ '87'        │ [ 146, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 89      │ '87'        │ [ 147, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 90      │ '87'        │ [ 148, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 91      │ '87'        │ [ 146, 147, 151 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 92      │ '87'        │ [ 146, 147, 148, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 93      │ '87'        │ [ 146, 147, 148, ... 2 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 94      │ '85'        │ [ 149 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 95      │ '85'        │ [ 149, 152 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 96      │ '85'        │ [ 152 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 97      │ '85'        │ [ 149, 152 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 98      │ '88'        │ [ 149 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 99      │ '88'        │ [ 149, 150 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 100     │ '88'        │ [ 149, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 101     │ '88'        │ [ 149, 152 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 102     │ '88'        │ [ 149, 153 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 103     │ '88'        │ [ 149, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 104     │ '88'        │ [ 149, 150, 151 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 105     │ '88'        │ [ 149, 150, 151, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 106     │ '88'        │ [ 149, 150, 151, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 107     │ '88'        │ [ 149, 150, 151, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 108     │ '88'        │ [ 150 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 109     │ '88'        │ [ 150, 151 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 110     │ '88'        │ [ 150, 152 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 111     │ '88'        │ [ 150, 153 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 112     │ '88'        │ [ 150, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 113     │ '88'        │ [ 151 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 114     │ '88'        │ [ 151, 152 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 115     │ '88'        │ [ 151, 153 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 116     │ '88'        │ [ 151, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 117     │ '88'        │ [ 152 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 118     │ '88'        │ [ 149, 152 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 119     │ '88'        │ [ 150, 152 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 120     │ '88'        │ [ 151, 152 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 121     │ '88'        │ [ 152, 153 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 122     │ '88'        │ [ 152, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 123     │ '88'        │ [ 149, 150, 152 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 124     │ '88'        │ [ 149, 150, 151, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 125     │ '88'        │ [ 149, 150, 151, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 126     │ '88'        │ [ 149, 150, 151, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 127     │ '88'        │ [ 153 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 128     │ '88'        │ [ 149, 153 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 129     │ '88'        │ [ 150, 153 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 130     │ '88'        │ [ 151, 153 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 131     │ '88'        │ [ 153, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 132     │ '88'        │ [ 149, 150, 153 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 133     │ '88'        │ [ 149, 150, 151, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 134     │ '88'        │ [ 154 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 135     │ '88'        │ [ 149, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 136     │ '88'        │ [ 150, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 137     │ '88'        │ [ 151, 154 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 138     │ '88'        │ [ 149, 150, 154 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 139     │ '88'        │ [ 149, 150, 151, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 140     │ '88'        │ [ 149, 150, 151, ... 2 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+└─────────┴─────────────┴─────────────────────────────────────┴────────────┴────────────────┴────────────────┴───────────────┘
+
+RIEPILOGO SCENARIO MULTI-VEICOLO:
+┌─────────┬─────────┬─────────────────┬───────────────────┬─────────────┬───────────────────┬──────────────┐
+│ (index) │ oraRoma │ veicoliDistinti │ coppieCompatibili │ scartiTurno │ economicheFixture │ multiVeicolo │
+├─────────┼─────────┼─────────────────┼───────────────────┼─────────────┼───────────────────┼──────────────┤
+│ 0       │ '14:00' │ 14              │ 1962              │ 138         │ 0                 │ true         │
+└─────────┴─────────┴─────────────────┴───────────────────┴─────────────┴───────────────────┴──────────────┘
+ROLLBACK SCENARIO MULTI-VEICOLO CONFERMATO. Nessuna attivazione.

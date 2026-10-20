@@ -1,0 +1,870 @@
+DB verificato: { db: 'corse_db', schema: 'public', host: '10.26.98.185/32' }
+
+=== BASELINE ===
+[PIXEL FORMAZIONI] {
+  opportunitaId: 115,
+  richiesteContesto: 2,
+  seed: [ 196, 199 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 199 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 115,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 118,
+  richiesteContesto: 6,
+  seed: [ 196, 197, 198, 199, 200, 201 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 197, 198, 199, 200, 201 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 118,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 116,
+  richiesteContesto: 2,
+  seed: [ 199, 202 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 199, 202 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 116,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T14:00:00.000Z',
+    end: '2026-11-01T14:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 119,
+  richiesteContesto: 6,
+  seed: [ 199, 200, 201, 202, 203, 204 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 199, 200, 201, 202, 203, 204 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 119,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T14:00:00.000Z',
+    end: '2026-11-01T14:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 117,
+  richiesteContesto: 2,
+  seed: [ 202, 205 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 202, 205 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 117,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T14:45:00.000Z',
+    end: '2026-11-01T15:00:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 120,
+  richiesteContesto: 6,
+  seed: [ 202, 203, 204, 205, 206, 207 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 202, 203, 204, 205, 206, 207 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 120,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T14:45:00.000Z',
+    end: '2026-11-01T15:00:00.000Z'
+  }
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-20T11:26:40.500Z',
+  contestiPixel: 6,
+  missioniCandidate: 102,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+[PIXEL ECONOMIA DIAGNOSTICA] {
+  "coppieDopoPreflight": 545,
+  "blocchiOrdinati": 1,
+  "saltateEconomiaPreflight": 18775,
+  "coppieConRouting": 545,
+  "cicliValutati": 63,
+  "cicliNonAttivabiliEconomiaFinale": 63,
+  "cicliNonRestituitiDaShadow": 482,
+  "miglioriCinqueNonAttivabili": [
+    {
+      "veicoloId": 361,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 53.208,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 0.323,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 74,
+      "ricavoNettoEuro": 62.9,
+      "costoCompletoEuro": 94.7,
+      "margineEuro": -31.8,
+      "sogliaAttivazioneLordaEuro": 111.41,
+      "deficitLordoEuro": 37.41
+    },
+    {
+      "veicoloId": 363,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 24.312,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 29.686,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 74,
+      "ricavoNettoEuro": 62.9,
+      "costoCompletoEuro": 94.98,
+      "margineEuro": -32.08,
+      "sogliaAttivazioneLordaEuro": 111.74,
+      "deficitLordoEuro": 37.74
+    },
+    {
+      "veicoloId": 353,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 3.869,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 56.967,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 74,
+      "ricavoNettoEuro": 62.9,
+      "costoCompletoEuro": 99.09,
+      "margineEuro": -36.19,
+      "sogliaAttivazioneLordaEuro": 116.58,
+      "deficitLordoEuro": 42.58
+    },
+    {
+      "veicoloId": 365,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 3.869,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 56.967,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 74,
+      "ricavoNettoEuro": 62.9,
+      "costoCompletoEuro": 99.09,
+      "margineEuro": -36.19,
+      "sogliaAttivazioneLordaEuro": 116.58,
+      "deficitLordoEuro": 42.58
+    },
+    {
+      "veicoloId": 361,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 53.208,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 0.323,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 67,
+      "ricavoNettoEuro": 56.95,
+      "costoCompletoEuro": 94.7,
+      "margineEuro": -37.75,
+      "sogliaAttivazioneLordaEuro": 111.41,
+      "deficitLordoEuro": 44.41
+    }
+  ]
+}
+RISULTATO_BASELINE: {
+  "modalita": "ROLLBACK_ONLY",
+  "offerte": 0,
+  "motivo": "nessun ciclo economicamente attivabile e A/R completo",
+  "cicliValutati": 63,
+  "coppiePotenziali": 545,
+  "coppieConRouting": 545,
+  "saltateEconomia": 18775,
+  "saltateAr": 0,
+  "chiamateRouting": 22
+}
+BACKUP DURATURO: D:\TURENTU\Servizi\project-root\tests\pixel_first_prezzi_196_207_RECOVERY.json
+
+=== POSITIVO_160 ===
+[PIXEL FORMAZIONI] {
+  opportunitaId: 115,
+  richiesteContesto: 2,
+  seed: [ 196, 199 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 199 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 115,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 118,
+  richiesteContesto: 6,
+  seed: [ 196, 197, 198, 199, 200, 201 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 197, 198, 199, 200, 201 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 118,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 116,
+  richiesteContesto: 2,
+  seed: [ 199, 202 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 199, 202 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 116,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T14:00:00.000Z',
+    end: '2026-11-01T14:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 119,
+  richiesteContesto: 6,
+  seed: [ 199, 200, 201, 202, 203, 204 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 199, 200, 201, 202, 203, 204 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 119,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T14:00:00.000Z',
+    end: '2026-11-01T14:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 117,
+  richiesteContesto: 2,
+  seed: [ 202, 205 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 202, 205 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 117,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-01T14:45:00.000Z',
+    end: '2026-11-01T15:00:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 120,
+  richiesteContesto: 6,
+  seed: [ 202, 203, 204, 205, 206, 207 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 202, 203, 204, 205, 206, 207 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 120,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T14:45:00.000Z',
+    end: '2026-11-01T15:00:00.000Z'
+  }
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-20T11:26:55.181Z',
+  contestiPixel: 6,
+  missioniCandidate: 102,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+[PIXEL ECONOMIA DIAGNOSTICA] {
+  "coppieDopoPreflight": 4024,
+  "blocchiOrdinati": 4,
+  "saltateEconomiaPreflight": 15296,
+  "coppieConRouting": 2995,
+  "cicliValutati": 234,
+  "cicliNonAttivabiliEconomiaFinale": 230,
+  "cicliNonRestituitiDaShadow": 2761,
+  "miglioriCinqueNonAttivabili": [
+    {
+      "veicoloId": 361,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 53.208,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 0.323,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 107.2,
+      "ricavoNettoEuro": 91.12,
+      "costoCompletoEuro": 94.7,
+      "margineEuro": -3.58,
+      "sogliaAttivazioneLordaEuro": 111.41,
+      "deficitLordoEuro": 4.21
+    },
+    {
+      "veicoloId": 361,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 53.208,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 0.323,
+      "oreAttesa": 0.31666666666666665,
+      "ricavoLordoEuro": 107.2,
+      "ricavoNettoEuro": 91.12,
+      "costoCompletoEuro": 94.7,
+      "margineEuro": -3.58,
+      "sogliaAttivazioneLordaEuro": 111.41,
+      "deficitLordoEuro": 4.21
+    },
+    {
+      "veicoloId": 363,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 24.312,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 29.686,
+      "oreAttesa": 0.5666666666666667,
+      "ricavoLordoEuro": 107.2,
+      "ricavoNettoEuro": 91.12,
+      "costoCompletoEuro": 94.98,
+      "margineEuro": -3.86,
+      "sogliaAttivazioneLordaEuro": 111.74,
+      "deficitLordoEuro": 4.54
+    },
+    {
+      "veicoloId": 363,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        199,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 24.312,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 29.686,
+      "oreAttesa": 0.31666666666666665,
+      "ricavoLordoEuro": 107.2,
+      "ricavoNettoEuro": 91.12,
+      "costoCompletoEuro": 94.98,
+      "margineEuro": -3.86,
+      "sogliaAttivazioneLordaEuro": 111.74,
+      "deficitLordoEuro": 4.54
+    },
+    {
+      "veicoloId": 361,
+      "opportunitaIds": [
+        115,
+        120
+      ],
+      "richiestaIds": [
+        196,
+        199,
+        202,
+        203,
+        204,
+        205,
+        207
+      ],
+      "euroKm": 0.6,
+      "kmAvvicinamento": 53.208,
+      "kmMissioni": 80.282,
+      "kmTrasferimenti": 24.016,
+      "kmRitornoBase": 0.323,
+      "oreAttesa": 0.8166666666666667,
+      "ricavoLordoEuro": 104,
+      "ricavoNettoEuro": 88.4,
+      "costoCompletoEuro": 94.7,
+      "margineEuro": -6.3,
+      "sogliaAttivazioneLordaEuro": 111.41,
+      "deficitLordoEuro": 7.41
+    }
+  ]
+}
+RISULTATO_POSITIVO_160: {
+  "attivazioneId": "43",
+  "offertaId": 34,
+  "veicoloId": 361,
+  "autistaId": 2,
+  "partenza": "2026-11-01T13:15:00.000Z",
+  "startNodeId": 8,
+  "endNodeId": 7,
+  "origineAddress": "Tricase, LE, Italia",
+  "destinazioneAddress": "Lecce, LE, Italia",
+  "peak": 4,
+  "richiestaIds": [
+    196,
+    199,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207
+  ],
+  "opportunitaIds": [
+    115,
+    120
+  ],
+  "margineEuro": 5.94,
+  "modo": "ROLLBACK_ONLY",
+  "persistita": false,
+  "cicliValutati": 234
+}
+TEST FALLITO: Error: Nessuna attivazione in ROLLBACK_ONLY: scenario positivo NON superato
+    at fail (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_economia_positiva_rollback.mjs:17:29)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_economia_positiva_rollback.mjs:105:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+RIPRISTINO PREZZI VERIFICATO. Backup di recovery rimosso.

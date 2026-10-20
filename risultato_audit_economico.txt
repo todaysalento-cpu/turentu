@@ -1,0 +1,790 @@
+
+=== SCENARIO 14:00 EUROPE/ROME — 01/11/2026 ===
+ASSEGNAZIONE MULTI-VEICOLO DIAGNOSTICA OK: {
+  orarioRoma: '14:00',
+  operatore: 2,
+  missioneA: {
+    opportunita: '90',
+    richieste: [ 155, 158 ],
+    veicolo: 363,
+    costoCiclo: 29.55
+  },
+  missioneB: {
+    opportunita: '93',
+    richieste: [ 156, 157 ],
+    veicolo: 361,
+    costoCiclo: 65.62
+  },
+  candidatiBPrima: 14,
+  candidatiBDopoEsclusione: 13,
+  stessoVeicoloRespinto: true,
+  terzaMissioneStessoVeicoloRespinta: true,
+  veicoliDistintiStessoOperatore: true,
+  richiesteNonDuplicate: true,
+  formazioniBDisgiunte: 10,
+  entrambeEconomichePrezziFixture: false,
+  entrambeEconomicheRicaviSimulati: true,
+  assegnazioniPersistite: 0,
+  limite: 'Simulazione isolata: NON certifica il selettore operativo o conflitti DB.'
+}
+SCENARIO FALLITO: 14 exit: 1 rollback: true provaAssegnazione: true ottimizzazione: false
+  "opportunita": "95",
+        "richieste": [
+          165,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      162,
+      165
+    ],
+    "postiPicco": 2,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 25,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          165
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 25,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          165
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 25,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          165
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      162,
+      163,
+      165
+    ],
+    "postiPicco": 3,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 39,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          165
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 39,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          165
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 39,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          165
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      166
+    ],
+    "postiPicco": 1,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 14,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 14,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 14,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      166
+    ],
+    "postiPicco": 2,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 21,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 21,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 21,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      162,
+      166
+    ],
+    "postiPicco": 2,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 23,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          162,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 23,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          162,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 23,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          162,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      163,
+      166
+    ],
+    "postiPicco": 2,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 28,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          163,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 28,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          163,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 28,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          163,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      162,
+      166
+    ],
+    "postiPicco": 2,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 30,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 30,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 30,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      162,
+      163,
+      166
+    ],
+    "postiPicco": 3,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 44,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 44,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 44,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          166
+        ]
+      }
+    ]
+  },
+  {
+    "opportunita": "95",
+    "richieste": [
+      161,
+      162,
+      163,
+      164,
+      166
+    ],
+    "postiPicco": 4,
+    "partenza": "2026-11-01T15:00:00.000Z",
+    "candidatiTurno": 14,
+    "migliori": [
+      {
+        "veicolo": 361,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_LECCE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 53.21,
+        "kmRitorno": 0.32,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 51,
+        "costoCiclo": 65.62,
+        "sogliaLorda": 77.2,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          164,
+          166
+        ]
+      },
+      {
+        "veicolo": 363,
+        "operatore": 2,
+        "modello": "POPBUS_TEST_MAGLIE_8",
+        "posti": 8,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 24.4,
+        "kmRitorno": 29.69,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 51,
+        "costoCiclo": 65.95,
+        "sogliaLorda": 77.59,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          164,
+          166
+        ]
+      },
+      {
+        "veicolo": 353,
+        "operatore": 2,
+        "modello": "Diplomat",
+        "posti": 10,
+        "euroKm": 0.6,
+        "kmAvvicinamento": 3.87,
+        "kmRitorno": 56.97,
+        "kmMissione": 55.823,
+        "kmTrasferimenti": 0,
+        "ricaviBase": 51,
+        "costoCiclo": 70,
+        "sogliaLorda": 82.35,
+        "attivabile": false,
+        "attivabileSimulato": true,
+        "opportunita": "95",
+        "richieste": [
+          161,
+          162,
+          163,
+          164,
+          166
+        ]
+      }
+    ]
+  }
+]
+MOTIVI SCARTO TURNO: { fuori_fascia: 138 }
+DIAGNOSI TURNO PER VEICOLO (PRIMO SCARTO): [
+  {
+    "veicolo": 348,
+    "modello": "50",
+    "posti": 5,
+    "turnoRegistratoUTC": "2026-10-08T08:00:00.000Z / 2026-10-08T18:00:00.000Z",
+    "fasciaRicorrenteRoma": "10:00-20:00",
+    "inizioCicloUTC": "2026-11-01T01:11:21.000Z",
+    "inizioCicloRoma": "01/11/2026, 02:11",
+    "partenzaMissioneUTC": "2026-11-01T13:15:00.000Z",
+    "partenzaMissioneRoma": "01/11/2026, 14:15",
+    "fineMissioneUTC": "2026-11-01T13:43:34.000Z",
+    "fineCicloUTC": "2026-11-02T01:25:06.000Z",
+    "fineCicloRoma": "02/11/2026, 02:25",
+    "kmAvvicinamento": 1204.34,
+    "minutiAvvicinamento": 723.6,
+    "kmRitorno": 1195.32,
+    "minutiRitorno": 701.5,
+    "motivo": "fuori_fascia",
+    "primoMinutoNonValido": "2026-11-01T01:11:21.000Z",
+    "primoMinutoRoma": "01/11/2026, 02:11",
+    "fascia": "10:00-20:00"
+  }
+]
+NOTA ORA LEGALE: fascia ricorrente interpretata in Europe/Rome; i timestamp UTC di ottobre possono rappresentare orari locali diversi da quelli attesi.
+ESCLUSIVITA MULTI-VEICOLO (REGOLA ISOLATA): {
+  conflittoStessoVeicoloOsservato: true,
+  simultaneitaVeicoliDistintiStessoOperatoreOsservata: true,
+  nota: 'Non certifica conflitti DB, disponibilita conducente fisico o selettore del worker.'
+}
+ASSEGNAZIONE_MULTI_JSON:{"orarioRoma":"14:00","operatore":2,"missioneA":{"opportunita":"90","richieste":[155,158],"veicolo":363,"costoCiclo":29.55},"missioneB":{"opportunita":"93","richieste":[156,157],"veicolo":361,"costoCiclo":65.62},"candidatiBPrima":14,"candidatiBDopoEsclusione":13,"stessoVeicoloRespinto":true,"terzaMissioneStessoVeicoloRespinta":true,"veicoliDistintiStessoOperatore":true,"richiesteNonDuplicate":true,"formazioniBDisgiunte":10,"entrambeEconomichePrezziFixture":false,"entrambeEconomicheRicaviSimulati":true,"assegnazioniPersistite":0,"limite":"Simulazione isolata: NON certifica il selettore operativo o conflitti DB."}
+ROLLBACK ESEGUITO: nessuna scrittura confermata.
+
+TEST DINAMICO FALLITO: Error: PIXEL DOMANDA DINAMICA ROLLBACK: criterio di attivazione diverso da soglia lorda ricalcolata
+    at assert (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_audit_economico_missioni_12_e2e_rollback.js:80:42)
+    at calcolaAudit (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_audit_economico_missioni_12_e2e_rollback.js:1076:5)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_audit_economico_missioni_12_e2e_rollback.js:1105:36
+    at Array.map (<anonymous>)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_audit_economico_missioni_12_e2e_rollback.js:1105:29
+    at Array.map (<anonymous>)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_audit_economico_missioni_12_e2e_rollback.js:1104:34
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+

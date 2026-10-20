@@ -1,0 +1,1412 @@
+
+=== SCENARIO 14:00 EUROPE/ROME — 01/11/2026 ===
+ASSEGNAZIONE MULTI-VEICOLO DIAGNOSTICA OK: {
+  orarioRoma: '14:00',
+  operatore: 2,
+  missioneA: {
+    opportunita: '96',
+    richieste: [ 167, 170 ],
+    veicolo: 363,
+    costoCiclo: 29.55
+  },
+  missioneB: {
+    opportunita: '99',
+    richieste: [ 168, 169 ],
+    veicolo: 361,
+    costoCiclo: 65.62
+  },
+  candidatiBPrima: 14,
+  candidatiBDopoEsclusione: 13,
+  stessoVeicoloRespinto: true,
+  terzaMissioneStessoVeicoloRespinta: true,
+  veicoliDistintiStessoOperatore: true,
+  richiesteNonDuplicate: true,
+  formazioniBDisgiunte: 10,
+  entrambeEconomichePrezziFixture: false,
+  entrambeEconomicheRicaviSimulati: true,
+  assegnazioniPersistite: 0,
+  limite: 'Simulazione isolata: NON certifica il selettore operativo o conflitti DB.'
+}
+OTTIMIZZAZIONE MULTI-MISSIONE DIAGNOSTICA: {
+  "domanda": [
+    167,
+    168,
+    169,
+    170,
+    171,
+    172,
+    173,
+    174,
+    175,
+    176,
+    177,
+    178
+  ],
+  "soloFattibilita": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "nessuna",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 408,
+    "espansioniValutate": 122808,
+    "richiesteTotali": 12,
+    "richiesteServite": 12,
+    "richiesteNonServite": [],
+    "missioni": 2,
+    "costoTotaleEuro": 131.57,
+    "assegnazioni": [
+      {
+        "opportunita": "101",
+        "richieste": [
+          173,
+          174,
+          175,
+          176,
+          177,
+          178
+        ],
+        "veicolo": 361,
+        "operatore": 2,
+        "costoCiclo": 65.62,
+        "inizioCiclo": "2026-11-01T13:57:14.000Z",
+        "fineCiclo": "2026-11-01T15:46:49.000Z"
+      },
+      {
+        "opportunita": "99",
+        "richieste": [
+          167,
+          168,
+          169,
+          170,
+          171,
+          172
+        ],
+        "veicolo": 363,
+        "operatore": 2,
+        "costoCiclo": 65.95,
+        "inizioCiclo": "2026-11-01T12:46:02.000Z",
+        "fineCiclo": "2026-11-01T14:41:59.000Z"
+      }
+    ]
+  },
+  "economiaFixture": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "fixture",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 0,
+    "espansioniValutate": 0,
+    "richiesteTotali": 12,
+    "richiesteServite": 0,
+    "richiesteNonServite": [
+      167,
+      168,
+      169,
+      170,
+      171,
+      172,
+      173,
+      174,
+      175,
+      176,
+      177,
+      178
+    ],
+    "missioni": 0,
+    "costoTotaleEuro": 0,
+    "assegnazioni": []
+  },
+  "ricaviSimulati": {
+    "metodo": "beam_search_diagnostica_non_ottimo_certificato",
+    "economia": "simulata",
+    "moltiplicatore": 1,
+    "larghezzaBeam": 300,
+    "formazioniVeicoloEsaminate": 408,
+    "espansioniValutate": 122808,
+    "richiesteTotali": 12,
+    "richiesteServite": 12,
+    "richiesteNonServite": [],
+    "missioni": 2,
+    "costoTotaleEuro": 131.57,
+    "assegnazioni": [
+      {
+        "opportunita": "101",
+        "richieste": [
+          173,
+          174,
+          175,
+          176,
+          177,
+          178
+        ],
+        "veicolo": 361,
+        "operatore": 2,
+        "costoCiclo": 65.62,
+        "inizioCiclo": "2026-11-01T13:57:14.000Z",
+        "fineCiclo": "2026-11-01T15:46:49.000Z"
+      },
+      {
+        "opportunita": "99",
+        "richieste": [
+          167,
+          168,
+          169,
+          170,
+          171,
+          172
+        ],
+        "veicolo": 363,
+        "operatore": 2,
+        "costoCiclo": 65.95,
+        "inizioCiclo": "2026-11-01T12:46:02.000Z",
+        "fineCiclo": "2026-11-01T14:41:59.000Z"
+      }
+    ]
+  },
+  "limite": "Beam search euristica; nessuna scrittura missioni, nessuna garanzia di ottimo globale."
+}
+SENSIBILITA ECONOMICA 12 RICHIESTE: {
+  "ricavoDomandaBaseEuro": 120,
+  "costoCicloPianoOperativoEuro": 131.57,
+  "moltiplicatoreMinimoSingolaCoppia": 1.28667,
+  "sogliaCoperturaCompleta": {
+    "moltiplicatoreStimato": 1.29318,
+    "incrementoPercentoStimato": 29.32,
+    "precisioneIntervallo": 0.000030517578125,
+    "metodo": "bisezione euristica su copertura beam search, non ottimo certificato"
+  },
+  "scenari": [
+    {
+      "moltiplicatore": 1,
+      "incrementoPercento": 0,
+      "ricavoTotaleDomandaEuro": 120,
+      "richiesteServite": 0,
+      "missioni": 0,
+      "costoCicliEuro": 0,
+      "richiesteNonServite": [
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178
+      ],
+      "assegnazioni": []
+    },
+    {
+      "moltiplicatore": 1.25,
+      "incrementoPercento": 25,
+      "ricavoTotaleDomandaEuro": 150,
+      "richiesteServite": 0,
+      "missioni": 0,
+      "costoCicliEuro": 0,
+      "richiesteNonServite": [
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178
+      ],
+      "assegnazioni": []
+    },
+    {
+      "moltiplicatore": 1.5,
+      "incrementoPercento": 50,
+      "ricavoTotaleDomandaEuro": 180,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 2,
+      "incrementoPercento": 100,
+      "ricavoTotaleDomandaEuro": 240,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 3,
+      "incrementoPercento": 200,
+      "ricavoTotaleDomandaEuro": 360,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 4,
+      "incrementoPercento": 300,
+      "ricavoTotaleDomandaEuro": 480,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 5,
+      "incrementoPercento": 400,
+      "ricavoTotaleDomandaEuro": 600,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 7.5,
+      "incrementoPercento": 650,
+      "ricavoTotaleDomandaEuro": 900,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 10,
+      "incrementoPercento": 900,
+      "ricavoTotaleDomandaEuro": 1200,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 15,
+      "incrementoPercento": 1400,
+      "ricavoTotaleDomandaEuro": 1800,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 20,
+      "incrementoPercento": 1900,
+      "ricavoTotaleDomandaEuro": 2400,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 30,
+      "incrementoPercento": 2900,
+      "ricavoTotaleDomandaEuro": 3600,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 50,
+      "incrementoPercento": 4900,
+      "ricavoTotaleDomandaEuro": 6000,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 100,
+      "incrementoPercento": 9900,
+      "ricavoTotaleDomandaEuro": 12000,
+      "richiesteServite": 12,
+      "missioni": 2,
+      "costoCicliEuro": 131.57,
+      "richiesteNonServite": [],
+      "assegnazioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "costoCiclo": 65.62,
+          "inizioCiclo": "2026-11-01T13:57:14.000Z",
+          "fineCiclo": "2026-11-01T15:46:49.000Z"
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "costoCiclo": 65.95,
+          "inizioCiclo": "2026-11-01T12:46:02.000Z",
+          "fineCiclo": "2026-11-01T14:41:59.000Z"
+        }
+      ]
+    }
+  ],
+  "nota": "Soglia lorda gia calcolata con ritorno; moltiplicazione dei soli ricavi. Nessuna modifica worker o database."
+}
+AUDIT ECONOMICO PER MISSIONE: {
+  "metodo": "ricalcolo_valutaEconomiaCiclo_per_missione",
+  "piano": "piano_completo_senza_vincolo_economico",
+  "sogliaCoperturaEuristica": {
+    "moltiplicatoreStimato": 1.29318,
+    "incrementoPercentoStimato": 29.32,
+    "precisioneIntervallo": 0.000030517578125,
+    "metodo": "bisezione euristica su copertura beam search, non ottimo certificato"
+  },
+  "aliquotaCommissioneIllustrativa": 0.15,
+  "nota": "Commissione 15% informativa: verificare nel modulo pricing se gia inclusa. La differenza netta illustrativa NON e una seconda soglia di attivazione.",
+  "scenari": [
+    {
+      "moltiplicatore": 1,
+      "ricavoTotaleEuro": 120,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 18,
+      "tutteLeMissioniAttivabili": false,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            7,
+            9,
+            14,
+            7,
+            9,
+            14
+          ],
+          "ricavoLordoEuro": 60,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": -17.2,
+          "commissione15PercentoIllustrativaEuro": 9,
+          "ricavoDopoCommissioneIllustrativoEuro": 51,
+          "differenzaDopoCommissioneMenoCostoEuro": -14.62,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": false,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            7,
+            9,
+            14,
+            7,
+            9,
+            14
+          ],
+          "ricavoLordoEuro": 60,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": -17.59,
+          "commissione15PercentoIllustrativaEuro": 9,
+          "ricavoDopoCommissioneIllustrativoEuro": 51,
+          "differenzaDopoCommissioneMenoCostoEuro": -14.95,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": false,
+          "divergenzaAttivazione": false
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 1.25,
+      "ricavoTotaleEuro": 150,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 22.5,
+      "tutteLeMissioniAttivabili": false,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            8.75,
+            11.25,
+            17.5,
+            8.75,
+            11.25,
+            17.5
+          ],
+          "ricavoLordoEuro": 75,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": -2.2,
+          "commissione15PercentoIllustrativaEuro": 11.25,
+          "ricavoDopoCommissioneIllustrativoEuro": 63.75,
+          "differenzaDopoCommissioneMenoCostoEuro": -1.87,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": false,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            8.75,
+            11.25,
+            17.5,
+            8.75,
+            11.25,
+            17.5
+          ],
+          "ricavoLordoEuro": 75,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": -2.59,
+          "commissione15PercentoIllustrativaEuro": 11.25,
+          "ricavoDopoCommissioneIllustrativoEuro": 63.75,
+          "differenzaDopoCommissioneMenoCostoEuro": -2.2,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": false,
+          "divergenzaAttivazione": false
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 1.29308,
+      "ricavoTotaleEuro": 155.16,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 23.27,
+      "tutteLeMissioniAttivabili": false,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.1,
+            9.05,
+            11.64,
+            18.1
+          ],
+          "ricavoLordoEuro": 77.58,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": 0.38,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.95,
+          "differenzaDopoCommissioneMenoCostoEuro": 0.33,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.1,
+            9.05,
+            11.64,
+            18.1
+          ],
+          "ricavoLordoEuro": 77.58,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": -0.01,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.95,
+          "differenzaDopoCommissioneMenoCostoEuro": 0,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": false,
+          "divergenzaAttivazione": false
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 1.29318,
+      "ricavoTotaleEuro": 155.18,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 23.28,
+      "tutteLeMissioniAttivabili": false,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.1,
+            9.05,
+            11.64,
+            18.1
+          ],
+          "ricavoLordoEuro": 77.59,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": 0.39,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.95,
+          "differenzaDopoCommissioneMenoCostoEuro": 0.33,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.1,
+            9.05,
+            11.64,
+            18.1
+          ],
+          "ricavoLordoEuro": 77.59,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": 0,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.95,
+          "differenzaDopoCommissioneMenoCostoEuro": 0,
+          "attivabileSecondoPricingReale": false,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": true
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 1.29328,
+      "ricavoTotaleEuro": 155.2,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 23.28,
+      "tutteLeMissioniAttivabili": true,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.11,
+            9.05,
+            11.64,
+            18.11
+          ],
+          "ricavoLordoEuro": 77.6,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": 0.4,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.96,
+          "differenzaDopoCommissioneMenoCostoEuro": 0.34,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            9.05,
+            11.64,
+            18.11,
+            9.05,
+            11.64,
+            18.11
+          ],
+          "ricavoLordoEuro": 77.6,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": 0.01,
+          "commissione15PercentoIllustrativaEuro": 11.64,
+          "ricavoDopoCommissioneIllustrativoEuro": 65.96,
+          "differenzaDopoCommissioneMenoCostoEuro": 0.01,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        }
+      ]
+    },
+    {
+      "moltiplicatore": 1.5,
+      "ricavoTotaleEuro": 180,
+      "costoTotaleEuro": 131.57,
+      "commissioneIllustrativaEuro": 27,
+      "tutteLeMissioniAttivabili": true,
+      "missioni": [
+        {
+          "opportunita": "101",
+          "richieste": [
+            173,
+            174,
+            175,
+            176,
+            177,
+            178
+          ],
+          "veicolo": 361,
+          "operatore": 2,
+          "kmAvvicinamento": 53.21,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 0.32,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            10.5,
+            13.5,
+            21,
+            10.5,
+            13.5,
+            21
+          ],
+          "ricavoLordoEuro": 90,
+          "costoCicloEuro": 65.62,
+          "sogliaLordaEuro": 77.2,
+          "differenzaRicavoSogliaEuro": 12.8,
+          "commissione15PercentoIllustrativaEuro": 13.5,
+          "ricavoDopoCommissioneIllustrativoEuro": 76.5,
+          "differenzaDopoCommissioneMenoCostoEuro": 10.88,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        },
+        {
+          "opportunita": "99",
+          "richieste": [
+            167,
+            168,
+            169,
+            170,
+            171,
+            172
+          ],
+          "veicolo": 363,
+          "operatore": 2,
+          "kmAvvicinamento": 24.4,
+          "kmMissione": 55.823,
+          "kmTrasferimenti": 0,
+          "kmRitornoBase": 29.69,
+          "euroKm": 0.6,
+          "ricaviSingoleRichiesteEuro": [
+            10.5,
+            13.5,
+            21,
+            10.5,
+            13.5,
+            21
+          ],
+          "ricavoLordoEuro": 90,
+          "costoCicloEuro": 65.95,
+          "sogliaLordaEuro": 77.59,
+          "differenzaRicavoSogliaEuro": 12.41,
+          "commissione15PercentoIllustrativaEuro": 13.5,
+          "ricavoDopoCommissioneIllustrativoEuro": 76.5,
+          "differenzaDopoCommissioneMenoCostoEuro": 10.55,
+          "attivabileSecondoPricingReale": true,
+          "attivabilePerConfrontoSoglia": true,
+          "divergenzaAttivazione": false
+        }
+      ]
+    }
+  ]
+}
+RIEPILOGO: {
+  formazioni: 141,
+  coppie: 2115,
+  compatibili: 1962,
+  scartiTurno: 138,
+  motivi: { fuori_fascia: 138 },
+  veicoliCompatibili: [
+    347, 352, 353, 356,
+    357, 358, 359, 360,
+    361, 362, 363, 364,
+    365, 366
+  ],
+  multiVeicoloOsservato: true,
+  attivabiliPrezziFixture: 0,
+  rollback: true
+}
+┌─────────┬─────────────┬─────────────────────────────────────┬────────────┬────────────────┬────────────────┬───────────────┐
+│ (index) │ opportunita │ richieste                           │ postiPicco │ candidatiTurno │ migliorVeicolo │ costoMigliore │
+├─────────┼─────────────┼─────────────────────────────────────┼────────────┼────────────────┼────────────────┼───────────────┤
+│ 0       │ '96'        │ [ 167 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 1       │ '96'        │ [ 167, 170 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 2       │ '96'        │ [ 170 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 3       │ '96'        │ [ 167, 170 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 4       │ '99'        │ [ 167 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 5       │ '99'        │ [ 167, 168 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 6       │ '99'        │ [ 167, 169 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 7       │ '99'        │ [ 167, 170 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 8       │ '99'        │ [ 167, 171 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 9       │ '99'        │ [ 167, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 10      │ '99'        │ [ 167, 168, 169 ]                   │ 4          │ 14             │ 361            │ 65.62         │
+│ 11      │ '99'        │ [ 167, 168, 169, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 12      │ '99'        │ [ 167, 168, 169, ... 2 more items ] │ 5          │ 13             │ 361            │ 65.62         │
+│ 13      │ '99'        │ [ 167, 168, 169, ... 3 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 14      │ '99'        │ [ 168 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 15      │ '99'        │ [ 168, 169 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 16      │ '99'        │ [ 168, 170 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 17      │ '99'        │ [ 168, 171 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 18      │ '99'        │ [ 168, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 19      │ '99'        │ [ 169 ]                             │ 3          │ 14             │ 361            │ 65.62         │
+│ 20      │ '99'        │ [ 169, 170 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 21      │ '99'        │ [ 169, 171 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 22      │ '99'        │ [ 169, 172 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 23      │ '99'        │ [ 170 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 24      │ '99'        │ [ 167, 170 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 25      │ '99'        │ [ 168, 170 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 26      │ '99'        │ [ 169, 170 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 27      │ '99'        │ [ 170, 171 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 28      │ '99'        │ [ 170, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 29      │ '99'        │ [ 167, 168, 170 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 30      │ '99'        │ [ 167, 168, 169, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 31      │ '99'        │ [ 167, 168, 169, ... 2 more items ] │ 5          │ 13             │ 361            │ 65.62         │
+│ 32      │ '99'        │ [ 167, 168, 169, ... 3 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 33      │ '99'        │ [ 171 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 34      │ '99'        │ [ 167, 171 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 35      │ '99'        │ [ 168, 171 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 36      │ '99'        │ [ 169, 171 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 37      │ '99'        │ [ 171, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 38      │ '99'        │ [ 167, 168, 171 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 39      │ '99'        │ [ 167, 168, 169, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 40      │ '99'        │ [ 172 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 41      │ '99'        │ [ 167, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 42      │ '99'        │ [ 168, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 43      │ '99'        │ [ 169, 172 ]                        │ 4          │ 14             │ 361            │ 65.62         │
+│ 44      │ '99'        │ [ 167, 168, 172 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 45      │ '99'        │ [ 167, 168, 169, ... 1 more item ]  │ 5          │ 13             │ 361            │ 65.62         │
+│ 46      │ '99'        │ [ 167, 168, 169, ... 2 more items ] │ 6          │ 12             │ 361            │ 65.62         │
+│ 47      │ '97'        │ [ 170 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 48      │ '97'        │ [ 170, 173 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 49      │ '97'        │ [ 173 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 50      │ '97'        │ [ 170, 173 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 51      │ '100'       │ [ 170 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 52      │ '100'       │ [ 170, 171 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 53      │ '100'       │ [ 170, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 54      │ '100'       │ [ 170, 173 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 55      │ '100'       │ [ 170, 174 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 56      │ '100'       │ [ 170, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 57      │ '100'       │ [ 170, 171, 172 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 58      │ '100'       │ [ 170, 171, 172, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 59      │ '100'       │ [ 170, 171, 172, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 60      │ '100'       │ [ 170, 171, 172, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 61      │ '100'       │ [ 171 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 62      │ '100'       │ [ 171, 172 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 63      │ '100'       │ [ 171, 173 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 64      │ '100'       │ [ 171, 174 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 65      │ '100'       │ [ 171, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 66      │ '100'       │ [ 172 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 67      │ '100'       │ [ 172, 173 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 68      │ '100'       │ [ 172, 174 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 69      │ '100'       │ [ 172, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 70      │ '100'       │ [ 173 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 71      │ '100'       │ [ 170, 173 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 72      │ '100'       │ [ 171, 173 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 73      │ '100'       │ [ 172, 173 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 74      │ '100'       │ [ 173, 174 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 75      │ '100'       │ [ 173, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 76      │ '100'       │ [ 170, 171, 173 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 77      │ '100'       │ [ 170, 171, 172, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 78      │ '100'       │ [ 170, 171, 172, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 79      │ '100'       │ [ 170, 171, 172, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 80      │ '100'       │ [ 174 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 81      │ '100'       │ [ 170, 174 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 82      │ '100'       │ [ 171, 174 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 83      │ '100'       │ [ 172, 174 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 84      │ '100'       │ [ 174, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 85      │ '100'       │ [ 170, 171, 174 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 86      │ '100'       │ [ 170, 171, 172, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 87      │ '100'       │ [ 175 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 88      │ '100'       │ [ 170, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 89      │ '100'       │ [ 171, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 90      │ '100'       │ [ 172, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 91      │ '100'       │ [ 170, 171, 175 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 92      │ '100'       │ [ 170, 171, 172, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 93      │ '100'       │ [ 170, 171, 172, ... 2 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 94      │ '98'        │ [ 173 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 95      │ '98'        │ [ 173, 176 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 96      │ '98'        │ [ 176 ]                             │ 1          │ 14             │ 363            │ 29.55         │
+│ 97      │ '98'        │ [ 173, 176 ]                        │ 2          │ 14             │ 363            │ 29.55         │
+│ 98      │ '101'       │ [ 173 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 99      │ '101'       │ [ 173, 174 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 100     │ '101'       │ [ 173, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 101     │ '101'       │ [ 173, 176 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 102     │ '101'       │ [ 173, 177 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 103     │ '101'       │ [ 173, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 104     │ '101'       │ [ 173, 174, 175 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 105     │ '101'       │ [ 173, 174, 175, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 106     │ '101'       │ [ 173, 174, 175, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 107     │ '101'       │ [ 173, 174, 175, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 108     │ '101'       │ [ 174 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 109     │ '101'       │ [ 174, 175 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 110     │ '101'       │ [ 174, 176 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 111     │ '101'       │ [ 174, 177 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 112     │ '101'       │ [ 174, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 113     │ '101'       │ [ 175 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 114     │ '101'       │ [ 175, 176 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 115     │ '101'       │ [ 175, 177 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 116     │ '101'       │ [ 175, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 117     │ '101'       │ [ 176 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 118     │ '101'       │ [ 173, 176 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 119     │ '101'       │ [ 174, 176 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 120     │ '101'       │ [ 175, 176 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 121     │ '101'       │ [ 176, 177 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 122     │ '101'       │ [ 176, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 123     │ '101'       │ [ 173, 174, 176 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 124     │ '101'       │ [ 173, 174, 175, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 125     │ '101'       │ [ 173, 174, 175, ... 2 more items ] │ 3          │ 14             │ 361            │ 65.62         │
+│ 126     │ '101'       │ [ 173, 174, 175, ... 3 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+│ 127     │ '101'       │ [ 177 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 128     │ '101'       │ [ 173, 177 ]                        │ 1          │ 14             │ 361            │ 65.62         │
+│ 129     │ '101'       │ [ 174, 177 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 130     │ '101'       │ [ 175, 177 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 131     │ '101'       │ [ 177, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 132     │ '101'       │ [ 173, 174, 177 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 133     │ '101'       │ [ 173, 174, 175, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 134     │ '101'       │ [ 178 ]                             │ 1          │ 14             │ 361            │ 65.62         │
+│ 135     │ '101'       │ [ 173, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 136     │ '101'       │ [ 174, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 137     │ '101'       │ [ 175, 178 ]                        │ 2          │ 14             │ 361            │ 65.62         │
+│ 138     │ '101'       │ [ 173, 174, 178 ]                   │ 2          │ 14             │ 361            │ 65.62         │
+│ 139     │ '101'       │ [ 173, 174, 175, ... 1 more item ]  │ 3          │ 14             │ 361            │ 65.62         │
+│ 140     │ '101'       │ [ 173, 174, 175, ... 2 more items ] │ 4          │ 14             │ 361            │ 65.62         │
+└─────────┴─────────────┴─────────────────────────────────────┴────────────┴────────────────┴────────────────┴───────────────┘
+
+RIEPILOGO SCENARIO MULTI-VEICOLO:
+┌─────────┬─────────┬─────────────────┬───────────────────┬─────────────┬───────────────────┬──────────────┐
+│ (index) │ oraRoma │ veicoliDistinti │ coppieCompatibili │ scartiTurno │ economicheFixture │ multiVeicolo │
+├─────────┼─────────┼─────────────────┼───────────────────┼─────────────┼───────────────────┼──────────────┤
+│ 0       │ '14:00' │ 14              │ 1962              │ 138         │ 0                 │ true         │
+└─────────┴─────────┴─────────────────┴───────────────────┴─────────────┴───────────────────┴──────────────┘
+ROLLBACK SCENARIO MULTI-VEICOLO CONFERMATO. Nessuna attivazione.

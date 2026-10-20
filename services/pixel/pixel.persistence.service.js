@@ -1,5 +1,3 @@
-// TURENTU — Persistenza delle opportunità territoriali PIXEL.
-// Non genera direttrici, non assegna veicoli e non attiva missioni.
 import { createHash } from 'node:crypto';
 import { pool } from '../../db/db.js';
 
@@ -27,18 +25,18 @@ function normalizeCorridor(c) {
   return { nodes, legs, engineId: `territorial:${nodes.join('>')}` };
 }
 function normalizeOpportunities(instances, bufferMinuti) {
-  assert(Array.isArray(instances), 'opportunità non valide');
+  assert(Array.isArray(instances), 'opportunit├á non valide');
   const result = [];
   const seen = new Set();
   for (const instance of instances) {
     const w = instance?.finestraPartenza;
     const start = w?.inizioMs, end = w?.fineMs;
     assert(Number.isFinite(start) && Number.isFinite(end) && end >= start, 'finestra partenza non valida');
-    assert(Array.isArray(instance.richiestaIds) && instance.richiestaIds.length, 'opportunità senza richieste');
+    assert(Array.isArray(instance.richiestaIds) && instance.richiestaIds.length, 'opportunit├á senza richieste');
     const ids = [...new Set(instance.richiestaIds.map(Number))].sort((a,b)=>a-b);
     assert(ids.every(validId) && ids.length === instance.richiestaIds.length, 'ID richieste non validi o duplicati');
     const key = digest({ start, end, ids, bufferMinuti });
-    assert(!seen.has(key), 'opportunità duplicata nel medesimo snapshot');
+    assert(!seen.has(key), 'opportunit├á duplicata nel medesimo snapshot');
     seen.add(key);
     result.push({ start: toDate(start), end: toDate(end), ids, key,
       data: { fingerprint: key, bufferMinuti, istanzaIndice: instance.istanzaIndice ?? null,
@@ -51,7 +49,7 @@ function normalizeOpportunities(instances, bufferMinuti) {
 
 // Pubblica uno snapshot coerente di UNA direttrice; idempotente e serializzato per sequenza.
 // Non consuma consumeOpportunityChanges(): il chiamante deve fare retry in caso di errore.
-export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMinuti = 0 } = {}) {
+export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMinuti = 0, client: externalClient = null } = {}) {
   assert(engine && typeof engine.getCorridor === 'function' &&
     typeof engine.temporalCandidatesCompleteWithReturns === 'function' &&
     typeof engine.opportunityRevision === 'function', 'engine PIXEL non valido: opportunityRevision obbligatoria');
@@ -66,13 +64,15 @@ export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMin
   const current = normalizeCorridor(engine.getCorridor(direttriceId));
   assert(json(current.nodes) === json(normalized.nodes) && json(current.legs) === json(normalized.legs), 'routing cambiato: riprovare');
   const opportunities = normalizeOpportunities(instances, bufferMinuti);
-  const client = await pool.connect();
+  // Con client esterno la transazione appartiene al chiamante.
+  const client = externalClient ?? await pool.connect();
+  const ownsTransaction = externalClient === null;
   try {
-    await client.query('BEGIN');
+    if (ownsTransaction) await client.query('BEGIN');
     // Lock transazionale: serializza gli snapshot anche fra processi Node differenti.
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [normalized.engineId]);
     const foundNodes = await client.query(
-      'SELECT id FROM public.nodi_territoriali WHERE id = ANY($1::bigint[]) AND active = TRUE',
+      'SELECT id FROM public.nodi_territoriali WHERE id = ANY($1::bigint[]) AND attivo = TRUE',
       [normalized.nodes]
     );
     assert(foundNodes.rowCount === normalized.nodes.length, 'nodi territoriali inesistenti o inattivi');
@@ -91,7 +91,7 @@ export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMin
       );
       row = ins.rows[0];
     } else if (digest(existing.rows[0].legs.map(l => ({ metres: Number(l.metres), seconds: Number(l.seconds), polyline: l.polyline, roadCoincident: l.roadCoincident === true }))) !== digest(normalized.legs)) {
-      // La nuova geometria non deve riscrivere versioni storiche già usate.
+      // La nuova geometria non deve riscrivere versioni storiche gi├á usate.
       await client.query(
         `UPDATE public.pixel_direttrici SET stato = 'superata', updated_at = NOW()
          WHERE engine_id = $1 AND stato = 'attiva'`, [normalized.engineId]
@@ -117,7 +117,7 @@ export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMin
       );
     }
 
-    // Nessun vincolo UNIQUE sull'opportunità: la serializzazione e il fingerprint
+    // Nessun vincolo UNIQUE sull'opportunit├á: la serializzazione e il fingerprint
     // rendono la pubblicazione idempotente per singola direttrice/versione.
     const previous = await client.query(
       `SELECT id, dati_temporali->>'fingerprint' AS fingerprint
@@ -164,21 +164,27 @@ export async function pubblicaOpportunitaPixel({ engine, direttriceId, bufferMin
     const finalCorridor = normalizeCorridor(engine.getCorridor(direttriceId));
     assert(json(finalCorridor.nodes) === json(normalized.nodes) &&
       json(finalCorridor.legs) === json(normalized.legs), 'routing PIXEL cambiato: riprovare');
-    await client.query('COMMIT');
+    if (ownsTransaction) await client.query('COMMIT');
     return { direttricePixelId: row.id, versione: row.versione,
       opportunitaCandidate: opportunities.length, revisioneEngine: revisionAfter };
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (ownsTransaction) await client.query('ROLLBACK');
     throw error;
   } finally {
-    client.release();
+    if (ownsTransaction) client.release();
   }
 }
 
 // Contratto di sola lettura per POPBUS: candidature, non assegnazioni.
-export async function leggiOpportunitaPixel({ limit = 100 } = {}) {
+// opportunityIds opzionale: filtro SQL prima del LIMIT, per isolare le fixture E2E.
+export async function leggiOpportunitaPixel({ limit = 100, client = null, opportunityIds = null } = {}) {
   assert(Number.isSafeInteger(limit) && limit >= 1 && limit <= 1000, 'limit non valido');
-  const { rows } = await pool.query(
+  assert(opportunityIds === null || (
+    Array.isArray(opportunityIds) && opportunityIds.length > 0 &&
+    opportunityIds.every(validId) &&
+    new Set(opportunityIds.map(Number)).size === opportunityIds.length
+  ), 'opportunityIds non validi');
+  const { rows } = await (client ?? pool).query(
     `SELECT o.id AS pixel_opportunita_id, o.direttrice_id AS pixel_direttrice_id,
             d.versione, d.nodi, d.legs, o.inizio_finestra, o.fine_finestra,
             o.dati_temporali, ARRAY_AGG(r.richiesta_id ORDER BY r.richiesta_id) AS richiesta_ids
@@ -186,8 +192,10 @@ export async function leggiOpportunitaPixel({ limit = 100 } = {}) {
      JOIN public.pixel_direttrici d ON d.id=o.direttrice_id
      JOIN public.pixel_opportunita_richieste r ON r.opportunita_id=o.id
      WHERE o.stato='candidata' AND d.stato='attiva'
+       AND ($2::bigint[] IS NULL OR o.id = ANY($2::bigint[]))
      GROUP BY o.id, d.id
-     ORDER BY o.inizio_finestra, o.id LIMIT $1`, [limit]
+     ORDER BY o.inizio_finestra, o.id LIMIT $1`,
+    [limit, opportunityIds === null ? null : opportunityIds.map(Number)]
   );
   return rows;
 }

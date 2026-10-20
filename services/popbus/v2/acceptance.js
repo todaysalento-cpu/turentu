@@ -3,6 +3,8 @@ import { verificaTurnoVeicolo } from './popbus-vehicle-availability.js';
 import { validaPianoMultiMissione } from './popbus-multimission-preflight.js';
 import { verificaMissioniPersistite } from './popbus-multimission-db-preflight.js';
 import { fingerprintRichiesta } from './request-fingerprint.js';
+import { verificaAccettazionePixel } from './popbus-pixel-acceptance-preflight.js';
+import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-preflight.js';
 
 import Stripe from 'stripe';
 import polyline from 'polyline';
@@ -132,6 +134,14 @@ export async function accettaAttivazione(
   }
 
   const plan = a.piano;
+  const isMultiPixel = Array.isArray(plan?.missioni) && plan.missioni.length > 1;
+  // P0-C6: nessuna opportunita principale obbligatoria nel ciclo multimissione.
+  // La verifica controlla tutte le opportunita delle missioni persistite.
+  if (isMultiPixel) {
+    await verificaAccettazionePixelMulti(client, a, plan);
+  } else if (a.pixel_opportunita_id != null) {
+    await verificaAccettazionePixel(client, a, plan);
+  }
   // P0-C3: percorso multi-missione abilitabile solo in ambiente di collaudo.
   // Il flag e' intenzionalmente OFF per default; non abilitarlo in produzione.
   const isMulti = Array.isArray(plan?.missioni) && plan.missioni.length > 1;

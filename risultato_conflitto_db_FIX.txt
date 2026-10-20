@@ -1,0 +1,3 @@
+PIXEL_CONFLITTO_DB_JSON:{"db":"corse_db","intervallo":{"start":"2026-11-01T12:00:00.000Z","end":"2026-11-01T18:00:00.000Z"},"veicoli":[{"id":361,"driver_id":2},{"id":363,"driver_id":2}],"attivazioneTemporaneaId":"31","prima":{"veicolo361":0,"veicolo363":0},"dopo":{"veicolo361":1,"veicolo363":0},"queryWorkerOriginale":true,"stessaConnessione":true,"conflitto361Rilevato":true,"altroVeicoloLibero":true,"passed":true}
+PIXEL_CONFLITTO_DB_ROLLBACK_OK: ROLLBACK eseguito
+PIXEL_CONFLITTO_DB_PERSISTENZA_JSON:{"id":"31","assenteDopoRollback":true,"passed":true}

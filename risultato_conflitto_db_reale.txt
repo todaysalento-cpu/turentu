@@ -1,0 +1,11 @@
+PIXEL_CONFLITTO_DB_ROLLBACK_OK: ROLLBACK eseguito
+file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_conflitto_db_reale_rollback.js:9
+const fail = message => { throw new Error('PIXEL_CONFLITTO_DB: ' + message); };
+                                ^
+
+Error: PIXEL_CONFLITTO_DB: Nessuna direttrice di test per soddisfare FK; nessun inserimento effettuato
+    at fail (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_conflitto_db_reale_rollback.js:9:33)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_conflitto_db_reale_rollback.js:44:21
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+Node.js v22.23.1

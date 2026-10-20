@@ -1,0 +1,38 @@
+// Copiare in tests/ e rinominare .mjs. Eseguire dalla root del progetto.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+const source=readFileSync(resolve('services/popbus/v2/model.js'),'utf8');
+const importLine="import { valutaEconomiaCiclo } from './cycle-pricing.js';";
+assert.equal(source.split(importLine).length,2,'Import model.js diverso: fermare test');
+const isolated=source.replace(importLine,'const valutaEconomiaCiclo=()=>{throw new Error("pricing non testato")};');
+const model=await import('data:text/javascript;base64,'+Buffer.from(isolated).toString('base64'));
+const safeSource=readFileSync(resolve('tests/pixel-ar-safe-formations.js.txt'),'utf8');
+const {generaFormazioniArSafe}=await import('data:text/javascript;base64,'+Buffer.from(safeSource).toString('base64'));
+const group='123e4567-e89b-42d3-a456-426614174000';
+const plan={nodes:[1,2,3],legs:[{metres:10000,seconds:600},{metres:10000,seconds:600}]};
+const when='2027-04-01T12:00:00Z';
+const req=(id,price,ar=false,tratta=null,posti=1)=>({id,start_node_id:1,end_node_id:3,start_datetime:when,posti_richiesti:posti,prezzo:price,ar_vincolata:ar,ar_group_id:ar?group:null,ar_tratta:tratta});
+const a=req(11,12),b=req(12,8),out=req(101,9,true,'andata'),back=req(201,10,true,'ritorno');
+const pair={andata:101,ritorno:201};
+const options={qualityEnabled:false,maxPeak:4};
+const base={plan,requests:[a,b,out,back],seeds:[101],generaFormazioniAlternative:model.generaFormazioniAlternative,valutaRichieste:model.valutaRichieste,options};
+const ids=e=>e.requests.map(r=>r.id).sort((x,y)=>x-y).join(',');
+const run=(patch={})=>generaFormazioniArSafe({...base,registro:{esclusiIds:[],arPairs:[pair]},...patch});
+let passed=0;
+function test(label,fn){fn();passed++;console.log('PASS '+label);}
+test('seed A/R produce alternativa solo ordinaria',()=>assert.ok(run().formazioni.some(e=>ids(e)==='11,12')));
+test('ricavo alternativa ordinaria ricalcolato dal model',()=>assert.equal(run().formazioni.find(e=>ids(e)==='11,12').revenue,20));
+test('occupazione alternativa ordinaria ricalcolata',()=>assert.deepEqual(run().formazioni.find(e=>ids(e)==='11,12').occupancy,[2,2]));
+test('seed originale A/R mantenuto fra alternative candidate',()=>assert.ok(run().formazioni.some(e=>ids(e).includes('101'))));
+test('coppia A/R non valida esclusa interamente',()=>{const r=run({registro:{esclusiIds:[101,201],arPairs:[]}});assert.ok(r.formazioni.length);assert.ok(r.formazioni.every(e=>e.requests.every(x=>!x.ar_vincolata)));});
+test('solo A/R escluse: nessuna formazione inventata',()=>assert.equal(run({requests:[out,back],registro:{esclusiIds:[101,201],arPairs:[]}}).formazioni.length,0));
+test('richiesta A/R senza registro fallisce chiusa',()=>assert.throws(()=>run({registro:{esclusiIds:[],arPairs:[]}}),/non registrata/));
+test('registro incompleto fallisce chiuso',()=>assert.throws(()=>run({registro:{esclusiIds:[],arPairs:[{andata:101,ritorno:999}]}}),/incoerente/));
+test('seed escluso mantiene fallback ordinario',()=>assert.ok(run({registro:{esclusiIds:[101,201],arPairs:[]}}).formazioni.some(e=>ids(e)==='11,12')));
+test('nessun dato originale mutato',()=>{const data=JSON.stringify(base.requests);run();assert.equal(JSON.stringify(base.requests),data);});
+test('limite seed fail closed',()=>assert.throws(()=>run({maxSeeds:1}),/maxSeeds/));
+test('limite formazioni fail closed',()=>assert.throws(()=>run({maxFormazioni:1}),/maxFormazioni/));
+test('opzioni esclusione non possono bypassare registro',()=>assert.throws(()=>run({options:{...options,excludeIds:[11]}}),/opzioni non ammesse/));
+test('metadata ordinari restano non vincolati',()=>assert.ok(run().formazioni.find(e=>ids(e)==='11,12').requests.every(x=>x.ar_vincolata===false)));
+console.log('PIXEL_AR_SAFE_FORMATIONS_JSON:'+JSON.stringify({passed:true,checksPassed:passed,checksTotal:14,dbWrites:0,workerModified:false,scope:'model reale e modulo fallback isolato; NON certifica economia reale, copertura completa combinazioni, optimizer o commit'}));

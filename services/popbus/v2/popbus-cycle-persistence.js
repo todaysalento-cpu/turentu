@@ -54,6 +54,44 @@ function validaMappingGlobale(missioni, piano) {
   return [...byId.values()].sort((a, b) => a.id - b.id);
 }
 
+// Validazione PIXEL nella transazione del chiamante. I lock impediscono
+// cambiamenti concorrenti alle righe esistenti fino al COMMIT/ROLLBACK.
+// Non sostituisce la rivalidazione delle richieste e dei veicoli nel worker.
+async function verificaOpportunitaPixel(client, m, richieste, nodes) {
+  const id = interoPositivo(m.pixelOpportunitaId, 'pixelOpportunitaId');
+  const { rows } = await client.query(`
+    SELECT o.id, o.stato AS opportunita_stato, o.direttrice_id,
+           d.stato AS direttrice_stato, d.nodi, d.engine_id, d.versione
+    FROM public.pixel_opportunita o
+    JOIN public.pixel_direttrici d ON d.id = o.direttrice_id
+    WHERE o.id = $1
+    FOR SHARE OF o, d
+  `, [id]);
+  const op = rows[0];
+  if (!op || op.opportunita_stato !== 'candidata' || op.direttrice_stato !== 'attiva')
+    throw new Error(`Opportunita PIXEL ${id} non attiva/candidata`);
+  const corridoio = op.nodi.map(Number);
+  if (corridoio.length !== nodes.length || corridoio.some((n, i) => n !== nodes[i]))
+    throw new Error(`Opportunita PIXEL ${id}: sequenza nodi discordante`);
+  if (m.corridoioPixelId != null && String(m.corridoioPixelId) !== String(op.engine_id))
+    throw new Error(`Opportunita PIXEL ${id}: engine_id discordante`);
+  if (m.pixelDirettriceId != null && Number(m.pixelDirettriceId) !== Number(op.direttrice_id))
+    throw new Error(`Opportunita PIXEL ${id}: direttrice_id discordante`);
+  if (m.pixelVersione != null && Number(m.pixelVersione) !== Number(op.versione))
+    throw new Error(`Opportunita PIXEL ${id}: versione discordante`);
+  const { rows: associazioni } = await client.query(`
+    SELECT richiesta_id
+    FROM public.pixel_opportunita_richieste
+    WHERE opportunita_id = $1
+    ORDER BY richiesta_id
+    FOR SHARE
+  `, [id]);
+  const ammesse = new Set(associazioni.map(r => Number(r.richiesta_id)));
+  if (richieste.some(r => !ammesse.has(r.id)))
+    throw new Error(`Opportunita PIXEL ${id}: richieste non associate`);
+  return { id, engineId: String(op.engine_id), versione: Number(op.versione), direttriceId: Number(op.direttrice_id) };
+}
+
 export async function registraMissioniAttivazione(client, { attivazioneId, missioni, pianoGlobale = null }) {
   if (!client || typeof client.query !== 'function') throw new Error('Client PostgreSQL richiesto');
   const aid = interoPositivo(attivazioneId, 'attivazioneId');
@@ -62,6 +100,7 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
   const globali = pianoGlobale == null ? null : validaMappingGlobale(missioni, pianoGlobale);
   const tutteRichieste = new Set();
   const ids = [];
+  const preparate = [];
   let ultimaFine = -Infinity;
   for (let i = 0; i < missioni.length; i++) {
     const m = missioni[i];
@@ -88,15 +127,29 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
       }
       tutteRichieste.add(r.id);
     }
-    // Nessuna scrittura finche' la struttura della missione corrente non e' valida.
+    // Il percorso PIXEL non puo' usare contemporaneamente una direttrice legacy.
+    const pixel = m.pixelOpportunitaId == null ? null :
+      await verificaOpportunitaPixel(client, m, richieste, nodes);
+    if (pixel && m.direttriceId != null)
+      throw new Error('Missione PIXEL con direttrice virtuale legacy');
+    if (!pixel && m.corridoioPixelId != null)
+      throw new Error('Riferimento corridoio PIXEL senza pixelOpportunitaId');
+    preparate.push({ m, nodes, partenza, arrivo, richieste, pixel });
+  }
+  // Solo dopo che TUTTE le missioni hanno superato il preflight si scrive.
+  // Il chiamante deve mantenere una transazione aperta e fare ROLLBACK su errore.
+  for (let i = 0; i < preparate.length; i++) {
+    const { m, nodes, partenza, arrivo, richieste, pixel } = preparate[i];
     const { rows } = await client.query(`
       INSERT INTO public.popbus_attivazione_missioni
         (attivazione_id, ordine, direttrice_id, corridoio_pixel_id,
-         nodi_territoriali, partenza, arrivo, piano)
-      VALUES ($1,$2,$3,$4,$5::bigint[],$6,$7,$8::jsonb)
+         nodi_territoriali, partenza, arrivo, piano, pixel_opportunita_id)
+      VALUES ($1,$2,$3,$4,$5::bigint[],$6,$7,$8::jsonb,$9)
       RETURNING id
-    `, [aid, i + 1, m.direttriceId ?? null, m.corridoioPixelId ?? null,
-      nodes, partenza, arrivo, JSON.stringify({ nodes, legs: m.legs, requests: richieste })]);
+    `, [aid, i + 1, m.direttriceId ?? null, pixel?.engineId ?? null,
+      nodes, partenza, arrivo, JSON.stringify({ nodes, legs: m.legs, requests: richieste,
+        ...(pixel ? { pixel: { opportunitaId: pixel.id, direttriceId: pixel.direttriceId, versione: pixel.versione } } : {}) }),
+      pixel?.id ?? null]);
     const missioneId = rows[0]?.id;
     if (!missioneId) throw new Error('Inserimento missione senza ID');
     ids.push(missioneId);

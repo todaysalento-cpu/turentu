@@ -22,6 +22,11 @@ import { ottimizzaFlotta } from './fleet-optimizer.js';
 import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
 import { componiCicloInCorsa } from './popbus-single-corsa-assembler.js';
 import { leggiOpportunitaPixel } from '../../pixel/pixel.persistence.service.js';
+import { leggiContestiOpportunitaPixel, generaFormazioniDaOpportunitaPixel } from './pixel-opportunity-adapter.js';
+import { leggiFormazioniPixelWorker } from './pixel-worker-formation-source.js';
+import { preparaInputFattibilitaPixel } from './pixel-worker-feasibility-bridge.js';
+import { eseguiPixelArWorkerShadow } from './pixel-ar-worker-shadow.js';
+import { processaPixelFirstMultimissione } from './pixel-first-multimission-service.js';
 
 // I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
 // e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
@@ -39,6 +44,13 @@ const COMMISSIONE_TURENTU = 0.15;
 const POPBUS_PIXEL_SHADOW = process.env.POPBUS_PIXEL_SHADOW === '1';
 // Fase controllata: lettura delle opportunita PIXEL persistenti, senza attivazioni.
 const POPBUS_PIXEL_DB_SHADOW = process.env.POPBUS_PIXEL_DB_SHADOW === '1';
+// Diagnostica adapter reale: non alimenta feasible, chosen o la persistenza.
+const POPBUS_PIXEL_ADAPTER_SHADOW = process.env.POPBUS_PIXEL_ADAPTER_SHADOW === '1';
+// Flag riservato al cutover. Fino al collaudo operativo completo, FAIL-CLOSED.
+const POPBUS_PIXEL_FIRST = process.env.POPBUS_PIXEL_FIRST === '1';
+const POPBUS_PIXEL_AR_WORKER_SHADOW = process.env.POPBUS_PIXEL_AR_WORKER_SHADOW === '1';
+const POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT = 1000;
+const POPBUS_PIXEL_ADAPTER_SHADOW_MAX_FORMAZIONI = 80;
 const POPBUS_PIXEL_MAX_REQUESTS = 100;
 const POPBUS_PIXEL_CYCLE_SHADOW = process.env.POPBUS_PIXEL_CYCLE_SHADOW === '1';
 const POPBUS_PIXEL_MAX_MISSIONI = 24;
@@ -270,6 +282,48 @@ async function verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, sta
     potenzialmenteTroncato: opportunita.length === 1000,
     soloLettura: true,
     nota: 'La generazione e attivazione legacy restano indipendenti in questa fase'
+  });
+}
+
+// Osservazione dell'adapter reale PIXEL -> POPBUS. Nessuna candidata shadow
+// entra nel matching operativo. In caso di errore, segnala e non nasconde
+// il problema; il percorso legacy resta invariato.
+async function eseguiPixelAdapterShadow({ client, log, stats }) {
+  if (!POPBUS_PIXEL_ADAPTER_SHADOW) return;
+  const contesti = await leggiContestiOpportunitaPixel({
+    client, limit: POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT
+  });
+  // Il reader PIXEL e limitato a 1000: non interpretare una lettura piena
+  // come un dataset completo, e non usare risultati potenzialmente troncati.
+  if (contesti.length >= POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT) {
+    throw new Error('PIXEL ADAPTER SHADOW: limite 1000 raggiunto; dataset potenzialmente troncato');
+  }
+  let formazioni = 0;
+  const dettagli = [];
+  for (const contesto of contesti) {
+    const alternative = generaFormazioniDaOpportunitaPixel(contesto, {
+      maxFormazioniPerSeed: POPBUS_PIXEL_ADAPTER_SHADOW_MAX_FORMAZIONI
+    });
+    formazioni += alternative.length;
+    // Contesti estranei allo snapshot del worker non vengono scartati:
+    // l'adapter legge la propria sorgente PIXEL, non le candidate legacy.
+    dettagli.push({
+      opportunita: contesto.pixel_opportunita_id,
+      direttrice: contesto.pixel_direttrice_id,
+      versione: contesto.versione,
+      richieste: contesto.richiesta_ids.length,
+      formazioni: alternative.length
+    });
+  }
+  stats.pixelAdapterShadow = {
+    opportunita: contesti.length, formazioni, soloDiagnostica: true
+  };
+  log('PIXEL ADAPTER SHADOW RIEPILOGO', {
+    ...stats.pixelAdapterShadow,
+    dettagli: dettagli.slice(0, 30),
+    dettagliOmesse: Math.max(0, dettagli.length - 30),
+    nessunaAttivazioneDaAdapter: true,
+    nota: 'Il matching operativo legacy non e modificato'
   });
 }
 
@@ -737,10 +791,165 @@ async function diagnosticaCicliContigui(feasible, requests, nodeMap, log) {
   log('CICLI DIAGNOSTICA RIEPILOGO',{esaminati:examined,compatibili:compatible,conRichiesteAggiuntive:withReturn});
 }
 
+// Diagnostica operativa PIXEL-first: percorso COMPLETAMENTE read-only.
+// Non sostituisce il cutover, non crea attivazioni e non invia socket.
+const POPBUS_PIXEL_FEASIBILITY_READONLY = process.env.POPBUS_PIXEL_FEASIBILITY_READONLY === '1';
+
+async function diagnosticaFattibilitaPixelReadOnly() {
+  const client = await pool.connect();
+  let tx = false;
+  try {
+    await client.query('BEGIN READ ONLY');
+    tx = true;
+    const formazioni = await leggiFormazioniPixelWorker({ client, limit: 100, maxFormazioniPerSeed: 80 });
+    const ids = [...new Set(formazioni.flatMap(f => f.richiestaIds.map(Number)))];
+    const nodeIds = [...new Set(formazioni.flatMap(f => f.plan.nodes.map(Number)))];
+    if (!formazioni.length) {
+      console.log('PIXEL_FEASIBILITY_READONLY_JSON:' + JSON.stringify({ formazioni: 0, fattibili: 0, selezionate: 0 }));
+      return;
+    }
+    const { rows: rawRequests } = await client.query(
+      `SELECT * FROM richieste_pop_bus WHERE id = ANY($1::int[])`, [ids]);
+    const { valide: requests } = normalizzaRichiesteTerritoriali(rawRequests, () => {});
+    const { rows: nodes } = await client.query(`
+      SELECT id, nome AS nome_nodo,
+             ST_Y(posizione::geometry) AS lat,
+             ST_X(posizione::geometry) AS lon
+      FROM public.nodi_territoriali
+      WHERE id = ANY($1::bigint[]) AND attivo = TRUE`, [nodeIds]);
+    const prepared = preparaInputFattibilitaPixel(formazioni, requests, nodes);
+    const nodeMap = new Map(nodes.map(n => [Number(n.id), n]));
+    const { rows: vehicles } = await client.query(`
+      SELECT v.id, v.driver_id, v.posti_totali, t.euro_km,
+             dv.start, dv.fine, dv.manual, dv.giorni_esclusi, dv.inattivita,
+             ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
+             ST_X(COALESCE(dv.coord,v.coord)::geometry) AS lon
+      FROM veicolo v
+      JOIN disponibilita_veicolo dv ON dv.veicolo_id=v.id
+      JOIN LATERAL (
+        SELECT MIN(euro_km) AS euro_km FROM tariffe
+        WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0
+      ) t ON t.euro_km IS NOT NULL
+      WHERE v.driver_id IS NOT NULL AND v.posti_totali>0
+        AND COALESCE(dv.coord,v.coord) IS NOT NULL
+      ORDER BY t.euro_km,v.id`);
+    const feasible = [];
+    const scarti = {};
+    const skip = reason => { scarti[reason] = (scarti[reason] || 0) + 1; };
+    for (const f of prepared) {
+      const { plan, evaluation } = f;
+      if (evaluation.departure <= Date.now()) { skip('partenza_passata'); continue; }
+      const quality = verificaQualitaRichieste(plan, f.selectedRequests);
+      if (!quality.ok) { skip('qualita'); continue; }
+      for (const vehicle of vehicles) {
+        if (Number(vehicle.posti_totali) < evaluation.peak) { skip('capienza'); continue; }
+        let approach, returnTrip;
+        try {
+          approach = await movement(vehicle, nodeMap.get(Number(plan.nodes[0])));
+          returnTrip = await movement(nodeMap.get(Number(plan.nodes.at(-1))), vehicle);
+          if (![approach.metres, approach.seconds, returnTrip.metres, returnTrip.seconds]
+            .every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) throw new Error('routing invalido');
+        } catch { skip('routing'); continue; }
+        const busyStart = evaluation.departure - approach.seconds * 1000;
+        const busyEnd = evaluation.arrival + returnTrip.seconds * 1000;
+        if (busyStart <= Date.now() || !turno(vehicle, busyStart, busyEnd)) { skip('turno'); continue; }
+        // Contratto economico condiviso con economiaCandidato()/scegliAttivazioni().
+        // Ricavi reali: nessun moltiplicatore di collaudo nel worker originale.
+        const ricaviRichiesteEuro = f.selectedRequests.map(r => Number(r.prezzo));
+        let economia;
+        try {
+          economia = valutaEconomiaCiclo({
+            ricaviRichiesteEuro,
+            kmAvvicinamento: approach.metres / 1000,
+            kmMissioni: plan.legs.reduce((sum, l) => sum + Number(l.metres), 0) / 1000,
+            kmTrasferimenti: 0,
+            kmRitornoBase: returnTrip.metres / 1000,
+            euroKm: Number(vehicle.euro_km)
+          });
+        } catch { skip('economia_invalida'); continue; }
+        if (!economia.economicamenteAttivabile) { skip('soglia_economica'); continue; }
+        if ((await conflittiVeicolo(client, vehicle.id, busyStart, busyEnd)).length) {
+          skip('conflitto_veicolo'); continue;
+        }
+        feasible.push({
+          source: 'PIXEL', pixelOpportunitaId: f.pixelOpportunitaId,
+          pixelDirettriceId: f.pixelDirettriceId, pixelVersione: f.pixelVersione,
+          plan, evaluation: { ...evaluation, revenue: economia.ricavoLordoEuro },
+          vehicle, approach, returnTrip, busyStart, busyEnd,
+          ricaviRichiesteEuro, economia, cost: economia.costoCompletoEuro
+        });
+      }
+    }
+    const chosen = scegliAttivazioni(feasible);
+    console.log('PIXEL_FEASIBILITY_READONLY_JSON:' + JSON.stringify({
+      formazioni: prepared.length, veicoli: vehicles.length,
+      fattibili: feasible.length, selezionate: chosen.length, scarti,
+      scelta: chosen.map(c => ({ pixelOpportunitaId: c.pixelOpportunitaId,
+        veicoloId: c.vehicle.id, richiestaIds: c.evaluation.requests.map(r => r.id),
+        margineEuro: c.economia.margineEuro, ritornoIncluso: true }))
+    }));
+  } finally {
+    if (tx) await client.query('ROLLBACK');
+    client.release();
+  }
+}
+
 let cicliAttivi = 0;
 let numeroCiclo = 0;
 
 export async function processaProposteDinamicheV2() {
+  // Shadow isolato PRIMA di qualsiasi pulizia/scadenza/scrittura legacy.
+  if (POPBUS_PIXEL_AR_WORKER_SHADOW) {
+    if (POPBUS_PIXEL_FIRST || POPBUS_PIXEL_FEASIBILITY_READONLY)
+      throw new Error('PIXEL AR WORKER SHADOW: flag incompatibili');
+    const result = await eseguiPixelArWorkerShadow({
+  pool,
+  movement,
+  turno,
+  conflittiVeicolo,
+  enableMultiMission: process.env.POPBUS_PIXEL_MULTIMISSION_SHADOW === '1',
+  preflightMultiMission: process.env.POPBUS_PIXEL_MULTIMISSION_PREFLIGHT === '1',
+  maxPreflightChecks: Number(process.env.POPBUS_PIXEL_PREFLIGHT_MAX_CHECKS ?? 2000000),
+  maxOpportunita: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_OPPORTUNITA ?? 3),
+  maxPairs: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_PAIRS ?? 5),
+  maxRoutingCalls: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_ROUTING_CALLS ?? 100),
+  maxProposte: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_PROPOSTE ?? 100)
+});
+    console.log('PIXEL_AR_WORKER_SHADOW_JSON:' + JSON.stringify(result));
+    return result;
+  }
+  // Diagnostica separata e READ ONLY; mai un fallback legacy in questa modalita.
+  if (POPBUS_PIXEL_FEASIBILITY_READONLY) {
+    if (POPBUS_PIXEL_FIRST) throw new Error('Flag PIXEL_FIRST e READONLY incompatibili');
+    return diagnosticaFattibilitaPixelReadOnly();
+  }
+  // Protezione prima di qualsiasi transazione, cleanup o scrittura legacy.
+  if (POPBUS_PIXEL_FIRST) {
+    const result = await processaPixelFirstMultimissione({
+      pool, mode: process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY'
+    });
+    // Il socket non deve precedere il commit; nessun socket in ROLLBACK_ONLY.
+    if (result?.persistita === true) {
+      try {
+        getIO().to(`autista_${result.autistaId}`).emit('nuova_proposta_popbus', {
+          id: result.offertaId,
+          attivazione_id: result.attivazioneId,
+          direttrice_id: null,
+          veicolo_id: result.veicoloId,
+          classe: 'MULTIMISSIONE_PIXEL',
+          posti_richiesti: result.peak,
+          oraPartenza: result.partenza,
+          start_node_id: result.startNodeId,
+          end_node_id: result.endNodeId,
+          origine_address: result.origineAddress,
+          destinazione_address: result.destinazioneAddress
+        });
+      } catch (err) {
+        console.error('[PIXEL FIRST SOCKET POSTCOMMIT]', err.message);
+      }
+    }
+    return result;
+  }
   const ciclo = ++numeroCiclo;
   const inizio = Date.now();
 
@@ -1035,6 +1244,17 @@ export async function processaProposteDinamicheV2() {
         await verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, stats });
       } catch (error) {
         log('PIXEL DB SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
+    // Adapter PIXEL reale in osservazione. Non modifica richieste,
+    // candidate, attivazioni, pagamenti, socket o scelte del worker.
+    if (POPBUS_PIXEL_ADAPTER_SHADOW) {
+      try {
+        await eseguiPixelAdapterShadow({ client, log, stats });
+      } catch (error) {
+        stats.pixelAdapterShadowErrore = error.message;
+        log('PIXEL ADAPTER SHADOW ERROR', error.stack || error.message);
       }
     }
 

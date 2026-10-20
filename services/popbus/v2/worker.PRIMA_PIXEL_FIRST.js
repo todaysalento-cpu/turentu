@@ -1,0 +1,2659 @@
+
+import { verificaPagamento } from './acceptance.js';
+import { fingerprintRichiesta } from './request-fingerprint.js';
+import { pool } from '../../../db/db.js';
+import { getIO } from '../../../socket.js';
+import {
+  generaCandidate,
+  valutaRichieste,
+  generaFormazioniAlternative,
+  verificaQualitaRichieste,
+  scegliAttivazioni,
+  economiaCandidato
+} from './model.js';
+import { pianifica, leg } from './planner.js';
+import { generaRitorniCompatibili } from './return-matching.js';
+import { verificaQualitaOccorrenze } from './service-quality.js';
+import { generaCandidatiFlotta } from './fleet-candidates.js';
+import { valutaEconomiaCiclo } from './cycle-pricing.js';
+import { createIncrementalCorridorEngine } from '../../pixel/incremental-corridor-engine.js';
+import { diagnosticaCicloPixelPopbus } from '../../pixel/pixel-popbus-cycle-adapter.js';
+import { ottimizzaFlotta } from './fleet-optimizer.js';
+import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
+import { componiCicloInCorsa } from './popbus-single-corsa-assembler.js';
+import { leggiOpportunitaPixel } from '../../pixel/pixel.persistence.service.js';
+import { leggiContestiOpportunitaPixel, generaFormazioniDaOpportunitaPixel } from './pixel-opportunity-adapter.js';
+import { leggiFormazioniPixelWorker } from './pixel-worker-formation-source.js';
+import { preparaInputFattibilitaPixel } from './pixel-worker-feasibility-bridge.js';
+import { eseguiPixelArWorkerShadow } from './pixel-ar-worker-shadow.js';
+import { processaPixelFirstMultimissione } from './pixel-first-multimission-service.js';
+
+// I cicli composti sono DIAGNOSTICI finché il relativo schema di persistenza
+// e la rivalidazione delle occorrenze non saranno collaudati in isolamento.
+// Questo flag non abilita scritture per cicli composti.
+const POPBUS_CYCLE_DIAGNOSTICS = process.env.POPBUS_CYCLE_DIAGNOSTICS === '1';
+const MAX_CYCLE_DIAGNOSTICS = 40;
+
+// Integrazione controllata: il nuovo generatore NON entra nella scelta
+// delle attivazioni e NON modifica database, pagamenti o socket.
+// Abilitazione esplicita: POPBUS_FLEET_SHADOW=1
+const POPBUS_FLEET_SHADOW = process.env.POPBUS_FLEET_SHADOW === '1';
+const POPBUS_FLEET_SHADOW_MAX_REQUESTS = 30;
+const POPBUS_FLEET_SHADOW_MAX_VEHICLES = 30;
+const COMMISSIONE_TURENTU = 0.15;
+const POPBUS_PIXEL_SHADOW = process.env.POPBUS_PIXEL_SHADOW === '1';
+// Fase controllata: lettura delle opportunita PIXEL persistenti, senza attivazioni.
+const POPBUS_PIXEL_DB_SHADOW = process.env.POPBUS_PIXEL_DB_SHADOW === '1';
+// Diagnostica adapter reale: non alimenta feasible, chosen o la persistenza.
+const POPBUS_PIXEL_ADAPTER_SHADOW = process.env.POPBUS_PIXEL_ADAPTER_SHADOW === '1';
+// Flag riservato al cutover. Fino al collaudo operativo completo, FAIL-CLOSED.
+const POPBUS_PIXEL_FIRST = process.env.POPBUS_PIXEL_FIRST === '1';
+const POPBUS_PIXEL_AR_WORKER_SHADOW = process.env.POPBUS_PIXEL_AR_WORKER_SHADOW === '1';
+const POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT = 1000;
+const POPBUS_PIXEL_ADAPTER_SHADOW_MAX_FORMAZIONI = 80;
+const POPBUS_PIXEL_MAX_REQUESTS = 100;
+const POPBUS_PIXEL_CYCLE_SHADOW = process.env.POPBUS_PIXEL_CYCLE_SHADOW === '1';
+const POPBUS_PIXEL_MAX_MISSIONI = 24;
+const POPBUS_PIXEL_MAX_CICLI = 180;
+const POPBUS_PIXEL_MAX_VEICOLI = 20;
+// Configurabile ma limitato a 3: il generatore attuale rifiuta profondita superiori.
+const POPBUS_MAX_MISSIONI_PER_CICLO = Number(process.env.POPBUS_MAX_MISSIONI_PER_CICLO ?? 3);
+if (!Number.isSafeInteger(POPBUS_MAX_MISSIONI_PER_CICLO) ||
+    POPBUS_MAX_MISSIONI_PER_CICLO < 1 || POPBUS_MAX_MISSIONI_PER_CICLO > 3) {
+  throw new Error('POPBUS_MAX_MISSIONI_PER_CICLO: supportati valori da 1 a 3; oltre 3 serve estendere e collaudare il generatore');
+}
+
+// Fase 2: PIXEL riceve esclusivamente nodi territoriali e routing verificato.
+// NON crea attivazioni, NON cambia la scelta legacy e NON scrive nel database.
+async function eseguiPixelShadow({ requests, nodes, vehicles, client, log, stats }) {
+  if (!POPBUS_PIXEL_SHADOW) return;
+  if (requests.length > POPBUS_PIXEL_MAX_REQUESTS) {
+    log('PIXEL SHADOW SKIP', { motivo: 'limite senza troncamento', richieste: requests.length });
+    return;
+  }
+  const nodeMap = new Map(nodes.map(n => [Number(n.id), n]));
+  const engine = createIncrementalCorridorEngine({
+    routeNodes: async ids => {
+      const legs = [];
+      for (let i = 0; i < ids.length - 1; i++) {
+        const a = nodeMap.get(Number(ids[i]));
+        const b = nodeMap.get(Number(ids[i + 1]));
+        if (!a || !b) throw new Error(`PIXEL: nodo territoriale assente ${ids[i]} o ${ids[i + 1]}`);
+        // Usa il provider stradale reale. Non inventa distanze o polilinee.
+        const result = await movement(a, b);
+        if (!Number.isFinite(result.metres) || !Number.isFinite(result.seconds) ||
+            (result.metres > 0 && (!result.polyline || result.seconds <= 0))) {
+          throw new Error('PIXEL: routing senza geometria/durata verificata');
+        }
+        if (result.metres === 0) {
+          // Il motore richiede geometria verificata anche per nodi coincidenti.
+          throw new Error('PIXEL: nodi distinti con coordinate coincidenti: routing non rappresentabile');
+        }
+        legs.push({ metres: result.metres, seconds: result.seconds,
+          polyline: result.polyline, roadCoincident: false });
+      }
+      return { verificataRouting: true, legs };
+    }
+  });
+  let inserite = 0;
+  const errori = [];
+  for (const r of requests) {
+    try {
+      await engine.processRequest(r);
+      inserite++;
+    } catch (error) {
+      errori.push({ richiestaId: r.id, motivo: error.message });
+    }
+  }
+  const corridors = engine.listCorridors();
+  stats.pixelRichieste = inserite;
+  stats.pixelCorridoi = corridors.length;
+  stats.pixelErrori = errori.length;
+  log('PIXEL SHADOW RIEPILOGO', {
+    richiesteValide: requests.length, richiesteInserite: inserite,
+    corridoi: corridors.length, errori: errori.slice(0, 20),
+    soloLettura: true, utilizzabiliPerAttivazione: false
+  });
+  for (const c of corridors.slice(0, 30)) {
+    log('PIXEL SHADOW CORRIDOIO', {
+      id: c.id, nodes: c.nodes, richieste: c.richiestaIds,
+      metri: c.legs.reduce((sum, leg) => sum + leg.metres, 0),
+      versione: c.versione, verificataRouting: c.verificataRouting
+    });
+  }
+  if (POPBUS_PIXEL_CYCLE_SHADOW) {
+    await eseguiCicliPixelShadow({ engine, corridors, requests, nodes, vehicles, client, log, stats });
+  }
+}
+
+// Diagnostica integrata: PIXEL -> adapter -> ottimizzatore indicizzato.
+// Ogni candidata viene verificata dal vero adapter, non da stime sintetiche.
+// Non scrive su DB e NON abilita attivazioni.
+async function eseguiCicliPixelShadow({ engine, corridors, requests, nodes, vehicles, client, log, stats }) {
+  if (corridors.length > POPBUS_PIXEL_MAX_MISSIONI || vehicles.length > POPBUS_PIXEL_MAX_VEICOLI) {
+    log('PIXEL CICLI SKIP', { corridoi: corridors.length, veicoli: vehicles.length,
+      motivo: 'Limiti di carico senza troncamento del dataset' });
+    return;
+  }
+  const missioni = corridors.filter(c => c.verificataRouting && c.richiestaIds.length)
+    .map(c => ({ corridorId: c.id, requestIds: [...c.richiestaIds] }));
+  const byRequest = new Map(requests.map(r => [Number(r.id), r]));
+  const proposte = [];
+  // La sequenza dei corridoi non determina da sola la compatibilita:
+  // l'adapter controlla tutti i tempi, trasferimenti, posti ed economia.
+  function* catene(prefix, used) {
+    if (prefix.length) yield prefix;
+    if (prefix.length >= POPBUS_MAX_MISSIONI_PER_CICLO) return;
+    for (const m of missioni) {
+      if (prefix.some(p => p.corridorId === m.corridorId)) continue;
+      if (m.requestIds.some(id => used.has(Number(id)))) continue;
+      const next = new Set(used);
+      for (const id of m.requestIds) next.add(Number(id));
+      yield* catene([...prefix, m], next);
+    }
+  }
+  let esaminate = 0, valide = 0;
+  const motivi = {};
+  outer: for (const chain of catene([], new Set())) {
+    for (const vehicle of vehicles) {
+      if (esaminate >= POPBUS_PIXEL_MAX_CICLI) break outer;
+      esaminate++;
+      const esito = await diagnosticaCicloPixelPopbus({
+        engine, missioni: chain, richieste: requests, vehicle, nodes,
+        road: movement, now: Date.now(),
+        validateVehicle: async (v, start, end) => {
+          if (!turno(v, start, end)) return false;
+          return (await conflittiVeicolo(client, v.id, start, end)).length === 0;
+        },
+        validateCandidate: async (result) =>
+          result.richieste.every(id => byRequest.has(Number(id)))
+      });
+      if (!esito.ok || !esito.validazionePreliminare) {
+        const motivo = esito.motivo || 'NON_VALIDATO';
+        motivi[motivo] = (motivi[motivo] || 0) + 1;
+        continue;
+      }
+      // Prova la costruzione di UNA corsa globale per tutte le missioni.
+      // Se geometria o orari non sono coerenti, non entra neppure nell'ottimizzatore shadow.
+      let corsaGlobale;
+      try {
+        corsaGlobale = componiCicloInCorsa({
+          missioni: esito.missioni, trasferimenti: esito.trasferimenti,
+          nodi: nodes, veicoloId: vehicle.id, postiTotali: vehicle.posti_totali,
+          busyStart: esito.busyStart,
+          busyEnd: esito.busyEnd, approach: esito.approach, returnTrip: esito.returnTrip
+        });
+      } catch (error) {
+        const motivo = `CORSA_GLOBALE_${error.message}`;
+        motivi[motivo] = (motivi[motivo] || 0) + 1;
+        continue;
+      }
+      valide++;
+      proposte.push({
+        _corsaGlobale: corsaGlobale,
+        _pianoCiclo: { missioni: esito.missioni, trasferimenti: esito.trasferimenti,
+          approach: esito.approach, returnTrip: esito.returnTrip,
+          busyStart: esito.busyStart, busyEnd: esito.busyEnd,
+          economia: esito.economia, richiestaIds: esito.richieste },
+        veicolo: Number(vehicle.id),
+        richieste: [esito.richieste],
+        partenza_base: esito.busyStart,
+        ritorno_base: esito.busyEnd,
+        margine_ciclo_con_attesa_euro: esito.economia.margineEuro,
+        _diagnostica: { missioni: chain.length, corridorIds: chain.map(m => m.corridorId),
+          titolareId: vehicle.driver_id, economia: esito.economia }
+      });
+    }
+  }
+  const scelta = ottimizzaFlotta(proposte, { maxCandidati: 500, maxNodi: 100000 });
+  stats.pixelCicliEsaminati = esaminate;
+  stats.pixelCicliValidi = valide;
+  stats.pixelCicliSelezionati = scelta.selezionati?.length ?? 0;
+  log('PIXEL CICLI OTTIMIZZAZIONE SHADOW', {
+    esaminate, valide, motivi, candidati: proposte.length,
+    scelta: { margine: scelta.margineTotaleEuro, selezionate: scelta.selezionati?.length,
+      limiteNodiRaggiunto: scelta.limiteNodiRaggiunto,
+      candidatiTagliati: scelta.candidatiTagliati },
+    selezionati: (scelta.selezionati || []).slice(0, 20).map(c => ({
+      veicolo: c.veicolo, missioni: c._pianoCiclo?.missioni?.length,
+      richieste: c._pianoCiclo?.richiestaIds,
+      margineEuro: c._pianoCiclo?.economia?.margineEuro,
+      busyStart: c._pianoCiclo?.busyStart, busyEnd: c._pianoCiclo?.busyEnd
+    })),
+    nota: 'Piani completi in memoria, non attivabili: servono rivalidazione e acceptance multi-missione'
+  });
+}
+
+
+// Diagnostica DB PIXEL -> POPBUS. Non crea candidate territoriali e non scrive.
+// Nessuna opportunita e' assegnata a una missione in questa fase.
+async function verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, stats }) {
+  if (!POPBUS_PIXEL_DB_SHADOW) return;
+  const opportunita = await leggiOpportunitaPixel({ limit: 1000 });
+  const byRequest = new Map(requests.map(r => [Number(r.id), r]));
+  const esiti = { lette: opportunita.length, utilizzabili: 0, fuoriSnapshot: 0,
+    nodiMancanti: 0, richiesteIncompatibili: 0, geometrieNonValide: 0 };
+  for (const o of opportunita) {
+    const nodes = (o.nodi || []).map(Number);
+    const legs = o.legs;
+    const ids = (o.richiesta_ids || []).map(Number);
+    if (nodes.length < 2 || !Array.isArray(legs) || legs.length !== nodes.length - 1 ||
+        !nodes.every(n => Number.isSafeInteger(n) && n > 0) ||
+        !legs.every(l => Number.isFinite(Number(l.metres)) && Number(l.metres) >= 0 &&
+          Number.isFinite(Number(l.seconds)) && Number(l.seconds) >= 0)) {
+      esiti.geometrieNonValide++;
+      continue;
+    }
+    if (nodes.some(n => !nodeMap.has(n))) {
+      esiti.nodiMancanti++;
+      continue;
+    }
+    if (!ids.length || ids.some(id => !byRequest.has(id))) {
+      esiti.fuoriSnapshot++;
+      continue;
+    }
+    // Compatibilita territoriale minima; quella temporale/operativa resta
+    // di competenza dei validatori POPBUS, non di questa diagnostica.
+    if (ids.some(id => {
+      const r = byRequest.get(id);
+      const a = nodes.indexOf(Number(r.origine_nodo_territoriale_id));
+      const b = nodes.indexOf(Number(r.destinazione_nodo_territoriale_id));
+      return a < 0 || b <= a;
+    })) {
+      esiti.richiesteIncompatibili++;
+      continue;
+    }
+    esiti.utilizzabili++;
+    log('PIXEL DB OPPORTUNITA', {
+      pixelOpportunitaId: o.pixel_opportunita_id,
+      pixelDirettriceId: o.pixel_direttrice_id,
+      versione: o.versione,
+      nodi: nodes,
+      richieste: ids,
+      finestraInizio: o.inizio_finestra,
+      finestraFine: o.fine_finestra,
+      stato: 'CANDIDATA_NON_ATTIVABILE_DA_SHADOW'
+    });
+  }
+  stats.pixelDb = esiti;
+  log('PIXEL DB RIEPILOGO', {
+    ...esiti,
+    limiteLettura: 1000,
+    potenzialmenteTroncato: opportunita.length === 1000,
+    soloLettura: true,
+    nota: 'La generazione e attivazione legacy restano indipendenti in questa fase'
+  });
+}
+
+// Osservazione dell'adapter reale PIXEL -> POPBUS. Nessuna candidata shadow
+// entra nel matching operativo. In caso di errore, segnala e non nasconde
+// il problema; il percorso legacy resta invariato.
+async function eseguiPixelAdapterShadow({ client, log, stats }) {
+  if (!POPBUS_PIXEL_ADAPTER_SHADOW) return;
+  const contesti = await leggiContestiOpportunitaPixel({
+    client, limit: POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT
+  });
+  // Il reader PIXEL e limitato a 1000: non interpretare una lettura piena
+  // come un dataset completo, e non usare risultati potenzialmente troncati.
+  if (contesti.length >= POPBUS_PIXEL_ADAPTER_SHADOW_LIMIT) {
+    throw new Error('PIXEL ADAPTER SHADOW: limite 1000 raggiunto; dataset potenzialmente troncato');
+  }
+  let formazioni = 0;
+  const dettagli = [];
+  for (const contesto of contesti) {
+    const alternative = generaFormazioniDaOpportunitaPixel(contesto, {
+      maxFormazioniPerSeed: POPBUS_PIXEL_ADAPTER_SHADOW_MAX_FORMAZIONI
+    });
+    formazioni += alternative.length;
+    // Contesti estranei allo snapshot del worker non vengono scartati:
+    // l'adapter legge la propria sorgente PIXEL, non le candidate legacy.
+    dettagli.push({
+      opportunita: contesto.pixel_opportunita_id,
+      direttrice: contesto.pixel_direttrice_id,
+      versione: contesto.versione,
+      richieste: contesto.richiesta_ids.length,
+      formazioni: alternative.length
+    });
+  }
+  stats.pixelAdapterShadow = {
+    opportunita: contesti.length, formazioni, soloDiagnostica: true
+  };
+  log('PIXEL ADAPTER SHADOW RIEPILOGO', {
+    ...stats.pixelAdapterShadow,
+    dettagli: dettagli.slice(0, 30),
+    dettagliOmesse: Math.max(0, dettagli.length - 30),
+    nessunaAttivazioneDaAdapter: true,
+    nota: 'Il matching operativo legacy non e modificato'
+  });
+}
+
+// PIXEL usa esclusivamente i nodi territoriali. Il mapping verso i campi
+// start/end e' interno al worker e NON aggiorna le colonne legacy nel DB.
+// Una richiesta senza entrambi gli ID territoriali non puo' entrare nel
+// nuovo percorso: non e' lecito reinterpretare ID legacy come territoriali.
+function normalizzaRichiesteTerritoriali(rawRequests, log) {
+  const valide = [];
+  const scartate = [];
+  for (const r of rawRequests) {
+    const a = Number(r.origine_nodo_territoriale_id);
+    const b = Number(r.destinazione_nodo_territoriale_id);
+    if (r.origine_nodo_territoriale_id == null ||
+        r.destinazione_nodo_territoriale_id == null ||
+        !Number.isSafeInteger(a) || !Number.isSafeInteger(b) ||
+        a <= 0 || b <= 0 || a === b) {
+      scartate.push(r.id);
+      continue;
+    }
+    valide.push({ ...r, start_node_id: a, end_node_id: b });
+  }
+  if (scartate.length) log('NODI TERRITORIALI NON VALIDI', {
+    richiesteScartate: scartate,
+    motivo: 'ID territoriali assenti, non sicuri o coincidenti; nessun fallback legacy'
+  });
+  return { valide, scartate };
+}
+
+function riepilogaEconomiaFlotta(c) {
+  const ricavo = Number(c.ricavo_euro);
+  const costo = Number(c.costo_completo_euro) + Number(c.costo_attesa_euro || 0);
+  const commissione = Math.round(ricavo * COMMISSIONE_TURENTU * 100) / 100;
+  return {
+    ricavoLordoEuro: ricavo,
+    commissioneTurentuEuro: commissione,
+    costoCicloEuro: Math.round(costo * 100) / 100,
+    margineNettoEuro: Math.round((ricavo - commissione - costo) * 100) / 100,
+    // La soglia economica comprende esplicitamente il ritorno alla base.
+    ritornoAllaBaseIncluso: true
+  };
+}
+
+async function eseguiFleetShadow({ requests, nodes, vehicles, log, stats }) {
+  if (!POPBUS_FLEET_SHADOW) return;
+  if (!requests.length || !vehicles.length) {
+    log('FLEET SHADOW SKIP', 'Nessuna richiesta o veicolo');
+    return;
+  }
+  if (requests.length > POPBUS_FLEET_SHADOW_MAX_REQUESTS ||
+      vehicles.length > POPBUS_FLEET_SHADOW_MAX_VEHICLES) {
+    log('FLEET SHADOW SKIP', {
+      motivo: 'Limite prudenziale di carico: nessun taglio silenzioso del dataset',
+      richieste: requests.length, veicoli: vehicles.length,
+      limiteRichieste: POPBUS_FLEET_SHADOW_MAX_REQUESTS,
+      limiteVeicoli: POPBUS_FLEET_SHADOW_MAX_VEHICLES
+    });
+    return;
+  }
+  const validCoord = x => x && Number.isFinite(Number(x.lat)) &&
+    Number.isFinite(Number(x.lon)) && Math.abs(Number(x.lat)) <= 90 &&
+    Math.abs(Number(x.lon)) <= 180;
+  const nodeIds = new Set(nodes.filter(validCoord).map(n => Number(n.id)));
+  const validRequests = requests.filter(r =>
+    nodeIds.has(Number(r.start_node_id)) &&
+    nodeIds.has(Number(r.end_node_id)) &&
+    Number.isFinite(Date.parse(r.start_datetime)) &&
+    Number.isSafeInteger(Number(r.posti_richiesti)) &&
+    Number(r.posti_richiesti) > 0 &&
+    r.prezzo != null && Number.isFinite(Number(r.prezzo)) &&
+    Number(r.prezzo) >= 0
+  );
+  const validVehicles = vehicles.filter(v =>
+    validCoord(v) && Number.isSafeInteger(Number(v.posti_totali)) &&
+    Number(v.posti_totali) > 0 && Number.isFinite(Number(v.euro_km)) &&
+    Number(v.euro_km) > 0
+  );
+  if (validRequests.length !== requests.length || validVehicles.length !== vehicles.length) {
+    log('FLEET SHADOW INPUT FILTRATO', {
+      richiesteOriginali: requests.length, richiesteUsabili: validRequests.length,
+      veicoliOriginali: vehicles.length, veicoliUsabili: validVehicles.length
+    });
+  }
+  if (!validRequests.length || !validVehicles.length) return;
+
+  // Il routing usa lo stesso planner.leg del worker legacy.
+  // Non si passa validateCandidate: nessun candidato e' dichiarato validato.
+  const generated = await generaCandidatiFlotta({
+    requests: validRequests,
+    nodes: nodes.filter(validCoord),
+    vehicles: validVehicles,
+    road: (a, b) => movement(a, b)
+  }, {
+    now: Date.now(), includePast: false, strict: true,
+    maxDepth: POPBUS_MAX_MISSIONI_PER_CICLO, maxWaitMin: 180, bufferMin: 0,
+    maxGroupRequests: 12, maxAggregateCombos: 2500,
+    maxFormations: 2500, maxChains: 500,
+    maxCombosPerChainVehicle: 20000, maxTotalChainCombos: 100000,
+    nearTransferMetres: 0, costoAttesaOra: 0
+  });
+  stats.fleetShadowCandidati = generated.candidati.length;
+  stats.fleetShadowCatene = generated.candidati.filter(c => c.missioni > 1).length;
+  log('FLEET SHADOW DIAGNOSTICA', {
+    ...generated.diagnostica,
+    utilizzabiliPerAttivazione: generated.utilizzabiliPerAttivazione
+  });
+  for (const c of generated.candidati.slice(0, 50)) {
+    log('FLEET SHADOW CANDIDATO', {
+      veicolo: c.veicolo, tipo: c.tipo_candidato,
+      richieste: c.richieste, missioni: c.missioni,
+      partenzaBase: c.partenza_base, ritornoBase: c.ritorno_base,
+      kmTotali: c.km_totali,
+      ...riepilogaEconomiaFlotta(c),
+      utilizzabilePerAttivazione: false
+    });
+  }
+  if (generated.candidati.length > 50) {
+    log('FLEET SHADOW LOG LIMIT', {
+      candidatiTotali: generated.candidati.length, candidatiStampati: 50
+    });
+  }
+}
+
+
+
+const fmt = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/Rome',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+});
+
+function minute(t) {
+  const p = fmt.formatToParts(new Date(t));
+
+  return Number(
+    p.find(x => x.type === 'hour').value
+  ) * 60 + Number(
+    p.find(x => x.type === 'minute').value
+  );
+}
+
+// I turni sono ricorrenti: la data di start/fine è solo un contenitore
+// dell'orario. Gli istanti della missione sono verificati in Europe/Rome.
+const giornoFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Europe/Rome', weekday: 'short'
+});
+const GIORNI = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+function giornoLocale(t) {
+  return GIORNI.indexOf(giornoFmt.format(new Date(t)).toLowerCase());
+}
+
+function giornoEscluso(giorni, t) {
+  if (!Array.isArray(giorni) || !giorni.length) return false;
+  const day = giornoLocale(t);
+  const nomi = ['domenica', 'lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato'];
+  return giorni.some(g => {
+    const value = String(g).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Supporta 0..6 (domenica=0), 1..7 (ISO, domenica=7) e nomi.
+    // Per valori numerici 1..6 le due convenzioni differiscono:
+    // qui viene adottata la convenzione JavaScript 0..6.
+    return value === String(day) || (day === 0 && value === '7') ||
+      value === nomi[day] || value === GIORNI[day];
+  });
+}
+
+function inattivo(v, a, b) {
+  const periodi = v.inattivita || [];
+  if (!Array.isArray(periodi) || !periodi.length) return false;
+  return periodi.some(p => {
+    // Se il formato non è riconosciuto, blocca per sicurezza.
+    if (!p || typeof p !== 'object') return true;
+    const start = p.start ?? p.inizio ?? p.dal ?? p.da;
+    const end = p.fine ?? p.end ?? p.al ?? p.a;
+    if (!start || !end) return true;
+    const x = new Date(start).getTime();
+    const y = new Date(end).getTime();
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+    return x < b && y > a;
+  });
+}
+
+function turno(v, a, b) {
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return false;
+  if (!v.start || !v.fine) return false;
+  const s = minute(v.start);
+  const e = minute(v.fine);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s === e) return false;
+  if (inattivo(v, a, b)) return false;
+
+  // Campionamento di ogni minuto, incluso l'ultimo minuto operativo.
+  // Le esclusioni si riferiscono al giorno di inizio del turno:
+  // per un turno notturno 20:00-06:00, le ore dopo mezzanotte
+  // appartengono al turno iniziato il giorno precedente.
+  for (let t = a; t < b; t = Math.min(b, Math.floor(t / 60000) * 60000 + 60000)) {
+    const m = minute(t);
+    const valido = s < e ? (m >= s && m < e) : (m >= s || m < e);
+    if (!valido) return false;
+    const giornoTurno = s > e && m < e ? t - 24 * 60 * 60 * 1000 : t;
+    if (giornoEscluso(v.giorni_esclusi, giornoTurno)) return false;
+  }
+  return true;
+}
+
+// Unica fonte per la verifica iniziale e la rivalidazione finale.
+// driver_id e' il TITOLARE della flotta: l'esclusivita' e' per veicolo_id.
+// Le corse gia' collegate a un'attivazione sono rappresentate dalla
+// relativa attivazione (che include avvicinamento e ritorno).
+// Le direttrici legacy sono controllate soltanto se hanno segmenti
+// temporali determinabili; quelle senza intervallo richiedono gestione
+// separata, non un blocco permanente di tutti i giorni.
+async function conflittiVeicolo(client, veicoloId, busyStart, busyEnd) {
+  const { rows } = await client.query(`
+    SELECT 'attivazione' AS origine, a.id::text AS id,
+           COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) AS inizio,
+           COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) AS fine
+    FROM popbus_attivazioni a
+    WHERE a.veicolo_id=$1
+      AND a.stato IN ('in_attesa_autista','confermata')
+      AND COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) < $3::timestamptz
+      AND COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) > $2::timestamptz
+
+    UNION ALL
+
+    SELECT 'corsa' AS origine, c.id::text AS id,
+           c.start_datetime AS inizio, c.arrivo_datetime AS fine
+    FROM corse c
+    WHERE c.veicolo_id=$1
+      AND c.stato IN ('prenotabile','in_corso','da_attivare')
+      AND c.start_datetime < $3::timestamptz
+      AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime > $2::timestamptz)
+      AND NOT EXISTS (
+        SELECT 1 FROM popbus_attivazioni a
+        WHERE a.corsa_id=c.id AND a.veicolo_id=c.veicolo_id
+          AND a.stato IN ('in_attesa_autista','confermata')
+      )
+
+    UNION ALL
+
+    SELECT 'direttrice' AS origine, d.id::text AS id,
+           d.partenza_prevista AS inizio,
+           MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') AS fine
+    FROM direttrici_virtuali d
+    JOIN segmenti s ON s.direttrice_id=d.id
+    WHERE d.veicolo_id=$1
+      AND d.stato IN ('in_attesa_autista','attivo','confermata')
+      AND d.partenza_prevista < $3::timestamptz
+      AND NOT EXISTS (
+        SELECT 1 FROM popbus_attivazioni a
+        WHERE a.direttrice_id=d.id AND a.veicolo_id=d.veicolo_id
+          AND a.stato IN ('in_attesa_autista','confermata')
+      )
+    GROUP BY d.id, d.partenza_prevista
+    HAVING MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') > $2::timestamptz
+  `, [veicoloId, new Date(busyStart), new Date(busyEnd)]);
+  return rows;
+}
+
+async function movement(a, b) {
+  if (
+    Math.abs(Number(a.lat) - Number(b.lat)) < 1e-7 &&
+    Math.abs(Number(a.lon) - Number(b.lon)) < 1e-7
+  ) {
+    return {
+      metres: 0,
+      seconds: 0
+    };
+  }
+
+  return leg(a, b);
+}
+
+const fingerprint = fingerprintRichiesta;
+
+// =====================================================
+// POPBUS V2 - LOCALITÀ
+//
+// Recupera i nomi dalle richieste selezionate.
+// Non modifica la geometria o la tabella dei nodi.
+//
+// Le richieste sono già state rivalidate e bloccate
+// con SELECT ... FOR UPDATE.
+//
+// Se due richieste associano indirizzi diversi allo
+// stesso nodo, mantiene il primo e registra un log.
+// =====================================================
+
+function costruisciCoordinateConLocalita(
+  plan,
+  nodeMap,
+  richieste,
+  log
+) {
+  const nomiNodi = new Map();
+
+  function registraNome(nodoId, indirizzo, richiestaId) {
+    const id = Number(nodoId);
+
+    const nome = String(
+      indirizzo || ''
+    ).trim();
+
+    if (!Number.isInteger(id) || !nome) {
+      return;
+    }
+
+    const esistente = nomiNodi.get(id);
+
+    if (!esistente) {
+      nomiNodi.set(id, nome);
+      return;
+    }
+
+    if (esistente !== nome) {
+      log('LOCALITA DISCORDANTE', {
+        nodo: id,
+        nomeEsistente: esistente,
+        nomeNuovo: nome,
+        richiesta: richiestaId
+      });
+    }
+  }
+
+  for (const r of richieste) {
+    registraNome(
+      r.start_node_id,
+      r.origine_address,
+      r.id
+    );
+
+    registraNome(
+      r.end_node_id,
+      r.destinazione_address,
+      r.id
+    );
+  }
+
+  const coordinates = plan.nodes.map(id => {
+    const nodo = nodeMap.get(Number(id));
+
+    if (!nodo) {
+      throw new Error(
+        `POPBUS V2: nodo ${id} non trovato`
+      );
+    }
+
+    const nomeDatabase = String(
+      nodo.nome_nodo || ''
+    ).trim();
+
+    const nomeRichiesta =
+      nomiNodi.get(Number(id)) || null;
+
+    return {
+      ...nodo,
+      nome_nodo:
+        nomeDatabase ||
+        nomeRichiesta ||
+        null
+    };
+  });
+
+  log('LOCALITA', {
+    nodi: coordinates.map(n => ({
+      id: n.id,
+      nome_nodo: n.nome_nodo
+    }))
+  });
+
+  const senzaNome = coordinates.filter(
+    n => !n.nome_nodo
+  );
+
+  if (senzaNome.length) {
+    log('LOCALITA MANCANTI', {
+      numero: senzaNome.length,
+      nodi: senzaNome.map(n => n.id)
+    });
+  }
+
+  return coordinates;
+}
+
+
+// Analisi senza effetti collaterali: combina fino a tre missioni già valutate,
+// con lo stesso veicolo e senza richieste duplicate. I collegamenti sono
+// percorsi stradali reali. Non crea attivazioni né modifica lo stato.
+async function diagnosticaCicliContigui(feasible, requests, nodeMap, log) {
+  const byVehicle = new Map();
+  for (const f of feasible) {
+    const id = Number(f.vehicle.id);
+    if (!byVehicle.has(id)) byVehicle.set(id, []);
+    byVehicle.get(id).push(f);
+  }
+  let examined = 0;
+  let compatible = 0;
+  let withReturn = 0;
+  for (const [vehicleId, items] of byVehicle) {
+    const ordered = items.slice().sort((a,b) => a.evaluation.departure - b.evaluation.departure);
+    for (let i=0; i<ordered.length && examined<MAX_CYCLE_DIAGNOSTICS; i++) {
+      for (let j=i+1; j<ordered.length && examined<MAX_CYCLE_DIAGNOSTICS; j++) {
+        const first=ordered[i], second=ordered[j];
+        const idsA=new Set(first.evaluation.requests.map(x=>Number(x.id)));
+        if (second.evaluation.requests.some(x=>idsA.has(Number(x.id)))) continue;
+        if (second.evaluation.departure<=first.evaluation.departure) continue;
+        examined++;
+        try {
+          const lastNode=nodeMap.get(Number(first.plan.nodes.at(-1)));
+          const nextNode=nodeMap.get(Number(second.plan.nodes[0]));
+          if (!lastNode || !nextNode) continue;
+          const link=await movement(lastNode,nextNode);
+          const earliest=first.evaluation.arrival + link.seconds*1000;
+          // Il veicolo non può iniziare la seconda missione prima di arrivare.
+          if (earliest>second.evaluation.departure) continue;
+          // In questo test diagnostico non inseriamo attese nel piano:
+          // le sequenze devono essere temporalmente contigue.
+          if (Math.abs(earliest-second.evaluation.departure)>1000) continue;
+          const joinedNodes=[...first.plan.nodes];
+          const joinedLegs=[...first.plan.legs];
+          if (Number(joinedNodes.at(-1))!==Number(second.plan.nodes[0])) {
+            joinedNodes.push(Number(second.plan.nodes[0]));
+            joinedLegs.push(link);
+          }
+          joinedNodes.push(...second.plan.nodes.slice(1));
+          joinedLegs.push(...second.plan.legs);
+          const joined={nodes:joinedNodes,legs:joinedLegs,classe:'MISTA_V2'};
+          const baseAssignments=[...first.evaluation.requests.map(r=>({
+            richiesta:requests.find(x=>Number(x.id)===Number(r.id)),
+            start:r.start,end:r.end
+          })),...second.evaluation.requests.map(r=>({
+            richiesta:requests.find(x=>Number(x.id)===Number(r.id)),
+            start:r.start+first.plan.nodes.length-1+(Number(first.plan.nodes.at(-1))!==Number(second.plan.nodes[0])?1:0),
+            end:r.end+first.plan.nodes.length-1+(Number(first.plan.nodes.at(-1))!==Number(second.plan.nodes[0])?1:0)
+          }))];
+          if (baseAssignments.some(a=>!a.richiesta)) continue;
+          const q=verificaQualitaOccorrenze(joined,baseAssignments);
+          if (!q.ok) continue;
+          compatible++;
+          const excluded=new Set(baseAssignments.map(a=>Number(a.richiesta.id)));
+          const extra=requests.filter(r=>!excluded.has(Number(r.id)));
+          const matches=generaRitorniCompatibili(joined,extra,first.evaluation.departure,{
+            maxPosti:Number(first.vehicle.posti_totali),baseAssignments,maxRisultati:20
+          });
+          const best=matches.reduce((a,b)=>!a||b.revenue>a.revenue?b:a,null);
+          if (best && best.requestIds.length>baseAssignments.length) withReturn++;
+          const approach=first.approach;
+          const returnTrip=await movement(nodeMap.get(Number(joined.nodes.at(-1))),first.vehicle);
+          const metres=joined.legs.reduce((s,l)=>s+l.metres,0)+approach.metres+returnTrip.metres;
+          const cost=Math.ceil(metres/1000*Number(first.vehicle.euro_km)*100)/100;
+          const revenue=best?.revenue??baseAssignments.reduce((s,a)=>s+Number(a.richiesta.prezzo),0);
+          log('CICLO DIAGNOSTICO SOLA LETTURA',{
+            veicolo:vehicleId,missioni:[first.plan.nodes,second.plan.nodes],
+            percorso:joined.nodes,richieste:best?.requestIds??[...excluded],
+            ricavo:revenue,costo:cost,superaCoperturaIntegrale:revenue>=cost,
+            ritornoFinaleKm:returnTrip.metres/1000,
+            nota:'Nessuna attivazione ciclo eseguita; soglie di classe da rivalidare'
+          });
+        } catch(e) {
+          log('CICLO DIAGNOSTICO SCARTATO',e.message);
+        }
+      }
+    }
+  }
+  log('CICLI DIAGNOSTICA RIEPILOGO',{esaminati:examined,compatibili:compatible,conRichiesteAggiuntive:withReturn});
+}
+
+// Diagnostica operativa PIXEL-first: percorso COMPLETAMENTE read-only.
+// Non sostituisce il cutover, non crea attivazioni e non invia socket.
+const POPBUS_PIXEL_FEASIBILITY_READONLY = process.env.POPBUS_PIXEL_FEASIBILITY_READONLY === '1';
+
+async function diagnosticaFattibilitaPixelReadOnly() {
+  const client = await pool.connect();
+  let tx = false;
+  try {
+    await client.query('BEGIN READ ONLY');
+    tx = true;
+    const formazioni = await leggiFormazioniPixelWorker({ client, limit: 100, maxFormazioniPerSeed: 80 });
+    const ids = [...new Set(formazioni.flatMap(f => f.richiestaIds.map(Number)))];
+    const nodeIds = [...new Set(formazioni.flatMap(f => f.plan.nodes.map(Number)))];
+    if (!formazioni.length) {
+      console.log('PIXEL_FEASIBILITY_READONLY_JSON:' + JSON.stringify({ formazioni: 0, fattibili: 0, selezionate: 0 }));
+      return;
+    }
+    const { rows: rawRequests } = await client.query(
+      `SELECT * FROM richieste_pop_bus WHERE id = ANY($1::int[])`, [ids]);
+    const { valide: requests } = normalizzaRichiesteTerritoriali(rawRequests, () => {});
+    const { rows: nodes } = await client.query(`
+      SELECT id, nome AS nome_nodo,
+             ST_Y(posizione::geometry) AS lat,
+             ST_X(posizione::geometry) AS lon
+      FROM public.nodi_territoriali
+      WHERE id = ANY($1::bigint[]) AND attivo = TRUE`, [nodeIds]);
+    const prepared = preparaInputFattibilitaPixel(formazioni, requests, nodes);
+    const nodeMap = new Map(nodes.map(n => [Number(n.id), n]));
+    const { rows: vehicles } = await client.query(`
+      SELECT v.id, v.driver_id, v.posti_totali, t.euro_km,
+             dv.start, dv.fine, dv.manual, dv.giorni_esclusi, dv.inattivita,
+             ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
+             ST_X(COALESCE(dv.coord,v.coord)::geometry) AS lon
+      FROM veicolo v
+      JOIN disponibilita_veicolo dv ON dv.veicolo_id=v.id
+      JOIN LATERAL (
+        SELECT MIN(euro_km) AS euro_km FROM tariffe
+        WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0
+      ) t ON t.euro_km IS NOT NULL
+      WHERE v.driver_id IS NOT NULL AND v.posti_totali>0
+        AND COALESCE(dv.coord,v.coord) IS NOT NULL
+      ORDER BY t.euro_km,v.id`);
+    const feasible = [];
+    const scarti = {};
+    const skip = reason => { scarti[reason] = (scarti[reason] || 0) + 1; };
+    for (const f of prepared) {
+      const { plan, evaluation } = f;
+      if (evaluation.departure <= Date.now()) { skip('partenza_passata'); continue; }
+      const quality = verificaQualitaRichieste(plan, f.selectedRequests);
+      if (!quality.ok) { skip('qualita'); continue; }
+      for (const vehicle of vehicles) {
+        if (Number(vehicle.posti_totali) < evaluation.peak) { skip('capienza'); continue; }
+        let approach, returnTrip;
+        try {
+          approach = await movement(vehicle, nodeMap.get(Number(plan.nodes[0])));
+          returnTrip = await movement(nodeMap.get(Number(plan.nodes.at(-1))), vehicle);
+          if (![approach.metres, approach.seconds, returnTrip.metres, returnTrip.seconds]
+            .every(x => Number.isFinite(Number(x)) && Number(x) >= 0)) throw new Error('routing invalido');
+        } catch { skip('routing'); continue; }
+        const busyStart = evaluation.departure - approach.seconds * 1000;
+        const busyEnd = evaluation.arrival + returnTrip.seconds * 1000;
+        if (busyStart <= Date.now() || !turno(vehicle, busyStart, busyEnd)) { skip('turno'); continue; }
+        // Contratto economico condiviso con economiaCandidato()/scegliAttivazioni().
+        // Ricavi reali: nessun moltiplicatore di collaudo nel worker originale.
+        const ricaviRichiesteEuro = f.selectedRequests.map(r => Number(r.prezzo));
+        let economia;
+        try {
+          economia = valutaEconomiaCiclo({
+            ricaviRichiesteEuro,
+            kmAvvicinamento: approach.metres / 1000,
+            kmMissioni: plan.legs.reduce((sum, l) => sum + Number(l.metres), 0) / 1000,
+            kmTrasferimenti: 0,
+            kmRitornoBase: returnTrip.metres / 1000,
+            euroKm: Number(vehicle.euro_km)
+          });
+        } catch { skip('economia_invalida'); continue; }
+        if (!economia.economicamenteAttivabile) { skip('soglia_economica'); continue; }
+        if ((await conflittiVeicolo(client, vehicle.id, busyStart, busyEnd)).length) {
+          skip('conflitto_veicolo'); continue;
+        }
+        feasible.push({
+          source: 'PIXEL', pixelOpportunitaId: f.pixelOpportunitaId,
+          pixelDirettriceId: f.pixelDirettriceId, pixelVersione: f.pixelVersione,
+          plan, evaluation: { ...evaluation, revenue: economia.ricavoLordoEuro },
+          vehicle, approach, returnTrip, busyStart, busyEnd,
+          ricaviRichiesteEuro, economia, cost: economia.costoCompletoEuro
+        });
+      }
+    }
+    const chosen = scegliAttivazioni(feasible);
+    console.log('PIXEL_FEASIBILITY_READONLY_JSON:' + JSON.stringify({
+      formazioni: prepared.length, veicoli: vehicles.length,
+      fattibili: feasible.length, selezionate: chosen.length, scarti,
+      scelta: chosen.map(c => ({ pixelOpportunitaId: c.pixelOpportunitaId,
+        veicoloId: c.vehicle.id, richiestaIds: c.evaluation.requests.map(r => r.id),
+        margineEuro: c.economia.margineEuro, ritornoIncluso: true }))
+    }));
+  } finally {
+    if (tx) await client.query('ROLLBACK');
+    client.release();
+  }
+}
+
+let cicliAttivi = 0;
+let numeroCiclo = 0;
+
+export async function processaProposteDinamicheV2() {
+  // Shadow isolato PRIMA di qualsiasi pulizia/scadenza/scrittura legacy.
+  if (POPBUS_PIXEL_AR_WORKER_SHADOW) {
+    if (POPBUS_PIXEL_FIRST || POPBUS_PIXEL_FEASIBILITY_READONLY)
+      throw new Error('PIXEL AR WORKER SHADOW: flag incompatibili');
+    const result = await eseguiPixelArWorkerShadow({
+  pool,
+  movement,
+  turno,
+  conflittiVeicolo,
+  enableMultiMission: process.env.POPBUS_PIXEL_MULTIMISSION_SHADOW === '1',
+  preflightMultiMission: process.env.POPBUS_PIXEL_MULTIMISSION_PREFLIGHT === '1',
+  maxPreflightChecks: Number(process.env.POPBUS_PIXEL_PREFLIGHT_MAX_CHECKS ?? 2000000),
+  maxOpportunita: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_OPPORTUNITA ?? 3),
+  maxPairs: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_PAIRS ?? 5),
+  maxRoutingCalls: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_ROUTING_CALLS ?? 100),
+  maxProposte: Number(process.env.POPBUS_PIXEL_SHADOW_MAX_PROPOSTE ?? 100)
+});
+    console.log('PIXEL_AR_WORKER_SHADOW_JSON:' + JSON.stringify(result));
+    return result;
+  }
+  // Diagnostica separata e READ ONLY; mai un fallback legacy in questa modalita.
+  if (POPBUS_PIXEL_FEASIBILITY_READONLY) {
+    if (POPBUS_PIXEL_FIRST) throw new Error('Flag PIXEL_FIRST e READONLY incompatibili');
+    return diagnosticaFattibilitaPixelReadOnly();
+  }
+  // Protezione prima di qualsiasi transazione, cleanup o scrittura legacy.
+  if (POPBUS_PIXEL_FIRST) {
+    const result = await processaPixelFirstMultimissione({
+      pool, mode: process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY'
+    });
+    // Il socket non deve precedere il commit; nessun socket in ROLLBACK_ONLY.
+    if (result?.persistita === true) {
+      try {
+        getIO().to(`autista_${result.autistaId}`).emit('nuova_proposta_popbus', {
+          id: result.offertaId,
+          attivazione_id: result.attivazioneId,
+          direttrice_id: null,
+          veicolo_id: result.veicoloId,
+          classe: 'MULTIMISSIONE_PIXEL',
+          posti_richiesti: result.peak,
+          oraPartenza: result.partenza,
+          start_node_id: result.startNodeId,
+          end_node_id: result.endNodeId,
+          origine_address: result.origineAddress,
+          destinazione_address: result.destinazioneAddress
+        });
+      } catch (err) {
+        console.error('[PIXEL FIRST SOCKET POSTCOMMIT]', err.message);
+      }
+    }
+    return result;
+  }
+  const ciclo = ++numeroCiclo;
+  const inizio = Date.now();
+
+  cicliAttivi++;
+
+  const log = (fase, ...args) =>
+    console.log(
+      `[POPBUS V2 #${ciclo}] [${fase}]`,
+      ...args
+    );
+
+  const stats = {
+    richieste: 0,
+    pagamentiScartati: 0,
+    candidate: 0,
+    pianiValidi: 0,
+    erroriPercorso: 0,
+    valutazioniScartate: 0,
+    veicoliCapienza: 0,
+    erroriAvvicinamento: 0,
+    veicoliTurno: 0,
+    veicoliCosto: 0,
+    veicoliConflitto: 0,
+    fattibili: 0,
+    formazioniAlternative: 0,
+    selezionate: 0,
+    scartiRivalidazione: 0,
+    scartiPrenotazione: 0,
+    scartiVeicolo: 0,
+    scartiOccupato: 0,
+    attivazioni: 0,
+    fleetShadowCandidati: 0,
+    fleetShadowCatene: 0,
+    pixelRichieste: 0,
+    pixelCorridoi: 0,
+    pixelErrori: 0
+  };
+
+  log(
+    'START',
+    `PID=${process.pid} ` +
+    `attivi=${cicliAttivi} ` +
+    `ora=${new Date().toISOString()}`
+  );
+
+  if (cicliAttivi > 1) {
+    log(
+      'ATTENZIONE',
+      `Esecuzioni sovrapposte nello stesso processo: ${cicliAttivi}`
+    );
+  }
+
+  let client;
+  let tx = false;
+
+  const events = [];
+
+  // Collaudo controllato: in assenza della variabile nessun filtro viene applicato.
+  // La validazione avviene prima di qualunque accesso al database con scritture.
+  const richiestaTestIdRaw = process.env.POPBUS_TEST_REQUEST_ID;
+  const richiestaTestId = richiestaTestIdRaw === undefined
+    ? null
+    : Number(richiestaTestIdRaw);
+  if (richiestaTestId !== null &&
+      (!Number.isSafeInteger(richiestaTestId) ||
+       richiestaTestId <= 0 || richiestaTestId > 2147483647 ||
+       String(richiestaTestId) !== richiestaTestIdRaw)) {
+    cicliAttivi--;
+    throw new Error('POPBUS_TEST_REQUEST_ID non valido: usare un ID intero positivo');
+  }
+
+  try {
+    // =====================================================
+    // CONNESSIONE DATABASE
+    // =====================================================
+
+    const tConn = Date.now();
+
+    client = await pool.connect();
+
+    log(
+      'DB',
+      `Connessione ottenuta in ${Date.now() - tConn} ms`
+    );
+
+    await client.query('BEGIN');
+    tx = true;
+
+    const tLock1 = Date.now();
+
+    await client.query(
+      'SELECT pg_advisory_xact_lock(734021,1)'
+    );
+
+    log(
+      'LOCK',
+      `Lock iniziale ottenuto in ${Date.now() - tLock1} ms`
+    );
+
+    // =====================================================
+    // PULIZIA ATTIVAZIONI SCADUTE
+    // =====================================================
+
+    // In modalita collaudo, non consentire la pulizia globale.
+    // Il controllo viene eseguito sotto lo stesso advisory lock della pulizia.
+    if (richiestaTestId !== null) {
+      const { rows: scadenzeTest } = await client.query(`
+        SELECT COUNT(*)::int AS totale
+        FROM popbus_attivazioni
+        WHERE stato='in_attesa_autista'
+          AND expires_at<=NOW()
+      `);
+      if (scadenzeTest[0].totale !== 0) {
+        throw new Error(
+          `Collaudo richiesta ${richiestaTestId} bloccato: ` +
+          `${scadenzeTest[0].totale} attivazioni scadute da ripulire`
+        );
+      }
+      log('COLLAUDO ISOLATO', `Richiesta ${richiestaTestId}; nessuna scadenza pendente`);
+    }
+
+    const { rows: expired } = await client.query(`
+      UPDATE popbus_attivazioni
+      SET stato='scaduta'
+      WHERE stato='in_attesa_autista'
+        AND expires_at<=NOW()
+      RETURNING id
+    `);
+
+    log(
+      'SCADENZE',
+      `Attivazioni scadute: ${expired.length}`
+    );
+
+    for (const a of expired) {
+      await client.query(
+        `
+        UPDATE popbus_attivazione_richieste
+        SET attiva=false
+        WHERE attivazione_id=$1
+        `,
+        [a.id]
+      );
+
+      await client.query(
+        `
+        UPDATE offerte_autisti
+        SET stato='scaduta'
+        WHERE attivazione_id=$1
+          AND stato='inviata'
+        `,
+        [a.id]
+      );
+
+      await client.query(
+        `
+        UPDATE richieste_pop_bus r
+        SET stato='in_attesa'
+        FROM popbus_attivazione_richieste ar
+        WHERE ar.attivazione_id=$1
+          AND ar.richiesta_id=r.id
+          AND r.stato='in_lavorazione'
+          AND r.corsa_id IS NULL
+        `,
+        [a.id]
+      );
+    }
+
+    await client.query('COMMIT');
+    tx = false;
+
+    log('DB', 'Pulizia scadenze completata');
+
+    // =====================================================
+    // RICERCA RICHIESTE
+    //
+    // Routing fuori transazione.
+    // Snapshot rivalidato prima della riserva.
+    // =====================================================
+
+    const { rows: rawRequests } = await client.query(`
+      SELECT r.*
+      FROM richieste_pop_bus r
+      WHERE r.stato='in_attesa'
+        AND r.start_datetime>NOW()
+        AND r.corsa_id IS NULL
+        AND ($1::int IS NULL OR r.id=$1::int)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM popbus_attivazione_richieste ar
+          WHERE ar.richiesta_id=r.id
+            AND ar.attiva
+        )
+      ORDER BY r.start_datetime,r.id
+      LIMIT 201
+    `, [richiestaTestId]);
+
+    stats.richieste = rawRequests.length;
+
+    log(
+      'RICHIESTE',
+      `Trovate: ${rawRequests.length}`
+    );
+
+    if (rawRequests.length > 200) {
+      throw new Error(
+        'Più di 200 richieste: suddividere per area e data prima del lancio'
+      );
+    }
+
+    // =====================================================
+    // VERIFICA PAGAMENTI
+    // =====================================================
+
+    const requests = [];
+    const territoriali = normalizzaRichiesteTerritoriali(rawRequests, log);
+    stats.richiesteSenzaNodiTerritoriali = territoriali.scartate.length;
+
+    for (const r of territoriali.valide) {
+      try {
+        await verificaPagamento(client, r);
+
+        requests.push(r);
+      } catch (e) {
+        stats.pagamentiScartati++;
+
+        log(
+          'PAGAMENTO',
+          `Richiesta ${r.id} scartata: ${e.message}`
+        );
+      }
+    }
+
+    log(
+      'PAGAMENTI',
+      `Valide: ${requests.length}; ` +
+      `scartate: ${stats.pagamentiScartati}`
+    );
+
+    if (!requests.length) {
+      log('STOP', 'Nessuna richiesta valida');
+      return;
+    }
+
+    // =====================================================
+    // CARICAMENTO NODI
+    // =====================================================
+
+    const nodeIds = [
+      ...new Set(
+        requests.flatMap(r => [
+          r.start_node_id,
+          r.end_node_id
+        ])
+      )
+    ];
+
+    const { rows: nodes } = await client.query(`
+      SELECT
+        id,
+        nome AS nome_nodo,
+        ST_Y(posizione::geometry) AS lat,
+        ST_X(posizione::geometry) AS lon
+      FROM public.nodi_territoriali
+      WHERE id=ANY($1::bigint[])
+        AND attivo = TRUE
+    `, [nodeIds]);
+
+    // Gli ID geografici sono BIGINT in PostgreSQL. I modelli JS usano Number:
+    // rifiutare identificativi fuori dall'intervallo esatto anziche' corromperli.
+    if (nodeIds.some(id => !Number.isSafeInteger(Number(id)) || Number(id) <= 0) ||
+        nodes.some(n => !Number.isSafeInteger(Number(n.id)) || Number(n.id) <= 0)) {
+      throw new Error('POPBUS V2: ID nodo territoriale non rappresentabile in sicurezza come Number');
+    }
+    if (nodes.length !== nodeIds.length) {
+      const found = new Set(nodes.map(n => String(n.id)));
+      const missing = nodeIds.filter(id => !found.has(String(id)));
+      throw new Error(`POPBUS V2: nodi territoriali assenti o inattivi: ${missing.join(', ')}`);
+    }
+
+    const nodeMap = new Map(
+      nodes.map(n => [
+        Number(n.id),
+        n
+      ])
+    );
+
+    // Opportunita PIXEL persistenti: controllo in sola lettura.
+    // Nessuna modifica alla scelta o alla persistenza delle attivazioni.
+    if (POPBUS_PIXEL_DB_SHADOW) {
+      try {
+        await verificaOpportunitaPixelPersistenti({ requests, nodeMap, log, stats });
+      } catch (error) {
+        log('PIXEL DB SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
+    // Adapter PIXEL reale in osservazione. Non modifica richieste,
+    // candidate, attivazioni, pagamenti, socket o scelte del worker.
+    if (POPBUS_PIXEL_ADAPTER_SHADOW) {
+      try {
+        await eseguiPixelAdapterShadow({ client, log, stats });
+      } catch (error) {
+        stats.pixelAdapterShadowErrore = error.message;
+        log('PIXEL ADAPTER SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
+    // =====================================================
+    // CARICAMENTO VEICOLI
+    // =====================================================
+
+    const { rows: vehicles } = await client.query(`
+      SELECT
+        v.id,
+        v.driver_id,
+        v.posti_totali,
+        t.euro_km,
+        dv.start,
+        dv.fine,
+        dv.manual,
+        dv.giorni_esclusi,
+        dv.inattivita,
+        ST_Y(
+          COALESCE(dv.coord,v.coord)::geometry
+        ) AS lat,
+        ST_X(
+          COALESCE(dv.coord,v.coord)::geometry
+        ) AS lon
+      FROM veicolo v
+      JOIN disponibilita_veicolo dv
+        ON dv.veicolo_id=v.id
+      JOIN LATERAL (
+        SELECT MIN(euro_km) AS euro_km
+        FROM tariffe
+        WHERE veicolo_id=v.id
+          AND tipo='standard'
+          AND euro_km>0
+      ) t ON t.euro_km IS NOT NULL
+      WHERE v.driver_id IS NOT NULL
+        AND v.posti_totali>0
+        AND COALESCE(dv.coord,v.coord) IS NOT NULL
+      ORDER BY t.euro_km,v.id
+    `);
+
+    log(
+      'RISORSE',
+      `Nodi: ${nodes.length}/${nodeIds.length}; ` +
+      `veicoli: ${vehicles.length}`
+    );
+
+    const feasible = [];
+    const plans = [];
+
+    // =====================================================
+    // GENERAZIONE CANDIDATE
+    // =====================================================
+
+    for (const c of generaCandidate(requests)) {
+      stats.candidate++;
+
+      log(
+        'CANDIDATA',
+        `#${stats.candidate} ` +
+        `classe=${c.classe} ` +
+        `seeds=${JSON.stringify(c.seeds)}`
+      );
+
+      let plan;
+
+      try {
+        plan = await pianifica(c, nodes);
+      } catch (e) {
+        stats.erroriPercorso++;
+
+        log('ROUTE ERROR', e.message);
+        continue;
+      }
+
+      // =====================================================
+      // VALUTAZIONE RICHIESTE
+      // =====================================================
+
+      // La classe commerciale appartiene alla richiesta.
+      // Non filtrare per classe della candidata: sono ammesse
+      // formazioni miste, purché compatibili e di qualità valida.
+      const classRequests = requests;
+
+      // Genera formazioni distinte: singole richieste, aggregazioni
+      // parziali e aggregazione completa. La prenotazione resta indivisibile.
+      const alternatives = generaFormazioniAlternative(
+        plan,
+        classRequests,
+        c.seeds,
+        { maxFormazioni: 80 }
+      );
+
+      // Difesa aggiuntiva: verifica esplicita della qualità su ogni
+      // formazione. Il model applica già il controllo incrementale.
+      const validAlternatives = alternatives.filter(evaluation => {
+        const selectedIds = new Set(evaluation.requests.map(r => Number(r.id)));
+        const selectedRequests = requests.filter(r => selectedIds.has(Number(r.id)));
+        if (selectedRequests.length !== selectedIds.size) return false;
+        const quality = verificaQualitaRichieste(plan, selectedRequests);
+        if (!quality.ok) {
+          log('QUALITA SCARTO', {
+            candidata: stats.candidate,
+            motivo: quality.motivo,
+            richiestaId: quality.richiestaId
+          });
+          return false;
+        }
+        return true;
+      });
+
+      stats.formazioniAlternative += validAlternatives.length;
+
+      log('ALTERNATIVE', {
+        candidata: stats.candidate,
+        classe: c.classe,
+        percorso: plan.nodes.join('>'),
+        numero: validAlternatives.length,
+        gruppi: validAlternatives.map(e => ({
+          ids: e.requests.map(r => r.id),
+          picco: e.peak,
+          ricavo: e.revenue
+        }))
+      });
+
+      for (const evaluation of validAlternatives) {
+        if (evaluation.departure <= Date.now()) {
+          stats.valutazioniScartate++;
+          continue;
+        }
+
+        stats.pianiValidi++;
+        log('PIANO ALTERNATIVO', {
+          percorso: plan.nodes.join('>'),
+          richieste: evaluation.requests.map(r => r.id),
+          peak: evaluation.peak,
+          ricavo: evaluation.revenue,
+          partenza: new Date(evaluation.departure).toISOString()
+        });
+
+        // La direttrice viene mantenuta come contenitore geometrico.
+        // Ogni alternativa ha valutazione e assegnazione indipendenti.
+        plans.push({ plan, evaluation });
+
+      // =====================================================
+      // VALUTAZIONE VEICOLI
+      // =====================================================
+
+      for (const vehicle of vehicles) {
+        if (
+          Number(vehicle.posti_totali) <
+          evaluation.peak
+        ) {
+          stats.veicoliCapienza++;
+          continue;
+        }
+
+        let approach;
+        let returnTrip;
+
+        try {
+          approach = await movement(
+            vehicle,
+            nodeMap.get(plan.nodes[0])
+          );
+
+          returnTrip = await movement(
+            nodeMap.get(plan.nodes.at(-1)),
+            vehicle
+          );
+        } catch (e) {
+          stats.erroriAvvicinamento++;
+
+          log(
+            'MOVIMENTO ERROR',
+            `veicolo=${vehicle.id}: ${e.message}`
+          );
+
+          continue;
+        }
+
+        const busyStart =
+          evaluation.departure -
+          approach.seconds * 1000;
+
+        const busyEnd =
+          evaluation.arrival +
+          returnTrip.seconds * 1000;
+
+        // =====================================================
+        // DIAGNOSTICA DISPONIBILITÀ VEICOLO
+        // =====================================================
+
+        const adesso = Date.now();
+
+        const partenzaImpossibile =
+          busyStart <= adesso;
+
+        const turnoValido = partenzaImpossibile
+          ? null
+          : turno(
+              vehicle,
+              busyStart,
+              busyEnd
+            );
+
+        if (
+          partenzaImpossibile ||
+          !turnoValido
+        ) {
+          stats.veicoliTurno++;
+
+          const motivi = [];
+
+          if (partenzaImpossibile) {
+            motivi.push(
+              'AVVICINAMENTO NON COMPLETABILE IN TEMPO'
+            );
+          }
+
+          if (turnoValido === false) {
+            motivi.push(
+              'TURNO NON COMPATIBILE'
+            );
+          }
+
+          if (
+            (vehicle.giorni_esclusi || []).length > 0
+          ) {
+            motivi.push(
+              'GIORNI ESCLUSI PRESENTI'
+            );
+          }
+
+          if (
+            (vehicle.inattivita || []).length > 0
+          ) {
+            motivi.push(
+              'PERIODI INATTIVITA PRESENTI'
+            );
+          }
+
+          log('SCARTO TURNO', {
+            candidata: stats.candidate,
+            classe: c.classe,
+            seeds: c.seeds,
+            percorso: plan.nodes.join('>'),
+
+            veicolo: vehicle.id,
+            autista: vehicle.driver_id,
+
+            postiDisponibili:
+              vehicle.posti_totali,
+
+            postiRichiesti:
+              evaluation.peak,
+
+            manual: vehicle.manual,
+
+            turnoStart: vehicle.start,
+            turnoFine: vehicle.fine,
+
+            giorniEsclusi:
+              vehicle.giorni_esclusi,
+
+            inattivita:
+              vehicle.inattivita,
+
+            partenzaRichiesta:
+              new Date(
+                evaluation.departure
+              ).toISOString(),
+
+            busyStart:
+              new Date(
+                busyStart
+              ).toISOString(),
+
+            busyEnd:
+              new Date(
+                busyEnd
+              ).toISOString(),
+
+            avvicinamentoMinuti:
+              Math.round(
+                approach.seconds / 60
+              ),
+
+            ritornoMinuti:
+              Math.round(
+                returnTrip.seconds / 60
+              ),
+
+            partenzaImpossibile,
+
+            turnoValido:
+              turnoValido === null
+                ? 'NON VALUTATO'
+                : turnoValido,
+
+            motivi
+          });
+
+          continue;
+        }
+
+        // =====================================================
+        // COSTO OPERATIVO COMPLETO
+        // AVVICINAMENTO + PERCORSO + RITORNO
+        // =====================================================
+
+        const metriPercorso =
+          plan.legs.reduce(
+            (sum, l) =>
+              sum + l.metres,
+            0
+          );
+
+        const metriAvvicinamento =
+          approach.metres;
+
+        const metriRitorno =
+          returnTrip.metres;
+
+        const metriTotali =
+          metriPercorso +
+          metriAvvicinamento +
+          metriRitorno;
+
+        const tariffaEuroKm =
+          Number(vehicle.euro_km);
+
+        // Formula originale invariata.
+        const cost = Math.ceil(
+          metriTotali /
+          1000 *
+          tariffaEuroKm *
+          100
+        ) / 100;
+
+        const ricavo =
+          Number(evaluation.revenue);
+
+        const arrotonda = (
+          n,
+          cifre = 2
+        ) =>
+          Number(
+            Number(n).toFixed(cifre)
+          );
+
+        const km = m =>
+          arrotonda(
+            Number(m) / 1000,
+            3
+          );
+
+        const euro = m =>
+          arrotonda(
+            Number(m) /
+            1000 *
+            tariffaEuroKm
+          );
+
+        // =====================================================
+        // DIAGNOSTICA COSTI
+        // =====================================================
+
+        log('COSTO DETTAGLIO', {
+          candidata: stats.candidate,
+          classe: c.classe,
+          seeds: c.seeds,
+          percorso: plan.nodes.join('>'),
+
+          veicolo: vehicle.id,
+          autista: vehicle.driver_id,
+
+          origineVeicolo: {
+            lat: Number(vehicle.lat),
+            lon: Number(vehicle.lon)
+          },
+
+          nodoPartenza:
+            nodeMap.get(plan.nodes[0]),
+
+          nodoArrivo:
+            nodeMap.get(
+              plan.nodes.at(-1)
+            ),
+
+          avvicinamento: {
+            km: km(
+              metriAvvicinamento
+            ),
+
+            minuti: arrotonda(
+              approach.seconds / 60,
+              1
+            ),
+
+            costoEuroNonArrotondato:
+              euro(metriAvvicinamento)
+          },
+
+          percorsoCommerciale: {
+            km: km(
+              metriPercorso
+            ),
+
+            minuti: arrotonda(
+              plan.legs.reduce(
+                (sum, l) =>
+                  sum + l.seconds,
+                0
+              ) / 60,
+              1
+            ),
+
+            costoEuroNonArrotondato:
+              euro(metriPercorso)
+          },
+
+          ritornoAllaBase: {
+            km: km(
+              metriRitorno
+            ),
+
+            minuti: arrotonda(
+              returnTrip.seconds / 60,
+              1
+            ),
+
+            costoEuroNonArrotondato:
+              euro(metriRitorno)
+          },
+
+          kmTotali:
+            km(metriTotali),
+
+          tariffaEuroKm,
+
+          ricavoEuro: ricavo,
+          costoTotaleEuro: cost,
+
+          margineEuro:
+            arrotonda(
+              ricavo - cost
+            ),
+
+          coperturaCostoPercentuale:
+            cost > 0
+              ? arrotonda(
+                  ricavo / cost * 100,
+                  1
+                )
+              : null,
+
+          sogliaSuperata:
+            ricavo >= cost,
+
+          busyStart:
+            new Date(
+              busyStart
+            ).toISOString(),
+
+          busyEnd:
+            new Date(
+              busyEnd
+            ).toISOString()
+        });
+
+        const selectedIdsEconomy = new Set(evaluation.requests.map(r => Number(r.id)));
+        const selectedEconomy = requests.filter(r => selectedIdsEconomy.has(Number(r.id)));
+        let economia;
+        try {
+          if (selectedEconomy.length !== selectedIdsEconomy.size) throw new Error('Richieste incomplete');
+          economia = valutaEconomiaCiclo({
+            ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+            kmAvvicinamento: metriAvvicinamento / 1000,
+            kmMissioni: metriPercorso / 1000,
+            kmTrasferimenti: 0,
+            kmRitornoBase: metriRitorno / 1000,
+            euroKm: tariffaEuroKm
+          });
+        } catch (error) {
+          stats.veicoliCosto++;
+          log('SCARTO ECONOMIA', error.message);
+          continue;
+        }
+        if (!economia.economicamenteAttivabile) {
+          stats.veicoliCosto++;
+          log('SCARTO ECONOMIA NETTA', {
+            veicolo: vehicle.id, ricavoLordo: economia.ricavoLordoEuro,
+            commissione: economia.commissioneTurentuEuro,
+            costoCiclo: economia.costoCompletoEuro, margine: economia.margineEuro,
+            sogliaLorda: economia.sogliaAttivazioneLordaEuro
+          });
+          continue;
+        }
+        if (
+          evaluation.revenue < cost
+        ) {
+          stats.veicoliCosto++;
+
+          log(
+            'SCARTO COSTO',
+            `candidata=${stats.candidate} ` +
+            `seeds=${JSON.stringify(c.seeds)} ` +
+            `veicolo=${vehicle.id} ` +
+            `ricavo=${ricavo} ` +
+            `costo=${cost} ` +
+            `differenza=${arrotonda(
+              ricavo - cost
+            )} ` +
+            `(inclusi avvicinamento, percorso e ritorno)`
+          );
+
+          continue;
+        }
+
+        // =====================================================
+        // CONTROLLO CONFLITTI
+        // =====================================================
+
+        const conflicts = await conflittiVeicolo(
+          client, vehicle.id, busyStart, busyEnd
+        );
+
+        if (conflicts.length) {
+          log(
+            'SCARTO CONFLITTO DETTAGLIO',
+            {
+              candidata:
+                stats.candidate,
+
+              classe:
+                c.classe,
+
+              seeds:
+                c.seeds,
+
+              percorso:
+                plan.nodes.join('>'),
+
+              veicolo:
+                vehicle.id,
+
+              autista:
+                vehicle.driver_id,
+
+              postiVeicolo:
+                Number(
+                  vehicle.posti_totali
+                ),
+
+              postiRichiesti:
+                evaluation.peak,
+
+              ricavoEuro:
+                Number(
+                  evaluation.revenue
+                ),
+
+              costoEuro:
+                cost,
+
+              busyStart:
+                new Date(
+                  busyStart
+                ).toISOString(),
+
+              busyEnd:
+                new Date(
+                  busyEnd
+                ).toISOString(),
+
+              numeroConflitti:
+                conflicts.length,
+
+              conflitti:
+                conflicts.map(
+                  (conflict, index) => ({
+                    numero: index + 1,
+                    ...conflict
+                  })
+                )
+            }
+          );
+
+          stats.veicoliConflitto++;
+          continue;
+        }
+
+        feasible.push({
+          plan,
+          evaluation,
+          vehicle,
+          cost,
+          ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+          economia,
+          approach,
+          returnTrip,
+          busyStart,
+          busyEnd
+        });
+
+        stats.fattibili++;
+
+        log(
+          'FATTIBILE',
+          `veicolo=${vehicle.id} ` +
+          `costo=${cost} ` +
+          `ricavo=${evaluation.revenue}`
+        );
+      }
+      } // fine formazioni alternative
+    }
+
+    log(
+      'MATCHING',
+      JSON.stringify(stats)
+    );
+
+    // PIXEL P2.1: esecuzione isolata sullo snapshot territoriale.
+    if (POPBUS_PIXEL_SHADOW) {
+      try {
+        await eseguiPixelShadow({ requests, nodes, vehicles, client, log, stats });
+      } catch (error) {
+        log('PIXEL SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
+    // Il generatore flotta e' eseguito solo in osservazione.
+    // Eventuali errori non interrompono il matching legacy.
+    if (POPBUS_FLEET_SHADOW) {
+      try {
+        await eseguiFleetShadow({ requests, nodes, vehicles, log, stats });
+      } catch (error) {
+        log('FLEET SHADOW ERROR', error.stack || error.message);
+      }
+    }
+
+    // Analisi opzionale dei cicli contigui, SENZA SCRITTURE.
+    // Il normale worker continua a selezionare soltanto missioni
+    // già supportate dal modello transazionale esistente.
+    if (POPBUS_CYCLE_DIAGNOSTICS) {
+      await diagnosticaCicliContigui(feasible, requests, nodeMap, log);
+    }
+
+    // =====================================================
+    // SCELTA ATTIVAZIONI
+    // =====================================================
+
+    // Più missioni possono essere selezionate nello stesso intervallo
+    // se utilizzano richieste e veicoli distinti (anche stesso titolare).
+    const chosen = scegliAttivazioni(feasible);
+    log('MULTI VEICOLO', chosen.map(x => ({
+      veicolo: x.vehicle.id,
+      autista: x.vehicle.driver_id,
+      richieste: x.evaluation.requests.map(r => r.id),
+      ricavo: x.evaluation.revenue,
+      costo: x.cost,
+      busyStart: new Date(x.busyStart).toISOString(),
+      busyEnd: new Date(x.busyEnd).toISOString()
+    })));
+
+    stats.selezionate =
+      chosen.length;
+
+    log(
+      'SCELTA',
+      `Selezionate: ${chosen.length}`
+    );
+
+    if (!chosen.length) {
+      log(
+        'STOP',
+        'Nessuna attivazione selezionata'
+      );
+      return;
+    }
+
+    // =====================================================
+    // RIVALIDAZIONE E ATTIVAZIONE
+    // =====================================================
+
+    await client.query('BEGIN');
+    tx = true;
+
+    const tLock2 = Date.now();
+
+    await client.query(
+      'SELECT pg_advisory_xact_lock(734021,1)'
+    );
+
+    log(
+      'LOCK',
+      `Lock finale ottenuto in ${Date.now() - tLock2} ms`
+    );
+
+    for (const c of chosen) {
+      const ids =
+        c.evaluation.requests.map(
+          r => r.id
+        );
+
+      const {
+        rows: locked
+      } = await client.query(`
+        SELECT *
+        FROM richieste_pop_bus
+        WHERE id=ANY($1::int[])
+        ORDER BY id
+        FOR UPDATE
+      `, [ids]);
+
+      // =====================================================
+      // RIVALIDAZIONE SNAPSHOT
+      // =====================================================
+
+      if (
+        locked.length !== ids.length ||
+        locked.some(
+          r =>
+            r.stato !== 'in_attesa' ||
+            r.corsa_id != null ||
+            fingerprint(r) !==
+              fingerprint(
+                requests.find(
+                  x => Number(x.id) === Number(r.id)
+                )
+              )
+        )
+      ) {
+        stats.scartiRivalidazione++;
+
+        log(
+          'RIVALIDAZIONE',
+          `Richieste modificate: ${ids.join(',')}`
+        );
+
+        continue;
+      }
+
+      // Ricalcolo sullo snapshot bloccato: una modifica ai dati
+      // di qualità non deve essere ignorata prima dell'attivazione.
+      const qualityFinal = verificaQualitaRichieste(c.plan, locked);
+      if (!qualityFinal.ok) {
+        stats.scartiRivalidazione++;
+        log('QUALITA RIVALIDAZIONE', {
+          richieste: ids,
+          motivo: qualityFinal.motivo,
+          richiestaId: qualityFinal.richiestaId
+        });
+        continue;
+      }
+
+       // Rivalidazione economica sulla richiesta bloccata e sulla tariffa corrente.
+       // Non attiva catene; il ritorno alla base resta obbligatorio.
+       const { rows: currentRates } = await client.query(`
+         SELECT MIN(euro_km) AS euro_km FROM tariffe
+         WHERE veicolo_id=$1 AND tipo='standard' AND euro_km>0
+       `, [c.vehicle.id]);
+       const rateNow = Number(currentRates[0]?.euro_km);
+       if (currentRates[0]?.euro_km == null || !Number.isFinite(rateNow) || rateNow <= 0) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', 'Tariffa assente o non valida');
+         continue;
+       }
+       let finalEconomy;
+       try {
+         finalEconomy = valutaEconomiaCiclo({
+           ricaviRichiesteEuro: locked.map(r => Number(r.prezzo)),
+           kmAvvicinamento: Number(c.approach.metres) / 1000,
+           kmMissioni: c.plan.legs.reduce((s, l) => s + Number(l.metres), 0) / 1000,
+           kmTrasferimenti: 0,
+           kmRitornoBase: Number(c.returnTrip.metres) / 1000,
+           euroKm: rateNow
+         });
+       } catch (error) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', error.message);
+         continue;
+       }
+       if (!finalEconomy.economicamenteAttivabile ||
+           finalEconomy.centesimi.costoCompleto !== c.economia?.centesimi.costoCompleto ||
+           finalEconomy.centesimi.ricavoLordo !== c.economia?.centesimi.ricavoLordo) {
+         stats.scartiRivalidazione++;
+         log('ECONOMIA RIVALIDAZIONE', {
+           richieste: ids, margine: finalEconomy.margineEuro,
+           costo: finalEconomy.costoCompletoEuro, soglia: finalEconomy.sogliaAttivazioneLordaEuro
+         });
+         continue;
+       }
+
+      const {
+        rows: reservations
+      } = await client.query(`
+        SELECT 1
+        FROM popbus_attivazione_richieste
+        WHERE richiesta_id=ANY($1::int[])
+          AND attiva
+      `, [ids]);
+
+      if (reservations.length) {
+        stats.scartiPrenotazione++;
+
+        log(
+          'RISERVAZIONE',
+          `Richieste già riservate: ${ids.join(',')}`
+        );
+
+        continue;
+      }
+
+      // Il lock esclusivo e' sul veicolo, non sul titolare della flotta.
+
+      // =====================================================
+      // VERIFICA VEICOLO
+      // =====================================================
+
+      const {
+        rows: stillFree
+      } = await client.query(`
+        SELECT id
+        FROM veicolo
+        WHERE id=$1
+          AND driver_id=$2
+          AND posti_totali >= $3
+        FOR UPDATE
+      `, [
+        c.vehicle.id,
+        c.vehicle.driver_id,
+        c.evaluation.peak
+      ]);
+
+      if (!stillFree.length) {
+        stats.scartiVeicolo++;
+
+        log(
+          'VEICOLO',
+          `Non più disponibile: ${c.vehicle.id}`
+        );
+
+        continue;
+      }
+
+      // =====================================================
+      // RIVALIDAZIONE OCCUPAZIONE
+      // =====================================================
+
+      const busy = await conflittiVeicolo(
+        client, c.vehicle.id, c.busyStart, c.busyEnd
+      );
+
+      if (busy.length) {
+        stats.scartiOccupato++;
+
+        log(
+          'CONFLITTO',
+          `Veicolo occupato: ${c.vehicle.id}`
+        );
+
+        continue;
+      }
+
+      // =====================================================
+      // CONTENITORE PERCORSO
+      // =====================================================
+
+      const containers = plans.filter(
+        p =>
+          p.plan.classe ===
+            c.plan.classe &&
+          c.plan.nodes.every(
+            (n, i) => {
+              const start =
+                p.plan.nodes.indexOf(
+                  c.plan.nodes[0]
+                );
+
+              return start >= 0 &&
+                p.plan.nodes[start + i] === n;
+            }
+          )
+      ).sort(
+        (a, b) =>
+          b.plan.nodes.length -
+          a.plan.nodes.length
+      );
+
+      const container =
+        containers[0] || c;
+
+      const prefix =
+        container.plan.nodes.indexOf(
+          c.plan.nodes[0]
+        );
+
+      const dirDeparture =
+        c.evaluation.departure -
+        container.plan.legs
+          .slice(0, prefix)
+          .reduce(
+            (s, l) =>
+              s + l.seconds * 1000,
+            0
+          );
+
+      // =====================================================
+      // CREAZIONE DIRETTRICE VIRTUALE
+      // =====================================================
+
+      const {
+        rows: dirs
+      } = await client.query(`
+        INSERT INTO direttrici_virtuali(
+          stato,
+          partenza_prevista,
+          start_node_id,
+          end_node_id,
+          tipo_servizio
+        )
+        VALUES(
+          'in_formazione',
+          $1,$2,$3,$4
+        )
+        ON CONFLICT(
+          start_node_id,
+          end_node_id,
+          partenza_prevista
+        )
+        DO NOTHING
+        RETURNING id
+      `, [
+        new Date(dirDeparture),
+        container.plan.nodes[0],
+        container.plan.nodes.at(-1),
+        `${c.plan.classe}_V2`
+      ]);
+
+      let dirId =
+        dirs[0]?.id;
+
+      if (!dirId) {
+        const {
+          rows: d
+        } = await client.query(`
+          SELECT id
+          FROM direttrici_virtuali
+          WHERE start_node_id=$1
+            AND end_node_id=$2
+            AND partenza_prevista=$3
+            AND tipo_servizio=$4
+          FOR UPDATE
+        `, [
+          container.plan.nodes[0],
+          container.plan.nodes.at(-1),
+          new Date(dirDeparture),
+          `${c.plan.classe}_V2`
+        ]);
+
+        dirId = d[0]?.id;
+      }
+
+      if (!dirId) {
+        throw new Error(
+          'Collisione con direttrice legacy: nessuna sovrascrittura'
+        );
+      }
+
+      // =====================================================
+      // SEGMENTI DIRETTRICE
+      // =====================================================
+
+      const {
+        rows: existingSegments
+      } = await client.query(`
+        SELECT *
+        FROM segmenti
+        WHERE direttrice_id=$1
+        ORDER BY ordine_sequenziale
+      `, [dirId]);
+
+      const segs = [];
+
+      let t = dirDeparture;
+
+      if (
+        existingSegments.length &&
+        (
+          existingSegments.length !==
+            container.plan.legs.length ||
+          existingSegments.some(
+            (s, i) =>
+              Number(s.start_node_id) !==
+                container.plan.nodes[i] ||
+              Number(s.end_node_id) !==
+                container.plan.nodes[i + 1]
+          )
+        )
+      ) {
+        throw new Error(
+          'Versione percorso diversa: segmenti esistenti preservati'
+        );
+      }
+
+      for (
+        let i = 0;
+        i < container.plan.legs.length;
+        i++
+      ) {
+        if (existingSegments.length) {
+          segs.push(
+            existingSegments[i]
+          );
+        } else {
+          const {
+            rows: s
+          } = await client.query(`
+            INSERT INTO segmenti(
+              direttrice_id,
+              start_node_id,
+              end_node_id,
+              ordine_sequenziale,
+              tempo_stimato,
+              start_datetime,
+              stato
+            )
+            VALUES(
+              $1,$2,$3,$4,$5,$6,
+              'in_attesa'
+            )
+            RETURNING id
+          `, [
+            dirId,
+            container.plan.nodes[i],
+            container.plan.nodes[i + 1],
+            i + 1,
+            Math.ceil(
+              container.plan.legs[i].seconds / 60
+            ),
+            new Date(t)
+          ]);
+
+          segs.push(s[0]);
+        }
+
+        t +=
+          container.plan.legs[i].seconds *
+          1000;
+      }
+
+      // =====================================================
+      // NUOVO: LOCALITÀ NEL PIANO POPBUS
+      //
+      // Utilizza esclusivamente le richieste
+      // selezionate, bloccate e rivalidate.
+      //
+      // Esempio:
+      // nodo 12 -> Brindisi, BR, Italia
+      // nodo 13 -> Tiggiano, LE, Italia
+      // nodo 5  -> Bari, BA, Italia
+      // =====================================================
+
+      const coordinates =
+        costruisciCoordinateConLocalita(
+          c.plan,
+          nodeMap,
+          locked,
+          log
+        );
+
+      // =====================================================
+      // PIANO ATTIVAZIONE
+      // =====================================================
+
+      const piano = {
+        ...c.plan,
+
+        requestSnapshot:
+          locked.map(r => ({
+            id: r.id,
+            fingerprint:
+              fingerprint(r)
+          })),
+
+        coordinates,
+
+        evaluation:
+          c.evaluation,
+
+        approach:
+          c.approach,
+
+        returnTrip:
+          c.returnTrip,
+
+        busyStart:
+          new Date(
+            c.busyStart
+          ).toISOString(),
+
+        busyEnd:
+          new Date(
+            c.busyEnd
+          ).toISOString()
+      };
+
+      // =====================================================
+      // CREAZIONE ATTIVAZIONE POPBUS
+      // =====================================================
+
+      const {
+        rows: as
+      } = await client.query(`
+        INSERT INTO popbus_attivazioni(
+          direttrice_id,
+          veicolo_id,
+          autista_id,
+          stato,
+          partenza,
+          arrivo,
+          costo,
+          ricavo,
+          tariffa,
+          piano,
+          expires_at
+        )
+        VALUES(
+          $1,$2,$3,
+          'in_attesa_autista',
+          $4,$5,$6,$7,$8,
+          $9::jsonb,
+          LEAST(
+            NOW()+INTERVAL '10 minutes',
+            $10::timestamptz
+          )
+        )
+        RETURNING id,expires_at
+      `, [
+        dirId,
+        c.vehicle.id,
+        c.vehicle.driver_id,
+        new Date(
+          c.evaluation.departure
+        ),
+        new Date(
+          c.evaluation.arrival
+        ),
+        c.cost,
+        c.evaluation.revenue,
+        c.vehicle.euro_km,
+        JSON.stringify(piano),
+        new Date(c.busyStart)
+      ]);
+
+      const act = as[0];
+
+      // FASE 5: registra anche la missione relazionale nella stessa transazione.
+      // L'attivazione corrente rimane mono-missione e conserva integralmente
+      // il formato precedente del piano per acceptance.js.
+      // Un errore qui causa il rollback di tutta la transazione.
+      await registraMissioniAttivazione(client, {
+        attivazioneId: act.id,
+        missioni: [{
+          direttriceId: dirId,
+          nodes: c.plan.nodes,
+          legs: c.plan.legs,
+          departure: c.evaluation.departure,
+          arrival: c.evaluation.arrival,
+          requests: c.evaluation.requests
+        }]
+      });
+
+      stats.attivazioni++;
+
+      log(
+        'ATTIVAZIONE',
+        `id=${act.id} ` +
+        `direttrice=${dirId} ` +
+        `veicolo=${c.vehicle.id} ` +
+        `richieste=${ids.join(',')} ` +
+        `origine=${coordinates[0]?.nome_nodo || 'N/D'} ` +
+        `destinazione=${coordinates.at(-1)?.nome_nodo || 'N/D'} ` +
+        `scadenza=${act.expires_at}`
+      );
+
+      // =====================================================
+      // ASSOCIAZIONE RICHIESTE
+      // =====================================================
+
+      for (
+        const r of c.evaluation.requests
+      ) {
+        await client.query(`
+          INSERT INTO popbus_attivazione_richieste(
+            attivazione_id,
+            richiesta_id,
+            indice_salita,
+            indice_discesa
+          )
+          VALUES(
+            $1,$2,$3,$4
+          )
+        `, [
+          act.id,
+          r.id,
+          r.start,
+          r.end
+        ]);
+      }
+
+      // =====================================================
+      // ASSOCIAZIONE SEGMENTI
+      // =====================================================
+
+      for (
+        let i = 0;
+        i < c.plan.legs.length;
+        i++
+      ) {
+        await client.query(`
+          INSERT INTO popbus_attivazione_segmenti(
+            attivazione_id,
+            segmento_id,
+            ordine
+          )
+          VALUES(
+            $1,$2,$3
+          )
+        `, [
+          act.id,
+          segs[prefix + i].id,
+          i + 1
+        ]);
+      }
+
+      // =====================================================
+      // AGGIORNAMENTO RICHIESTE
+      // =====================================================
+
+      await client.query(`
+        UPDATE richieste_pop_bus
+        SET stato='in_lavorazione',
+            direttrice_id=$2
+        WHERE id=ANY($1::int[])
+      `, [
+        ids,
+        dirId
+      ]);
+
+      // =====================================================
+      // CREAZIONE OFFERTA AUTISTA
+      // =====================================================
+
+      const {
+        rows: offers
+      } = await client.query(`
+        INSERT INTO offerte_autisti(
+          direttrice_id,
+          autista_id,
+          attivazione_id,
+          stato,
+          expires_at
+        )
+        VALUES(
+          $1,$2,$3,
+          'inviata',$4
+        )
+        RETURNING id
+      `, [
+        dirId,
+        c.vehicle.driver_id,
+        act.id,
+        act.expires_at
+      ]);
+
+      // =====================================================
+      // SOCKET: ORIGINE E DESTINAZIONE VALORIZZATE
+      // =====================================================
+
+      events.push({
+        driver:
+          c.vehicle.driver_id,
+
+        payload: {
+          id:
+            offers[0].id,
+
+          attivazione_id:
+            act.id,
+
+          direttrice_id:
+            dirId,
+
+          veicolo_id:
+            c.vehicle.id,
+
+          classe:
+            c.plan.classe,
+
+          posti_richiesti:
+            c.evaluation.peak,
+
+          oraPartenza:
+            new Date(
+              c.evaluation.departure
+            ).toISOString(),
+
+          start_node_id:
+            c.plan.nodes[0],
+
+          end_node_id:
+            c.plan.nodes.at(-1),
+
+          origine_address:
+            coordinates[0]?.nome_nodo ||
+            null,
+
+          destinazione_address:
+            coordinates.at(-1)?.nome_nodo ||
+            null
+        }
+      });
+    }
+
+    // =====================================================
+    // COMMIT
+    // =====================================================
+
+    await client.query('COMMIT');
+    tx = false;
+
+    log(
+      'COMMIT',
+      `Attivazioni create: ${stats.attivazioni}; ` +
+      `eventi socket: ${events.length}`
+    );
+
+    // =====================================================
+    // EMISSIONE SOCKET DOPO COMMIT
+    // =====================================================
+
+    for (const e of events) {
+      try {
+        getIO()
+          .to(
+            `autista_${e.driver}`
+          )
+          .emit(
+            'nuova_proposta_popbus',
+            e.payload
+          );
+      } catch (err) {
+        console.error(
+          '[V2 SOCKET POSTCOMMIT]',
+          err.message
+        );
+      }
+    }
+
+  } catch (err) {
+    log(
+      'ERRORE',
+      err.stack || err.message
+    );
+
+    if (tx && client) {
+      try {
+        await client.query(
+          'ROLLBACK'
+        );
+
+        log(
+          'ROLLBACK',
+          'Eseguito'
+        );
+      } catch (e) {
+        log(
+          'ROLLBACK ERROR',
+          e.message
+        );
+      }
+    }
+
+    throw err;
+
+  } finally {
+    if (client) {
+      client.release();
+    }
+
+    cicliAttivi--;
+
+    log(
+      'FINE',
+      `durata=${Date.now() - inizio} ms ` +
+      `attivi=${cicliAttivi} ` +
+      `riepilogo=${JSON.stringify(stats)}`
+    );
+  }
+}

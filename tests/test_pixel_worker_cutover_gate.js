@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const file = new URL('../services/popbus/v2/worker.js', import.meta.url);
+const src = readFileSync(file, 'utf8');
+const start = src.indexOf('export async function processaProposteDinamicheV2() {');
+assert.ok(start >= 0, 'worker V2 non trovato');
+const body = src.slice(start);
+const guard = body.indexOf('if (POPBUS_PIXEL_FIRST)');
+const tx = body.indexOf("await client.query('BEGIN')");
+const generator = body.indexOf('generaCandidate(requests)');
+assert.ok(src.includes("const POPBUS_PIXEL_FIRST = process.env.POPBUS_PIXEL_FIRST === '1';"), 'flag assente');
+assert.ok(guard >= 0 && guard < tx && guard < generator, 'gate non prima del legacy');
+assert.ok(body.slice(guard, guard + 300).includes('throw new Error'), 'gate non fail-closed');
+console.log('PASS flag PIXEL-first default OFF');
+console.log('PASS fail-closed prima del percorso legacy e delle transazioni');
+console.log('PASS il cutover incompleto non puo attivare il legacy per errore');
+console.log('RISULTATO: 3/3 PASS - statico, non E2E');

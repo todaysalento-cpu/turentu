@@ -174,8 +174,12 @@ const startServer = async () => {
     
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
-    startPixelFirstWorker();
-    console.log('⚙️ [PIXEL FIRST] Scheduler PIXEL-first V2 avviato.');
+    if (process.env.POPBUS_PIXEL_FIRST_ENABLED !== 'false') {
+      startPixelFirstWorker();
+      console.log('⚙️ [PIXEL FIRST] Scheduler PIXEL-first V2 avviato.');
+    } else {
+      console.log('⏸️ [PIXEL FIRST] Scheduler PIXEL-first V2 sospeso.');
+    }
     
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {

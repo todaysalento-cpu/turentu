@@ -1,0 +1,239 @@
+// Turentu POPBUS V2 - test idempotenza conferma, DB reale + Stripe TEST.
+// Salvare come tests/popbus-idempotenza-produzione.js.
+// DRY_RUN di default. RUN solo con backup e TUTTI i worker/scheduler sospesi.
+// RUN crea fixture COMMITTED, un PaymentIntent Stripe TEST e due conferme concorrenti.
+// NON cattura fondi. Pulisce le fixture per ID e cancella l'autorizzazione TEST.
+// ATTENZIONE: un crash/kill puo' lasciare fixture; conservare ID e marker stampati.
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import Stripe from 'stripe';
+import { pool } from '../db/db.js';
+import {
+  riservaPostiPopbus, collegaPaymentIntentPopbus, confermaPrenotazionePopbus
+} from '../services/popbus/v2/confirmed-booking.service.js';
+
+const RUN = process.env.POPBUS_TEST_MODE === 'RUN';
+const VEICOLO_ID = 347;
+const CLIENTE_ID = Number(process.env.POPBUS_TEST_CLIENTE_ID || 0);
+const MARKER = `TST_POPBUS_IDEMP_${randomUUID()}`;
+const created = { corsa: null, attivazione: null, riserva: null, prenotazione: null, pagamento: null, pi: null };
+let cleanupFailed = false;
+let stripe;
+const log = (...args) => console.log('[POPBUS IDEMP]', ...args);
+
+async function prerequisites() {
+  const { rows: [db] } = await pool.query('SELECT current_database() AS db, current_user AS usr');
+  log('DB:', db.db, 'utente:', db.usr, 'modalita:', RUN ? 'RUN' : 'DRY_RUN');
+  assert.equal(db.db, 'corse_db', 'STOP: database inatteso');
+  const { rows: [v] } = await pool.query(`
+    SELECT v.id,v.driver_id,v.posti_totali FROM public.veicolo v
+    JOIN public.utente u ON u.id=v.driver_id WHERE v.id=$1`, [VEICOLO_ID]);
+  assert(v && Number(v.posti_totali) === 4 && Number(v.driver_id) === 2, 'Veicolo non conforme');
+  const { rows: [u] } = await pool.query('SELECT id FROM public.utente WHERE id=$1', [CLIENTE_ID]);
+  assert(u, 'Cliente test inesistente');
+  if (RUN) {
+    assert.equal(process.env.POPBUS_TEST_ALLOW_PRODUCTION, 'YES');
+    assert.equal(process.env.POPBUS_TEST_WORKERS_STOPPED, 'YES');
+    assert.equal(process.env.POPBUS_TEST_BACKUP_DONE, 'YES');
+    const key = process.env.STRIPE_SECRET_KEY || '';
+    assert(key.startsWith('sk_test_'), 'STOP: serve STRIPE_SECRET_KEY sk_test_');
+    stripe = new Stripe(key, { apiVersion: '2022-11-15' });
+  }
+  log('Prerequisiti OK. Veicolo:', VEICOLO_ID, 'cliente:', CLIENTE_ID);
+}
+
+async function fixture() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout='5s'");
+    const start = new Date(Date.now() + 30 * 86400000);
+    const end = new Date(start.getTime() + 60 * 60000);
+    const { rows: [c] } = await client.query(`
+      INSERT INTO public.corse
+      (veicolo_id,start_datetime,arrivo_datetime,tipo_corsa,stato,posti_totali,
+       posti_disponibili,posti_prenotati,origine_address,destinazione_address)
+      VALUES ($1,$2,$3,'riempimento','prenotabile',4,4,0,$4,$4) RETURNING id`,
+      [VEICOLO_ID,start,end,MARKER]);
+    created.corsa = c.id;
+    const { rows: [a] } = await client.query(`
+      INSERT INTO public.popbus_attivazioni
+      (veicolo_id,autista_id,stato,partenza,arrivo,costo,ricavo,tariffa,piano,corsa_id,expires_at)
+      VALUES ($1,$2,'confermata',$3,$4,0,0,0,$5::jsonb,$6,$7) RETURNING id`,
+      [VEICOLO_ID,2,start,end,JSON.stringify({test:MARKER}),c.id,end]);
+    created.attivazione = a.id;
+    await client.query('COMMIT');
+    log('FIXTURE COMMITTED:', JSON.stringify(created), 'marker:', MARKER);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
+}
+
+async function test() {
+  const requestId = randomUUID();
+  const r = await riservaPostiPopbus({
+    requestId, corsaId:created.corsa, clienteId:CLIENTE_ID,
+    postiRichiesti:3, startOffset:0, endOffset:10000,
+    startIndexPolyline:0, endIndexPolyline:1, prezzo:1.00
+  });
+  created.riserva = r.id;
+  log('Riserva:', r.id);
+
+  // PaymentIntent autorizzato ma NON catturato. Il metadata corrisponde alla riserva.
+  const pi = await stripe.paymentIntents.create({
+    amount:100, currency:'eur', capture_method:'manual',
+    payment_method_types:['card'], payment_method:'pm_card_visa', confirm:true,
+    metadata:{tipo:'popbus_confirmed', riservaId:String(r.id),
+      corsaId:String(created.corsa), clienteId:String(CLIENTE_ID), requestId:String(requestId),
+      testMarker:MARKER}
+  }, { idempotencyKey:`turentu-idemp-${requestId}` });
+  created.pi = pi.id;
+  log('Stripe TEST PI:', pi.id, 'stato:', pi.status);
+  assert.equal(pi.livemode, false, 'STOP: PaymentIntent non TEST');
+  assert.equal(pi.status, 'requires_capture', 'PaymentIntent non autorizzato');
+  assert.equal(pi.amount_capturable, 100, 'Importo autorizzato inatteso');
+  await collegaPaymentIntentPopbus({riservaId:r.id,clienteId:CLIENTE_ID,paymentIntentId:pi.id});
+
+  const outcomes = await Promise.allSettled([
+    confermaPrenotazionePopbus({riservaId:r.id,clienteId:CLIENTE_ID}),
+    confermaPrenotazionePopbus({riservaId:r.id,clienteId:CLIENTE_ID})
+  ]);
+  for (const [i,o] of outcomes.entries()) {
+    log('Conferma concorrente', i+1, o.status,
+      o.status==='fulfilled' ? o.value : o.reason?.message);
+  }
+  assert(outcomes.every(o=>o.status==='fulfilled'), 'Una conferma concorrente e\' fallita');
+  const results = outcomes.map(o=>o.value);
+  assert.equal(String(results[0].prenotazioneId),String(results[1].prenotazioneId));
+  assert.equal(results.filter(x=>x.giaConfermata===false).length,1,
+    'Attesa una sola nuova conferma');
+  assert.equal(results.filter(x=>x.giaConfermata===true).length,1,
+    'Attesa una conferma idempotente');
+  created.prenotazione = results[0].prenotazioneId;
+
+  const third = await confermaPrenotazionePopbus({riservaId:r.id,clienteId:CLIENTE_ID});
+  assert.equal(String(third.prenotazioneId),String(created.prenotazione));
+  assert.equal(third.giaConfermata,true,'Terza conferma non idempotente');
+
+  const { rows:[check] } = await pool.query(`
+    SELECT c.posti_prenotati,c.posti_disponibili,
+      (SELECT COUNT(*)::int FROM public.prenotazioni WHERE corsa_id=c.id) AS bookings,
+      (SELECT COALESCE(SUM(posti_richiesti),0)::int FROM public.prenotazioni
+       WHERE corsa_id=c.id) AS booked_seats,
+      (SELECT COUNT(*)::int FROM public.popbus_riserve
+       WHERE corsa_id=c.id AND stato='confermata' AND prenotazione_id=$2) AS confirmed,
+      (SELECT COUNT(*)::int FROM public.popbus_riserve
+       WHERE corsa_id=c.id AND stato='riservata' AND expires_at>NOW()) AS active_reserves,
+      (SELECT COUNT(*)::int FROM public.pagamenti
+       WHERE corsa_id=c.id AND prenotazione_id=$2 AND stripe_payment_intent=$3
+         AND stato='autorizzazione') AS payments
+    FROM public.corse c WHERE c.id=$1`, [created.corsa,created.prenotazione,created.pi]);
+  assert(check,'Corsa non trovata');
+  assert.equal(Number(check.posti_prenotati),3);
+  assert.equal(Number(check.posti_disponibili),1);
+  assert.equal(check.bookings,1);
+  assert.equal(check.booked_seats,3);
+  assert.equal(check.confirmed,1);
+  assert.equal(check.active_reserves,0);
+  assert.equal(check.payments,1);
+  const { rows:[payment] } = await pool.query(`SELECT id FROM public.pagamenti
+    WHERE corsa_id=$1 AND prenotazione_id=$2 AND stripe_payment_intent=$3`,
+    [created.corsa,created.prenotazione,created.pi]);
+  created.pagamento = payment.id;
+  log('PASS: 2 conferme concorrenti + 1 ripetuta, 1 prenotazione, 1 pagamento, 3/4 posti');
+}
+
+async function cleanupStripe() {
+  if (!created.pi || !stripe) return;
+  const pi = await stripe.paymentIntents.retrieve(created.pi);
+  assert.equal(pi.livemode,false,'STOP: Stripe PI non TEST');
+  if (pi.status === 'canceled') { log('Stripe PI gia\' cancellato'); return; }
+  if (['succeeded','processing'].includes(pi.status)) {
+    throw new Error('STOP: PI in stato inatteso '+pi.status+'; verifica manuale');
+  }
+  const canceled = await stripe.paymentIntents.cancel(created.pi);
+  assert.equal(canceled.status,'canceled','Cancellazione PI non confermata');
+  log('Stripe TEST PI cancellato:',created.pi);
+}
+
+async function cleanupDb() {
+  if (!created.corsa) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout='5s'");
+    const {rows:[c]} = await client.query(`SELECT id FROM public.corse
+      WHERE id=$1 AND origine_address=$2 FOR UPDATE`,[created.corsa,MARKER]);
+    assert(c,'STOP PULIZIA: corsa/marker non corrispondono');
+    const {rows:[counts]} = await client.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM public.popbus_attivazioni WHERE corsa_id=$1
+          AND id<>$2) AS other_activations,
+        (SELECT COUNT(*)::int FROM public.popbus_riserve WHERE corsa_id=$1
+          AND id<>$3) AS other_reserves,
+        (SELECT COUNT(*)::int FROM public.prenotazioni WHERE corsa_id=$1
+          AND ($4::int IS NULL OR id<>$4::int)) AS other_bookings,
+        (SELECT COUNT(*)::int FROM public.pagamenti WHERE corsa_id=$1
+          AND ($5::int IS NULL OR id<>$5::int)) AS other_payments`,
+      [created.corsa,created.attivazione,created.riserva,created.prenotazione,created.pagamento]);
+    assert.deepEqual(counts,{other_activations:0,other_reserves:0,other_bookings:0,other_payments:0},
+      'STOP PULIZIA: dati estranei');
+    if (created.riserva) {
+      const d = await client.query(`DELETE FROM public.popbus_riserve
+        WHERE id=$1 AND corsa_id=$2 AND cliente_id=$3
+          AND ($4::text IS NULL OR payment_intent_id=$4::text) RETURNING id`,
+        [created.riserva,created.corsa,CLIENTE_ID,created.pi]);
+      assert.equal(d.rowCount,1,'Riserva non eliminata');
+    }
+    if (created.pagamento) {
+      const d=await client.query(`DELETE FROM public.pagamenti
+        WHERE id=$1 AND corsa_id=$2 AND prenotazione_id=$3
+          AND stripe_payment_intent=$4 RETURNING id`,
+        [created.pagamento,created.corsa,created.prenotazione,created.pi]);
+      assert.equal(d.rowCount,1,'Pagamento non eliminato');
+    }
+    if (created.prenotazione) {
+      const d=await client.query(`DELETE FROM public.prenotazioni
+        WHERE id=$1 AND corsa_id=$2 AND cliente_id=$3 RETURNING id`,
+        [created.prenotazione,created.corsa,CLIENTE_ID]);
+      assert.equal(d.rowCount,1,'Prenotazione non eliminata');
+    }
+    const a=await client.query(`DELETE FROM public.popbus_attivazioni
+      WHERE id=$1 AND corsa_id=$2 RETURNING id`,[created.attivazione,created.corsa]);
+    assert.equal(a.rowCount,1,'Attivazione non eliminata');
+    const d=await client.query(`DELETE FROM public.corse
+      WHERE id=$1 AND origine_address=$2 RETURNING id`,[created.corsa,MARKER]);
+    assert.equal(d.rowCount,1,'Corsa non eliminata');
+    await client.query('COMMIT');
+    log('PULIZIA DB OK: corsa',created.corsa);
+  } catch(e) {
+    await client.query('ROLLBACK').catch(()=>{});
+    throw e;
+  } finally {client.release();}
+}
+
+try {
+  await prerequisites();
+  if (!RUN) log('DRY_RUN OK: nessuna scrittura e nessuna chiamata Stripe.');
+  else { await fixture(); await test(); }
+} catch(e) {
+  process.exitCode=1;
+  console.error('[POPBUS IDEMP] TEST FALLITO:',e);
+} finally {
+  if (RUN) {
+    // Se Stripe non e' stato cancellato, non cancelliamo i riferimenti DB.
+    let stripeClean=false;
+    try {await cleanupStripe(); stripeClean=true;}
+    catch(e){cleanupFailed=true;console.error('PULIZIA STRIPE FALLITA:',e);}
+    if (stripeClean) {
+      try {await cleanupDb();}
+      catch(e){cleanupFailed=true;console.error('PULIZIA DB FALLITA:',e);}
+    }
+    if (cleanupFailed) {
+      process.exitCode=1;
+      console.error('VERIFICA MANUALE NECESSARIA:',JSON.stringify(created),'marker:',MARKER);
+    }
+  }
+  await pool.end();
+}

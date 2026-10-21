@@ -181,6 +181,16 @@ const startServer = async () => {
       console.log('⏸️ [PIXEL FIRST] Scheduler PIXEL-first V2 sospeso.');
     }
     
+    // ======================= POPBUS RECONCILIATION =======================
+    // Disabilitato per default: non avviare riconciliazioni durante i collaudi.
+    if (process.env.POPBUS_RECON_WORKER_ENABLED === 'YES') {
+      const { startPopbusReconciliationWorker } = await import('./workers/popbus-reconciliation.worker.js');
+      startPopbusReconciliationWorker();
+      console.log('[POPBUS RECON] Scheduler riconciliazione avviato.');
+    } else {
+      console.log('[POPBUS RECON] Scheduler riconciliazione disabilitato.');
+    }
+
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {
     console.error('💥 [CRITICAL] Errore durante l\'inizializzazione:', err);

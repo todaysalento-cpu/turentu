@@ -46,18 +46,32 @@ export async function runPopbusReconciliationCycle() {
       if (errors.length) console.error('[POPBUS RECON] Errori nel batch:', errors);
       return { outcome: errors.length ? 'partial_error' : 'completed', ...result };
     } finally {
-      try {
-        if (acquired) {
-          await client.query(
+      let unlockError = null;
+      if (acquired) {
+        try {
+          const unlocked = await client.query(
             'SELECT pg_advisory_unlock(hashtextextended($1::text,0)) AS released',
             [LOCK_NAME]
           );
+          if (unlocked.rows[0]?.released !== true) {
+            throw new Error('[POPBUS RECON] Advisory unlock non confermato');
+          }
+        } catch (error) {
+          unlockError = error;
         }
-        client.release();
-      } catch (error) {
-        client.release(true);
-        throw error;
       }
+      // Una sola chiamata release. Scarta la connessione se lo sblocco
+      // non e' stato confermato: potrebbe mantenere lock di sessione.
+      try {
+        client.release(unlockError !== null);
+      } catch (releaseError) {
+        if (unlockError) {
+          console.error('[POPBUS RECON] Errore release dopo unlock fallito:', releaseError);
+        } else {
+          throw releaseError;
+        }
+      }
+      if (unlockError) throw unlockError;
     }
   })();
   activeRun = execution;
@@ -93,6 +107,12 @@ export async function stopPopbusReconciliationWorker() {
     task.destroy();
     task = null;
   }
-  if (activeRun) await activeRun;
+  if (activeRun) {
+    try {
+      await activeRun;
+    } catch (error) {
+      console.error('[POPBUS RECON] Ciclo terminato con errore durante arresto:', error?.stack || error);
+    }
+  }
   console.log('[POPBUS RECON] Scheduler arrestato');
 }

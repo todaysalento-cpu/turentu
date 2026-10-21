@@ -1,0 +1,18 @@
+{
+  "test": "POPBUS_5F4_A",
+  "tag": "POPBUS_5F4_cab680f1-ac93-462a-8e34-450ab7bb0dab",
+  "requestId": "5e6675d5-fb70-4a46-b9c2-40923d1b7f20",
+  "clienteId": 291,
+  "veicoloId": 368,
+  "corsaId": 944,
+  "riservaId": "16",
+  "paymentIntentId": "pi_3USyHsEVCTpFHY210ojbUStc",
+  "phase": "idempotence_verified",
+  "createdAt": "2026-10-21T12:05:11.449Z",
+  "stripeStatus": "requires_capture",
+  "stripeCreatedAt": "2026-10-21T12:06:34.779Z",
+  "linkedAt": "2026-10-21T12:10:37.046Z",
+  "reconciledAt": "2026-10-21T12:18:40.939Z",
+  "reconciliationJobId": "11",
+  "idempotenceVerifiedAt": "2026-10-21T12:20:39.950Z"
+}

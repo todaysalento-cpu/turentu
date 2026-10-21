@@ -162,6 +162,38 @@ async function caricaAnteprimaFormazione({
         prezzi
     });
 
+    // Diagnostic-only multimission preview: NEVER exposed as bookable.
+    // Disabled by default; errors cannot affect the stable search response.
+    if (process.env.POPBUS_PREVIEW_MULTIMISSION_ENABLED === '1') {
+        try {
+            const { anteprimaMultimissioneSearchDB } = await import(
+                '../popbus/v2/formation-multimission-search-db-bridge.js'
+            );
+            const diagnostic = await anteprimaMultimissioneSearchDB({
+                start_node_id: Number(origine.id),
+                end_node_id: Number(destinazione.id),
+                start_datetime,
+                posti_richiesti: postiRichiesti,
+                prezzi
+            });
+            console.log('[POPBUS MULTIMISSION SHADOW]', JSON.stringify({
+                shadow: diagnostic.shadow,
+                dbWrites: diagnostic.dbWrites,
+                simulazione_non_prenotabile: diagnostic.simulazione_non_prenotabile,
+                classi: Object.fromEntries(Object.entries(diagnostic.classi || {}).map(
+                    ([classe, r]) => [classe, {
+                        missioni_valutate: r.missioni_valutate,
+                        coppie_valutate: r.coppie_valutate,
+                        cicli: r.cicli?.length ?? 0,
+                        migliore: r.migliore ?? null
+                    }]
+                ))
+            }));
+        } catch (error) {
+            console.warn('[POPBUS MULTIMISSION SHADOW] Non disponibile:', error.message);
+        }
+    }
+
     console.log(
         '[POPBUS ANTEPRIMA RAW]',
         JSON.stringify(anteprima, null, 2)
@@ -323,7 +355,7 @@ export async function cercaSlotUltra(richiesta) {
             }
 
             console.log(
-                `🎟️ [SearchEngine] Evento [ID: ${richiesta.evento_id}] -> Dest: ${destLat},${destLon} | Inizio: ${ev.data_inizio}`
+                `ÐYZY‹÷? [SearchEngine] Evento [ID: ${richiesta.evento_id}] -> Dest: ${destLat},${destLon} | Inizio: ${ev.data_inizio}`
             );
         }
     }
@@ -339,7 +371,7 @@ export async function cercaSlotUltra(richiesta) {
     );
 
     console.log(
-        `🔍 [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} (Immediata: ${isImmediata})`
+        `ÐY"? [SearchEngine] Analisi tratta ${lat},${lon} -> ${destLat},${destLon} (Immediata: ${isImmediata})`
     );
 
     const info = await getDurataDistanza(
@@ -515,7 +547,7 @@ export async function cercaSlotUltra(richiesta) {
         );
 
     console.log(
-        `🔎 [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`
+        `ÐY"Z [DEBUG CONDIVISE] Corse valide dopo filterDisponibilita: ${corseValide.length}`
     );
 
     console.log('[NCC 899 DOPO FILTRO]', JSON.stringify(
@@ -605,7 +637,7 @@ export async function cercaSlotUltra(richiesta) {
         };
 
         console.log(
-            `📍 [SEARCH ENGINE MAPPING] Corsa condivisa ID [${c.id}] formattata con offset:`,
+            `ÐY"? [SEARCH ENGINE MAPPING] Corsa condivisa ID [${c.id}] formattata con offset:`,
             {
                 start_offset: slotRisultato.start_offset,
                 end_offset: slotRisultato.end_offset,
@@ -770,7 +802,7 @@ export async function cercaSlotUltra(richiesta) {
                     };
 
                     console.log(
-                        `🚗 [SEARCH ENGINE MAPPING] Corsa privata ID [${slotPrivato.id}] generata con offset:`,
+                        `ÐYs- [SEARCH ENGINE MAPPING] Corsa privata ID [${slotPrivato.id}] generata con offset:`,
                         {
                             start_offset:
                                 slotPrivato.start_offset,
@@ -789,15 +821,15 @@ export async function cercaSlotUltra(richiesta) {
     // 3. POPBUS V2
     // -------------------------------------------------
 
-    // Una direttrice logica non è una corsa prenotabile.
+    // Una direttrice logica non Çù una corsa prenotabile.
     // Le corse riempimento confermate arrivano da corseCandidate.
     // Le nuove richieste sono virtuali e pianificate dal worker V2.
 
     const risultatiPool = [];
 
     // POPBUS confermate: verifica diagnostica in sola lettura.
-    // Non esponiamo ancora queste corse finché prezzo e Booking non sono validati.
-    // Il flag è disabilitato per impostazione predefinita.
+    // Non esponiamo ancora queste corse finchÇ¸ prezzo e Booking non sono validati.
+    // Il flag Çù disabilitato per impostazione predefinita.
     const popbusActiveSearchEnabled =
         process.env.POPBUS_ACTIVE_SEARCH_ENABLED === '1';
 
@@ -945,7 +977,7 @@ export async function cercaSlotUltra(richiesta) {
             }
         }
 
-        // La ricerca PIXEL è informativa: un errore non blocca le corse private.
+        // La ricerca PIXEL Çù informativa: un errore non blocca le corse private.
         let pixelContext = {
             origine_nodo_territoriale_id: null,
             destinazione_nodo_territoriale_id: null,
@@ -1045,7 +1077,7 @@ export async function cercaSlotUltra(richiesta) {
     }
 
     console.log(
-        `📦 [SEARCH ENGINE] Totale risultati finali generati: ${risultatiFinali.length}`
+        `ÐY"Ý [SEARCH ENGINE] Totale risultati finali generati: ${risultatiFinali.length}`
     );
 
     return await formatResults({

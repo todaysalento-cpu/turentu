@@ -1,0 +1,31 @@
+{
+  "test": "POPBUS_5F4_F",
+  "timestamp": "2026-10-21T12:24:01.879Z",
+  "fixture": {
+    "clienteId": 291,
+    "veicoloId": 368,
+    "corsaId": 944,
+    "riservaId": "16",
+    "paymentIntentId": "pi_3USyHsEVCTpFHY210ojbUStc",
+    "requestId": "5e6675d5-fb70-4a46-b9c2-40923d1b7f20"
+  },
+  "stripeBefore": {
+    "status": "canceled",
+    "livemode": false,
+    "amountReceived": 0
+  },
+  "jobBefore": {
+    "id": "11",
+    "stato": "canceled",
+    "tentativi": 1,
+    "ultimo_errore": null
+  },
+  "endToEndPassed": true,
+  "idempotencePassed": true,
+  "stripeAfter": {
+    "status": "canceled",
+    "amountReceived": 0,
+    "amountCapturable": 0
+  },
+  "dbCleanup": "committed"
+}

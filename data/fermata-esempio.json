@@ -1,0 +1,11 @@
+{
+  "nodo_territoriale_id": 8,
+  "nome": "Fermata di prova",
+  "indirizzo": "Indirizzo da verificare, Tricase",
+  "lat": 40.123456,
+  "lon": 18.123456,
+  "fonte": "rilievo_operatore",
+  "riferimento_fonte": "RIL-TEST-001",
+  "autorizzazione_uso_dati": true,
+  "conferma_punto_salita": true
+}

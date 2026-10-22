@@ -191,6 +191,45 @@ const startServer = async () => {
       console.log('[POPBUS RECON] Scheduler riconciliazione disabilitato.');
     }
 
+    // ======================= PIXEL TERRITORIALE =======================
+    // Modalità SHADOW: sola diagnostica e audit, nessuna registrazione fermate.
+    // Il controllo orario rispetta il cooldown persistente configurato nel DB.
+    if (process.env.PIXEL_TERRITORIAL_MODE === 'SHADOW') {
+      const {
+        parsePixelTerritorialConfig,
+        runPixelTerritorialCycle
+      } = await import('./services/pixel/pixel-territorial-runner.service.js');
+
+      const territorialConfig = parsePixelTerritorialConfig();
+      let territorialRunning = false;
+
+      const executeTerritorialCycle = async () => {
+        if (territorialRunning) return;
+        territorialRunning = true;
+        try {
+          const result = await runPixelTerritorialCycle(territorialConfig);
+          console.log('[PIXEL TERRITORIALE] ciclo completato', result);
+        } catch (error) {
+          console.error('[PIXEL TERRITORIALE] errore ciclo:', error);
+        } finally {
+          territorialRunning = false;
+        }
+      };
+
+      // Non bloccare l'avvio delle API durante la diagnostica territoriale.
+      void executeTerritorialCycle();
+
+      const territorialInterval = setInterval(
+        executeTerritorialCycle,
+        60 * 60 * 1000
+      );
+      territorialInterval.unref();
+
+      console.log('⚙️ [PIXEL TERRITORIALE] Scheduler SHADOW avviato.');
+    } else {
+      console.log('⏸️ [PIXEL TERRITORIALE] Scheduler disabilitato.');
+    }
+
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {
     console.error('💥 [CRITICAL] Errore durante l\'inizializzazione:', err);

@@ -10,6 +10,7 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
+import { discoverPixelComuneCandidates } from '../pixel/pixel-stop-selection-comune.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -35,6 +36,8 @@ async function getNearestTerritorialNode(lat, lon) {
     return rows[0] ?? null;
 }
 
+// Disponibilita' PIXEL commerciale e discovery informativa per il collaudo.
+// I candidati Google restano transitori: non sono fermate persistenti prenotabili.
 async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
     const [origine, destinazione] = await Promise.all([
         getNearestTerritorialNode(lat, lon),
@@ -49,11 +52,11 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
     };
 
     if (!origine || !destinazione) return base;
-    if (Number(origine.id) === Number(destinazione.id)) {
+    if (String(origine.id) === String(destinazione.id)) {
         return { ...base, pixel_stato: 'nodi_coincidenti' };
     }
 
-    // Due fermate sono selezionabili solo se condividono un tipo veicolo.
+    // Percorso ordinario: richiede fermate verificate e veicoli compatibili.
     const { rows } = await pool.query(`
         SELECT EXISTS (
             SELECT 1
@@ -67,12 +70,71 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
         ) AS disponibili
     `, [origine.id, destinazione.id]);
 
-    const disponibili = rows[0]?.disponibili === true;
-    return {
-        ...base,
-        pixel_fermate_disponibili: disponibili,
-        pixel_stato: disponibili ? 'disponibile' : 'fermate_non_disponibili'
-    };
+    if (rows[0]?.disponibili === true) {
+        return {
+            ...base,
+            pixel_fermate_disponibili: true,
+            pixel_stato: 'disponibile'
+        };
+    }
+
+    // Non attivabile da un parametro inviato dal frontend.
+    if (process.env.PIXEL_TEST_MODE !== 'true') {
+        return { ...base, pixel_stato: 'fermate_non_disponibili' };
+    }
+
+    try {
+        const { rows: comuniRows } = await pool.query(`
+            SELECT id, codice_istat_comune
+            FROM public.nodi_territoriali
+            WHERE id = ANY($1::BIGINT[]) AND attivo = TRUE
+        `, [[origine.id, destinazione.id]]);
+
+        const comuni = new Map(comuniRows.map(row => [
+            String(row.id), String(row.codice_istat_comune)
+        ]));
+        const istatOrigine = comuni.get(String(origine.id));
+        const istatDestinazione = comuni.get(String(destinazione.id));
+        if (!istatOrigine || !istatDestinazione) {
+            return { ...base, pixel_stato: 'comuni_non_disponibili' };
+        }
+
+        const codici = [...new Set([istatOrigine, istatDestinazione])];
+        const risultati = await Promise.all(codici.map(codice =>
+            discoverPixelComuneCandidates(codice, { source: 'GOOGLE' })
+        ));
+        const perComune = new Map(risultati.map((r, i) => [codici[i], r]));
+        const candidatiPerNodo = (result, nodoId) =>
+            (result?.selezionati ?? []).filter(candidate =>
+                candidate.nodi_raggiungibili?.some(id => String(id) === String(nodoId))
+            );
+
+        const countOrigine = candidatiPerNodo(perComune.get(istatOrigine), origine.id).length;
+        const countDestinazione = candidatiPerNodo(perComune.get(istatDestinazione), destinazione.id).length;
+        const discoveryCompleta = risultati.every(r => r.stato === 'ok');
+        const disponibiliTest = discoveryCompleta && countOrigine > 0 && countDestinazione > 0;
+
+        console.log('[PIXEL TEST] Contesto territoriale:', {
+            origine: origine.id,
+            destinazione: destinazione.id,
+            candidatiOrigine: countOrigine,
+            candidatiDestinazione: countDestinazione,
+            disponibiliTest
+        });
+
+        return {
+            ...base,
+            // Rimane false: il booking richiede ID reali di fermate verificate.
+            pixel_fermate_disponibili: false,
+            pixel_stato: disponibiliTest ? 'disponibile_test' : 'fermate_non_disponibili',
+            pixel_test: disponibiliTest,
+            pixel_candidati_origine: countOrigine,
+            pixel_candidati_destinazione: countDestinazione
+        };
+    } catch (error) {
+        console.error('[PIXEL TEST] Errore discovery territoriale:', error);
+        return { ...base, pixel_stato: 'discovery_test_errore' };
+    }
 }
 
 

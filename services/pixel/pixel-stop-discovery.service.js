@@ -2,8 +2,9 @@
 // Google Places: uso transitorio in memoria, nessuna persistenza dei dettagli.
 import { pool } from '../../db/db.js';
 import { getPixelStopBudget } from './pixel-stop-budget.service.js';
+// Verificare il percorso effettivo di maps.util.js nel progetto.
+import { searchGooglePlaces } from '../../utils/maps.util.js';
 
-const SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
 const SEARCHES = Object.freeze([
   { tipo: 'ferrovia', priorita: 100, query: 'stazione ferroviaria' },
   { tipo: 'autobus', priorita: 95, query: 'autostazione terminal autobus' },
@@ -12,6 +13,25 @@ const SEARCHES = Object.freeze([
   { tipo: 'stadio', priorita: 75, query: 'stadio ingresso principale' },
   { tipo: 'trasporto', priorita: 60, query: 'fermata autobus' },
 ]);
+// La query Google non determina il tipo: contano solo le categorie del luogo.
+// I risultati generici o non classificabili vengono esclusi, non promossi.
+const PLACE_CATEGORIES = [
+  { tipo: 'ferrovia', priorita: 100, types: ['train_station', 'railway_station'] },
+  { tipo: 'autobus', priorita: 95, types: ['bus_station'] },
+  { tipo: 'aeroporto', priorita: 90, types: ['airport', 'international_airport'] },
+  { tipo: 'porto', priorita: 85, types: ['ferry_terminal'] },
+  { tipo: 'stadio', priorita: 75, types: ['stadium'] },
+  { tipo: 'trasporto', priorita: 60, types: ['bus_stop', 'transit_station', 'light_rail_station', 'subway_station'] },
+];
+
+export function classifyPixelPlace(place) {
+  const types = new Set([...(Array.isArray(place?.types) ? place.types : []), place?.primaryType].filter(Boolean));
+  // Tipologie esplicitamente incompatibili con una fermata passeggeri.
+  if (types.has('electric_vehicle_charging_station') || types.has('gas_station')) return null;
+  const match = PLACE_CATEGORIES.find(category => category.types.some(type => types.has(type)));
+  return match ? { tipo: match.tipo, priorita: match.priorita } : null;
+}
+
 const DEFAULT_RADIUS_METERS = 3000;
 
 export function pixelDistanceMeters(a, b) {
@@ -38,24 +58,6 @@ export async function getPixelDiscoveryContext(nodoId) {
   return { nodo: { id: String(nodo.id), nome: nodo.nome,
     comune: nodo.codice_istat_comune, lat: Number(nodo.lat), lon: Number(nodo.lon) }, budget };
 }
-async function googleTextSearch(query, center, apiKey, fetchImpl, radiusMeters) {
-  const response = await fetchImpl(SEARCH_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus',
-    },
-    body: JSON.stringify({ textQuery: query, languageCode: 'it', maxResultCount: 10,
-      locationBias: { circle: { center: { latitude: center.lat, longitude: center.lon }, radius: radiusMeters } } }),
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!response.ok) {
-    const body = (await response.text()).slice(0, 350);
-    throw new Error(`Google Places HTTP ${response.status}: ${body}`);
-  }
-  return (await response.json()).places ?? [];
-}
 // includeAll=true restituisce i candidati deduplicati senza taglio per nodo;
 // NON autorizza a salvare dati Google o ad attivare fermate.
 export async function discoverPixelStopCandidates(nodoId, {
@@ -73,17 +75,19 @@ export async function discoverPixelStopCandidates(nodoId, {
   const errori = [];
   for (const s of SEARCHES) {
     try {
-      const places = await googleTextSearch(`${s.query} ${nodo.nome}`, nodo, apiKey, fetchImpl, radiusMeters);
+      const places = await searchGooglePlaces(`${s.query} ${nodo.nome}`, nodo, { apiKey, fetchImpl, radiusMeters });
       for (const p of places) {
         const loc = { lat: Number(p.location?.latitude), lon: Number(p.location?.longitude) };
         if (!p.location || !validCoords(loc) || p.businessStatus === 'CLOSED_PERMANENTLY') continue;
         const distanza_m = Math.round(pixelDistanceMeters(nodo, loc));
         if (distanza_m > radiusMeters || !p.id) continue;
+        const classification = classifyPixelPlace(p);
+        if (!classification) continue;
         const old = found.get(p.id);
-        if (old && old.priorita >= s.priorita) continue;
+        if (old && old.priorita >= classification.priorita) continue;
         found.set(p.id, { place_id: p.id, nome: p.displayName?.text ?? '',
           indirizzo: p.formattedAddress ?? '', lat: loc.lat, lon: loc.lon,
-          tipo: s.tipo, priorita: s.priorita, distanza_m });
+          tipo: classification.tipo, priorita: classification.priorita, distanza_m });
       }
     } catch (e) { errori.push({ categoria: s.tipo, errore: e.message }); }
   }

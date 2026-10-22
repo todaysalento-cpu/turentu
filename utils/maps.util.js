@@ -144,3 +144,50 @@ export async function getLocalitaSafe(coord) {
     return "Località sconosciuta";
   }
 }
+
+// =========================
+// PLACES API (NEW) - ricerca transitoria per PIXEL
+// Non persistere i dettagli Places senza un diritto di utilizzo appropriato.
+// =========================
+export async function searchGooglePlaces(textQuery, center, {
+  apiKey = process.env.GOOGLE_MAPS_API_KEY,
+  fetchImpl = fetch,
+  radiusMeters = 3000,
+  timeoutMs = 12000,
+} = {}) {
+  const c = normalizeCoord(center);
+  if (typeof textQuery !== 'string' || !textQuery.trim()) throw new Error('textQuery obbligatoria');
+  if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lon) ||
+      c.lat < -90 || c.lat > 90 || c.lon < -180 || c.lon > 180) throw new Error('Coordinate non valide');
+  if (!apiKey) throw new Error('GOOGLE_MAPS_API_KEY mancante');
+  if (typeof fetchImpl !== 'function') throw new Error('fetchImpl non valido');
+  if (!Number.isFinite(radiusMeters) || radiusMeters <= 0 || radiusMeters > 50000) throw new Error('radiusMeters non valido');
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1000 || timeoutMs > 60000) throw new Error('timeoutMs non valido');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.businessStatus,places.types,places.primaryType',
+      },
+      body: JSON.stringify({
+        textQuery: textQuery.trim(), languageCode: 'it', maxResultCount: 10,
+        locationBias: { circle: { center: { latitude: c.lat, longitude: c.lon }, radius: radiusMeters } },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 350);
+      throw new Error(`Google Places HTTP ${response.status}: ${detail}`);
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload.places) && payload.places != null) throw new Error('Risposta Places non valida');
+    return payload.places ?? [];
+  } finally {
+    clearTimeout(timer);
+  }
+}

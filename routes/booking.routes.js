@@ -187,14 +187,17 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     let savedRow;
 
     if (isPopBus) {
-      console.log(`🗺️ [DEBUG-NODES:${requestId}] Chiamata get_or_create_node con coordinate origine: (${finalOrigine.lat}, ${finalOrigine.lon}) e destinazione: (${finalDestinazione.lat}, ${finalDestinazione.lon})`);
-
-      const nodeRes = await client.query(
-        `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-        [finalOrigine.lat, finalOrigine.lon, finalDestinazione.lat, finalDestinazione.lon]
-      );
-
-      console.log(`🗺️ [DEBUG-NODES:${requestId}] Nodi restituiti dal DB -> start_node_id: ${nodeRes.rows[0]?.start}, end_node_id: ${nodeRes.rows[0]?.end}`);
+      // PIXEL e' la fonte autorevole per i nodi territoriali POPBUS.
+      // get_or_create_node() non garantisce ID della tabella nodi_territoriali
+      // e non deve alimentare le colonne soggette alle relative foreign key.
+      const startNodeId = Number(pixelValidated?.origine_nodo_territoriale_id);
+      const endNodeId = Number(pixelValidated?.destinazione_nodo_territoriale_id);
+      if (!Number.isSafeInteger(startNodeId) || startNodeId <= 0 ||
+          !Number.isSafeInteger(endNodeId) || endNodeId <= 0 ||
+          startNodeId === endNodeId) {
+        throw Object.assign(new Error('Nodi territoriali PIXEL non validi'), { status: 409 });
+      }
+      console.log(`[PIXEL-NODES:${requestId}] Nodi territoriali validati: ${startNodeId} -> ${endNodeId}`);
 
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
@@ -214,8 +217,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           finalDestinazione.lon, finalDestinazione.lat,
           slot.start_datetime,
           slot.posti_richiesti || 1,
-          nodeRes.rows[0].start,
-          nodeRes.rows[0].end,
+          startNodeId,
+          endNodeId,
           slot.classe || 'STANDARD',
           origineAddress,
           destinazioneAddress,

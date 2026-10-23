@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { pool } from '../db/db.js';
-import { discoverPixelComuneCandidates } from '../services/pixel/pixel-stop-selection-comune.service.js';
 import { pixelCollaudoEnabled } from '../services/pixel/pixel-collaudo-mode.js';
 import { ensurePixelStopsForNode } from '../services/pixel/pixel-stop-acquisition.service.js';
 
@@ -12,11 +11,7 @@ function parseNodoId(raw) {
     return Number.isSafeInteger(id) ? id : null;
 }
 
-/**
- * GET /api/pixel/fermate?nodo_id=4
- * Catalogo commerciale: esclusivamente fermate attive e verificate.
- * Contratto invariato per frontend e validazione booking.
- */
+/** Catalogo fermate: commerciale in produzione, esteso in collaudo. */
 pixelRouter.get('/fermate', async (req, res) => {
     try {
         const nodoId = parseNodoId(req.query.nodo_id);
@@ -33,8 +28,8 @@ pixelRouter.get('/fermate', async (req, res) => {
                        ST_X(f.posizione::geometry) AS lon,
                        f.tipi_veicolo_ammessi
                 FROM public.pixel_fermate f
-                JOIN public.nodi_territoriali n ON n.id=f.nodo_territoriale_id
-                WHERE f.nodo_territoriale_id=$1::bigint AND n.attivo=TRUE
+                JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id
+                WHERE f.nodo_territoriale_id = $1::bigint AND n.attivo = TRUE
                 ORDER BY f.nome, f.id`, [nodoId]);
             ({ rows } = await read());
             if (!rows.length) {
@@ -63,7 +58,7 @@ pixelRouter.get('/fermate', async (req, res) => {
             }))
         });
     } catch (error) {
-        console.error('❌ [PIXEL] Errore caricamento fermate:', error);
+        console.error('[PIXEL] Errore caricamento fermate:', error);
         return res.status(500).json({
             success: false,
             error: 'Errore interno durante il caricamento delle fermate'
@@ -72,17 +67,12 @@ pixelRouter.get('/fermate', async (req, res) => {
 });
 
 /**
- * GET /api/pixel/fermate-test?nodo_id=4
- * Discovery Google Places transitoria: solo per collaudo isolato.
- * Gli ID sono etichette temporanee, NON ID di pixel_fermate.
- * Questo endpoint NON abilita pagamenti o prenotazioni.
+ * Catalogo per il frontend di collaudo.
+ * Espone SOLO le fixture sintetiche esplicitamente tracciate dalla CLI,
+ * con ID numerici persistenti; non usa Google Places e non scrive sul DB.
  */
 pixelRouter.get('/fermate-test', async (req, res) => {
-    // Richiede esplicita attivazione E Stripe test: nessuna esposizione in ambiente pagamenti reali.
-    if (
-        process.env.PIXEL_TEST_MODE !== 'true' ||
-        !String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test_')
-    ) {
+    if (!pixelCollaudoEnabled()) {
         return res.status(404).json({ success: false, error: 'Endpoint non disponibile' });
     }
 
@@ -92,64 +82,52 @@ pixelRouter.get('/fermate-test', async (req, res) => {
     }
 
     try {
-        const { rows } = await pool.query(`
-            SELECT id, codice_istat_comune
-            FROM public.nodi_territoriali
-            WHERE id = $1::BIGINT AND attivo = TRUE
-            LIMIT 1
-        `, [nodoId]);
+        const { rows: nodes } = await pool.query(`
+            SELECT id FROM public.nodi_territoriali
+            WHERE id = $1::bigint AND attivo = TRUE
+            LIMIT 1`, [nodoId]);
 
-        const nodo = rows[0];
-        if (!nodo?.codice_istat_comune) {
+        if (!nodes.length) {
             return res.status(404).json({ success: false, error: 'Nodo territoriale non disponibile' });
         }
 
-        const result = await discoverPixelComuneCandidates(
-            nodo.codice_istat_comune,
-            { source: 'GOOGLE' }
-        );
+        const { rows } = await pool.query(`
+            SELECT f.id, f.nome, f.indirizzo,
+                   ST_Y(f.posizione::geometry) AS lat,
+                   ST_X(f.posizione::geometry) AS lon,
+                   f.tipi_veicolo_ammessi, f.verificata
+            FROM public.pixel_fixture_stops x
+            JOIN public.pixel_fermate f ON f.id = x.fermata_id
+            WHERE f.nodo_territoriale_id = $1::bigint
+              AND f.attiva = FALSE
+              AND f.verificata = FALSE
+            ORDER BY f.id`, [nodoId]);
 
-        if (result.stato !== 'ok') {
-            console.warn('[PIXEL TEST] Discovery non completa:', result.stato, result.errori);
-            return res.status(503).json({
-                success: false,
-                error: 'Discovery PIXEL temporaneamente non disponibile'
-            });
-        }
-
-        const fermate = (result.selezionati || [])
-            .filter(candidate =>
-                (candidate.nodi_raggiungibili || []).some(id => String(id) === String(nodoId))
-            )
-            .map((candidate, index) => ({
-                id: `test_${nodoId}_${index + 1}`,
-                nome: candidate.nome,
-                tipo: candidate.tipo,
-                lat: Number(candidate.lat),
-                lon: Number(candidate.lon),
-                operativa_test: true,
-                verificata: false,
-                prenotabile: false
-            }));
-
-        console.log('[PIXEL TEST] Fermate temporanee:', {
-            nodo_id: nodoId,
-            fermate: fermate.length
-        });
+        const fermate = rows.map(row => ({
+            id: Number(row.id),
+            nome: row.nome,
+            indirizzo: row.indirizzo,
+            lat: Number(row.lat),
+            lon: Number(row.lon),
+            tipi_veicolo_ammessi: row.tipi_veicolo_ammessi || [],
+            operativa_test: true,
+            verificata: false,
+            prenotabile: true
+        }));
 
         return res.status(200).json({
             success: true,
             nodo_id: nodoId,
-            modalita: 'test',
-            persistite: false,
-            prenotabili: false,
+            modalita: 'collaudo',
+            persistite: true,
+            prenotabili: true,
             fermate
         });
     } catch (error) {
-        console.error('[PIXEL TEST] Errore fermate temporanee:', error);
+        console.error('[PIXEL TEST] Errore lettura fixture:', error);
         return res.status(500).json({
             success: false,
-            error: 'Errore interno durante la discovery PIXEL test'
+            error: 'Errore interno durante il caricamento delle fermate di collaudo'
         });
     }
 });

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { pool } from '../db/db.js';
 import { discoverPixelComuneCandidates } from '../services/pixel/pixel-stop-selection-comune.service.js';
+import { pixelCollaudoEnabled } from '../services/pixel/pixel-collaudo-mode.js';
+import { ensurePixelStopsForNode } from '../services/pixel/pixel-stop-acquisition.service.js';
 
 const pixelRouter = Router();
 
@@ -22,15 +24,35 @@ pixelRouter.get('/fermate', async (req, res) => {
             return res.status(400).json({ success: false, error: 'nodo_id non valido' });
         }
 
-        const { rows } = await pool.query(`
-            SELECT fermata_id AS id, nome, indirizzo, lat, lon, tipi_veicolo_ammessi
-            FROM public.pixel_fermate_per_nodo($1::BIGINT)
-            ORDER BY nome, fermata_id
-        `, [nodoId]);
+        const collaudo = pixelCollaudoEnabled();
+        let rows;
+        if (collaudo) {
+            const read = () => pool.query(`
+                SELECT f.id, f.nome, f.indirizzo,
+                       ST_Y(f.posizione::geometry) AS lat,
+                       ST_X(f.posizione::geometry) AS lon,
+                       f.tipi_veicolo_ammessi
+                FROM public.pixel_fermate f
+                JOIN public.nodi_territoriali n ON n.id=f.nodo_territoriale_id
+                WHERE f.nodo_territoriale_id=$1::bigint AND n.attivo=TRUE
+                ORDER BY f.nome, f.id`, [nodoId]);
+            ({ rows } = await read());
+            if (!rows.length) {
+                const acquisition = await ensurePixelStopsForNode(nodoId);
+                console.log('[PIXEL COLLAUDO] Acquisizione:', { nodoId, ...acquisition });
+                ({ rows } = await read());
+            }
+        } else {
+            ({ rows } = await pool.query(`
+                SELECT fermata_id AS id, nome, indirizzo, lat, lon, tipi_veicolo_ammessi
+                FROM public.pixel_fermate_per_nodo($1::bigint)
+                ORDER BY nome, fermata_id`, [nodoId]));
+        }
 
         return res.status(200).json({
             success: true,
             nodo_id: nodoId,
+            modalita: collaudo ? 'collaudo' : 'commerciale',
             fermate: rows.map(row => ({
                 id: Number(row.id),
                 nome: row.nome,

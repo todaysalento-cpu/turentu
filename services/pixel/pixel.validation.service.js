@@ -1,3 +1,4 @@
+import { pixelCollaudoEnabled } from './pixel-collaudo-mode.js';
 // Turentu POPBUS + PIXEL — validazione server-side condivisa (Stripe / wallet).
 // Usare ESCLUSIVAMENTE il client pg della transazione corrente (BEGIN ... COMMIT/ROLLBACK).
 // Fail closed: nessuna richiesta POPBUS senza coppia PIXEL verificabile.
@@ -96,8 +97,9 @@ export async function validatePixelStops(client, slot, quotation = null) {
   if (!pickup || !dropoff) {
     throw pixelError('PIXEL: una o entrambe le fermate non esistono');
   }
-  if (pickup.attiva !== true || pickup.verificata !== true ||
-      dropoff.attiva !== true || dropoff.verificata !== true) {
+  if (!pixelCollaudoEnabled() &&
+      (pickup.attiva !== true || pickup.verificata !== true ||
+       dropoff.attiva !== true || dropoff.verificata !== true)) {
     throw pixelError('PIXEL: fermate non attive o non verificate');
   }
   if (String(pickup.nodo_territoriale_id) !== originNode ||
@@ -108,7 +110,11 @@ export async function validatePixelStops(client, slot, quotation = null) {
   const pickupTypes = vehicleTypes(pickup.tipi_veicolo_ammessi);
   const dropoffTypes = vehicleTypes(dropoff.tipi_veicolo_ammessi);
   const commonTypes = pickupTypes.filter(type => dropoffTypes.includes(type));
-  if (commonTypes.length === 0) {
+  // In collaudo un array vuoto significa tipologia ancora non censita,
+  // non una dichiarazione che il punto sia idoneo a qualsiasi mezzo.
+  // Se entrambe le fermate dichiarano tipi, l'intersezione resta obbligatoria.
+  const typesUnspecified = pickupTypes.length === 0 || dropoffTypes.length === 0;
+  if (commonTypes.length === 0 && !(pixelCollaudoEnabled() && typesUnspecified)) {
     throw pixelError('PIXEL: nessuna tipologia di veicolo compatibile fra le due fermate');
   }
 

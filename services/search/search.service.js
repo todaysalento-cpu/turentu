@@ -10,7 +10,8 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
-import { discoverPixelComuneCandidates } from '../pixel/pixel-stop-selection-comune.service.js';
+import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
+import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -56,7 +57,19 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
         return { ...base, pixel_stato: 'nodi_coincidenti' };
     }
 
-    // Percorso ordinario: richiede fermate verificate e veicoli compatibili.
+    const collaudo = pixelCollaudoEnabled();
+    // In collaudo acquisizione on-demand prima del preventivo, in modo che
+    // la riquotazione nel booking veda gli stessi ID persistenti.
+    if (collaudo) {
+        for (const nodeId of [...new Set([String(origine.id), String(destinazione.id)])]) {
+            try {
+                const result = await ensurePixelStopsForNode(nodeId);
+                console.log('[PIXEL COLLAUDO] Nodo', nodeId, result.stato);
+            } catch (error) {
+                console.warn('[PIXEL COLLAUDO] Acquisizione fallita:', nodeId, error.message);
+            }
+        }
+    }
     const { rows } = await pool.query(`
         SELECT EXISTS (
             SELECT 1
@@ -64,77 +77,21 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
             JOIN public.pixel_fermate d
               ON d.nodo_territoriale_id = $2::BIGINT
             WHERE o.nodo_territoriale_id = $1::BIGINT
-              AND o.attiva = TRUE AND o.verificata = TRUE
-              AND d.attiva = TRUE AND d.verificata = TRUE
-              AND o.tipi_veicolo_ammessi && d.tipi_veicolo_ammessi
+              AND ($3::boolean OR (o.attiva = TRUE AND o.verificata = TRUE
+                                  AND d.attiva = TRUE AND d.verificata = TRUE))
+              AND (
+                  o.tipi_veicolo_ammessi && d.tipi_veicolo_ammessi
+                  OR ($3::boolean AND
+                      (COALESCE(cardinality(o.tipi_veicolo_ammessi),0)=0
+                       OR COALESCE(cardinality(d.tipi_veicolo_ammessi),0)=0))
+              )
         ) AS disponibili
-    `, [origine.id, destinazione.id]);
-
-    if (rows[0]?.disponibili === true) {
-        return {
-            ...base,
-            pixel_fermate_disponibili: true,
-            pixel_stato: 'disponibile'
-        };
-    }
-
-    // Non attivabile da un parametro inviato dal frontend.
-    if (process.env.PIXEL_TEST_MODE !== 'true') {
-        return { ...base, pixel_stato: 'fermate_non_disponibili' };
-    }
-
-    try {
-        const { rows: comuniRows } = await pool.query(`
-            SELECT id, codice_istat_comune
-            FROM public.nodi_territoriali
-            WHERE id = ANY($1::BIGINT[]) AND attivo = TRUE
-        `, [[origine.id, destinazione.id]]);
-
-        const comuni = new Map(comuniRows.map(row => [
-            String(row.id), String(row.codice_istat_comune)
-        ]));
-        const istatOrigine = comuni.get(String(origine.id));
-        const istatDestinazione = comuni.get(String(destinazione.id));
-        if (!istatOrigine || !istatDestinazione) {
-            return { ...base, pixel_stato: 'comuni_non_disponibili' };
-        }
-
-        const codici = [...new Set([istatOrigine, istatDestinazione])];
-        const risultati = await Promise.all(codici.map(codice =>
-            discoverPixelComuneCandidates(codice, { source: 'GOOGLE' })
-        ));
-        const perComune = new Map(risultati.map((r, i) => [codici[i], r]));
-        const candidatiPerNodo = (result, nodoId) =>
-            (result?.selezionati ?? []).filter(candidate =>
-                candidate.nodi_raggiungibili?.some(id => String(id) === String(nodoId))
-            );
-
-        const countOrigine = candidatiPerNodo(perComune.get(istatOrigine), origine.id).length;
-        const countDestinazione = candidatiPerNodo(perComune.get(istatDestinazione), destinazione.id).length;
-        const discoveryCompleta = risultati.every(r => r.stato === 'ok');
-        const disponibiliTest = discoveryCompleta && countOrigine > 0 && countDestinazione > 0;
-
-        console.log('[PIXEL TEST] Contesto territoriale:', {
-            origine: origine.id,
-            destinazione: destinazione.id,
-            candidatiOrigine: countOrigine,
-            candidatiDestinazione: countDestinazione,
-            disponibiliTest
-        });
-
-        return {
-            ...base,
-            // Rimane false: il booking richiede ID reali di fermate verificate.
-            pixel_fermate_disponibili: false,
-            pixel_stato: disponibiliTest ? 'disponibile_test' : 'fermate_non_disponibili',
-            pixel_test: disponibiliTest,
-            pixel_candidati_origine: countOrigine,
-            pixel_candidati_destinazione: countDestinazione
-        };
-    } catch (error) {
-        console.error('[PIXEL TEST] Errore discovery territoriale:', error);
-        return { ...base, pixel_stato: 'discovery_test_errore' };
-    }
+    `, [origine.id, destinazione.id, collaudo]);
+    return {
+        ...base,
+        pixel_fermate_disponibili: rows[0]?.disponibili === true,
+        pixel_stato: rows[0]?.disponibili === true ? 'disponibile' : 'fermate_non_disponibili'
+    };
 }
 
 

@@ -2,12 +2,14 @@
 // Richiede la migration 001_pixel_territorial_runs.sql.
 import { pool } from '../../db/db.js';
 import { diagnosticaFermateComunePixel } from './pixel-territorial-orchestrator.service.js';
+import { planPixelTerritorialDiscoveryV561 } from './pixel-territorial-discovery-plan-v561.service.js';
+import { runPixelV57PlanCycle } from './pixel-territorial-plan-v57.mjs';
 
 const LOCK_NAMESPACE = 'turentu:pixel:territorial:shadow:';
 const MAX_COMUNI = 1000;
 export function parsePixelTerritorialConfig(env = process.env) {
   const mode = String(env.PIXEL_TERRITORIAL_MODE ?? 'OFF').trim().toUpperCase();
-  if (!['OFF', 'SHADOW'].includes(mode)) throw new Error('Modalita non supportata: OFF o SHADOW');
+  if (!['OFF', 'SHADOW', 'PLAN'].includes(mode)) throw new Error('Modalita non supportata: OFF, SHADOW o PLAN');
   const raw = String(env.PIXEL_TERRITORIAL_COMUNI ?? 'AUTO').trim();
   const auto = !raw || raw.toUpperCase() === 'AUTO';
   const comuni = auto ? [] : [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))];
@@ -17,16 +19,23 @@ export function parsePixelTerritorialConfig(env = process.env) {
   if (!Number.isFinite(intervalHours) || intervalHours < 24 || intervalHours > 720) {
     throw new Error('Intervallo non valido: minimo 24 ore, massimo 720');
   }
-  return { mode, auto, comuni, intervalMs: intervalHours * 3600_000 };
+  const maxGoogleCalls = Number(env.PIXEL_TERRITORIAL_PLAN_MAX_CALLS ?? 48);
+  if (!Number.isSafeInteger(maxGoogleCalls) || maxGoogleCalls < 0 || maxGoogleCalls > 500)
+    throw new Error('PIXEL_TERRITORIAL_PLAN_MAX_CALLS non valido');
+  return { mode, auto, comuni, intervalMs: intervalHours * 3600_000, maxGoogleCalls };
 }
 
 export async function runPixelTerritorialCycle(config, {
   database = pool, diagnostic = diagnosticaFermateComunePixel,
   logger = console, now = () => new Date(),
+  planner = planPixelTerritorialDiscoveryV561,
 } = {}) {
   const summary = { mode: config.mode, eseguiti: 0, saltati: 0, errori: 0,
     scritture_fermate: 0, scritture_audit: 0 };
   if (config.mode === 'OFF') return summary;
+  // PLAN: solo SELECT PostGIS, nessuna discovery HTTP e nessuna scrittura di audit.
+  if (config.mode === 'PLAN')
+    return runPixelV57PlanCycle(config, { database, planner, logger });
   if (config.mode !== 'SHADOW') throw new Error('Runner esclusivamente SHADOW');
   const comuni = config.auto ? (await database.query(`
     SELECT codice_istat_comune FROM public.pixel_budget_comunali

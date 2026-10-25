@@ -23,14 +23,6 @@ const integerId = (value) => {
   }
 };
 
-const normalizeType = (value) => String(value ?? '').trim().toLowerCase();
-const allowedTypes = new Set(['ncc', 'navetta', 'autobus']);
-
-const vehicleTypes = (value) => {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.map(normalizeType).filter(type => allowedTypes.has(type)))];
-};
-
 export function isPopbusSlot(slot) {
   const kind = String(slot?.tipo ?? slot?.tipo_corsa ?? '')
     .toLowerCase()
@@ -83,7 +75,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
   // FOR SHARE protegge le righe da disattivazioni/modifiche concorrenti fino
   // al termine della transazione chiamante.
   const stopsResult = await client.query(
-    `SELECT id, nodo_territoriale_id, attiva, verificata, tipi_veicolo_ammessi
+    `SELECT id, nodo_territoriale_id, attiva, verificata
        FROM public.pixel_fermate
       WHERE id = ANY($1::bigint[])
       ORDER BY id
@@ -105,17 +97,6 @@ export async function validatePixelStops(client, slot, quotation = null) {
   if (String(pickup.nodo_territoriale_id) !== originNode ||
       String(dropoff.nodo_territoriale_id) !== destNode) {
     throw pixelError('PIXEL: fermate non appartenenti ai nodi territoriali richiesti');
-  }
-
-  const pickupTypes = vehicleTypes(pickup.tipi_veicolo_ammessi);
-  const dropoffTypes = vehicleTypes(dropoff.tipi_veicolo_ammessi);
-  const commonTypes = pickupTypes.filter(type => dropoffTypes.includes(type));
-  // In collaudo un array vuoto significa tipologia ancora non censita,
-  // non una dichiarazione che il punto sia idoneo a qualsiasi mezzo.
-  // Se entrambe le fermate dichiarano tipi, l'intersezione resta obbligatoria.
-  const typesUnspecified = pickupTypes.length === 0 || dropoffTypes.length === 0;
-  if (commonTypes.length === 0 && !(pixelCollaudoEnabled() && typesUnspecified)) {
-    throw pixelError('PIXEL: nessuna tipologia di veicolo compatibile fra le due fermate');
   }
 
   const nodesResult = await client.query(

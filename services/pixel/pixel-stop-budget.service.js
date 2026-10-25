@@ -1,5 +1,5 @@
 // services/pixel/pixel-stop-budget.service.js
-// PIXEL: budget condiviso per comune. ESM, PostgreSQL/PostGIS.
+// Budget condiviso per comune; supporta transazioni esterne per registrazione atomica.
 import { pool } from '../../db/db.js';
 
 function validateId(value, name) {
@@ -17,16 +17,13 @@ async function readBudget(client, nodeId, lock = false) {
   const code = node.rows[0].codice_istat_comune;
   if (!code) throw new Error(`Nodo ${nodeId} senza codice ISTAT comunale`);
 
-  // Lock sulla riga comunale: serializza le acquisizioni che passano da questo servizio.
   const budget = await client.query(
     `SELECT codice_istat_comune, max_fermate_auto, max_fermate_override,
             COALESCE(max_fermate_override, max_fermate_auto) AS limite
      FROM public.pixel_budget_comunali
-     WHERE codice_istat_comune = $1 ${lock ? 'FOR UPDATE' : ''}`,
-    [code]
+     WHERE codice_istat_comune = $1 ${lock ? 'FOR UPDATE' : ''}`, [code]
   );
   if (!budget.rowCount) throw new Error(`Budget comunale non configurato: ${code}`);
-
   const count = await client.query(
     `SELECT COUNT(*)::integer AS censite
      FROM public.pixel_fermate f
@@ -44,7 +41,6 @@ async function readBudget(client, nodeId, lock = false) {
   };
 }
 
-// Diagnostica, nessuna scrittura.
 export async function getPixelStopBudget(nodoTerritorialeId) {
   const id = validateId(nodoTerritorialeId, 'nodoTerritorialeId');
   const client = await pool.connect();
@@ -52,35 +48,47 @@ export async function getPixelStopBudget(nodoTerritorialeId) {
   finally { client.release(); }
 }
 
-// Inserisce una fermata candidata INATTIVA e NON VERIFICATA, nel limite comunale.
-// Tutti i writer automatici di pixel_fermate devono usare questa funzione.
+// Se viene passato client, il chiamante gestisce BEGIN/COMMIT/ROLLBACK.
+// Se non viene passato, questa funzione mantiene la gestione autonoma precedente.
 export async function insertPixelStopCandidate({
   nodo_territoriale_id, nome, indirizzo = null, lat, lon,
-}) {
+}, { client: externalClient } = {}) {
   const id = validateId(nodo_territoriale_id, 'nodo_territoriale_id');
   if (typeof nome !== 'string' || !nome.trim()) throw new Error('nome obbligatorio');
-  if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new Error('lat non valida');
-  if (!Number.isFinite(lon) || lon < -180 || lon > 180) throw new Error('lon non valida');
-  const client = await pool.connect();
+  if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) throw new Error('lat non valida');
+  if (typeof lon !== 'number' || !Number.isFinite(lon) || lon < -180 || lon > 180) throw new Error('lon non valida');
+
+  const owned = !externalClient;
+  const client = externalClient ?? await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (owned) await client.query('BEGIN');
     const before = await readBudget(client, id, true);
-    if (before.residue === 0) {
-      await client.query('COMMIT');
-      return { inserted: false, reason: 'budget_esaurito', budget: before };
-    }
-    // Evita doppioni geografici nello stesso comune (raggio 30 m).
+
+    // Cercare i duplicati prima del controllo budget permette di riutilizzare
+    // una fermata già censita anche quando il comune ha esaurito i posti.
     const duplicate = await client.query(
-      `SELECT f.id FROM public.pixel_fermate f
+      `SELECT f.id, f.nodo_territoriale_id
+       FROM public.pixel_fermate f
        JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id
        WHERE n.codice_istat_comune = $1
          AND ST_DWithin(f.posizione,
            ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 30)
+       ORDER BY ST_Distance(f.posizione,
+           ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography), f.id
        LIMIT 1`, [before.codice_istat_comune, lon, lat]
     );
     if (duplicate.rowCount) {
-      await client.query('COMMIT');
-      return { inserted: false, reason: 'duplicata_vicina', existing_id: duplicate.rows[0].id, budget: before };
+      if (owned) await client.query('COMMIT');
+      return {
+        inserted: false, reason: 'duplicata_vicina',
+        existing_id: duplicate.rows[0].id,
+        existing_nodo_territoriale_id: duplicate.rows[0].nodo_territoriale_id,
+        budget: before,
+      };
+    }
+    if (before.residue === 0) {
+      if (owned) await client.query('COMMIT');
+      return { inserted: false, reason: 'budget_esaurito', budget: before };
     }
     const inserted = await client.query(
       `INSERT INTO public.pixel_fermate
@@ -89,12 +97,12 @@ export async function insertPixelStopCandidate({
        RETURNING id`, [id, nome.trim(), indirizzo, lon, lat]
     );
     const after = { ...before, censite: before.censite + 1, residue: before.residue - 1 };
-    await client.query('COMMIT');
+    if (owned) await client.query('COMMIT');
     return { inserted: true, id: inserted.rows[0].id, budget: after };
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (owned) await client.query('ROLLBACK');
     throw error;
   } finally {
-    client.release();
+    if (owned) client.release();
   }
 }

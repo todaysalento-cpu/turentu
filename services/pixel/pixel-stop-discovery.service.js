@@ -1,8 +1,7 @@
 // services/pixel/pixel-stop-discovery.service.js
-// Google Places: uso transitorio in memoria, nessuna persistenza dei dettagli.
+// PIXEL V5.4: Text Search iniziale, Nearby Search supplementare e diagnostica geografica. Nessuna persistenza.
 import { pool } from '../../db/db.js';
 import { getPixelStopBudget } from './pixel-stop-budget.service.js';
-// Verificare il percorso effettivo di maps.util.js nel progetto.
 import { searchGooglePlaces } from '../../utils/maps.util.js';
 
 const SEARCHES = Object.freeze([
@@ -13,8 +12,6 @@ const SEARCHES = Object.freeze([
   { tipo: 'stadio', priorita: 75, query: 'stadio ingresso principale' },
   { tipo: 'trasporto', priorita: 60, query: 'fermata autobus' },
 ]);
-// La query Google non determina il tipo: contano solo le categorie del luogo.
-// I risultati generici o non classificabili vengono esclusi, non promossi.
 const PLACE_CATEGORIES = [
   { tipo: 'ferrovia', priorita: 100, types: ['train_station', 'railway_station'] },
   { tipo: 'autobus', priorita: 95, types: ['bus_station'] },
@@ -26,13 +23,48 @@ const PLACE_CATEGORIES = [
 
 export function classifyPixelPlace(place) {
   const types = new Set([...(Array.isArray(place?.types) ? place.types : []), place?.primaryType].filter(Boolean));
-  // Tipologie esplicitamente incompatibili con una fermata passeggeri.
   if (types.has('electric_vehicle_charging_station') || types.has('gas_station')) return null;
   const match = PLACE_CATEGORIES.find(category => category.types.some(type => types.has(type)));
   return match ? { tipo: match.tipo, priorita: match.priorita } : null;
 }
 
+// Nearby Search Google Places (New): vincolo geografico reale con locationRestriction.
+// I tipi devono appartenere alla tassonomia Places (New).
+const NEARBY_TYPES = Object.freeze({
+  trasporto: ['bus_stop'],
+  autobus: ['bus_station'],
+  ferrovia: ['train_station'],
+  porto: ['ferry_terminal'],
+  aeroporto: ['airport'],
+  stadio: ['stadium'],
+});
+async function searchGoogleNearby(tipo, center, { apiKey, fetchImpl, radiusMeters }) {
+  const includedTypes = NEARBY_TYPES[tipo];
+  if (!includedTypes) throw new Error(`Tipo Nearby non supportato: ${tipo}`);
+  const response = await fetchImpl('https://places.googleapis.com/v1/places:searchNearby', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.location,places.displayName,places.formattedAddress,places.primaryType,places.types,places.businessStatus',
+    },
+    body: JSON.stringify({
+      includedTypes,
+      maxResultCount: 20,
+      rankPreference: 'DISTANCE',
+      locationRestriction: { circle: { center: { latitude: center.lat, longitude: center.lon }, radius: radiusMeters } },
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Google Nearby HTTP ${response.status}: ${body.slice(0, 400)}`);
+  }
+  const data = await response.json();
+  return Array.isArray(data.places) ? data.places : [];
+}
+
 const DEFAULT_RADIUS_METERS = 3000;
+export const PIXEL_GOOGLE_SEARCHES = SEARCHES;
 
 export function pixelDistanceMeters(a, b) {
   const rad = Math.PI / 180;
@@ -58,38 +90,79 @@ export async function getPixelDiscoveryContext(nodoId) {
   return { nodo: { id: String(nodo.id), nome: nodo.nome,
     comune: nodo.codice_istat_comune, lat: Number(nodo.lat), lon: Number(nodo.lon) }, budget };
 }
-// includeAll=true restituisce i candidati deduplicati senza taglio per nodo;
-// NON autorizza a salvare dati Google o ad attivare fermate.
+
+// includeAll=true restituisce i candidati deduplicati senza taglio per nodo.
+// I dettagli Google rimangono transitori: nessuna registrazione o attivazione.
 export async function discoverPixelStopCandidates(nodoId, {
   apiKey = process.env.GOOGLE_MAPS_API_KEY,
   fetchImpl = globalThis.fetch,
   radiusMeters = DEFAULT_RADIUS_METERS,
   includeAll = false,
+  searchCenter = null,
+  searches = SEARCHES,
+  onGoogleAttempt = null,
+  territoryCenter = null,
+  territoryRadiusMeters = radiusMeters,
+  searchMode = 'TEXT',
 } = {}) {
   const { nodo, budget } = await getPixelDiscoveryContext(nodoId);
-  if (budget.residue === 0) return { nodo, budget, candidati: [], candidati_totali: 0, errori: [], stato: 'budget_esaurito' };
+  if (budget.residue === 0 && !includeAll) return { nodo, budget, candidati: [], candidati_totali: 0, errori: [], stato: 'budget_esaurito' };
   if (!apiKey) throw new Error('GOOGLE_MAPS_API_KEY mancante');
   if (typeof fetchImpl !== 'function') throw new Error('fetch non disponibile: richiede Node.js >=18');
   if (!Number.isFinite(radiusMeters) || radiusMeters <= 0 || radiusMeters > 50000) throw new Error('radiusMeters non valido');
+  const centro = searchCenter == null ? nodo : { lat: Number(searchCenter.lat), lon: Number(searchCenter.lon) };
+  if (!validCoords(centro)) throw new Error('searchCenter non valido');
+  const territorio = territoryCenter == null ? nodo : { lat: Number(territoryCenter.lat), lon: Number(territoryCenter.lon) };
+  if (!validCoords(territorio) || !Number.isFinite(territoryRadiusMeters) || territoryRadiusMeters <= 0 || territoryRadiusMeters > 50000) throw new Error('Territorio non valido');
+  if (!['TEXT', 'NEARBY'].includes(searchMode)) throw new Error('searchMode non valido');
+  if (!Array.isArray(searches) || searches.length > 20) throw new Error('searches non valido');
+  if (!searches.every(x => x && typeof x.query === 'string' && x.query.trim())) throw new Error('query Google non valida');
   const found = new Map();
   const errori = [];
-  for (const s of SEARCHES) {
+  let chiamateEffettive = 0;
+  let chiamateRiuscite = 0;
+  const diagnostica_ricerche = [];
+  for (const s of searches) {
+    const diag = { categoria: s.tipo, modalita: searchMode, query: searchMode === 'NEARBY' ? `nearby:${s.tipo}` : `${s.query} ${nodo.nome}`,
+      centro: { lat: centro.lat, lon: centro.lon }, raggio_m: radiusMeters,
+      territorio_raggio_m: territoryRadiusMeters,
+      risultati_grezzi: 0, senza_coordinate: 0, chiusi: 0,
+      fuori_raggio: 0, fuori_territorio: 0, senza_place_id: 0, categoria_non_ammessa: 0,
+      ammessi: 0, duplicati_place_id_locali: 0, errore: null };
+    diagnostica_ricerche.push(diag);
     try {
-      const places = await searchGooglePlaces(`${s.query} ${nodo.nome}`, nodo, { apiKey, fetchImpl, radiusMeters });
+      chiamateEffettive++;
+      if (typeof onGoogleAttempt === 'function') onGoogleAttempt({ nodo_id: nodo.id, categoria: s.tipo, centro });
+      const places = searchMode === 'NEARBY'
+        ? await searchGoogleNearby(s.tipo, centro, { apiKey, fetchImpl, radiusMeters })
+        : await searchGooglePlaces(`${s.query} ${nodo.nome}`, centro, { apiKey, fetchImpl, radiusMeters });
+      chiamateRiuscite++;
+      diag.risultati_grezzi = places.length;
       for (const p of places) {
         const loc = { lat: Number(p.location?.latitude), lon: Number(p.location?.longitude) };
-        if (!p.location || !validCoords(loc) || p.businessStatus === 'CLOSED_PERMANENTLY') continue;
+        if (!p.location || !validCoords(loc)) { diag.senza_coordinate++; continue; }
+        if (p.businessStatus === 'CLOSED_PERMANENTLY') { diag.chiusi++; continue; }
         const distanza_m = Math.round(pixelDistanceMeters(nodo, loc));
-        if (distanza_m > radiusMeters || !p.id) continue;
+        // Il raggio Google e' un parametro di ricerca, NON un filtro di ammissione.
+        // Accettiamo solo punti entro il territorio configurato del nodo.
+        if (pixelDistanceMeters(territorio, loc) > territoryRadiusMeters) { diag.fuori_territorio++; continue; }
+        if (!p.id) { diag.senza_place_id++; continue; }
         const classification = classifyPixelPlace(p);
-        if (!classification) continue;
+        if (!classification) { diag.categoria_non_ammessa++; continue; }
+        diag.ammessi++;
         const old = found.get(p.id);
+        if (old) diag.duplicati_place_id_locali++;
         if (old && old.priorita >= classification.priorita) continue;
-        found.set(p.id, { place_id: p.id, nome: p.displayName?.text ?? '',
+        found.set(p.id, {
+          place_id: p.id, nome: p.displayName?.text ?? '',
           indirizzo: p.formattedAddress ?? '', lat: loc.lat, lon: loc.lon,
-          tipo: classification.tipo, priorita: classification.priorita, distanza_m });
+          tipo: classification.tipo, priorita: classification.priorita, distanza_m,
+          google_primary_type: p.primaryType ?? null,
+          google_types: Array.isArray(p.types) ? [...p.types] : [],
+          google_business_status: p.businessStatus ?? null,
+        });
       }
-    } catch (e) { errori.push({ categoria: s.tipo, errore: e.message }); }
+    } catch (e) { diag.errore = e.message; errori.push({ categoria: s.tipo, errore: e.message }); }
   }
   const ordinati = [...found.values()].sort((a, b) => b.priorita - a.priorita || a.distanza_m - b.distanza_m);
   const unici = [];
@@ -97,6 +170,8 @@ export async function discoverPixelStopCandidates(nodoId, {
     if (!unici.some(x => pixelDistanceMeters(x, p) < 30)) unici.push(p);
   }
   return { nodo, budget, candidati: includeAll ? unici : unici.slice(0, budget.residue),
-    candidati_totali: unici.length, errori, stato: errori.length ? 'parziale' : 'ok',
+    candidati_totali: unici.length, diagnostica_ricerche,
+    diagnostica_dedup_30m: { prima: ordinati.length, dopo: unici.length, rimossi: ordinati.length - unici.length },
+    chiamate_google: chiamateEffettive, chiamate_google_riuscite: chiamateRiuscite, centro_ricerca: centro, errori, stato: errori.length ? 'parziale' : 'ok',
     avvertenza: 'Dati Google transitori in memoria; fermate NON autorizzate, NON salvate.' };
 }

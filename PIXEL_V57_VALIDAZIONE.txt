@@ -1,0 +1,424 @@
+// services/pixel/pixel-stop-registration.service.js
+// Registrazione atomica di fermata e provenienza indipendente da Google Places.
+// NON passare direttamente risultati Google Places a questa funzione.
+import { pool } from '../../db/db.js';
+import { insertPixelStopCandidate } from './pixel-stop-budget.service.js';
+
+const SOURCES = new Set(['rilievo_operatore', 'fonte_pubblica_riutilizzabile']);
+
+export async function registerPixelStopCandidate({
+  nodo_territoriale_id, nome, indirizzo = null, lat, lon,
+  fonte, riferimento_fonte, autorizzazione_uso_dati = false,
+  conferma_punto_salita = false,
+}) {
+  if (!SOURCES.has(fonte)) {
+    throw new Error('Fonte non ammessa: vietato registrare direttamente dati Google Places');
+  }
+  if (autorizzazione_uso_dati !== true ||
+      typeof riferimento_fonte !== 'string' || !riferimento_fonte.trim()) {
+    throw new Error('Servono diritti di riutilizzo e riferimento della fonte');
+  }
+  if (conferma_punto_salita !== true) {
+    throw new Error('Punto di salita non ancora confermato');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await insertPixelStopCandidate({
+      nodo_territoriale_id, nome, indirizzo, lat, lon,
+    }, { client });
+
+    if (!result.inserted && result.reason !== 'duplicata_vicina') {
+      await client.query('COMMIT');
+      return { ...result, fonte_registrata: false };
+    }
+
+    const fermataId = result.inserted ? result.id : result.existing_id;
+    if (!result.inserted &&
+        String(result.existing_nodo_territoriale_id) !== String(nodo_territoriale_id)) {
+      // Non attribuire al nodo richiesto una fermata appartenente a un altro nodo.
+      await client.query('COMMIT');
+      return { ...result, fonte_registrata: false, reason: 'duplicata_altro_nodo' };
+    }
+
+    // I flag ricevuti sono prerequisiti dichiarati, NON un'attestazione
+    // automatica di verifica commerciale. L'esito rimane da_verificare.
+    const source = await client.query(
+      `INSERT INTO public.pixel_fermate_fonti
+       (fermata_id, fonte, riferimento_fonte, stato_verifica, dettagli_verifica)
+       VALUES ($1::bigint, $2, $3, 'da_verificare', $4::jsonb)
+       ON CONFLICT (fermata_id, fonte, riferimento_fonte)
+       DO NOTHING
+       RETURNING id`,
+      [fermataId, fonte, riferimento_fonte.trim(), JSON.stringify({
+        autorizzazione_uso_dati_dichiarata: true,
+        conferma_punto_salita_dichiarata: true,
+      })]
+    );
+    await client.query('COMMIT');
+    return {
+      ...result,
+      fermata_id: fermataId,
+      fonte_registrata: source.rowCount > 0,
+      stato_verifica: 'da_verificare',
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+===== VALIDATION PIPELINE =====
+// services/pixel/pixel-stop-validation-pipeline.service.js
+// PIXEL V4.2 - pipeline diagnostica READ ONLY, con riserva candidati in output.
+// Google Places discovery -> selezione comunale -> validazione V2 -> Google road access.
+// NON registra, non ammette, non attiva e non rende prenotabili fermate.
+// Non usa OSM/HYBRID. Il routing NON certifica sosta, sicurezza o carico/scarico.
+
+import { pool } from '../../db/db.js';
+import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.service.js';
+import { validatePixelStopCandidates } from './pixel-stop-validation.service.js';
+import { checkPixelStopRoadAccess } from './pixel-stop-road-access.service.js';
+
+function codiceComune(value) {
+  if (!/^\d{6}$/.test(String(value))) throw new Error('PIXEL V4.2: codice ISTAT comunale non valido');
+  return String(value);
+}
+
+function limiteRichieste(value) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 100) {
+    throw new Error('PIXEL V4.2: maxRoadChecks deve essere un intero fra 0 e 100');
+  }
+  return value;
+}
+
+/**
+ * Esegue la pipeline senza scritture. Opzioni:
+ * - database: pool/client PostgreSQL (default pool)
+ * - roadAccess: funzione iniettabile (default checkPixelStopRoadAccess)
+ * - maxRoadChecks: tetto alle chiamate di routing (default 20, 0 = nessuna)
+ * - roadOptions: opzioni per il servizio Google Road Access
+ * - radiusMeters: raggio della discovery e della validazione (default 3000)
+ *
+ * ATTENZIONE: la discovery Google e il routing possono avere costi API.
+ */
+export async function runPixelStopValidationPipeline(codiceIstat, options = {}) {
+  const comune = codiceComune(codiceIstat);
+  const database = options.database ?? pool;
+  const roadAccess = options.roadAccess ?? checkPixelStopRoadAccess;
+  const maxRoadChecks = limiteRichieste(options.maxRoadChecks ?? 20);
+  const radiusMeters = options.radiusMeters ?? 3000;
+  const distanzaMinimaMetri = options.distanzaMinimaMetri ?? 500;
+  if (typeof roadAccess !== 'function') throw new Error('PIXEL V4.2: roadAccess non valido');
+  if (!Number.isFinite(radiusMeters) || radiusMeters <= 0 || radiusMeters > 50000) {
+    throw new Error('PIXEL V4.2: radiusMeters non valido');
+  }
+
+  const { rows } = await database.query(`
+    SELECT id,
+           ST_Y(posizione::geometry) AS lat,
+           ST_X(posizione::geometry) AS lon
+      FROM public.nodi_territoriali
+     WHERE codice_istat_comune = $1 AND attivo = TRUE
+     ORDER BY id
+  `, [comune]);
+  const centri = rows.map(r => ({ id: String(r.id), lat: Number(r.lat), lon: Number(r.lon) }));
+  if (!centri.length) throw new Error(`PIXEL V4.2: nessun nodo attivo per il comune ${comune}`);
+  if (centri.some(c => !Number.isFinite(c.lat) || !Number.isFinite(c.lon))) {
+    throw new Error('PIXEL V4.2: coordinate dei nodi territoriali non valide');
+  }
+
+  // La selezione comunale gestisce gia' budget e deduplicazione rispetto al catalogo.
+  // Source GOOGLE esplicito: il ramo legacy HYBRID non viene utilizzato.
+  const discovery = await discoverPixelComuneCandidates(comune, {
+    source: 'GOOGLE',
+    radiusMeters,
+    ...(options.discoveryOptions ?? {}),
+    distanzaMinimaMetri,
+    database,
+    source: 'GOOGLE', // forza GOOGLE anche se discoveryOptions contiene source
+  });
+
+  const valutazione = validatePixelStopCandidates(discovery.selezionati ?? [], {
+    centri,
+    raggioMetri: radiusMeters,
+  });
+
+  let chiamateRoad = 0;
+  const risultati = [];
+  for (const candidato of valutazione.risultati) {
+    let accesso = {
+      stato: 'non_valutato',
+      raggiungibile: null,
+      motivo: candidato.stato === 'scartata' ? 'candidato_scartato' : 'limite_chiamate',
+      distanza_m: null,
+      durata_s: null,
+    };
+    if (candidato.stato !== 'scartata' && candidato.nodo_id !== null && chiamateRoad < maxRoadChecks) {
+      const centro = centri.find(n => n.id === String(candidato.nodo_id));
+      if (centro) {
+        chiamateRoad += 1;
+        try {
+          accesso = await roadAccess(centro, candidato, options.roadOptions ?? {});
+          if (!accesso || !['raggiungibile', 'non_raggiungibile', 'non_valutabile'].includes(accesso.stato)) {
+            accesso = { stato: 'non_valutabile', raggiungibile: null, motivo: 'risposta_road_non_valida', distanza_m: null, durata_s: null };
+          }
+        } catch (error) {
+          accesso = { stato: 'non_valutabile', raggiungibile: null, motivo: 'errore_road_service', distanza_m: null, durata_s: null };
+        }
+      } else {
+        accesso.motivo = 'centro_non_trovato';
+      }
+    }
+
+    // Qualificazione esclusivamente tecnica. Il routing non certifica l'uso NCC.
+    const statoPipeline = candidato.stato === 'scartata' ? 'scartata'
+      : accesso.stato === 'non_raggiungibile' ? 'scartata_per_routing'
+      : accesso.stato === 'raggiungibile' ? 'qualificata_tecnicamente'
+      : 'da_approfondire';
+
+    risultati.push({
+      ...candidato,
+      accesso_stradale: accesso,
+      stato_pipeline: statoPipeline,
+      verifica_ncc: 'non_eseguita',
+      prenotabile: false,
+      idoneita_legale_certificata: false,
+    });
+  }
+
+  return {
+    comune,
+    modalita: 'sola_lettura',
+    fonte_discovery: 'GOOGLE',
+    stato_discovery: discovery.stato,
+    budget: { limite: discovery.limite, censite: discovery.censite, residue: discovery.residue },
+    centri,
+    candidati_selezionati: risultati.length,
+    candidati_distinti: discovery.candidati_distinti ?? risultati.length,
+    distanza_minima_m: discovery.distanza_minima_m ?? distanzaMinimaMetri,
+    // Riserva non persiste nel DB: il chiamante deve salvarla se vuole conservarla tra esecuzioni.
+    riserva: discovery.riserva ?? [],
+    totale_riserva: discovery.totale_riserva ?? 0,
+    esclusi_vicinanza: discovery.esclusi_vicinanza ?? [],
+    riconciliazioni_non_operative: discovery.riconciliazioni_non_operative ?? [],
+    validazione: {
+      validate_algoritmicamente: valutazione.validate_algoritmicamente,
+      da_approfondire: valutazione.da_approfondire,
+      scartate: valutazione.scartate,
+    },
+    routing: {
+      chiamate: chiamateRoad,
+      raggiungibili: risultati.filter(r => r.accesso_stradale.stato === 'raggiungibile').length,
+      non_raggiungibili: risultati.filter(r => r.accesso_stradale.stato === 'non_raggiungibile').length,
+      non_valutabili: risultati.filter(r => r.accesso_stradale.stato === 'non_valutabile').length,
+      non_valutati: risultati.filter(r => r.accesso_stradale.stato === 'non_valutato').length,
+    },
+    qualificati_tecnicamente: risultati.filter(r => r.stato_pipeline === 'qualificata_tecnicamente').length,
+    qualificati_geograficamente: risultati.filter(r => r.stato_pipeline === 'qualificata_tecnicamente').length,
+    errori_discovery: discovery.errori ?? [],
+    risultati,
+    avvertenza: 'Verifica NCC non eseguita. La riserva e restituita in memoria, non salvata nel database. Nessuna fermata e stata attivata.',
+  };
+}
+
+===== STOP VERIFIER =====
+// services/pixel/pixel-stop-verifier.service.js
+// PIXEL V1: verifica automatica, fail-closed, delle evidenze indipendenti.
+// Non usa Google Places come attestazione di idoneita' e non modifica il DB.
+import { pool } from '../../db/db.js';
+
+const FONTI_AMMESSE = new Set(['rilievo_operatore', 'fonte_pubblica_riutilizzabile']);
+
+function positiveId(value, field) {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`PIXEL: ${field} non valido`);
+  return id;
+}
+
+function validEvidence(row) {
+  if (!FONTI_AMMESSE.has(row.fonte)) return false;
+  if (row.stato_verifica !== 'verificata' || !row.verificata_il) return false;
+  if (typeof row.riferimento_fonte !== 'string' || !row.riferimento_fonte.trim()) return false;
+  const details = row.dettagli_verifica;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return false;
+  // Questi attributi sono attestazioni registrate, NON inferenze da Google.
+  // Il writer che le registra deve essere autenticato e autorizzato e
+  // deve verificare realmente il documento/fonte prima di marcarle vere.
+  if (details.autorizzazione_uso_dati !== true) return false;
+  if (details.punto_salita_confermato !== true) return false;
+  if (typeof details.verificatore !== 'string' || !details.verificatore.trim()) return false;
+  if (typeof details.riferimento_evidenza !== 'string' || !details.riferimento_evidenza.trim()) return false;
+  return true;
+}
+
+export async function verifyPixelStop(fermataId, { database = pool, lockEvidence = false } = {}) {
+  const id = positiveId(fermataId, 'fermata_id');
+  const { rows: stops } = await database.query(`
+    SELECT f.id, f.nodo_territoriale_id, n.attivo AS nodo_attivo
+      FROM public.pixel_fermate f
+      JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id
+     WHERE f.id = $1::bigint
+  `, [id]);
+  if (!stops.length) return { fermata_id: id, stato: 'inesistente', ammissibile: false, motivi: ['fermata_inesistente'] };
+  if (!stops[0].nodo_attivo) return { fermata_id: id, stato: 'non_ammissibile', ammissibile: false, motivi: ['nodo_inattivo'] };
+
+  const { rows } = await database.query(`
+    SELECT fonte, riferimento_fonte, stato_verifica, dettagli_verifica, verificata_il
+      FROM public.pixel_fermate_fonti
+     WHERE fermata_id = $1::bigint
+     ORDER BY created_at DESC, id DESC
+     ${lockEvidence ? 'FOR SHARE' : ''}
+  `, [id]);
+
+  // Un esito negativo esplicito blocca l'ammissione, anche se esistono
+  // altre attestazioni positive. Le controversie vanno risolte a monte.
+  if (rows.some(r => r.stato_verifica === 'non_ammessa')) {
+    return { fermata_id: id, stato: 'non_ammissibile', ammissibile: false, motivi: ['verifica_negativa'], evidenze: rows.length };
+  }
+  const valide = rows.filter(validEvidence);
+  if (!valide.length) {
+    return { fermata_id: id, stato: 'da_verificare', ammissibile: false, motivi: [rows.length ? 'evidenze_insufficienti' : 'nessuna_evidenza'], evidenze: rows.length };
+  }
+  return {
+    fermata_id: id,
+    stato: 'ammissibile',
+    ammissibile: true,
+    evidenze: rows.length,
+    fonti_valide: valide.map(r => ({ fonte: r.fonte, riferimento_fonte: r.riferimento_fonte })),
+  };
+}
+
+export async function verifyPixelNodeStops(nodoId, { database = pool } = {}) {
+  const id = positiveId(nodoId, 'nodo_id');
+  const { rows } = await database.query(
+    'SELECT id FROM public.pixel_fermate WHERE nodo_territoriale_id = $1::bigint ORDER BY id', [id]
+  );
+  const risultati = [];
+  for (const row of rows) risultati.push(await verifyPixelStop(row.id, { database }));
+  return {
+    nodo_id: id,
+    censite: risultati.length,
+    ammissibili: risultati.filter(r => r.ammissibile).length,
+    risultati,
+  };
+}
+
+===== AUTO ADMISSION =====
+// services/pixel/pixel-stop-auto-admission.service.js
+// PIXEL: riconciliazione automatica delle fermate con verifica indipendente.
+// Google Places e' SOLO discovery: non persiste risultati e non produce attestazioni.
+import { pool } from '../../db/db.js';
+import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.service.js';
+import { admitPixelStop } from './pixel-stop-admission.service.js';
+import { verifyPixelStop } from './pixel-stop-verifier.service.js';
+
+function positiveId(value) {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new Error('PIXEL: nodo territoriale non valido');
+  }
+  return id;
+}
+
+/**
+ * Attiva le sole fermate del nodo con attestazione indipendente GIA' registrata.
+ * Non crea fermate da Google Places e non scrive mai stato_verifica='verificata'.
+ * Opzioni: discoverGoogle=true per mantenere la diagnostica candidati;
+ *          dryRun=true per simulare senza attivare alcuna fermata.
+ */
+export async function acquirePixelStopsForNode(nodoId, {
+  database = pool,
+  discoverGoogle = true,
+  dryRun = false,
+} = {}) {
+  const id = positiveId(nodoId);
+  const { rows: nodes } = await database.query(`
+    SELECT id, codice_istat_comune
+    FROM public.nodi_territoriali
+    WHERE id = $1::bigint AND attivo = TRUE
+  `, [id]);
+  const node = nodes[0];
+  if (!node?.codice_istat_comune) {
+    return { stato: 'nodo_non_disponibile', nodo_id: id, inserite: 0, ammesse: 0 };
+  }
+
+  // Verifica completa, inclusi esiti negativi e dettagli dell'attestazione.
+  // La decisione viene ripetuta in transazione da Admission.
+  const { rows: pending } = await database.query(`
+    SELECT id FROM public.pixel_fermate
+    WHERE nodo_territoriale_id = $1::bigint
+      AND (attiva = FALSE OR verificata = FALSE)
+    ORDER BY id
+  `, [id]);
+  const eligible = [];
+  const esiti_verifica = [];
+  for (const stop of pending) {
+    const result = await verifyPixelStop(stop.id, { database });
+    esiti_verifica.push({ fermata_id: String(stop.id), stato: result.stato,
+      motivi: result.motivi ?? [] });
+    if (result.ammissibile) eligible.push(stop);
+  }
+
+  let ammesse = 0;
+  const errori_ammissione = [];
+  for (const stop of eligible) {
+    if (dryRun) continue;
+    try {
+      await admitPixelStop({ fermata_id: stop.id }, { database });
+      ammesse++;
+    } catch (error) {
+      errori_ammissione.push({ fermata_id: String(stop.id), errore: error.message });
+    }
+  }
+
+  const { rows: counts } = await database.query(`
+    SELECT COUNT(*)::integer AS censite,
+           COUNT(*) FILTER (WHERE attiva = TRUE AND verificata = TRUE)::integer AS commerciali
+    FROM public.pixel_fermate
+    WHERE nodo_territoriale_id = $1::bigint
+  `, [id]);
+
+  let candidati_selezionati = null;
+  let stato_discovery = 'non_eseguita';
+  let errori_discovery = [];
+  if (discoverGoogle) {
+    try {
+      const plan = await discoverPixelComuneCandidates(
+        String(node.codice_istat_comune), { source: 'GOOGLE', database }
+      );
+      stato_discovery = plan.stato ?? 'sconosciuto';
+      candidati_selezionati = (plan.selezionati ?? []).filter(c =>
+        (c.nodi_raggiungibili ?? []).some(n => String(n) === String(id))
+      ).length;
+      errori_discovery = plan.errori ?? [];
+    } catch (error) {
+      stato_discovery = 'errore';
+      errori_discovery = [error.message];
+    }
+  }
+
+  const commerciali = Number(counts[0]?.commerciali ?? 0);
+  return {
+    stato: commerciali > 0 ? 'fermate_commerciali_presenti' :
+      eligible.length > 0 && dryRun ? 'ammissioni_simulate' : 'nessuna_fermata_ammissibile',
+    nodo_id: id,
+    comune: String(node.codice_istat_comune),
+    censite: Number(counts[0]?.censite ?? 0),
+    commerciali,
+    verifiche_ammissibili: eligible.length,
+    ammesse,
+    inserite: 0,
+    dry_run: dryRun,
+    pixel_fermate_disponibili: commerciali > 0,
+    candidati_google_selezionati: candidati_selezionati,
+    stato_discovery,
+    errori_discovery,
+    errori_ammissione,
+    esiti_verifica,
+    nota: 'Google Places non genera registrazioni o verifiche commerciali.'
+  };
+}

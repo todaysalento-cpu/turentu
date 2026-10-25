@@ -48,6 +48,7 @@
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.7.0",
     "redis": "^5.12.1",
+    "shapefile": "^0.6.6",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "streamifier": "^0.1.1",

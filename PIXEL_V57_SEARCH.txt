@@ -1,0 +1,125 @@
+
+import * as turf from '@turf/turf';
+import ngeohash from 'ngeohash';
+import { redisClient } from '../../redis.js';
+import { pool } from '../../db/db.js';
+import { loadCachesUltra, CacheStore } from './search.cache.js';
+import { filterDisponibilita } from './engine/availability.engine.js';
+import { formatResults } from './formatter/search.formatter.js';
+import { getDurataDistanza } from '../../utils/maps.util.js';
+import { calcolaPrezzo } from '../../utils/pricing.util.js';
+import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
+import { cercaPopbusAttivate } from './popbus-active-search.service.js';
+import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
+import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
+
+const GEOHASH_PRECISION_TRATTA = 5;
+const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
+const MAX_DISTANZA_NODO_TERRITORIALE_METRI = 3000;
+
+// PIXEL e POPBUS V2 condividono i nodi territoriali.
+async function getNearestTerritorialNode(lat, lon) {
+    const { rows } = await pool.query(`
+        SELECT id, ST_Distance(
+            posizione,
+            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+        ) AS distanza_metri
+        FROM public.nodi_territoriali
+        WHERE attivo = TRUE AND posizione IS NOT NULL
+          AND ST_DWithin(
+              posizione,
+              ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+              $3
+          )
+        ORDER BY distanza_metri ASC, id ASC
+        LIMIT 1
+    `, [lon, lat, MAX_DISTANZA_NODO_TERRITORIALE_METRI]);
+    return rows[0] ?? null;
+}
+
+// Disponibilita' PIXEL commerciale e discovery informativa per il collaudo.
+// I candidati Google restano transitori: non sono fermate persistenti prenotabili.
+async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
+    const [origine, destinazione] = await Promise.all([
+        getNearestTerritorialNode(lat, lon),
+        getNearestTerritorialNode(destLat, destLon)
+    ]);
+
+    const base = {
+        origine_nodo_territoriale_id: origine ? Number(origine.id) : null,
+        destinazione_nodo_territoriale_id: destinazione ? Number(destinazione.id) : null,
+        pixel_fermate_disponibili: false,
+        pixel_stato: 'nodi_non_disponibili'
+    };
+
+    if (!origine || !destinazione) return base;
+    if (String(origine.id) === String(destinazione.id)) {
+        return { ...base, pixel_stato: 'nodi_coincidenti' };
+    }
+
+    const collaudo = pixelCollaudoEnabled();
+    // In collaudo acquisizione on-demand prima del preventivo, in modo che
+    // la riquotazione nel booking veda gli stessi ID persistenti.
+    if (collaudo) {
+        for (const nodeId of [...new Set([String(origine.id), String(destinazione.id)])]) {
+            try {
+                const result = await ensurePixelStopsForNode(nodeId);
+                console.log('[PIXEL COLLAUDO] Nodo', nodeId, result.stato);
+            } catch (error) {
+                console.warn('[PIXEL COLLAUDO] Acquisizione fallita:', nodeId, error.message);
+            }
+        }
+    }
+    const { rows } = await pool.query(`
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.pixel_fermate o
+            JOIN public.pixel_fermate d
+              ON d.nodo_territoriale_id = $2::BIGINT
+            WHERE o.nodo_territoriale_id = $1::BIGINT
+              AND ($3::boolean OR (o.attiva = TRUE AND o.verificata = TRUE
+                                  AND d.attiva = TRUE AND d.verificata = TRUE))
+        ) AS disponibili
+    `, [origine.id, destinazione.id, collaudo]);
+    return {
+        ...base,
+        pixel_fermate_disponibili: rows[0]?.disponibili === true,
+        pixel_stato: rows[0]?.disponibili === true ? 'disponibile' : 'fermate_non_disponibili'
+    };
+}
+
+
+function determinaClasse(indice) {
+    if (indice <= 0.3) return 'SAVER';
+    if (indice <= 1.5) return 'STANDARD';
+    return 'EXPRESS';
+}
+
+async function caricaAnteprimaFormazione({
+    lat,
+    lon,
+    destLat,
+    destLon,
+    start_datetime,
+    postiRichiesti,
+    slot
+}) {
+    const [origine, destinazione] = await Promise.all([
+        getNearestTerritorialNode(lat, lon),
+        getNearestTerritorialNode(destLat, destLon)
+    ]);
+
+    if (
+        !origine ||
+        !destinazione ||
+        Number(origine.id) === Number(destinazione.id)
+    ) {
+        console.log(
+            '[POPBUS PREVIEW] Nodi non disponibili o non distinti; anteprima omessa'
+        );
+        return null;
+    }
+
+    const prezzi = {};
+
+    for (const classe of CLASSI_ANTEPRIMA_POPBUS) {

@@ -70,6 +70,9 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
             }
         }
     }
+    // Modalita' provvisoria: la certificazione e la tipologia veicolo
+    // non sono prerequisiti di disponibilita'. Il collaudo non bypassa
+    // mai i flag operativi; escludiamo le fermate sintetiche e respinte.
     const { rows } = await pool.query(`
         SELECT EXISTS (
             SELECT 1
@@ -77,16 +80,26 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
             JOIN public.pixel_fermate d
               ON d.nodo_territoriale_id = $2::BIGINT
             WHERE o.nodo_territoriale_id = $1::BIGINT
-              AND ($3::boolean OR (o.attiva = TRUE AND o.verificata = TRUE
-                                  AND d.attiva = TRUE AND d.verificata = TRUE))
-              AND (
-                  o.tipi_veicolo_ammessi && d.tipi_veicolo_ammessi
-                  OR ($3::boolean AND
-                      (COALESCE(cardinality(o.tipi_veicolo_ammessi),0)=0
-                       OR COALESCE(cardinality(d.tipi_veicolo_ammessi),0)=0))
+              AND o.id <> d.id
+              AND o.attiva = TRUE
+              AND d.attiva = TRUE
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.pixel_fermate_test_metadata t
+                  WHERE t.fermata_id IN (o.id, d.id)
+              )
+              AND upper(ltrim(o.nome)) NOT LIKE 'TEST PIXEL%'
+              AND upper(ltrim(o.nome)) NOT LIKE '[TEST PIXEL]%'
+              AND upper(ltrim(d.nome)) NOT LIKE 'TEST PIXEL%'
+              AND upper(ltrim(d.nome)) NOT LIKE '[TEST PIXEL]%'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.pixel_fermate_fonti ff
+                  WHERE ff.fermata_id IN (o.id, d.id)
+                    AND ff.stato_verifica = 'non_ammessa'
               )
         ) AS disponibili
-    `, [origine.id, destinazione.id, collaudo]);
+    `, [origine.id, destinazione.id]);
     return {
         ...base,
         pixel_fermate_disponibili: rows[0]?.disponibili === true,

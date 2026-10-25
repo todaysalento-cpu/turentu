@@ -8,6 +8,7 @@ import {
 
 const fail = (s) => { throw new Error(`P0-C8 ADAPTER: ${s}`); };
 const positiveId = (v) => Number.isSafeInteger(Number(v)) && Number(v) > 0;
+const positiveInteger = (v) => v != null && v !== '' && Number.isSafeInteger(Number(v)) && Number(v) >= 0;
 const asMs = (v) => {
   const n = typeof v === 'number' ? v : new Date(v).getTime();
   return Number.isFinite(n) ? n : NaN;
@@ -18,7 +19,9 @@ const asMs = (v) => {
  * @param {object} options.plan Output originale di componiCicloInCorsa().
  * @param {Array<object>} options.richiesteBloccate Righe reali DB, gia' bloccate dal chiamante.
  * @param {Array<object>} options.opportunitaMissioni Metadati PIXEL, uno per missione, stesso ordine:
- *   {pixelOpportunitaId, corridoioPixelId?}. Non crea direttrici legacy.
+ *   V1: {pixelOpportunitaId, corridoioPixelId?}.
+ *   V2: {pixelOpportunitaId, corridoioPixelId, pixelDirettriceId,
+ *        pixelVersione, nodiTerritoriali}. Non crea direttrici legacy.
  * @param {number} options.veicoloId
  * @param {number} options.postiTotali Capienza reale riletta dal DB.
  * @param {function} options.fingerprintRichiesta Funzione originale di request-fingerprint.js.
@@ -30,6 +33,14 @@ export function preparaCicloPixelPerPersistenza({
   plan, richiesteBloccate, opportunitaMissioni, veicoloId, postiTotali,
   fingerprintRichiesta, economia
 }) {
+  // Un contratto parzialmente marcato non deve ricadere silenziosamente in V1.
+  const haSchema = plan?.schemaVersion != null;
+  const haTipo = plan?.tipoItinerario != null;
+  const v2 = Number(plan?.schemaVersion) === 2 &&
+    plan?.tipoItinerario === 'FERMATE_FISICHE';
+  if ((haSchema || haTipo) && !v2) {
+    fail('contratto fisico V2 incompleto o non riconosciuto');
+  }
   validaPianoMultiMissione(plan, { veicoloId, postiTotali });
   if (!Array.isArray(richiesteBloccate) ||
       richiesteBloccate.length !== plan.evaluation.requests.length) {
@@ -75,6 +86,24 @@ export function preparaCicloPixelPerPersistenza({
   const missioniPersistibili = plan.missioni.map((m, i) => {
     const pix = opportunitaMissioni[i];
     if (!positiveId(pix?.pixelOpportunitaId)) fail(`opportunita PIXEL missione ${i + 1} assente`);
+    if (v2) {
+      if (!Array.isArray(pix.nodiTerritoriali) || pix.nodiTerritoriali.length < 2 ||
+          !pix.nodiTerritoriali.every(positiveId)) {
+        fail(`missione ${i + 1}: nodiTerritoriali mancanti o invalidi`);
+      }
+      if (!positiveId(pix.pixelDirettriceId)) {
+        fail(`missione ${i + 1}: pixelDirettriceId mancante o invalido`);
+      }
+      if (!positiveInteger(pix.pixelVersione)) {
+        fail(`missione ${i + 1}: pixelVersione mancante o invalida`);
+      }
+      if (typeof pix.corridoioPixelId !== 'string' || !pix.corridoioPixelId.trim()) {
+        fail(`missione ${i + 1}: corridoioPixelId/engine ID mancante`);
+      }
+      if (m.corridoioPixelId != null && m.corridoioPixelId !== pix.corridoioPixelId) {
+        fail(`missione ${i + 1}: engine ID discordante`);
+      }
+    }
     const s = Number(m.startIndex), e = Number(m.endIndex);
     const requests = plan.evaluation.requests
       .filter(r => r.start >= s && r.end <= e)
@@ -87,6 +116,13 @@ export function preparaCicloPixelPerPersistenza({
     return {
       pixelOpportunitaId: Number(pix.pixelOpportunitaId),
       ...(pix.corridoioPixelId == null ? {} : { corridoioPixelId: pix.corridoioPixelId }),
+      ...(v2 ? {
+        schemaVersion: 2,
+        tipoItinerario: 'FERMATE_FISICHE',
+        pixelDirettriceId: Number(pix.pixelDirettriceId),
+        pixelVersione: Number(pix.pixelVersione),
+        nodiTerritoriali: pix.nodiTerritoriali.map(Number)
+      } : {}),
       nodes: plan.nodes.slice(s, e + 1),
       legs: plan.legs.slice(s, e),
       departure: Number(m.partenza),

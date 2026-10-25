@@ -11,6 +11,24 @@ function istante(v, nome) {
   if (!Number.isFinite(d.getTime())) throw new Error(`${nome} non valido`);
   return d;
 }
+const isV2 = (x) => x?.schemaVersion === 2 && x?.tipoItinerario === 'FERMATE_FISICHE';
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function nodiValidi(a, nome) {
+  if (!Array.isArray(a) || a.length < 2) throw new Error(`${nome} non validi`);
+  return a.map(n => interoPositivo(n, nome));
+}
+function validaContrattoV2(m, piano, i) {
+  if (!isV2(m) || !isV2(piano)) throw new Error(`Missione ${i + 1}: contratto V2 incompleto`);
+  const nodiTerritoriali = nodiValidi(m.nodiTerritoriali, 'nodiTerritoriali');
+  interoPositivo(m.pixelOpportunitaId, 'pixelOpportunitaId');
+  interoPositivo(m.pixelDirettriceId, 'pixelDirettriceId');
+  interoPositivo(m.pixelVersione, 'pixelVersione');
+  if (typeof m.corridoioPixelId !== 'string' || !m.corridoioPixelId.trim())
+    throw new Error(`Missione ${i + 1}: engine ID PIXEL mancante`);
+  if (m.direttriceId != null) throw new Error('Missione PIXEL con direttrice virtuale legacy');
+  return nodiTerritoriali;
+}
+
 // pianoGlobale e' opzionale per non alterare le attivazioni mono-missione legacy.
 // Quando fornito, deve provenire dall'assembler e viene validato prima di ogni INSERT.
 function validaMappingGlobale(missioni, piano) {
@@ -40,6 +58,8 @@ function validaMappingGlobale(missioni, piano) {
       if (Number(piano.nodes[base + j]) !== Number(m.nodes[j]))
         throw new Error(`Missione ${i + 1}: nodi globali discordanti`);
     }
+    if (isV2(piano) && !same(m.legs, piano.legs.slice(base, endIndex)))
+      throw new Error(`Missione ${i + 1}: tratte fisiche globali discordanti`);
     for (const r of m.requests) {
       const id = interoPositivo(r.id, 'richiesta');
       if (expected.has(id)) throw new Error('Richiesta duplicata');
@@ -99,6 +119,11 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
   // Prevalidazione COMPLETA: impedisce scritture parziali per errori strutturali.
   const globali = pianoGlobale == null ? null : validaMappingGlobale(missioni, pianoGlobale);
   const tutteRichieste = new Set();
+  const opportunitaViste = new Set();
+  const v2Globale = isV2(pianoGlobale);
+  if (pianoGlobale && !v2Globale &&
+      (pianoGlobale.schemaVersion === 2 || pianoGlobale.tipoItinerario === 'FERMATE_FISICHE'))
+    throw new Error('Contratto globale V2 incompleto');
   const ids = [];
   const preparate = [];
   let ultimaFine = -Infinity;
@@ -109,7 +134,11 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
         !Array.isArray(m.requests) || m.requests.length === 0) {
       throw new Error(`Missione ${i + 1} non valida`);
     }
-    const nodes = m.nodes.map(n => interoPositivo(n, 'nodo territoriale'));
+    if (v2Globale !== isV2(m) || (!v2Globale &&
+        (m.schemaVersion === 2 || m.tipoItinerario === 'FERMATE_FISICHE')))
+      throw new Error(`Missione ${i + 1}: contratto V1/V2 discordante`);
+    const nodes = m.nodes.map(n => interoPositivo(n, v2Globale ? 'fermata fisica' : 'nodo territoriale'));
+    const nodiTerritoriali = v2Globale ? validaContrattoV2(m, pianoGlobale, i) : nodes;
     const partenza = istante(m.departure, 'partenza');
     const arrivo = istante(m.arrival, 'arrivo');
     if (arrivo <= partenza || partenza.getTime() < ultimaFine) {
@@ -129,17 +158,21 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
     }
     // Il percorso PIXEL non puo' usare contemporaneamente una direttrice legacy.
     const pixel = m.pixelOpportunitaId == null ? null :
-      await verificaOpportunitaPixel(client, m, richieste, nodes);
+      await verificaOpportunitaPixel(client, m, richieste, nodiTerritoriali);
     if (pixel && m.direttriceId != null)
       throw new Error('Missione PIXEL con direttrice virtuale legacy');
     if (!pixel && m.corridoioPixelId != null)
       throw new Error('Riferimento corridoio PIXEL senza pixelOpportunitaId');
-    preparate.push({ m, nodes, partenza, arrivo, richieste, pixel });
+    if (pixel) {
+      if (opportunitaViste.has(pixel.id)) throw new Error('Opportunita PIXEL duplicata');
+      opportunitaViste.add(pixel.id);
+    }
+    preparate.push({ m, nodes, nodiTerritoriali, partenza, arrivo, richieste, pixel });
   }
   // Solo dopo che TUTTE le missioni hanno superato il preflight si scrive.
   // Il chiamante deve mantenere una transazione aperta e fare ROLLBACK su errore.
   for (let i = 0; i < preparate.length; i++) {
-    const { m, nodes, partenza, arrivo, richieste, pixel } = preparate[i];
+    const { m, nodes, nodiTerritoriali, partenza, arrivo, richieste, pixel } = preparate[i];
     const { rows } = await client.query(`
       INSERT INTO public.popbus_attivazione_missioni
         (attivazione_id, ordine, direttrice_id, corridoio_pixel_id,
@@ -147,8 +180,14 @@ export async function registraMissioniAttivazione(client, { attivazioneId, missi
       VALUES ($1,$2,$3,$4,$5::bigint[],$6,$7,$8::jsonb,$9)
       RETURNING id
     `, [aid, i + 1, m.direttriceId ?? null, pixel?.engineId ?? null,
-      nodes, partenza, arrivo, JSON.stringify({ nodes, legs: m.legs, requests: richieste,
-        ...(pixel ? { pixel: { opportunitaId: pixel.id, direttriceId: pixel.direttriceId, versione: pixel.versione } } : {}) }),
+      nodiTerritoriali, partenza, arrivo, JSON.stringify({
+        ...(v2Globale ? { schemaVersion: 2, tipoItinerario: 'FERMATE_FISICHE' } : {}),
+        nodes, legs: m.legs, requests: richieste,
+        ...(pixel ? { pixel: {
+          opportunitaId: pixel.id, direttriceId: pixel.direttriceId, versione: pixel.versione,
+          ...(v2Globale ? { engineId: pixel.engineId, nodiTerritoriali } : {})
+        } } : {})
+      }),
       pixel?.id ?? null]);
     const missioneId = rows[0]?.id;
     if (!missioneId) throw new Error('Inserimento missione senza ID');

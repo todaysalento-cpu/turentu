@@ -1,4 +1,7 @@
-// TURENTU P0-C6 — preflight PIXEL multimissione, solo letture e lock.
+// TURENTU - PATCH MIRATA P0-C6 (V1 invariato, V2 esplicito).
+// Sostituire SOLO services/popbus/v2/popbus-pixel-multi-acceptance-preflight.js
+// Testare prima con il mock RED e test negativi. Nessuna query di scrittura.
+// TURENTU P0-C6 ÔÇö preflight PIXEL multimissione, solo letture e lock.
 // Richiede transazione del chiamante. Nessun accesso Stripe, nessun INSERT.
 const fail = (message) => { throw new Error(`PIXEL_MULTI_ACCEPTANCE: ${message}`); };
 const positive = (value, name) => {
@@ -17,6 +20,10 @@ const sameArray = (a, b) => Array.isArray(a) && Array.isArray(b) &&
 export async function verificaAccettazionePixelMulti(client, attivazione, plan) {
   if (!client || typeof client.query !== 'function') fail('client PostgreSQL mancante');
   const aid = positive(attivazione?.id, 'attivazione');
+  // Il ramo V2 e' esplicito: mai inferirlo da ID o forme delle sequenze.
+  const physical = plan?.schemaVersion === 2 && plan?.tipoItinerario === 'FERMATE_FISICHE';
+  if ((plan?.schemaVersion === 2 || plan?.tipoItinerario === 'FERMATE_FISICHE') && !physical)
+    fail('contratto V2 incompleto');
   if (attivazione.direttrice_id != null) fail('direttrice legacy nell attivazione');
   if (!Array.isArray(plan?.missioni) || plan.missioni.length < 2 || plan.missioni.length > 3 ||
       !Array.isArray(plan.nodes) || !Array.isArray(plan.legs) ||
@@ -53,13 +60,22 @@ export async function verificaAccettazionePixelMulti(client, attivazione, plan) 
     const start = nonnegative(meta?.startIndex, 'startIndex');
     const end = nonnegative(meta?.endIndex, 'endIndex');
     const nodes = m.nodi_territoriali;
-    if (end < start || end >= plan.nodes.length ||
-        !sameArray(nodes, plan.nodes.slice(start, end + 1)))
+    if (end < start || end >= plan.nodes.length) fail(`missione ${i + 1}: indici missione invalidi`);
+    const physicalNodes = plan.nodes.slice(start, end + 1);
+    if (!physical && !sameArray(nodes, physicalNodes))
       fail(`missione ${i + 1}: nodi globali discordanti`);
     const payload = typeof m.piano === 'string' ? JSON.parse(m.piano) : m.piano;
-    if (!payload || !sameArray(payload.nodes, nodes) ||
-        !Array.isArray(payload.legs) || payload.legs.length !== nodes.length - 1 ||
-        !Array.isArray(payload.requests)) fail(`missione ${i + 1}: payload non valido`);
+    if (!payload || !Array.isArray(payload.legs) || !Array.isArray(payload.requests))
+      fail(`missione ${i + 1}: payload non valido`);
+    if (physical) {
+      if (payload.schemaVersion !== 2 || payload.tipoItinerario !== 'FERMATE_FISICHE' ||
+          !sameArray(payload.nodes, physicalNodes) ||
+          !sameArray(payload.pixel?.nodiTerritoriali, nodes) ||
+          payload.legs.length !== physicalNodes.length - 1)
+        fail(`missione ${i + 1}: payload fisico/territoriale non valido`);
+    } else if (!sameArray(payload.nodes, nodes) || payload.legs.length !== nodes.length - 1) {
+      fail(`missione ${i + 1}: payload non valido`);
+    }
     for (let j = 0; j < payload.legs.length; j++) {
       const local = payload.legs[j], global = plan.legs[start + j];
       if (!local || !global || String(local.polyline) !== String(global.polyline) ||
@@ -83,7 +99,9 @@ export async function verificaAccettazionePixelMulti(client, attivazione, plan) 
     const snapshot = payload.pixel;
     if (!snapshot || Number(snapshot.opportunitaId) !== oid ||
         Number(snapshot.direttriceId) !== Number(op.direttrice_id) ||
-        Number(snapshot.versione) !== Number(op.versione))
+        Number(snapshot.versione) !== Number(op.versione) ||
+        (physical && (String(snapshot.engineId) !== String(op.engine_id) ||
+          !sameArray(snapshot.nodiTerritoriali, op.nodi))))
       fail(`missione ${i + 1}: identita o versione PIXEL modificata`);
     const { rows: associations } = await client.query(`
       SELECT richiesta_id FROM public.pixel_opportunita_richieste
@@ -96,7 +114,7 @@ export async function verificaAccettazionePixelMulti(client, attivazione, plan) 
       const localEnd = nonnegative(r.end, 'discesa locale');
       const expected = globalExpected.get(rid);
       if (!allowed.has(rid) || allLocal.has(rid) || localStart >= localEnd ||
-          localEnd >= nodes.length || !expected ||
+          localEnd >= (physical ? physicalNodes.length : nodes.length) || !expected ||
           expected.start !== start + localStart || expected.end !== start + localEnd)
         fail(`missione ${i + 1}: associazione o indici richiesta ${rid} invalidi`);
       allLocal.set(rid, { missionId: Number(m.id), localStart, localEnd });

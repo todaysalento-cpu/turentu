@@ -5,6 +5,15 @@ const integer = (x) => Number.isSafeInteger(Number(x));
 function check(ok, msg) { if (!ok) throw new Error(`POPBUS MULTI PREFLIGHT: ${msg}`); }
 export function validaPianoMultiMissione(plan, { veicoloId, postiTotali } = {}) {
   check(plan?.tipoPiano === 'CICLO_PIXEL_CORSA_UNICA_V1', 'tipo piano non riconosciuto');
+  // Il marker V2 e' esplicito: non confondere fermate fisiche e nodi PIXEL.
+  const v2 = plan.schemaVersion != null || plan.tipoItinerario != null ||
+    (Array.isArray(plan.missioni) && plan.missioni.some(m =>
+      m?.schemaVersion != null || m?.tipoItinerario != null ||
+      m?.nodiTerritoriali != null || m?.pixelDirettriceId != null));
+  if (v2) {
+    check(Number(plan.schemaVersion) === 2 &&
+      plan.tipoItinerario === 'FERMATE_FISICHE', 'contratto globale V2 incompleto');
+  }
   check(Array.isArray(plan.missioni) && plan.missioni.length >= 2 && plan.missioni.length <= 3, 'numero missioni');
   check(Array.isArray(plan.nodes) && plan.nodes.length >= 3, 'nodi');
   const n = plan.nodes.length;
@@ -32,9 +41,26 @@ export function validaPianoMultiMissione(plan, { veicoloId, postiTotali } = {}) 
   }
   check(Math.abs(departure + cumulative - arrival) <= 1000, 'arrivo e tempi');
   let previousEnd = -1;
+  const opportunitaViste = new Set();
   for (let i=0; i<plan.missioni.length; i++) {
     const m = plan.missioni[i];
     const s = Number(m?.startIndex), e = Number(m?.endIndex);
+    if (v2) {
+      check(Number(m?.schemaVersion) === 2 &&
+        m?.tipoItinerario === 'FERMATE_FISICHE', `missione ${i+1}: contratto V2 incompleto`);
+      check(Array.isArray(m.nodiTerritoriali) && m.nodiTerritoriali.length >= 2 &&
+        m.nodiTerritoriali.every(x => integer(x) && Number(x) > 0),
+        `missione ${i+1}: nodi territoriali PIXEL invalidi`);
+      check(integer(m.pixelOpportunitaId) && Number(m.pixelOpportunitaId) > 0 &&
+        !opportunitaViste.has(Number(m.pixelOpportunitaId)),
+        `missione ${i+1}: opportunita PIXEL non valida o duplicata`);
+      opportunitaViste.add(Number(m.pixelOpportunitaId));
+      check(integer(m.pixelDirettriceId) && Number(m.pixelDirettriceId) > 0 &&
+        integer(m.pixelVersione) && Number(m.pixelVersione) > 0 &&
+        typeof m.corridoioPixelId === 'string' && m.corridoioPixelId.trim().length > 0,
+        `missione ${i+1}: identita PIXEL incompleta`);
+      check(m.direttriceId == null, `missione ${i+1}: direttrice legacy non ammessa`);
+    }
     check(Number(m?.ordine) === i+1 && integer(s) && integer(e) && s >= 0 && e > s && e < n && s > previousEnd - 1, `missione ${i+1}: indici`);
     check(finite(m.partenza) && finite(m.arrivo) && Math.abs(departure + Number(plan.evaluation.times[s]) - Number(m.partenza)) <= 1000 && Math.abs(departure + Number(plan.evaluation.times[e]) - Number(m.arrivo)) <= 1000, `missione ${i+1}: orari`);
     previousEnd = e;

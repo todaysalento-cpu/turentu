@@ -1,7 +1,6 @@
-// TURENTU PIXEL — bootstrap diagnostico persistente (SOLA LETTURA).
-// Destinazione: services/pixel/pixel.orchestrator.service.js
-// Nessuna INSERT/UPDATE/DELETE; non pubblica opportunita, non attiva missioni.
-// Le direttrici sono generate dal motore PIXEL in base alla domanda.
+// TURENTU PIXEL - bootstrap persistente di sola lettura.
+// La diagnostica conserva il contratto originale; il bootstrap espone anche l'engine
+// ai servizi operativi. Nessuna scrittura DB in questo modulo.
 import { pool } from '../../db/db.js';
 import { leg } from '../popbus/v2/planner.js';
 import { createIncrementalCorridorEngine } from './incremental-corridor-engine.js';
@@ -13,12 +12,7 @@ const nodeId = x => {
   return n;
 };
 
-/**
- * Ricostruisce PIXEL dalle direttrici attive, poi rielabora la domanda corrente.
- * Non crea direttrici manualmente: initialCorridors e' soltanto la memoria geometrica.
- * Nessuna scrittura DB. P1 abilitata solo qui per la diagnostica.
- */
-export async function diagnosticaBootstrapPixel({
+export async function costruisciBootstrapPixel({
   client = null,
   now = new Date(),
   maxRichieste = 100,
@@ -29,9 +23,9 @@ export async function diagnosticaBootstrapPixel({
   check(Number.isSafeInteger(maxRichieste) && maxRichieste >= 1 && maxRichieste <= 10000, 'maxRichieste non valido');
   check(Number.isSafeInteger(maxDirettrici) && maxDirettrici >= 1 && maxDirettrici <= 10000, 'maxDirettrici non valido');
   check(now instanceof Date && Number.isFinite(now.getTime()), 'now non valido');
+  check(Number.isFinite(bufferMinuti) && bufferMinuti >= 0, 'bufferMinuti non valido');
   const db = client ?? pool;
 
-  // Rifiuta il troncamento: perdere una parte della domanda altererebbe le direttrici.
   const requestResult = await db.query(`
     SELECT * FROM public.richieste_pop_bus
     WHERE stato = 'in_attesa'
@@ -67,7 +61,7 @@ export async function diagnosticaBootstrapPixel({
     const nodes = c.nodi.map(nodeId);
     check(c.engine_id === `territorial:${nodes.join('>')}`, `engine_id incoerente: ${c.engine_id}`);
     return {
-      id: `px-${i + 1}`, // ID effimero, mai persistito
+      id: `px-${i + 1}`,
       nodes,
       legs: c.legs,
       richiestaIds: [],
@@ -96,7 +90,7 @@ export async function diagnosticaBootstrapPixel({
       const a = nodeMap.get(nodeId(ids[i]));
       const b = nodeMap.get(nodeId(ids[i + 1]));
       check(a && b, 'nodo routing mancante');
-      const result = await leg(a, b); // provider stradale reale
+      const result = await leg(a, b);
       check(result && Number.isFinite(result.metres) && result.metres > 0 &&
         Number.isFinite(result.seconds) && result.seconds > 0 &&
         typeof result.polyline === 'string' && result.polyline.length > 0,
@@ -125,7 +119,7 @@ export async function diagnosticaBootstrapPixel({
       idTemporaneo: c.id, nodes: [...c.nodes], richiestaIds: [...c.richiestaIds],
       gruppiTemporali: gruppi.length });
   }
-  return {
+  const riepilogo = {
     solaLettura: true,
     richiesteEsaminate: requests.length,
     direttriciRipristinate: initialCorridors.length,
@@ -134,4 +128,10 @@ export async function diagnosticaBootstrapPixel({
     opportunitaCandidate: opportunita.reduce((sum, x) => sum + x.gruppiTemporali, 0),
     elaborazioni, opportunita
   };
+  return { engine, riepilogo };
+}
+
+export async function diagnosticaBootstrapPixel(options = {}) {
+  const { riepilogo } = await costruisciBootstrapPixel(options);
+  return riepilogo;
 }

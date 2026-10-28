@@ -35,6 +35,7 @@ import bookingRouter from './routes/booking.routes.js';
 import { bookingClienteRouter } from './routes/booking.cliente.routes.js';
 import { router as stripeWebhookRouter } from './routes/stripe-webhook.js';
 import { router as authRouter } from './routes/auth.routes.js';
+import passwordResetRouter from './routes/password-reset.routes.js';
 import { disponibilitaRouter } from './routes/disponibilita.routes.js';
 import { veicoloRouter } from './routes/veicolo.routes.js';
 import { corseRouter } from './routes/corse.routes.js';
@@ -111,6 +112,7 @@ app.use('/api/veicolo', (req, res, next) => {
 
 // ======================= ROUTES =======================
 app.use('/api/auth', authRouter);
+app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/gmail-test', gmailTestRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);

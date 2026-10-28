@@ -1,0 +1,7 @@
+POPBUS_PHYSICAL_SHADOW_READONLY_FAIL: Error: SHADOW_PHYSICAL_ASSERT: Servono esattamente due ID opportunita PIXEL distinti
+    at assert (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_two_opportunities_shadow.mjs:10:50)
+    at main (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_two_opportunities_shadow.mjs:19:3)
+    at file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_two_opportunities_shadow.mjs:88:9
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)

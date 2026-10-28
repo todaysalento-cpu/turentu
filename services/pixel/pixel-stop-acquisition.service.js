@@ -1,6 +1,7 @@
 // services/pixel/pixel-stop-acquisition.service.js
-// PIXEL: discovery Google Places e stato del catalogo commerciale.
-// Non persiste contenuti Google Places e non attiva fermate automaticamente.
+// Politica temporanea Turentu: le fermate ATTIVE sono prenotabili anche se non verificate.
+// Restano escluse fermate TEST, nodi inattivi ed evidenze esplicite 'non_ammessa'.
+// Il campo 'verificata' NON viene modificato; Google Places resta solo discovery.
 import { pool } from '../../db/db.js';
 import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.service.js';
 
@@ -13,62 +14,88 @@ function normalizeNodeId(value) {
 }
 
 /**
- * Recupera lo stato delle fermate PIXEL per un nodo territoriale.
- * Il catalogo commerciale comprende solo fermate attive e verificate.
+ * Stato del catalogo secondo la politica operativa provvisoria.
+ * 'commerciali' indica fermate utilizzabili nella ricerca, NON certificate.
  */
 export async function getPixelStopCatalogStatus(nodoId, { database = pool } = {}) {
   const id = normalizeNodeId(nodoId);
   const { rows } = await database.query(`
+    WITH fermate AS (
+      SELECT f.id, f.verificata,
+        (
+          f.attiva IS TRUE
+          AND n.attivo IS TRUE
+          AND f.nome !~* '^\\s*(\\[TEST PIXEL\\]|TEST PIXEL\\b)'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.pixel_fermate_test_metadata t
+            WHERE t.fermata_id = f.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.pixel_fermate_fonti ff
+            WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
+          )
+        ) AS operativa
+      FROM public.pixel_fermate f
+      JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id
+      WHERE f.nodo_territoriale_id = $1::bigint
+    )
     SELECT COUNT(*)::integer AS censite,
-           COUNT(*) FILTER (WHERE attiva = TRUE AND verificata = TRUE)::integer AS commerciali,
-           COUNT(*) FILTER (WHERE NOT (attiva = TRUE AND verificata = TRUE))::integer AS non_ammesse
-      FROM public.pixel_fermate
-     WHERE nodo_territoriale_id = $1::bigint
+      COUNT(*) FILTER (WHERE operativa)::integer AS commerciali,
+      COUNT(*) FILTER (WHERE operativa AND verificata IS TRUE)::integer AS verificate_commerciali,
+      COUNT(*) FILTER (WHERE operativa AND verificata IS NOT TRUE)::integer AS provvisorie_operative
+    FROM fermate
   `, [id]);
+  const r = rows[0] ?? {};
+  const censite = Number(r.censite ?? 0);
+  const commerciali = Number(r.commerciali ?? 0);
   return {
-    censite: Number(rows[0]?.censite ?? 0),
-    commerciali: Number(rows[0]?.commerciali ?? 0),
-    non_ammesse: Number(rows[0]?.non_ammesse ?? 0),
+    censite,
+    commerciali,
+    non_ammesse: censite - commerciali,
+    verificate_commerciali: Number(r.verificate_commerciali ?? 0),
+    provvisorie_operative: Number(r.provvisorie_operative ?? 0),
   };
 }
 
 /**
- * Discovery on demand tramite Google Places, senza scritture.
- * Mantiene il nome storico per compatibilita' con Search.
- *
- * Le fermate Google sono candidati, NON fermate commercialmente ammesse.
- * La funzione non restituisce i dettagli dei Places: solo conteggi e stato.
+ * Stato per Search: nessuna modifica a fermate o attestazioni.
+ * Le fermate operative provvisorie sono disponibili alla ricerca.
  */
 export async function ensurePixelStopsForNode(nodoId, { database = pool } = {}) {
   const id = normalizeNodeId(nodoId);
   const { rows } = await database.query(`
     SELECT id, codice_istat_comune
-      FROM public.nodi_territoriali
-     WHERE id = $1::bigint AND attivo = TRUE
+    FROM public.nodi_territoriali
+    WHERE id = $1::bigint AND attivo = TRUE
   `, [id]);
-
   const node = rows[0];
   if (!node?.codice_istat_comune) {
-    return { stato: 'nodo_non_disponibile', nodo_id: id, inserite: 0, ammesse: 0 };
+    return {
+      stato: 'nodo_non_disponibile', nodo_id: id,
+      inserite: 0, ammesse: 0, pixel_fermate_disponibili: false,
+    };
   }
 
   const catalogo = await getPixelStopCatalogStatus(id, { database });
   if (catalogo.commerciali > 0) {
     return {
-      stato: 'fermate_commerciali_presenti', nodo_id: id,
-      ...catalogo, inserite: 0, ammesse: 0,
+      stato: 'fermate_commerciali_presenti',
+      nodo_id: id,
+      ...catalogo,
+      inserite: 0,
+      ammesse: 0,
+      pixel_fermate_disponibili: true,
+      politica: 'attive_anche_non_verificate',
     };
   }
 
-  // GOOGLE: discovery e selezione comunale; nessuna persistenza di Places.
+  // Google Places: sola discovery, senza registrazione o attivazione.
   const plan = await discoverPixelComuneCandidates(
     String(node.codice_istat_comune), { source: 'GOOGLE', database }
   );
-
   const candidatiNodo = (plan.selezionati ?? []).filter(candidate =>
     (candidate.nodi_raggiungibili ?? []).some(n => String(n) === id)
   ).length;
-
   return {
     stato: plan.stato === 'ok' ? 'candidati_google_non_ammessi' : 'discovery_non_completa',
     nodo_id: id,

@@ -1,0 +1,791 @@
+[PIXEL FORMAZIONI] {
+  opportunitaId: 118,
+  richiesteContesto: 6,
+  seed: [ 196, 197, 198, 199, 200, 201 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 197, 198, 199, 200, 201 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 118,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T20:32:58.853Z',
+  contestiPixel: 1,
+  missioniCandidate: 31,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 357,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 358,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 366,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 357,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 358,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 366,
+  richiestaIds: [ 196 ]
+}
+POPBUS_PHYSICAL_SHADOW_RESULT={
+  "stato": "PASS_SHADOW_READ_ONLY",
+  "opportunita": [
+    118
+  ],
+  "percorso": "PIXEL_FERMATE_FISICHE_CANDIDATI_V2",
+  "missioniCandidateFisiche": 0,
+  "offerte": 0,
+  "dbWrites": 0,
+  "attivabile": false,
+  "diagnostica": {
+    "tentativi": 30,
+    "alternative": 0,
+    "scarti": [
+      {
+        "veicoloId": 347,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 348,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 352,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 353,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 356,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 357,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 358,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 359,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 360,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 361,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 362,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 363,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 364,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 365,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 366,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 347,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 348,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 352,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 353,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 356,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 357,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 358,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 359,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 360,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 361,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 362,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 363,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 364,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 365,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      },
+      {
+        "veicoloId": 366,
+        "opportunitaId": 118,
+        "motivo": "FERMATE_COMPATIBILI_ASSENTI",
+        "diagnostica": {
+          "assegnazioni": null,
+          "ricercaEsaustiva": true,
+          "fase": "ASSEGNAZIONE_FERMATE",
+          "assenzaFermateConclusiva": true
+        }
+      }
+    ],
+    "completo": false,
+    "attivabile": false,
+    "diagnosticaLimitata": true,
+    "limiteEffettivo": 30,
+    "calcoliFisici": 14,
+    "cacheHits": 16,
+    "cacheEntries": 14,
+    "tempoCalcoliFisiciMs": 2307.5512,
+    "disabilitaCacheFisica": false,
+    "escludiVeicoliTest": false,
+    "veicoliEsclusi": [],
+    "numeroVeicoliEsclusi": 0,
+    "numeroVeicoliValutabili": 15,
+    "interrottoPerBudget": true
+  }
+}
+ATTENZIONE: zero candidati. Il controllo di sicurezza passa, NON la fattibilita fisica.
+POPBUS_PHYSICAL_SHADOW_READONLY_OK

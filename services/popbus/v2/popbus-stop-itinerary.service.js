@@ -12,7 +12,8 @@ const validId = value =>
 
 export function costruisciSequenzaFermate({
   assegnazioni,
-  postiTotali
+  postiTotali,
+  verificaCapienza = true
 }) {
   if (!Array.isArray(assegnazioni) || !assegnazioni.length) {
     fail('assegnazioni assenti');
@@ -109,6 +110,16 @@ export function costruisciSequenzaFermate({
     });
   }
 
+  if (typeof verificaCapienza !== 'boolean') fail('verificaCapienza non valido');
+
+  if (!verificaCapienza) {
+    return {
+      ok: true, stato: 'SEQUENZA_DA_RIORDINARE', visite,
+      peak: null, postiTotali, capienzaVerificata: false,
+      routingVerificato: false, qualitaVerificata: false, attivabile: false
+    };
+  }
+
   let occupati = 0;
   let peak = 0;
   const aBordo = new Set();
@@ -156,6 +167,7 @@ export function costruisciSequenzaFermate({
     visite,
     peak,
     postiTotali,
+    capienzaVerificata: true,
     routingVerificato: false,
     qualitaVerificata: false,
     attivabile: false

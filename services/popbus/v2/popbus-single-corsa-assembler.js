@@ -1,3 +1,5 @@
+import polyline from '@mapbox/polyline';
+
 // TURENTU POPBUS — composizione pura: fino a tre missioni, una sola corsa.
 // Nessuna scrittura DB, nessuna attivazione automatica.
 // Contratto: requests delle missioni contengono {id,start,end,posti_richiesti}.
@@ -26,6 +28,54 @@ function encodePair(p) {
     return s + String.fromCharCode(v + 63);
   };
   return enc(Math.round(p.lat * 1e5)) + enc(Math.round(p.lon * 1e5)) + '??';
+}
+
+// Contratto opzionale, esclusivo dei trasferimenti fisici V2.
+// Non certifica la provenienza dal provider stradale: il writer deve rivalidarla.
+const metriFraCoordinate = (a, b) => {
+  const rad = Math.PI / 180;
+  const dLat = (Number(b.lat) - Number(a.lat)) * rad;
+  const dLon = (Number(b.lon) - Number(a.lon)) * rad;
+  const latMedia = ((Number(a.lat) + Number(b.lat)) / 2) * rad;
+  return 6371008.8 * Math.hypot(dLat, Math.cos(latMedia) * dLon);
+};
+
+function verificaTrasferimentoFisicoV2(tr, last, next) {
+  const secs = num(tr.seconds, 'trasferimento.seconds');
+  const metres = num(tr.metres, 'trasferimento.metres');
+  if (secs < 0 || metres < 0) throw Error('Trasferimento V2: durata o distanza negativa');
+  const stessoPunto = metriFraCoordinate(last, next) < 0.5;
+  if (stessoPunto && last.id !== next.id)
+    throw Error('Trasferimento V2: fermate coincidenti con ID diversi da verificare nel catalogo');
+  if (stessoPunto && secs === 0 && metres === 0) {
+    if (tr.leg != null) {
+      if (num(tr.leg.seconds, 'trasferimento.leg.seconds') !== 0 ||
+          num(tr.leg.metres, 'trasferimento.leg.metres') !== 0)
+        throw Error('Trasferimento V2: segmento coincidente incoerente');
+    }
+    return;
+  }
+  if (stessoPunto || secs <= 0 || metres <= 0)
+    throw Error('Trasferimento V2: spostamento stradale non valido');
+
+  const leg = tr.leg ?? tr;
+  if (Math.abs(num(leg.seconds, 'trasferimento.leg.seconds') - secs) > 0.001 ||
+      Math.abs(num(leg.metres, 'trasferimento.leg.metres') - metres) > 0.01)
+    throw Error('Trasferimento V2: metri o secondi non coerenti con il segmento');
+  if (typeof leg.polyline !== 'string' || !leg.polyline.length)
+    throw Error('Trasferimento V2: polilinea mancante');
+  let pts;
+  try { pts = polyline.decode(leg.polyline); }
+  catch { throw Error('Trasferimento V2: polilinea malformata'); }
+  if (!Array.isArray(pts) || pts.length < 2 || pts.some(p =>
+      !Array.isArray(p) || p.length < 2 || !Number.isFinite(p[0]) ||
+      !Number.isFinite(p[1]) || Math.abs(p[0]) > 90 || Math.abs(p[1]) > 180))
+    throw Error('Trasferimento V2: polilinea malformata');
+  const first = { lat: pts[0][0], lon: pts[0][1] };
+  const final = { lat: pts.at(-1)[0], lon: pts.at(-1)[1] };
+  // Tolleranza per arrotondamento e accesso stradale, non prova di routing reale.
+  if (metriFraCoordinate(first, last) > 50 || metriFraCoordinate(final, next) > 50)
+    throw Error('Trasferimento V2: polilinea non ancorata alle fermate');
 }
 
 // Occorrenze: l'occupazione si misura su [start,end), non sommando i passeggeri
@@ -65,7 +115,7 @@ export function calcolaOccupazioneCiclo(requests, numeroSegmenti, postiTotali = 
 
 export function componiCicloInCorsa({
   missioni, trasferimenti = [], nodi, veicoloId, busyStart, busyEnd,
-  approach, returnTrip, postiTotali = null
+  approach, returnTrip, postiTotali = null, contrattoTrasferimentiFisiciV2 = false
 }) {
   if (!Array.isArray(missioni) || missioni.length < 1 || missioni.length > 3 ||
       !Array.isArray(trasferimenti) || trasferimenti.length !== missioni.length - 1)
@@ -106,6 +156,7 @@ export function componiCicloInCorsa({
       const wait = num(tr.attesaMinuti ?? 0, 'attesaMinuti') * 60;
       if (secs < 0 || wait < 0 || !close(prevArrival + (secs + wait) * 1000, start))
         throw Error('Trasferimento/attesa non coerenti con orari');
+      if (contrattoTrasferimentiFisiciV2) verificaTrasferimentoFisicoV2(tr, last, next);
       if (secs > 0 || last.id !== next.id) {
         appendLeg(tr.leg ?? tr, 'trasferimento');
         nodes.push(next);

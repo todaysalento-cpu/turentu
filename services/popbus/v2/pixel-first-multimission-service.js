@@ -15,6 +15,9 @@ import { valutaEconomiaCiclo } from './cycle-pricing.js';
 import { fingerprintRichiesta } from './request-fingerprint.js';
 import polyline from 'polyline';
 import { verificaPagamento } from './acceptance.js';
+import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
+import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimission-candidates.js';
+import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
 
 const fail = m => { throw new Error('PIXEL_FIRST_MULTI: ' + m); };
 const positive = x => Number.isSafeInteger(Number(x)) && Number(x) > 0;
@@ -141,6 +144,7 @@ async function candidates(client, now, opportunityIds = null) {
   if (nodi.length !== nodeIds.length) fail('nodo PIXEL mancante/inattivo');
   const byNode = new Map(nodi.map(n=>[Number(n.id),n]));
   const {rows:vehicles} = await client.query(`SELECT v.id,v.driver_id,v.posti_totali,t.euro_km,
+    to_jsonb(v)->>'tipo' AS tipo_veicolo,
     dv.start,dv.fine,dv.giorni_esclusi,dv.inattivita,
     ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
     ST_X(COALESCE(dv.coord,v.coord)::geometry) AS lon
@@ -218,6 +222,7 @@ async function candidates(client, now, opportunityIds = null) {
       const last=byNode.get(Number(ctx.plan.nodes.at(-1)));
       missioni.push({pixelOpportunitaId:Number(ctx.pixel_opportunita_id),
         pixelDirettriceId:Number(ctx.pixel_direttrice_id), pixelVersione:Number(ctx.versione),
+        corridoioPixelId:ctx.engine_id,
         from:first,to:last,plan:ctx.plan,evaluation,departure:Number(evaluation.departure),
         arrival:Number(evaluation.arrival),kmMissione:ctx.plan.legs.reduce((a,l)=>a+Number(l.metres),0)/1000,
         peak:Number(evaluation.peak), requests:selected.map(r=>({id:Number(r.id),prezzo:Number(r.prezzo)}))});
@@ -236,6 +241,54 @@ async function candidates(client, now, opportunityIds = null) {
     }
   }
   return {contexts,missioni,vehicles,nodi,registro};
+}
+// Percorso diagnostico esclusivamente read-only: nessun assemblaggio o persistenza.
+// Il bridge verifica fermate, sequenza, routing, tempo e qualita per il tipo mezzo.
+// La transizione verso la persistenza V2 richiede rivalidazione sotto lock.
+async function diagnosticaMissioniFisiche({client,snapshot,maxTentativi=250}={}) {
+  if (!Number.isSafeInteger(maxTentativi) || maxTentativi<1) fail('maxTentativi fisici non valido');
+  const byId=new Map(snapshot.contexts.flatMap(ctx=>ctx.requests.map(r=>[Number(r.id),r])));
+  const vehicleTypes=new Map();
+  for (const v of snapshot.vehicles) {
+    const tipoDb=String(v.tipo_veicolo??'').toLowerCase();
+    const tipo=({station_wagon:'ncc',berlina:'ncc',sedan:'ncc',suv:'ncc',
+      monovolume:'ncc',minivan:'ncc',ncc:'ncc',navetta:'navetta',
+      minibus:'navetta',autobus:'autobus',bus:'autobus'})[tipoDb];
+    if (!['ncc','navetta','autobus'].includes(tipo))
+      fail(`tipo veicolo ${v.id} assente/non supportato: impossibile certificare le fermate`);
+    const key=Number(v.id);
+    if (vehicleTypes.has(key) && vehicleTypes.get(key).tipo!==tipo)
+      fail(`tipo veicolo incoerente: ${key}`);
+    vehicleTypes.set(key,{tipo,postiTotali:Number(v.posti_totali)});
+  }
+  const combinations=[];
+  for (const m of snapshot.missioni) for (const [veicoloId,config] of vehicleTypes) {
+    if (Number(m.peak)>config.postiTotali) continue;
+    combinations.push({m,veicoloId,...config});
+    if (combinations.length>maxTentativi)
+      fail(`limite combinazioni fisiche (${maxTentativi}) superato: nessun risultato parziale`);
+  }
+  const diagnostica={tentativi:0,alternative:0,perVeicolo:[],scarti:[],
+    nessunaScrittura:true,attivabile:false,completo:true};
+  for (const {m,veicoloId,tipo,postiTotali} of combinations) {
+    if (typeof m.corridoioPixelId!=='string' || !m.corridoioPixelId.trim())
+      fail(`engine_id PIXEL autorevole assente: opportunita ${m.pixelOpportunitaId}`);
+    const richieste=m.evaluation.requests.map(ref=>byId.get(Number(ref.id)));
+    if (richieste.some(r=>!r)) fail('richiesta PIXEL mancante nel catalogo');
+    const result=await preparaAlternativeFisicheFormazione({
+      client,missionePixel:m,richieste,postiTotali,tipoVeicolo:tipo
+    });
+    diagnostica.tentativi++;
+    const count=result.ok?result.alternativeFisiche.length:0;
+    diagnostica.alternative+=count;
+    diagnostica.perVeicolo.push({veicoloId,tipoVeicolo:tipo,
+      pixelOpportunitaId:m.pixelOpportunitaId,
+      corridoioPixelId:m.corridoioPixelId,alternativeFisiche:count,
+      diagnostica:result.diagnostica??null});
+    if (!result.ok) diagnostica.scarti.push({veicoloId,
+      pixelOpportunitaId:m.pixelOpportunitaId,motivo:result.motivo});
+  }
+  return diagnostica;
 }
 function expectedFromMission(m, dbById) {
   return m.evaluation.requests.map(ref=>{
@@ -377,7 +430,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
   const {piano,missioniPersistibili}=preparaCicloPixelPerPersistenza({
     plan,richiesteBloccate:locked.map(r=>({...r,stato:'in_lavorazione'})),
     opportunitaMissioni:missions.map(m=>({pixelOpportunitaId:m.pixelOpportunitaId,
-      corridoioPixelId:`territorial:${m.plan.nodes.join('>')}`})),
+      corridoioPixelId:m.corridoioPixelId})),
     veicoloId:v.id,postiTotali:Number(v.posti_totali),fingerprintRichiesta,economia
   });
   // La funzione di persistenza confronta anche versione e ID direttrice sotto lock PIXEL.
@@ -392,7 +445,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
       pixelOpportunitaId:Number(missions[i].pixelOpportunitaId),
       pixelDirettriceId:Number(missions[i].pixelDirettriceId),
       pixelVersione:Number(missions[i].pixelVersione),
-      corridoioPixelId:`territorial:${missions[i].plan.nodes.join('>')}`})),
+      corridoioPixelId:missions[i].corridoioPixelId})),
     economia,requestSnapshot:locked.map(r=>({id:Number(r.id),fingerprint:fingerprintRichiesta(r)}))};
   const {rows:acts}=await client.query(`INSERT INTO popbus_attivazioni
     (direttrice_id,pixel_opportunita_id,veicolo_id,autista_id,stato,partenza,arrivo,
@@ -588,7 +641,35 @@ async function pulisciScadenzeLive(pool) {
   finally {client.release();}
 }
 
-export async function processaPixelFirstMultimissione({pool, now=Date.now(),mode='ROLLBACK_ONLY', rollbackTestHook=null}={}) {
+export async function processaPixelFirstMultimissione({
+  pool,
+  now = Date.now(),
+  mode = 'ROLLBACK_ONLY',
+  rollbackTestHook = null,
+  physicalShadow = false,
+  physicalCycleShadow = false,
+  physicalShadowBridge = null,
+  physicalOpportunityIds = null
+} = {}) {
+  // Il filtro opportunita e' disponibile soltanto nel percorso fisico SHADOW.
+  if (physicalCycleShadow !== false && physicalCycleShadow !== true) fail('physicalCycleShadow non booleano');
+  if (physicalCycleShadow && (!physicalShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null))
+    fail('physicalCycleShadow richiede physicalShadow ROLLBACK_ONLY senza hook');
+  if (physicalOpportunityIds !== null) {
+    if (physicalShadow !== true || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null)
+      fail('physicalOpportunityIds consentito solo in physicalShadow ROLLBACK_ONLY');
+    if (!Array.isArray(physicalOpportunityIds) ||
+        physicalOpportunityIds.length === 0 ||
+        physicalOpportunityIds.length > limits.opportunita ||
+        physicalOpportunityIds.some(x => !positive(x)) ||
+        new Set(physicalOpportunityIds.map(Number)).size !== physicalOpportunityIds.length)
+      fail('physicalOpportunityIds non validi');
+  }
+  if (physicalShadowBridge != null && (physicalShadow !== true || mode !== 'ROLLBACK_ONLY' || rollbackTestHook != null || typeof physicalShadowBridge !== 'function'))
+    fail('bridge diagnostico consentito solo in physicalShadow ROLLBACK_ONLY');
+  if (physicalShadow && (mode!=='ROLLBACK_ONLY' || rollbackTestHook!=null))
+    fail('physicalShadow richiede ROLLBACK_ONLY senza hook di scrittura');
+  if (mode==='LIVE') fail('LIVE disabilitato: integrazione fermate fisiche V2 non ancora certificata');
   if (rollbackTestHook != null && (mode !== 'ROLLBACK_ONLY' || typeof rollbackTestHook !== 'function'))
     fail('hook diagnostico consentito soltanto in ROLLBACK_ONLY');
   if (!pool?.connect) fail('pool mancante');
@@ -610,7 +691,30 @@ export async function processaPixelFirstMultimissione({pool, now=Date.now(),mode
   try {
     await reader.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
     readTx=true;
-    snapshot=await candidates(reader,nowMs);
+    snapshot = await candidates(
+      reader,
+      nowMs,
+      physicalShadow && physicalOpportunityIds !== null
+        ? physicalOpportunityIds.map(Number)
+        : null
+    );
+    // Diagnostica esclusivamente SHADOW: controlla la propagazione dell'engine_id PIXEL.
+    // Non modifica snapshot, non interroga ulteriormente il DB e non abilita LIVE.
+    if (physicalShadow) {
+      console.log('[PIXEL SNAPSHOT ENGINE ID]', {
+        contesti: snapshot.contexts.map(ctx => ({
+          opportunitaId: ctx.pixel_opportunita_id,
+          direttriceId: ctx.pixel_direttrice_id,
+          engineId: ctx.engine_id
+        })),
+        missioni: snapshot.missioni.slice(0, 5).map(m => ({
+          opportunitaId: m.pixelOpportunitaId,
+          direttriceId: m.pixelDirettriceId,
+          corridoioPixelId: m.corridoioPixelId,
+          tipo: typeof m.corridoioPixelId
+        }))
+      });
+    }
     if (mode === 'ROLLBACK_ONLY') {
       console.log('[PIXEL FIRST DIAGNOSTICA]', {
         timestamp: new Date(nowMs).toISOString(),
@@ -619,6 +723,66 @@ export async function processaPixelFirstMultimissione({pool, now=Date.now(),mode
         veicoliCandidati: snapshot.vehicles.length,
         nodiTerritoriali: snapshot.nodi.length
       });
+    }
+    if (physicalShadow) {
+      const fisiche=await preparaCandidatiFisiciMultimissione({
+        client:reader,snapshot,maxTentativi:600,
+        ...(physicalShadowBridge ? {bridge:physicalShadowBridge} : {})
+      });
+      // Il test storico dei candidati resta invariato se physicalCycleShadow=false.
+      // La selezione dei cicli e' un secondo livello diagnostico esplicitamente opt-in.
+      let selezioneFisica = null;
+      if (physicalCycleShadow) {
+        if (fisiche.diagnostica.completo !== true || fisiche.parziale === true)
+          fail('selezione cicli vietata su candidati fisici incompleti');
+        const veicoliUnici = new Map();
+        for (const v of snapshot.vehicles) {
+          const precedente = veicoliUnici.get(Number(v.id));
+          if (precedente && (!samePoint(precedente,v) ||
+              Number(precedente.euro_km) !== Number(v.euro_km) ||
+              Number(precedente.posti_totali) !== Number(v.posti_totali)))
+            fail('configurazioni veicolo divergenti: selezione fisica non certificabile');
+          veicoliUnici.set(Number(v.id),v);
+        }
+        const costi = {
+          costoAttesaOraEuro:Number(process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0),
+          altriCostiEuro:Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
+          margineMinimoEuro:Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)
+        };
+        selezioneFisica = await selezionaCicliFisiciShadow({
+          contrattoRoutingFisicoV2: true,
+          candidati:fisiche.candidati,
+          vehicles:[...veicoliUnici.values()],
+          now:nowMs,
+          movement,
+          isAvailable:async(v,start,end)=>snapshot.vehicles.some(d=>
+            Number(d.id)===Number(v.id) && samePoint(d,v) &&
+            verificaTurnoVeicolo(d,start,end)),
+          hasConflicts:async(v,start,end)=>conflicts(reader,v.id,start,end),
+          validateSingle:async(a)=>{
+            const ids=a.requests.map(r=>Number(r.id));
+            return new Set(ids).size===ids.length && arComplete(ids,snapshot.registro);
+          },
+          validatePair:async(a,b)=>{
+            const ids=[...a.requests,...b.requests].map(r=>Number(r.id));
+            return new Set(ids).size===ids.length && arComplete(ids,snapshot.registro);
+          },
+          ...costi
+        });
+      }
+      return {
+        modalita:mode,
+        percorso:physicalCycleShadow
+          ? 'PIXEL_FERMATE_FISICHE_CICLI_SHADOW_V2'
+          : 'PIXEL_FERMATE_FISICHE_CANDIDATI_V2',
+        missioniCandidateFisiche:fisiche.candidati.length,
+        diagnostica:fisiche.diagnostica,
+        candidati:fisiche.candidati,
+        ...(physicalCycleShadow ? {selezioneFisica} : {}),
+        offerte:0,
+        dbWrites:0,
+        attivabile:false
+      };
     }
     if (!snapshot.missioni.length || !snapshot.vehicles.length) {
       return {modalita:mode,offerte:0,motivo:'nessuna formazione/veicolo PIXEL candidato'};

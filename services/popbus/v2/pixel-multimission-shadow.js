@@ -1,13 +1,18 @@
-// TURENTU POPBUS V2 — GENERATORE MULTI-MISSIONE SHADOW (modulo puro)
-// Salva come services/popbus/v2/pixel-multimission-shadow.js
-// Nessun database, commit, modifica a PIXEL o attivazione.
-// Il chiamante deve fornire missioni PIXEL gia' validate, routing verificato,
-// prezzi originali, disponibilita e conflitti. NON e' un certificatore produttivo.
+// TURENTU POPBUS V2 - Generatore multi-missione SHADOW, senza persistenza.
+// Contratto geometrico fisico V2 opt-in; comportamento storico invariato.
+import polyline from 'polyline';
 import { valutaEconomiaCiclo } from './cycle-pricing.js';
 
 const fail = message => { throw new Error(`PIXEL_MULTIMISSION_SHADOW: ${message}`); };
 const num = (x, name) => { const n=Number(x); if (!Number.isFinite(n) || n<0) fail(`${name} non valido`); return n; };
 const positiveId = x => Number.isSafeInteger(Number(x)) && Number(x)>0;
+const radians = n => Number(n)*Math.PI/180;
+function distanceMetres(a,b) {
+  const dLat=radians(b[0]-a[0]);
+  const dLon=radians(b[1]-a[1]);
+  const lat=radians((a[0]+b[0])/2);
+  return 6371008.8*Math.hypot(dLat,dLon*Math.cos(lat));
+}
 function normalizeMission(m) {
   if (!m || !positiveId(m.pixelOpportunitaId)) fail('opportunita PIXEL non valida');
   if (!m.from || !m.to || !Number.isFinite(Number(m.from.lat)) || !Number.isFinite(Number(m.from.lon)) || !Number.isFinite(Number(m.to.lat)) || !Number.isFinite(Number(m.to.lon))) fail('estremi missione mancanti');
@@ -20,33 +25,52 @@ function normalizeMission(m) {
   const km=num(m.kmMissione,'kmMissione');
   return {...m, departure:start,arrival:end,kmMissione:km,requestIds:ids,prices};
 }
-function legCheck(leg, name) {
+function legCheck(leg,name,from,to,strictV2=false) {
   if (!leg || !Number.isFinite(Number(leg.metres)) || !Number.isFinite(Number(leg.seconds))) fail(`${name}: routing mancante`);
-  return {metres:num(leg.metres,`${name}.metres`),seconds:num(leg.seconds,`${name}.seconds`)};
+  const metres=num(leg.metres,`${name}.metres`);
+  const seconds=num(leg.seconds,`${name}.seconds`);
+  if (!strictV2) return {metres,seconds};
+  if (typeof leg.polyline!=='string' || !leg.polyline) fail(`${name}: polyline mancante`);
+  let pts;
+  try { pts=polyline.decode(leg.polyline); }
+  catch { fail(`${name}: geometria non decodificabile`); }
+  if (!Array.isArray(pts) || pts.length<1 || pts.some(p=>!Array.isArray(p) || p.length<2 ||
+      !Number.isFinite(p[0]) || !Number.isFinite(p[1]) || Math.abs(p[0])>90 || Math.abs(p[1])>180))
+    fail(`${name}: geometria non valida`);
+  const start=[Number(from.lat),Number(from.lon)];
+  const end=[Number(to.lat),Number(to.lon)];
+  // Tolleranza di ancoraggio del routing di movimento: non sostituisce la
+  // verifica piu' stretta delle fermate fisiche nell'assembler/writer V2.
+  if (distanceMetres(pts[0],start)>250 || distanceMetres(pts.at(-1),end)>250)
+    fail(`${name}: geometria non ancorata agli estremi`);
+  if (typeof leg.roadCoincident!=='boolean') fail(`${name}: roadCoincident mancante`);
+  if (metres===0 || seconds===0) {
+    if (metres!==0 || seconds!==0 || leg.roadCoincident!==true ||
+        pts.some(p=>distanceMetres(p,pts[0])>0.02) || distanceMetres(start,end)>250)
+      fail(`${name}: coincidenza stradale incoerente`);
+    // Normalizzazione ammessa soltanto per geometria realmente collassata.
+    const encoded=pts.length===1 ? polyline.encode([pts[0],pts[0]]) : leg.polyline;
+    return {metres,seconds,polyline:encoded,roadCoincident:true};
+  }
+  if (pts.length<2 || leg.roadCoincident!==false)
+    fail(`${name}: geometria stradale incoerente`);
+  return {metres,seconds,polyline:leg.polyline,roadCoincident:false};
 }
 /**
- * Costruisce solo sequenze di 2 missioni dello stesso veicolo.
- * `missions`: [{pixelOpportunitaId,from,to,departure,arrival,kmMissione,
- *               requests:[{id,prezzo}],peak}]. Orari in millisecondi.
- * `vehicles`: [{id,lat,lon,euroKm,posti_totali}].
- * `movement(from,to)` restituisce {metres,seconds} stradali verificati.
- * `isAvailable(vehicle,busyStart,busyEnd)` verifica l'intero ciclo.
- * `hasConflicts(vehicle,busyStart,busyEnd)` verifica l'intero ciclo.
- * Limiti: fallimento esplicito, mai troncamento silenzioso.
- * Non applica da solo vincoli A/R, qualita', finestre ai punti intermedi,
- * costi reali di attesa, o soglie di classe: responsabilita del chiamante.
+ * Generatore SHADOW per coppie di missioni. Nessun DB, nessun LIVE.
+ * In modalita' contrattoRoutingFisicoV2 richiede routing geometrico completo.
  */
 export async function generaCicliDueMissioniShadow({missions,vehicles,movement,isAvailable,hasConflicts,
-  now=Date.now(),maxPairs=10000,maxRoutingCalls=100,costoAttesaOraEuro=0}={}) {
+  now=Date.now(),maxPairs=10000,maxRoutingCalls=100,costoAttesaOraEuro=0,
+  contrattoRoutingFisicoV2=false}={}) {
   if (!Array.isArray(missions) || !Array.isArray(vehicles) ||
       typeof movement!=='function' || typeof isAvailable!=='function' || typeof hasConflicts!=='function') fail('dipendenze mancanti');
+  if (typeof contrattoRoutingFisicoV2!=='boolean') fail('contrattoRoutingFisicoV2 non valido');
   if (!Number.isSafeInteger(maxPairs) || maxPairs<1) fail('maxPairs non valido');
   if (!Number.isSafeInteger(maxRoutingCalls) || maxRoutingCalls<1) fail('maxRoutingCalls non valido');
   num(costoAttesaOraEuro,'costoAttesaOraEuro');
   const normalized=missions.map(normalizeMission);
   const results=[]; let attempted=0;
-  // Cache per coordinate e direzione: nessuna distanza simmetrica presunta.
-  // Non conserva promesse fallite; errori di routing sempre espliciti.
   const routingCache=new Map();
   const routingStats={richieste:0,chiamateEffettive:0,cacheHit:0};
   const keyPoint=p=>`${Number(p.lat)},${Number(p.lon)}`;
@@ -57,16 +81,13 @@ export async function generaCicliDueMissioniShadow({missions,vehicles,movement,i
       routingStats.cacheHit++;
       return routingCache.get(key);
     }
-    if (routingStats.chiamateEffettive >= maxRoutingCalls) {
+    if (routingStats.chiamateEffettive >= maxRoutingCalls)
       fail(`limite routing raggiunto (${maxRoutingCalls}): nessun risultato parziale; ${JSON.stringify(routingStats)}`);
-    }
     routingStats.chiamateEffettive++;
-    const route=legCheck(await movement(from,to),name);
+    const route=legCheck(await movement(from,to),name,from,to,contrattoRoutingFisicoV2);
     routingCache.set(key,route);
     return route;
   }
-  // Controllo preventivo del limite: nessun routing prima del fail-closed.
-  // Stessi filtri e stesso ordine del generatore originale.
   let pairCount=0;
   for (const v of vehicles) {
     if (!positiveId(v.id) || !Number.isFinite(Number(v.lat)) || !Number.isFinite(Number(v.lon))) fail('veicolo non valido');

@@ -39,7 +39,7 @@ function normalizeStop(stop) {
   };
 }
 
-function compatibleStops(stops, tipoVeicolo) {
+function compatibleStops(stops) {
   if (!Array.isArray(stops)) {
     fail('lista fermate non valida');
   }
@@ -49,20 +49,9 @@ function compatibleStops(stops, tipoVeicolo) {
   for (const raw of stops) {
     const stop = normalizeStop(raw);
 
-    if (!Array.isArray(stop.tipi_veicolo_ammessi)) {
-      continue;
-    }
-
-    // Fase provvisoria:
-    // array vuoto = compatibilità non ancora dichiarata,
-    // non esclusione automatica dal collaudo.
-    // Se sono presenti tipi espliciti, il veicolo deve essere ammesso.
-    if (
-      stop.tipi_veicolo_ammessi.length > 0 &&
-      !stop.tipi_veicolo_ammessi.includes(tipoVeicolo)
-    ) {
-      continue;
-    }
+    // Fase provvisoria POPBUS V2: nessuna esclusione per tipo di veicolo.
+    // Il campo tipi_veicolo_ammessi resta nei dati per usi futuri.
+    // Restano valide le verifiche di integrita' e la deduplicazione.
 
     const previous = unique.get(stop.fermata_id);
 
@@ -97,8 +86,8 @@ function comparePairs(a, b) {
 }
 
 function buildPairs(ref, item, tipoVeicolo) {
-  const salite = compatibleStops(item.salita, tipoVeicolo);
-  const discese = compatibleStops(item.discesa, tipoVeicolo);
+  const salite = compatibleStops(item.salita);
+  const discese = compatibleStops(item.discesa);
 
   if (!salite.length || !discese.length) {
     return { motivo: 'FERMATE_COMPATIBILI_ASSENTI', coppie: [] };
@@ -186,9 +175,9 @@ export function generaAssegnazioniFermate({
     fail('candidati non validi');
   }
 
-  if (!['ncc', 'navetta', 'autobus'].includes(tipoVeicolo)) {
-    fail('tipoVeicolo non valido');
-  }
+  // Il tipo di veicolo e' mantenuto solo per compatibilita' con le chiamate
+  // esistenti: non filtra le fermate in questa fase.
+  // Non rimuovere il parametro: buildPairs lo riceve ancora.
 
   if (
     !Number.isSafeInteger(maxCombinazioni) ||

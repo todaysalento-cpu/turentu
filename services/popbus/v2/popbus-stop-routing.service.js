@@ -3,6 +3,7 @@
 // Nessuna scrittura DB, nessuna attivazione.
 
 import { leg } from './planner.js';
+import polyline from 'polyline';
 
 const fail = message => {
   throw new Error(`POPBUS_STOP_ROUTING: ${message}`);
@@ -21,6 +22,44 @@ const validPoint = p =>
 const samePoint = (a, b) =>
   Math.abs(Number(a.lat) - Number(b.lat)) < 1e-7 &&
   Math.abs(Number(a.lon) - Number(b.lon)) < 1e-7;
+
+// Tolleranza geometrica provvisoria, coerente con il controllo PIXEL-FIRST.
+// NON certifica l'accessibilita' stradale o la sicurezza della fermata.
+const MAX_DISTANZA_ANCORAGGIO_METRI = 250;
+
+function distanzaMetri(a, b) {
+  const toRad = value => Number(value) * Math.PI / 180;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLat = lat2 - lat1;
+  const dLon = toRad(Number(b.lon) - Number(a.lon));
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6371008.8 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function verificaGeometriaStradale(segmento, from, to) {
+  let punti;
+  try {
+    punti = polyline.decode(segmento.polyline);
+  } catch {
+    fail('polilinea stradale malformata');
+  }
+
+  if (!Array.isArray(punti) || punti.length < 2 ||
+      punti.some(p => !Array.isArray(p) || p.length < 2 ||
+        !validPoint({ lat: p[0], lon: p[1] }))) {
+    fail('polilinea stradale malformata');
+  }
+
+  const primo = { lat: punti[0][0], lon: punti[0][1] };
+  const ultimo = { lat: punti.at(-1)[0], lon: punti.at(-1)[1] };
+
+  if (distanzaMetri(primo, from) > MAX_DISTANZA_ANCORAGGIO_METRI ||
+      distanzaMetri(ultimo, to) > MAX_DISTANZA_ANCORAGGIO_METRI) {
+    fail('polilinea non ancorata alle fermate');
+  }
+}
 
 export async function calcolaRoutingFermate({
   sequenza,
@@ -90,6 +129,8 @@ export async function calcolaRoutingFermate({
             !segmento.polyline.length) {
           fail('segmento stradale non valido');
         }
+
+        verificaGeometriaStradale(segmento, precedente, visita);
       }
 
       legs.push({
@@ -142,6 +183,10 @@ export async function calcolaRoutingFermate({
   return {
     ok: true,
     stato: 'ROUTING_CALCOLATO',
+    // Propaga il picco gia' verificato dal sequenziatore: il routing non lo ricalcola.
+    peak: sequenza.peak,
+    postiTotali: sequenza.postiTotali,
+    capienzaVerificata: sequenza.capienzaVerificata === true,
     departure,
     arrival: visite.at(-1).arrivo,
     fineOperazioni: currentTime,

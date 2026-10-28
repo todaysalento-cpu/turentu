@@ -544,6 +544,7 @@ export async function leggiOpportunitaPixel({
        o.id AS pixel_opportunita_id,
        o.direttrice_id AS pixel_direttrice_id,
        d.versione,
+       d.engine_id,
        d.nodi,
        d.legs,
        o.inizio_finestra,

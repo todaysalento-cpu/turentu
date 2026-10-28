@@ -35,6 +35,73 @@ function fixture(v2=false) {
 let pass=0,fail=0;
 function test(name,fn) {try{fn();pass++;console.log('PASS '+name);}catch(e){fail++;console.log('RED '+name+' — '+e.message);}}
 function rejects(name,mutate){test(name,()=>{const p=fixture(true);mutate(p);assert.throws(()=>validaPianoMultiMissione(p,{veicoloId:70,postiTotali:4}));});}
+test('V2 missione singola con due fermate accettata', () => {
+  const p = fixture(true);
+
+  p.nodes = [14, 15];
+  p.coordinates = p.nodes.map(id => ({
+    id,
+    lat: stops[id][0],
+    lon: stops[id][1]
+  }));
+
+  p.legs = [mkLeg(138, 869)];
+
+  p.missioni = [{
+    ordine: 1,
+    startIndex: 0,
+    endIndex: 1,
+    partenza: departure,
+    arrivo: departure + 138000,
+    schemaVersion: 2,
+    tipoItinerario: 'FERMATE_FISICHE',
+    nodiTerritoriali: [5, 6],
+    pixelOpportunitaId: 501,
+    pixelDirettriceId: 601,
+    pixelVersione: 3,
+    corridoioPixelId: 'pixel-engine-1'
+  }];
+
+  p.evaluation = {
+    departure,
+    arrival: departure + 138000,
+    times: [0, 138000],
+    requests: [{ id: 900001, start: 0, end: 1 }]
+  };
+
+  p.busyEnd = new Date(departure + 198000).toISOString();
+
+  const risultato = validaPianoMultiMissione(p, {
+    veicoloId: 70,
+    postiTotali: 4
+  });
+
+  assert.equal(risultato.numeroMissioni, 1);
+  assert.equal(risultato.nodi, 2);
+
+  const occupazione = validaOccupazioneMultiMissione(
+    p,
+    [{ id: 900001, posti_richiesti: 2 }],
+    4
+  );
+
+  assert.equal(occupazione.peak, 2);
+  assert.equal(occupazione.postiDisponibili, 2);
+});
+
+test('V1 con una sola missione respinta', () => {
+  const p = fixture(false);
+  p.missioni = [p.missioni[0]];
+  p.evaluation.requests = [p.evaluation.requests[0]];
+
+  assert.throws(
+    () => validaPianoMultiMissione(p, {
+      veicoloId: 70,
+      postiTotali: 4
+    }),
+    /numero missioni/
+  );
+});
 console.log('=== TURENTU — PREFLIGHT PURO MULTIMISSIONE V1/V2 RED ===');
 test('V1 invariato',()=>{const p=fixture(false);const r=validaPianoMultiMissione(p,{veicoloId:70,postiTotali:4});assert.equal(r.numeroMissioni,2);});
 test('V2 fisico/territoriale accettato',()=>{const p=fixture(true);const r=validaPianoMultiMissione(p,{veicoloId:70,postiTotali:4});assert.equal(r.numeroMissioni,2);});

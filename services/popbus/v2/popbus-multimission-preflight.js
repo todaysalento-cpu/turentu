@@ -14,8 +14,12 @@ export function validaPianoMultiMissione(plan, { veicoloId, postiTotali } = {}) 
     check(Number(plan.schemaVersion) === 2 &&
       plan.tipoItinerario === 'FERMATE_FISICHE', 'contratto globale V2 incompleto');
   }
-  check(Array.isArray(plan.missioni) && plan.missioni.length >= 2 && plan.missioni.length <= 3, 'numero missioni');
-  check(Array.isArray(plan.nodes) && plan.nodes.length >= 3, 'nodi');
+  const minMissioni = v2 ? 1 : 2;
+  check(Array.isArray(plan.missioni) && plan.missioni.length >= minMissioni && plan.missioni.length <= 3, 'numero missioni');
+  check(
+  Array.isArray(plan.nodes) && plan.nodes.length >= (v2 ? 2 : 3),
+  'nodi'
+);
   const n = plan.nodes.length;
   check(Array.isArray(plan.coordinates) && plan.coordinates.length === n, 'coordinate');
   check(Array.isArray(plan.legs) && plan.legs.length === n - 1, 'tratte');

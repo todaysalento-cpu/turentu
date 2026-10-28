@@ -1,0 +1,711 @@
+DATA_TEST_UTC: 2026-11-09T12:00:00.000Z
+SCENARI: 3, 6, 9, 12 richieste; quattro ondate distinte
+[PIXEL FORMAZIONI] {
+  opportunitaId: 183,
+  richiesteContesto: 1,
+  seed: [ 340 ],
+  formazioniGenerate: 1,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 340 ],
+    seedValutati: [ [Array] ],
+    fallback: true,
+    formazioni: 1,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 183,
+  formazioniGenerate: 1,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 1,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 1,
+  finestra: {
+    start: '2026-11-09T11:30:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 184,
+  richiesteContesto: 3,
+  seed: [ 340, 341, 342 ],
+  formazioniGenerate: 7,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 340, 341, 342 ],
+    seedValutati: [ [Array], [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 7,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 184,
+  formazioniGenerate: 7,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 7,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 7,
+  finestra: {
+    start: '2026-11-09T11:30:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 183,
+      direttriceId: 97,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 184,
+      direttriceId: 98,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: []
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T22:56:19.187Z',
+  contestiPixel: 2,
+  missioniCandidate: 0,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":3,"ondate":1,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[183,184],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 3/12 OK: PIXEL 2 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 3 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 185,
+  richiesteContesto: 2,
+  seed: [ 343, 346 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 343, 346 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 185,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 186,
+  richiesteContesto: 6,
+  seed: [ 343, 344, 345, 346, 347, 348 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 343, 344, 345, 346, 347, 348 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 186,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 185,
+      direttriceId: 99,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 186,
+      direttriceId: 100,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: []
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T22:56:24.754Z',
+  contestiPixel: 2,
+  missioniCandidate: 0,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":6,"ondate":2,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[185,186],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 6/12 OK: PIXEL 2 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 6 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 187,
+  richiesteContesto: 2,
+  seed: [ 349, 352 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 349, 352 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 187,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 189,
+  richiesteContesto: 6,
+  seed: [ 349, 350, 351, 352, 353, 354 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 349, 350, 351, 352, 353, 354 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 189,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 188,
+  richiesteContesto: 2,
+  seed: [ 352, 355 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 352, 355 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 188,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 190,
+  richiesteContesto: 6,
+  seed: [ 352, 353, 354, 355, 356, 357 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 352, 353, 354, 355, 356, 357 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 190,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 187,
+      direttriceId: 101,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 189,
+      direttriceId: 102,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 188,
+      direttriceId: 101,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 190,
+      direttriceId: 102,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: []
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T22:56:32.143Z',
+  contestiPixel: 4,
+  missioniCandidate: 0,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":9,"ondate":3,"direttriciPixel":2,"opportunitaPixel":4,"opportunitaIds":[187,189,188,190],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 9/12 OK: PIXEL 4 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 9 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 191,
+  richiesteContesto: 2,
+  seed: [ 358, 361 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 358, 361 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 191,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 194,
+  richiesteContesto: 6,
+  seed: [ 358, 359, 360, 361, 362, 363 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 358, 359, 360, 361, 362, 363 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 194,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 192,
+  richiesteContesto: 2,
+  seed: [ 361, 364 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 361, 364 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 192,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 195,
+  richiesteContesto: 6,
+  seed: [ 361, 362, 363, 364, 365, 366 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 361, 362, 363, 364, 365, 366 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 195,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 193,
+  richiesteContesto: 2,
+  seed: [ 364, 367 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 364, 367 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 193,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 3,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:45:00.000Z',
+    end: '2026-11-09T14:00:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 196,
+  richiesteContesto: 6,
+  seed: [ 364, 365, 366, 367, 368, 369 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 364, 365, 366, 367, 368, 369 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 196,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 31,
+  dataRichiestaNonValida: 0,
+  ammesse: 0,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:45:00.000Z',
+    end: '2026-11-09T14:00:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 191,
+      direttriceId: 103,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 194,
+      direttriceId: 104,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 192,
+      direttriceId: 103,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 195,
+      direttriceId: 104,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 193,
+      direttriceId: 103,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 196,
+      direttriceId: 104,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: []
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T22:56:43.033Z',
+  contestiPixel: 6,
+  missioniCandidate: 0,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":12,"ondate":4,"direttriciPixel":2,"opportunitaPixel":6,"opportunitaIds":[191,194,192,195,193,196],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 12/12 OK: PIXEL 6 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 12 richieste
+RIEPILOGO_INCREMENTALE_JSON:[{"richiesteSintetiche":3,"ondate":1,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[183,184],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false},{"richiesteSintetiche":6,"ondate":2,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[185,186],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false},{"richiesteSintetiche":9,"ondate":3,"direttriciPixel":2,"opportunitaPixel":4,"opportunitaIds":[187,189,188,190],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false},{"richiesteSintetiche":12,"ondate":4,"direttriciPixel":2,"opportunitaPixel":6,"opportunitaIds":[191,194,192,195,193,196],"missioniCandidateFisiche":0,"diagnosticaFisica":{"tentativi":0,"alternative":0,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":1200,"combinazioniElegibili":0,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":0,"cacheHits":0,"cacheEntries":0,"tempoCalcoliFisiciMs":0,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":0,"scartiValutazionePerFase":{},"campioneScartiValutazione":[],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":0,"veicoliConCandidati":0,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":0,"coppieStessaAlternativa":0,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":0,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":0,"candidatiOperativamenteFattibili":0,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":0,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":0,"scartiVincoliGlobali":0,"scartiEconomia":0,"scartiOperativi":0,"chiamateRouting":0,"rotteInCache":0,"completo":true,"chiamateDisponibilita":0,"cacheHitsDisponibilita":0,"chiamateConflitti":0,"cacheHitsConflitti":0,"coppieEsclusePerEconomiaSenzaValidazione":0,"tempiMs":{"singoleOperative":0,"validazioneSingole":0,"confrontoCoppie":0,"totale":0}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":0,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":0,"deficitMinimoEuro":null,"margineMiglioreEuro":null,"perVeicolo":[],"esempiMigliori":[]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":0},"offerte":0,"dbWrites":0,"attivabile":false}]
+TEST_INCREMENTALE_SHADOW_OK: nessuna attivazione o offerta
+ROLLBACK ESEGUITO: nessuna scrittura confermata.

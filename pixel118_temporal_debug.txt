@@ -1,0 +1,3726 @@
+[PIXEL FORMAZIONI] {
+  opportunitaId: 118,
+  richiesteContesto: 6,
+  seed: [ 196, 197, 198, 199, 200, 201 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 196, 197, 198, 199, 200, 201 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 118,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 118,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-27T11:22:22.332Z',
+  contestiPixel: 1,
+  missioniCandidate: 31,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197, 198, 199, 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 196, 197, 198, 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 196, 197, 198, 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 196, 197, 198, 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 196, 197, 198, 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 197, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 197, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 197, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 197, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 197, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 197, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 197, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 197, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 197, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 197, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 197, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 197, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 198, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 198, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 198, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 198, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 198, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 198, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 198, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 198, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 199, 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 199, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 199, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 199, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 199, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 199, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 199, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 199, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 199, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 200 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 200, 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 200, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 200, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 200, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 200, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 200, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 200, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 200, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 200, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 201 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 201, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 201, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 201, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 201, 196, 197 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 201, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 201, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 201, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 201, 196, 197, 198 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 347,
+  richiestaIds: [ 201, 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 348,
+  richiestaIds: [ 201, 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 353,
+  richiestaIds: [ 201, 196, 197, 198, 199 ]
+}
+[DEBUG PHYSICAL PIXEL MISSION] {
+  opportunitaId: 118,
+  direttriceId: 68,
+  versione: 1,
+  corridoioPixelId: 'territorial:8>5>7',
+  tipoCorridoio: 'string',
+  chiaviMissione: [
+    'arrival',
+    'corridoioPixelId',
+    'departure',
+    'evaluation',
+    'from',
+    'kmMissione',
+    'peak',
+    'pixelDirettriceId',
+    'pixelOpportunitaId',
+    'pixelVersione',
+    'plan',
+    'requests',
+    'to'
+  ],
+  veicoloId: 356,
+  richiestaIds: [ 201, 196, 197, 198, 199 ]
+}
+POPBUS_PHYSICAL_CYCLES_SHADOW_RESULT={
+  "stato": "PASS_SHADOW_READ_ONLY",
+  "opportunita": [
+    118
+  ],
+  "percorso": "PIXEL_FERMATE_FISICHE_CICLI_SHADOW_V2",
+  "missioniCandidateFisiche": 275,
+  "offerte": 0,
+  "dbWrites": 0,
+  "attivabile": false,
+  "diagnostica": {
+    "tentativi": 155,
+    "alternative": 275,
+    "scarti": [],
+    "completo": true,
+    "attivabile": false,
+    "diagnosticaLimitata": false,
+    "limiteEffettivo": 600,
+    "combinazioniElegibili": 155,
+    "combinazioniResidue": 0,
+    "ricercaInternaNonEsaustiva": 0,
+    "interrottoPerBudget": false,
+    "calcoliFisici": 124,
+    "cacheHits": 31,
+    "cacheEntries": 124,
+    "tempoCalcoliFisiciMs": 18863.228900000002,
+    "disabilitaCacheFisica": false,
+    "escludiVeicoliTest": true,
+    "veicoliEsclusi": [
+      {
+        "vehicleId": 357,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 358,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 359,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 360,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 361,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 362,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 363,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 364,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 365,
+        "motivo": "VEICOLO_TEST"
+      },
+      {
+        "vehicleId": 366,
+        "motivo": "VEICOLO_TEST"
+      }
+    ],
+    "numeroVeicoliEsclusi": 10,
+    "numeroVeicoliValutabili": 5,
+    "esitiFisiciVuoti": 20,
+    "scartiValutazioneTotali": 608,
+    "scartiValutazionePerFase": {
+      "TEMPORALE": 272,
+      "QUALITA": 336
+    },
+    "campioneScartiValutazione": [
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "TEMPORALE",
+        "motivo": "SALITA_FUORI_TOLLERANZA",
+        "richiestaId": 200
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 197
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 196
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "TEMPORALE",
+        "motivo": "SALITA_FUORI_TOLLERANZA",
+        "richiestaId": 200
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 198
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 197
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 196
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 198
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "TEMPORALE",
+        "motivo": "SALITA_FUORI_TOLLERANZA",
+        "richiestaId": 200
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 196
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 196
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 198
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 198
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "TEMPORALE",
+        "motivo": "SALITA_FUORI_TOLLERANZA",
+        "richiestaId": 200
+      },
+      {
+        "opportunitaId": 118,
+        "veicoloId": 347,
+        "fase": "QUALITA",
+        "motivo": "FERMATE_TROPPO_VICINE",
+        "richiestaId": 197
+      }
+    ],
+    "sequenziamento": {
+      "sequenzeScartateEventi": 0,
+      "sequenzeScartateRouting": 0,
+      "routingEccezioni": 0,
+      "routingRisposteNonValide": 0,
+      "routingTratteDistinte": 0,
+      "campioneErroriRouting": []
+    }
+  },
+  "diagnosticaCicli": {
+    "candidati": 275,
+    "veicoliConCandidati": 5,
+    "singoleEsaminate": 275,
+    "singoleScartateOrario": 0,
+    "singoleScartateVincoli": 0,
+    "singoleScartateOperativita": 55,
+    "singoleFisicamenteFattibili": 220,
+    "singoleEconomicamenteAmmissibili": 0,
+    "singoleScartateEconomia": 220,
+    "singoleNonValutateSenzaCallback": false,
+    "coppieEsaminate": 0,
+    "coppieTemporali": 0,
+    "coppieConRichiesteDisgiunte": 0,
+    "coppieAmmesseDaVincoli": 0,
+    "coppieScartateVincoli": 0,
+    "coppieValutateRouting": 0,
+    "cicliFisicamenteFattibili": 0,
+    "cicliEconomicamenteAmmissibili": 0,
+    "cicliScartatiEconomia": 0,
+    "completo": true,
+    "attivabile": false,
+    "dbWrites": 0,
+    "coppieTeoricheOrdinate": 15125,
+    "coppieStessaAlternativa": 275,
+    "coppieScartatePartenzaNonFutura": 0,
+    "coppieScartateSovrapposizione": 14850,
+    "coppieScartateRichiesteComuni": 0,
+    "diagnosticaPerVeicolo": [
+      {
+        "vehicleId": 347,
+        "alternative": 55,
+        "coppieTeoricheOrdinate": 3025,
+        "coppieTemporali": 0,
+        "scartiStessaAlternativa": 55,
+        "scartiPartenzaNonFutura": 0,
+        "scartiSovrapposizione": 2970,
+        "scartiRichiesteComuni": 0,
+        "coppieConRichiesteDisgiunte": 0,
+        "coppieAmmesseDaVincoli": 0,
+        "coppieScartateVincoli": 0
+      },
+      {
+        "vehicleId": 348,
+        "alternative": 55,
+        "coppieTeoricheOrdinate": 3025,
+        "coppieTemporali": 0,
+        "scartiStessaAlternativa": 55,
+        "scartiPartenzaNonFutura": 0,
+        "scartiSovrapposizione": 2970,
+        "scartiRichiesteComuni": 0,
+        "coppieConRichiesteDisgiunte": 0,
+        "coppieAmmesseDaVincoli": 0,
+        "coppieScartateVincoli": 0
+      },
+      {
+        "vehicleId": 352,
+        "alternative": 55,
+        "coppieTeoricheOrdinate": 3025,
+        "coppieTemporali": 0,
+        "scartiStessaAlternativa": 55,
+        "scartiPartenzaNonFutura": 0,
+        "scartiSovrapposizione": 2970,
+        "scartiRichiesteComuni": 0,
+        "coppieConRichiesteDisgiunte": 0,
+        "coppieAmmesseDaVincoli": 0,
+        "coppieScartateVincoli": 0
+      },
+      {
+        "vehicleId": 353,
+        "alternative": 55,
+        "coppieTeoricheOrdinate": 3025,
+        "coppieTemporali": 0,
+        "scartiStessaAlternativa": 55,
+        "scartiPartenzaNonFutura": 0,
+        "scartiSovrapposizione": 2970,
+        "scartiRichiesteComuni": 0,
+        "coppieConRichiesteDisgiunte": 0,
+        "coppieAmmesseDaVincoli": 0,
+        "coppieScartateVincoli": 0
+      },
+      {
+        "vehicleId": 356,
+        "alternative": 55,
+        "coppieTeoricheOrdinate": 3025,
+        "coppieTemporali": 0,
+        "scartiStessaAlternativa": 55,
+        "scartiPartenzaNonFutura": 0,
+        "scartiSovrapposizione": 2970,
+        "scartiRichiesteComuni": 0,
+        "coppieConRichiesteDisgiunte": 0,
+        "coppieAmmesseDaVincoli": 0,
+        "coppieScartateVincoli": 0
+      }
+    ],
+    "chiamateRouting": 18,
+    "rotteInCache": 18,
+    "cicliTotaliAmmissibili": 0
+  },
+  "diagnosticaEconomica": {
+    "cicliAnalizzati": 220,
+    "singoleAnalizzate": 220,
+    "coppieAnalizzate": 0,
+    "deficitTotaleEuro": 31630.31,
+    "deficitMinimoEuro": 21.66,
+    "deficitMassimoEuro": 381.6,
+    "margineMiglioreEuro": -18.41,
+    "esempiMigliori": [
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196,
+          197,
+          198,
+          199,
+          200,
+          201
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 60,
+        "commissioneTurentuEuro": 9,
+        "ricavoNettoEuro": 51,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 54.117,
+          "trasferimenti": 0,
+          "ritornoBase": 57.864,
+          "totali": 115.681
+        },
+        "costoKmEuro": 69.41,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 69.41,
+        "margineEuro": -18.41,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 81.66,
+        "deficitLordoEuro": 21.66,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196,
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 14,
+        "commissioneTurentuEuro": 2.1,
+        "ricavoNettoEuro": 11.9,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 23.94,
+          "trasferimenti": 0,
+          "ritornoBase": 28.461,
+          "totali": 56.101
+        },
+        "costoKmEuro": 33.67,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 33.67,
+        "margineEuro": -21.77,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 39.61,
+        "deficitLordoEuro": 25.61,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196,
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 14,
+        "commissioneTurentuEuro": 2.1,
+        "ricavoNettoEuro": 11.9,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 24.147,
+          "trasferimenti": 0,
+          "ritornoBase": 29.293,
+          "totali": 57.14
+        },
+        "costoKmEuro": 34.29,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 34.29,
+        "margineEuro": -22.39,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 40.34,
+        "deficitLordoEuro": 26.34,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          201,
+          196,
+          197,
+          198,
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 51,
+        "commissioneTurentuEuro": 7.65,
+        "ricavoNettoEuro": 43.35,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 55.855000000000004,
+          "trasferimenti": 0,
+          "ritornoBase": 57.864,
+          "totali": 117.41900000000001
+        },
+        "costoKmEuro": 70.46,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 70.46,
+        "margineEuro": -27.11,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 82.89,
+        "deficitLordoEuro": 31.89,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 352,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196,
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.7,
+        "ricavoLordoEuro": 14,
+        "commissioneTurentuEuro": 2.1,
+        "ricavoNettoEuro": 11.9,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 23.94,
+          "trasferimenti": 0,
+          "ritornoBase": 28.461,
+          "totali": 56.101
+        },
+        "costoKmEuro": 39.28,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 39.28,
+        "margineEuro": -27.38,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 46.21,
+        "deficitLordoEuro": 32.21,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 7,
+        "commissioneTurentuEuro": 1.05,
+        "ricavoNettoEuro": 5.95,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 23.94,
+          "trasferimenti": 0,
+          "ritornoBase": 28.461,
+          "totali": 56.101
+        },
+        "costoKmEuro": 33.67,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 33.67,
+        "margineEuro": -27.72,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 39.61,
+        "deficitLordoEuro": 32.61,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 7,
+        "commissioneTurentuEuro": 1.05,
+        "ricavoNettoEuro": 5.95,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 23.94,
+          "trasferimenti": 0,
+          "ritornoBase": 28.461,
+          "totali": 56.101
+        },
+        "costoKmEuro": 33.67,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 33.67,
+        "margineEuro": -27.72,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 39.61,
+        "deficitLordoEuro": 32.61,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 352,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196,
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.7,
+        "ricavoLordoEuro": 14,
+        "commissioneTurentuEuro": 2.1,
+        "ricavoNettoEuro": 11.9,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 24.147,
+          "trasferimenti": 0,
+          "ritornoBase": 29.293,
+          "totali": 57.14
+        },
+        "costoKmEuro": 40,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 40,
+        "margineEuro": -28.1,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 47.06,
+        "deficitLordoEuro": 33.06,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          196
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 7,
+        "commissioneTurentuEuro": 1.05,
+        "ricavoNettoEuro": 5.95,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 24.147,
+          "trasferimenti": 0,
+          "ritornoBase": 29.293,
+          "totali": 57.14
+        },
+        "costoKmEuro": 34.29,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 34.29,
+        "margineEuro": -28.34,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 40.34,
+        "deficitLordoEuro": 33.34,
+        "economicamenteAttivabile": false
+      },
+      {
+        "tipoCiclo": "SINGOLA",
+        "vehicleId": 353,
+        "opportunita": [
+          118
+        ],
+        "richiesteA": [
+          199
+        ],
+        "richiesteB": [],
+        "euroKm": 0.6,
+        "ricavoLordoEuro": 7,
+        "commissioneTurentuEuro": 1.05,
+        "ricavoNettoEuro": 5.95,
+        "km": {
+          "avvicinamento": 3.7,
+          "missioni": 24.147,
+          "trasferimenti": 0,
+          "ritornoBase": 29.293,
+          "totali": 57.14
+        },
+        "costoKmEuro": 34.29,
+        "costoAttesaEuro": 0,
+        "altriCostiEuro": 0,
+        "costoCompletoEuro": 34.29,
+        "margineEuro": -28.34,
+        "margineMinimoEuro": 0,
+        "sogliaAttivazioneLordaEuro": 40.34,
+        "deficitLordoEuro": 33.34,
+        "economicamenteAttivabile": false
+      }
+    ],
+    "perVeicolo": [
+      {
+        "vehicleId": 347,
+        "cicli": 55,
+        "deficitMinimoEuro": 49.59,
+        "margineMiglioreEuro": -42.15
+      },
+      {
+        "vehicleId": 352,
+        "cicli": 55,
+        "deficitMinimoEuro": 32.21,
+        "margineMiglioreEuro": -27.38
+      },
+      {
+        "vehicleId": 353,
+        "cicli": 55,
+        "deficitMinimoEuro": 21.66,
+        "margineMiglioreEuro": -18.41
+      },
+      {
+        "vehicleId": 356,
+        "cicli": 55,
+        "deficitMinimoEuro": 170.81,
+        "margineMiglioreEuro": -145.19
+      }
+    ],
+    "deficitMedioEuro": 143.77
+  },
+  "migliorCiclo": null
+}
+Candidati fisici non attivabili: 275
+POPBUS_PHYSICAL_CYCLES_SHADOW_READONLY_OK

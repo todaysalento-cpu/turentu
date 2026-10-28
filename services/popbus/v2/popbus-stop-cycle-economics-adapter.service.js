@@ -1,6 +1,7 @@
 // TURENTU POPBUS V2 - Valutazione economica del ciclo assemblato.
 // Modulo puro e diagnostico: nessun accesso DB, nessuna autorizzazione LIVE.
 import { valutaEconomiaCiclo } from './cycle-pricing.js';
+import polyline from '@mapbox/polyline';
 
 const fail = message => { throw new Error(`POPBUS_STOP_CYCLE_ECONOMICS: ${message}`); };
 const idValido = x => x != null && x !== '' && Number.isSafeInteger(Number(x)) && Number(x) > 0;
@@ -30,7 +31,8 @@ function sommaLegs(legs, nome, richiediPolyline = true) {
 export function valutaEconomiaCicloFermate({
   ciclo, missioni, missioniAdattate, trasferimenti = [], richieste, avvicinamento,
   ritornoBase, euroKm, oreAttesa = 0, costoAttesaOraEuro = 0,
-  altriCostiEuro = 0, margineMinimoEuro = 0
+  altriCostiEuro = 0, margineMinimoEuro = 0,
+  contrattoTrasferimentiFisiciV2 = false
 }) {
   if (!ciclo || ciclo.tipoPiano !== 'CICLO_PIXEL_CORSA_UNICA_V1' ||
       ciclo.attivabile !== false || ciclo.validazioneCapienza?.verificata !== true ||
@@ -142,9 +144,83 @@ export function valutaEconomiaCicloFermate({
     if (i > 0) {
       const tr = trasferimenti[i - 1];
       const metriTrasferimento = metri(tr, `trasferimento ${i}`);
-      const metriCicloTrasferimento = sommaLegs(intervalloTrasferimento, `ciclo trasferimento ${i}`);
+      const originaleTratta = tr?.leg ?? tr;
+      const coincidente = intervalloTrasferimento.length === 0 &&
+        Number(tr?.metres) === 0 && Number(tr?.seconds) === 0 &&
+        tr?.routingVerificato === true && tr?.roadCoincident === true &&
+        Number(originaleTratta?.metres) === 0 &&
+        Number(originaleTratta?.seconds) === 0 &&
+        originaleTratta?.roadCoincident === true &&
+        typeof originaleTratta?.polyline === 'string' &&
+        originaleTratta.polyline.length > 0 &&
+        Number(ciclo.nodes[finePrecedente]) === Number(ciclo.nodes[start]) &&
+        Number(missioniAdattate[i - 1]?.nodes?.at(-1)) ===
+          Number(missioniAdattate[i]?.nodes?.[0]) &&
+        Math.abs(Number(ciclo.missioni[i - 1]?.arrivo) -
+          Number(meta.partenza)) <= 1000;
+
+      const metriCicloTrasferimento = coincidente
+        ? 0
+        : sommaLegs(intervalloTrasferimento, `ciclo trasferimento ${i}`);
       if (!quasiUguale(metriTrasferimento, metriCicloTrasferimento))
         fail(`trasferimento ${i}: chilometri diversi dal ciclo assemblato`);
+
+      // Contratto V2: il segmento stradale originale deve coincidere con quello
+      // assemblato. I segmenti di attesa sono separati e non sono routing.
+      // Compatibilita' legacy: i vecchi diagnostici forniscono soltanto i metri.
+      // Se invece e' presente un routing originale completo, lo confrontiamo
+      // sempre, anche senza flag, per impedire manomissioni silenziose.
+      const originaleCompleto = numeroNonNegativo(originaleTratta?.seconds) &&
+        typeof originaleTratta?.polyline === 'string' && originaleTratta.polyline.length > 0;
+      if (contrattoTrasferimentiFisiciV2 && !originaleCompleto && metriTrasferimento > 0)
+        fail(`trasferimento ${i}: routing originale V2 incompleto`);
+      if (originaleCompleto) {
+        legValido(originaleTratta, `trasferimento originale ${i}`, 0);
+        if (!quasiUguale(Number(originaleTratta.metres), metriTrasferimento))
+          fail(`trasferimento ${i}: metri originali incoerenti`);
+        const segmentiStradali = intervalloTrasferimento.filter(l => l?.attesa !== true);
+
+        if (coincidente) {
+          const fermata = ciclo.coordinates?.[start];
+          if (!fermata || !Number.isFinite(Number(fermata.lat)) ||
+              !Number.isFinite(Number(fermata.lon)))
+            fail(`trasferimento ${i}: coordinate fermata assenti`);
+
+          let decoded;
+          try {
+            decoded = polyline.decode(originaleTratta.polyline);
+          } catch {
+            fail(`trasferimento ${i}: polilinea coincidente malformata`);
+          }
+
+          if (!Array.isArray(decoded) || decoded.length < 2 ||
+              decoded.some(p => !Array.isArray(p) || p.length < 2 ||
+                !Number.isFinite(p[0]) || !Number.isFinite(p[1])))
+            fail(`trasferimento ${i}: geometria coincidente invalida`);
+
+          const rad = Math.PI / 180;
+          const distanza = p => 6371008.8 * Math.hypot(
+            (p[0] - Number(fermata.lat)) * rad,
+            Math.cos(Number(fermata.lat) * rad) *
+              (p[1] - Number(fermata.lon)) * rad
+          );
+
+          if (decoded.some(p => distanza(p) > 0.5))
+            fail(`trasferimento ${i}: geometria non coincidente`);
+        } else {
+          if (segmentiStradali.length !== 1)
+            fail(`trasferimento ${i}: numero segmenti stradali incoerente`);
+
+          const assemblato = segmentiStradali[0];
+          legValido(assemblato, `trasferimento assemblato ${i}`, 0);
+
+          if (!quasiUguale(Number(originaleTratta.metres), Number(assemblato.metres)) ||
+              Math.abs(Number(originaleTratta.seconds) - Number(assemblato.seconds)) > 0.001 ||
+              originaleTratta.polyline !== assemblato.polyline ||
+              (originaleTratta.roadCoincident === true) !== (assemblato.roadCoincident === true))
+            fail(`trasferimento ${i}: segmento diverso dall'originale`);
+        }
+      }
       // La distanza del trasferimento non include eventuali segmenti di attesa a zero km.
       metriTrasferimenti += metriCicloTrasferimento;
     } else if (intervalloTrasferimento.length) {

@@ -144,6 +144,7 @@ assert(risultato.attivabile === false, 'sicurezza attivazione');
 console.log('TEST MULTI-MISSIONE SUPERATO');
 const economiaIntegrata = valutaEconomiaCicloFermate({
   ciclo,
+  missioniAdattate: [m1.missione, m2.missione],
   missioni: [
     m1 && {
       sequenza: { ok: true },

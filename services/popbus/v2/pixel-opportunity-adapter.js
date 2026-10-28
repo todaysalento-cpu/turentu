@@ -23,6 +23,8 @@ export function adattaOpportunitaPixel(opportunita, richieste) {
   const opportunityId = id(opportunita?.pixel_opportunita_id);
   const corridorId = id(opportunita?.pixel_direttrice_id);
   if (!opportunityId || !corridorId) fail('identificativi opportunita/direttrice invalidi');
+  const engineId = opportunita?.engine_id;
+  if (typeof engineId !== 'string' || !engineId.trim()) fail('engine_id PIXEL autorevole mancante');
   if (!Array.isArray(opportunita.nodi) || opportunita.nodi.length < 2) fail('nodi mancanti');
   const nodes = opportunita.nodi.map(id);
   if (nodes.some(x => x === null) || unique(nodes).length !== nodes.length) fail('nodi duplicati/invalidi');
@@ -47,6 +49,7 @@ export function adattaOpportunitaPixel(opportunita, richieste) {
   return {
     pixel_opportunita_id: opportunityId,
     pixel_direttrice_id: corridorId,
+    engine_id: engineId,
     versione: Number(opportunita.versione),
     plan: { nodes, legs },
     window: { start, end },

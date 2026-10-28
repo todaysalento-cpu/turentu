@@ -1,0 +1,837 @@
+DATA_TEST_UTC: 2026-11-09T12:00:00.000Z
+SCENARI: 3, 6, 9, 12 richieste; quattro ondate distinte
+[PIXEL FORMAZIONI] {
+  opportunitaId: 225,
+  richiesteContesto: 1,
+  seed: [ 430 ],
+  formazioniGenerate: 1,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 430 ],
+    seedValutati: [ [Array] ],
+    fallback: true,
+    formazioni: 1,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 225,
+  formazioniGenerate: 1,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 1,
+  totaleControllato: 1,
+  finestra: {
+    start: '2026-11-09T11:30:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 226,
+  richiesteContesto: 3,
+  seed: [ 430, 431, 432 ],
+  formazioniGenerate: 7,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 430, 431, 432 ],
+    seedValutati: [ [Array], [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 7,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 226,
+  formazioniGenerate: 7,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 7,
+  totaleControllato: 7,
+  finestra: {
+    start: '2026-11-09T11:30:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 225,
+      direttriceId: 121,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 226,
+      direttriceId: 122,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 225,
+      direttriceId: 121,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 226,
+      direttriceId: 122,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 226,
+      direttriceId: 122,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 226,
+      direttriceId: 122,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 226,
+      direttriceId: 122,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T23:14:06.329Z',
+  contestiPixel: 2,
+  missioniCandidate: 8,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":3,"ondate":1,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[225,226],"missioniCandidateFisiche":255,"diagnosticaFisica":{"tentativi":120,"alternative":255,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":2000,"combinazioniElegibili":120,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":56,"cacheHits":64,"cacheEntries":56,"tempoCalcoliFisiciMs":8617.5732,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":0,"scartiValutazioneTotali":42,"scartiValutazionePerFase":{"QUALITA":42},"campioneScartiValutazione":[{"opportunitaId":226,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":432},{"opportunitaId":226,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430},{"opportunitaId":226,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":430}],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":255,"veicoliConCandidati":15,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":4335,"coppieStessaAlternativa":255,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":4080,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[{"vehicleId":347,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":348,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":352,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":353,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":356,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":357,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":358,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":359,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":360,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":361,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":362,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":363,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":364,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":365,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":366,"alternative":17,"coppieTeoricheOrdinate":289,"coppieTemporali":0,"scartiStessaAlternativa":17,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":272,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0}],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":255,"candidatiOperativamenteFattibili":238,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":5460,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":3640,"scartiVincoliGlobali":0,"scartiEconomia":2058,"scartiOperativi":17,"chiamateRouting":48,"rotteInCache":48,"completo":true,"chiamateDisponibilita":165,"cacheHitsDisponibilita":90,"chiamateConflitti":154,"cacheHitsConflitti":84,"coppieEsclusePerEconomiaSenzaValidazione":2058,"tempiMs":{"singoleOperative":12778,"validazioneSingole":0,"confrontoCoppie":6,"totale":12784}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":238,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":238,"deficitMinimoEuro":27.33,"margineMiglioreEuro":-23.23,"perVeicolo":[{"vehicleId":347,"candidati":17,"ammissibili":0,"deficitMinimoEuro":56.59,"margineMiglioreEuro":-48.1,"miglioreAlternativa":{"vehicleId":347,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":54.05,"margineEuro":-48.1,"deficitLordoEuro":56.59,"sogliaAttivazioneLordaEuro":63.59,"kmTotali":49.13,"kmAvvicinamento":0.667,"kmMissione":23.94,"kmRitornoBase":24.523,"kmVuoto":25.19,"quotaKmVuotoPercento":51.27,"economicamenteAmmissibile":false}},{"vehicleId":352,"candidati":17,"ammissibili":0,"deficitMinimoEuro":39.21,"margineMiglioreEuro":-33.33,"miglioreAlternativa":{"vehicleId":352,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":39.28,"margineEuro":-33.33,"deficitLordoEuro":39.21,"sogliaAttivazioneLordaEuro":46.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":353,"candidati":17,"ammissibili":0,"deficitMinimoEuro":32.61,"margineMiglioreEuro":-27.72,"miglioreAlternativa":{"vehicleId":353,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":356,"candidati":17,"ammissibili":0,"deficitMinimoEuro":177.81,"margineMiglioreEuro":-151.14,"miglioreAlternativa":{"vehicleId":356,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":157.09,"margineEuro":-151.14,"deficitLordoEuro":177.81,"sogliaAttivazioneLordaEuro":184.81,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":357,"candidati":17,"ammissibili":0,"deficitMinimoEuro":248.29,"margineMiglioreEuro":-211.05,"miglioreAlternativa":{"vehicleId":357,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":218.7,"margineEuro":-211.05,"deficitLordoEuro":248.29,"sogliaAttivazioneLordaEuro":257.29,"kmTotali":364.48900000000003,"kmAvvicinamento":183.841,"kmMissione":29.97,"kmRitornoBase":150.678,"kmVuoto":334.519,"quotaKmVuotoPercento":91.78,"economicamenteAmmissibile":false}},{"vehicleId":358,"candidati":17,"ammissibili":0,"deficitMinimoEuro":334.06,"margineMiglioreEuro":-283.95,"miglioreAlternativa":{"vehicleId":358,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":291.6,"margineEuro":-283.95,"deficitLordoEuro":334.06,"sogliaAttivazioneLordaEuro":343.06,"kmTotali":364.48900000000003,"kmAvvicinamento":183.841,"kmMissione":29.97,"kmRitornoBase":150.678,"kmVuoto":334.519,"quotaKmVuotoPercento":91.78,"economicamenteAmmissibile":false}},{"vehicleId":359,"candidati":17,"ammissibili":0,"deficitMinimoEuro":89.41,"margineMiglioreEuro":-76,"miglioreAlternativa":{"vehicleId":359,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":83.65,"margineEuro":-76,"deficitLordoEuro":89.41,"sogliaAttivazioneLordaEuro":98.41,"kmTotali":139.401,"kmAvvicinamento":69.708,"kmMissione":29.97,"kmRitornoBase":39.723,"kmVuoto":109.431,"quotaKmVuotoPercento":78.5,"economicamenteAmmissibile":false}},{"vehicleId":360,"candidati":17,"ammissibili":0,"deficitMinimoEuro":122.21,"margineMiglioreEuro":-103.88,"miglioreAlternativa":{"vehicleId":360,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":111.53,"margineEuro":-103.88,"deficitLordoEuro":122.21,"sogliaAttivazioneLordaEuro":131.21,"kmTotali":139.401,"kmAvvicinamento":69.708,"kmMissione":29.97,"kmRitornoBase":39.723,"kmVuoto":109.431,"quotaKmVuotoPercento":78.5,"economicamenteAmmissibile":false}},{"vehicleId":361,"candidati":17,"ammissibili":0,"deficitMinimoEuro":33.93,"margineMiglioreEuro":-28.84,"miglioreAlternativa":{"vehicleId":361,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":36.49,"margineEuro":-28.84,"deficitLordoEuro":33.93,"sogliaAttivazioneLordaEuro":42.93,"kmTotali":60.806999999999995,"kmAvvicinamento":29.293,"kmMissione":29.97,"kmRitornoBase":1.544,"kmVuoto":30.837,"quotaKmVuotoPercento":50.71,"economicamenteAmmissibile":false}},{"vehicleId":362,"candidati":17,"ammissibili":0,"deficitMinimoEuro":62.54,"margineMiglioreEuro":-53.16,"miglioreAlternativa":{"vehicleId":362,"opportunitaId":226,"richiestaIds":[431],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":60.81,"margineEuro":-53.16,"deficitLordoEuro":62.54,"sogliaAttivazioneLordaEuro":71.54,"kmTotali":60.806999999999995,"kmAvvicinamento":29.293,"kmMissione":29.97,"kmRitornoBase":1.544,"kmVuoto":30.837,"quotaKmVuotoPercento":50.71,"economicamenteAmmissibile":false}},{"vehicleId":363,"candidati":17,"ammissibili":0,"deficitMinimoEuro":27.33,"margineMiglioreEuro":-23.23,"miglioreAlternativa":{"vehicleId":363,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":29.18,"margineEuro":-23.23,"deficitLordoEuro":27.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false}},{"vehicleId":364,"candidati":17,"ammissibili":0,"deficitMinimoEuro":38.78,"margineMiglioreEuro":-32.96,"miglioreAlternativa":{"vehicleId":364,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":38.91,"margineEuro":-32.96,"deficitLordoEuro":38.78,"sogliaAttivazioneLordaEuro":45.78,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false}},{"vehicleId":365,"candidati":17,"ammissibili":0,"deficitMinimoEuro":32.61,"margineMiglioreEuro":-27.72,"miglioreAlternativa":{"vehicleId":365,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":366,"candidati":17,"ammissibili":0,"deficitMinimoEuro":72.21,"margineMiglioreEuro":-61.38,"miglioreAlternativa":{"vehicleId":366,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":67.33,"margineEuro":-61.38,"deficitLordoEuro":72.21,"sogliaAttivazioneLordaEuro":79.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}}],"esempiMigliori":[{"vehicleId":363,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":29.18,"margineEuro":-23.23,"deficitLordoEuro":27.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":226,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":29.18,"margineEuro":-23.23,"deficitLordoEuro":27.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":29.34,"margineEuro":-23.39,"deficitLordoEuro":27.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":226,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":29.34,"margineEuro":-23.39,"deficitLordoEuro":27.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":226,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false},{"vehicleId":365,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false},{"vehicleId":365,"opportunitaId":226,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":33.67,"margineEuro":-27.72,"deficitLordoEuro":32.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":225,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":34.29,"margineEuro":-28.34,"deficitLordoEuro":33.34,"sogliaAttivazioneLordaEuro":40.34,"kmTotali":57.14,"kmAvvicinamento":3.7,"kmMissione":24.147,"kmRitornoBase":29.293,"kmVuoto":32.993,"quotaKmVuotoPercento":57.74,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":226,"richiestaIds":[430],"ricavoLordoEuro":7,"ricavoNettoEuro":5.95,"remunerazioneNccEuro":34.29,"margineEuro":-28.34,"deficitLordoEuro":33.34,"sogliaAttivazioneLordaEuro":40.34,"kmTotali":57.14,"kmAvvicinamento":3.7,"kmMissione":24.147,"kmRitornoBase":29.293,"kmVuoto":32.993,"quotaKmVuotoPercento":57.74,"economicamenteAmmissibile":false}]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":154},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 3/12 OK: PIXEL 2 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 3 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 227,
+  richiesteContesto: 2,
+  seed: [ 433, 436 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 433, 436 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 227,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 228,
+  richiesteContesto: 6,
+  seed: [ 433, 434, 435, 436, 437, 438 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 433, 434, 435, 436, 437, 438 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 228,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 227,
+      direttriceId: 123,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 228,
+      direttriceId: 124,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 227,
+      direttriceId: 123,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 227,
+      direttriceId: 123,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 227,
+      direttriceId: 123,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 228,
+      direttriceId: 124,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 228,
+      direttriceId: 124,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T23:14:34.363Z',
+  contestiPixel: 2,
+  missioniCandidate: 34,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":6,"ondate":2,"direttriciPixel":2,"opportunitaPixel":2,"opportunitaIds":[227,228],"missioniCandidateFisiche":915,"diagnosticaFisica":{"tentativi":510,"alternative":915,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":2000,"combinazioniElegibili":510,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":238,"cacheHits":272,"cacheEntries":238,"tempoCalcoliFisiciMs":33505.9955,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":60,"scartiValutazioneTotali":1104,"scartiValutazionePerFase":{"QUALITA":622,"TEMPORALE":482},"campioneScartiValutazione":[{"opportunitaId":227,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":436},{"opportunitaId":227,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433},{"opportunitaId":227,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":433}],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":915,"veicoliConCandidati":15,"coppieEsaminate":0,"coppieTemporali":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0,"coppieValutateRouting":0,"cicliFisicamenteFattibili":0,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":0,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":55815,"coppieStessaAlternativa":915,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":54900,"coppieScartateRichiesteComuni":0,"diagnosticaPerVeicolo":[{"vehicleId":347,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":348,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":352,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":353,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":356,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":357,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":358,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":359,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":360,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":361,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":362,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":363,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":364,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":365,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0},{"vehicleId":366,"alternative":61,"coppieTeoricheOrdinate":3721,"coppieTemporali":0,"scartiStessaAlternativa":61,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":3660,"scartiRichiesteComuni":0,"coppieConRichiesteDisgiunte":0,"coppieAmmesseDaVincoli":0,"coppieScartateVincoli":0}],"chiamateRouting":0,"rotteInCache":0,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":0,"deficitTotaleEuro":0,"deficitMinimoEuro":null,"deficitMassimoEuro":null,"margineMiglioreEuro":null,"esempiMigliori":[],"perVeicolo":[],"deficitMedioEuro":null},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":915,"candidatiOperativamenteFattibili":854,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":60060,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":34944,"scartiVincoliGlobali":0,"scartiEconomia":25970,"scartiOperativi":61,"chiamateRouting":48,"rotteInCache":48,"completo":true,"chiamateDisponibilita":435,"cacheHitsDisponibilita":480,"chiamateConflitti":406,"cacheHitsConflitti":448,"coppieEsclusePerEconomiaSenzaValidazione":25970,"tempiMs":{"singoleOperative":196,"validazioneSingole":0,"confrontoCoppie":25,"totale":221}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":854,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":854,"deficitMinimoEuro":16.2,"margineMiglioreEuro":-13.77,"perVeicolo":[{"vehicleId":347,"candidati":61,"ammissibili":0,"deficitMinimoEuro":49.59,"margineMiglioreEuro":-42.15,"miglioreAlternativa":{"vehicleId":347,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":54.05,"margineEuro":-42.15,"deficitLordoEuro":49.59,"sogliaAttivazioneLordaEuro":63.59,"kmTotali":49.13,"kmAvvicinamento":0.667,"kmMissione":23.94,"kmRitornoBase":24.523,"kmVuoto":25.19,"quotaKmVuotoPercento":51.27,"economicamenteAmmissibile":false}},{"vehicleId":352,"candidati":61,"ammissibili":0,"deficitMinimoEuro":32.21,"margineMiglioreEuro":-27.38,"miglioreAlternativa":{"vehicleId":352,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":39.28,"margineEuro":-27.38,"deficitLordoEuro":32.21,"sogliaAttivazioneLordaEuro":46.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":353,"candidati":61,"ammissibili":0,"deficitMinimoEuro":21.66,"margineMiglioreEuro":-18.41,"miglioreAlternativa":{"vehicleId":353,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false}},{"vehicleId":356,"candidati":61,"ammissibili":0,"deficitMinimoEuro":170.81,"margineMiglioreEuro":-145.19,"miglioreAlternativa":{"vehicleId":356,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":157.09,"margineEuro":-145.19,"deficitLordoEuro":170.81,"sogliaAttivazioneLordaEuro":184.81,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":357,"candidati":61,"ammissibili":0,"deficitMinimoEuro":230.55,"margineMiglioreEuro":-195.97,"miglioreAlternativa":{"vehicleId":357,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":246.97,"margineEuro":-195.97,"deficitLordoEuro":230.55,"sogliaAttivazioneLordaEuro":290.55,"kmTotali":411.616,"kmAvvicinamento":206.821,"kmMissione":54.117,"kmRitornoBase":150.678,"kmVuoto":357.499,"quotaKmVuotoPercento":86.85,"economicamenteAmmissibile":false}},{"vehicleId":358,"candidati":61,"ammissibili":0,"deficitMinimoEuro":327.41,"margineMiglioreEuro":-278.3,"miglioreAlternativa":{"vehicleId":358,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":329.3,"margineEuro":-278.3,"deficitLordoEuro":327.41,"sogliaAttivazioneLordaEuro":387.41,"kmTotali":411.616,"kmAvvicinamento":206.821,"kmMissione":54.117,"kmRitornoBase":150.678,"kmVuoto":357.499,"quotaKmVuotoPercento":86.85,"economicamenteAmmissibile":false}},{"vehicleId":359,"candidati":61,"ammissibili":0,"deficitMinimoEuro":71.67,"margineMiglioreEuro":-60.92,"miglioreAlternativa":{"vehicleId":359,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":111.92,"margineEuro":-60.92,"deficitLordoEuro":71.67,"sogliaAttivazioneLordaEuro":131.67,"kmTotali":186.52800000000002,"kmAvvicinamento":92.688,"kmMissione":54.117,"kmRitornoBase":39.723,"kmVuoto":132.411,"quotaKmVuotoPercento":70.99,"economicamenteAmmissibile":false}},{"vehicleId":360,"candidati":61,"ammissibili":0,"deficitMinimoEuro":115.56,"margineMiglioreEuro":-98.23,"miglioreAlternativa":{"vehicleId":360,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":149.23,"margineEuro":-98.23,"deficitLordoEuro":115.56,"sogliaAttivazioneLordaEuro":175.56,"kmTotali":186.52800000000002,"kmAvvicinamento":92.688,"kmMissione":54.117,"kmRitornoBase":39.723,"kmVuoto":132.411,"quotaKmVuotoPercento":70.99,"economicamenteAmmissibile":false}},{"vehicleId":361,"candidati":61,"ammissibili":0,"deficitMinimoEuro":16.2,"margineMiglioreEuro":-13.77,"miglioreAlternativa":{"vehicleId":361,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.77,"margineEuro":-13.77,"deficitLordoEuro":16.2,"sogliaAttivazioneLordaEuro":76.2,"kmTotali":107.934,"kmAvvicinamento":52.273,"kmMissione":54.117,"kmRitornoBase":1.544,"kmVuoto":53.817,"quotaKmVuotoPercento":49.86,"economicamenteAmmissibile":false}},{"vehicleId":362,"candidati":61,"ammissibili":0,"deficitMinimoEuro":62.54,"margineMiglioreEuro":-53.16,"miglioreAlternativa":{"vehicleId":362,"opportunitaId":228,"richiestaIds":[434],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":60.81,"margineEuro":-53.16,"deficitLordoEuro":62.54,"sogliaAttivazioneLordaEuro":71.54,"kmTotali":60.806999999999995,"kmAvvicinamento":29.293,"kmMissione":29.97,"kmRitornoBase":1.544,"kmVuoto":30.837,"quotaKmVuotoPercento":50.71,"economicamenteAmmissibile":false}},{"vehicleId":363,"candidati":61,"ammissibili":0,"deficitMinimoEuro":16.29,"margineMiglioreEuro":-13.85,"miglioreAlternativa":{"vehicleId":363,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.85,"margineEuro":-13.85,"deficitLordoEuro":16.29,"sogliaAttivazioneLordaEuro":76.29,"kmTotali":108.077,"kmAvvicinamento":23.377,"kmMissione":54.117,"kmRitornoBase":30.583,"kmVuoto":53.96,"quotaKmVuotoPercento":49.93,"economicamenteAmmissibile":false}},{"vehicleId":364,"candidati":61,"ammissibili":0,"deficitMinimoEuro":31.78,"margineMiglioreEuro":-27.01,"miglioreAlternativa":{"vehicleId":364,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":38.91,"margineEuro":-27.01,"deficitLordoEuro":31.78,"sogliaAttivazioneLordaEuro":45.78,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false}},{"vehicleId":365,"candidati":61,"ammissibili":0,"deficitMinimoEuro":21.66,"margineMiglioreEuro":-18.41,"miglioreAlternativa":{"vehicleId":365,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false}},{"vehicleId":366,"candidati":61,"ammissibili":0,"deficitMinimoEuro":65.21,"margineMiglioreEuro":-55.43,"miglioreAlternativa":{"vehicleId":366,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":67.33,"margineEuro":-55.43,"deficitLordoEuro":65.21,"sogliaAttivazioneLordaEuro":79.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}}],"esempiMigliori":[{"vehicleId":361,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.77,"margineEuro":-13.77,"deficitLordoEuro":16.2,"sogliaAttivazioneLordaEuro":76.2,"kmTotali":107.934,"kmAvvicinamento":52.273,"kmMissione":54.117,"kmRitornoBase":1.544,"kmVuoto":53.817,"quotaKmVuotoPercento":49.86,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.85,"margineEuro":-13.85,"deficitLordoEuro":16.29,"sogliaAttivazioneLordaEuro":76.29,"kmTotali":108.077,"kmAvvicinamento":23.377,"kmMissione":54.117,"kmRitornoBase":30.583,"kmVuoto":53.96,"quotaKmVuotoPercento":49.93,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":228,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.34,"margineEuro":-17.44,"deficitLordoEuro":20.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":228,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.34,"margineEuro":-17.44,"deficitLordoEuro":20.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false},{"vehicleId":365,"opportunitaId":228,"richiestaIds":[433,434,435,436,437,438],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":227,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":33.67,"margineEuro":-21.77,"deficitLordoEuro":25.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false},{"vehicleId":353,"opportunitaId":228,"richiestaIds":[433,436],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":33.67,"margineEuro":-21.77,"deficitLordoEuro":25.61,"sogliaAttivazioneLordaEuro":39.61,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":406},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 6/12 OK: PIXEL 2 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 6 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 229,
+  richiesteContesto: 2,
+  seed: [ 439, 442 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 439, 442 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 229,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 231,
+  richiesteContesto: 6,
+  seed: [ 439, 440, 441, 442, 443, 444 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 439, 440, 441, 442, 443, 444 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 231,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 230,
+  richiesteContesto: 2,
+  seed: [ 442, 445 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 442, 445 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 230,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 232,
+  richiesteContesto: 6,
+  seed: [ 442, 443, 444, 445, 446, 447 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 442, 443, 444, 445, 446, 447 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 232,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 229,
+      direttriceId: 125,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 231,
+      direttriceId: 126,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 230,
+      direttriceId: 125,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 232,
+      direttriceId: 126,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 229,
+      direttriceId: 125,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 229,
+      direttriceId: 125,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 229,
+      direttriceId: 125,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 231,
+      direttriceId: 126,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 231,
+      direttriceId: 126,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T23:15:16.005Z',
+  contestiPixel: 4,
+  missioniCandidate: 68,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SCENARIO_INCREMENTALE_JSON:{"richiesteSintetiche":9,"ondate":3,"direttriciPixel":2,"opportunitaPixel":4,"opportunitaIds":[229,231,230,232],"missioniCandidateFisiche":1830,"diagnosticaFisica":{"tentativi":1020,"alternative":1830,"scarti":[],"completo":true,"attivabile":false,"diagnosticaLimitata":false,"limiteEffettivo":2000,"combinazioniElegibili":1020,"combinazioniResidue":0,"ricercaInternaNonEsaustiva":0,"interrottoPerBudget":false,"calcoliFisici":476,"cacheHits":544,"cacheEntries":476,"tempoCalcoliFisiciMs":69929.44499999996,"disabilitaCacheFisica":false,"escludiVeicoliTest":false,"veicoliEsclusi":[],"numeroVeicoliEsclusi":0,"numeroVeicoliValutabili":15,"esitiFisiciVuoti":120,"scartiValutazioneTotali":2208,"scartiValutazionePerFase":{"QUALITA":1244,"TEMPORALE":964},"campioneScartiValutazione":[{"opportunitaId":229,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":347,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":348,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":353,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":442},{"opportunitaId":229,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439},{"opportunitaId":229,"veicoloId":356,"fase":"QUALITA","motivo":"FERMATE_TROPPO_VICINE","richiestaId":439}],"sequenziamento":{"sequenzeScartateEventi":0,"sequenzeScartateRouting":0,"routingEccezioni":0,"routingRisposteNonValide":0,"routingTratteDistinte":0,"campioneErroriRouting":[]}},"selezioneFisica":{"shadow":true,"attivabile":false,"dbWrites":0,"diagnostica":{"candidati":1830,"veicoliConCandidati":15,"coppieEsaminate":15510,"coppieTemporali":21450,"coppieConRichiesteDisgiunte":15510,"coppieAmmesseDaVincoli":15510,"coppieScartateVincoli":0,"coppieValutateRouting":15510,"cicliFisicamenteFattibili":2380,"cicliEconomicamenteAmmissibili":0,"cicliScartatiEconomia":2380,"completo":true,"attivabile":false,"dbWrites":0,"coppieTeoricheOrdinate":223260,"coppieStessaAlternativa":1830,"coppieScartatePartenzaNonFutura":0,"coppieScartateSovrapposizione":199980,"coppieScartateRichiesteComuni":5940,"diagnosticaPerVeicolo":[{"vehicleId":347,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":348,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":352,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":353,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":356,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":357,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":358,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":359,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":360,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":361,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":362,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":363,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":364,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":365,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0},{"vehicleId":366,"alternative":122,"coppieTeoricheOrdinate":14884,"coppieTemporali":1430,"scartiStessaAlternativa":122,"scartiPartenzaNonFutura":0,"scartiSovrapposizione":13332,"scartiRichiesteComuni":396,"coppieConRichiesteDisgiunte":1034,"coppieAmmesseDaVincoli":1034,"coppieScartateVincoli":0}],"chiamateRouting":57,"rotteInCache":57,"cicliTotaliAmmissibili":0},"diagnosticaEconomica":{"cicliAnalizzati":2380,"deficitTotaleEuro":415301.74,"deficitMinimoEuro":46.88,"deficitMassimoEuro":527.36,"margineMiglioreEuro":-39.85,"esempiMigliori":[{"vehicleId":363,"opportunita":[229,230],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":47.88,"trasferimenti":23.588,"ritornoBase":1.316,"totali":96.161},"costoKmEuro":57.7,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.7,"margineEuro":-39.85,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":67.88,"deficitLordoEuro":46.88,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[229,232],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":47.88,"trasferimenti":23.588,"ritornoBase":1.316,"totali":96.161},"costoKmEuro":57.7,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.7,"margineEuro":-39.85,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":67.88,"deficitLordoEuro":46.88,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[231,230],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":47.88,"trasferimenti":23.588,"ritornoBase":1.316,"totali":96.161},"costoKmEuro":57.7,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.7,"margineEuro":-39.85,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":67.88,"deficitLordoEuro":46.88,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[231,232],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":47.88,"trasferimenti":23.588,"ritornoBase":1.316,"totali":96.161},"costoKmEuro":57.7,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.7,"margineEuro":-39.85,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":67.88,"deficitLordoEuro":46.88,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[229,230],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":23.588,"ritornoBase":1.361,"totali":96.413},"costoKmEuro":57.85,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.85,"margineEuro":-40,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.06,"deficitLordoEuro":47.06,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[229,232],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":23.588,"ritornoBase":1.361,"totali":96.413},"costoKmEuro":57.85,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.85,"margineEuro":-40,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.06,"deficitLordoEuro":47.06,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[231,230],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":23.588,"ritornoBase":1.361,"totali":96.413},"costoKmEuro":57.85,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.85,"margineEuro":-40,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.06,"deficitLordoEuro":47.06,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[231,232],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":23.588,"ritornoBase":1.361,"totali":96.413},"costoKmEuro":57.85,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":57.85,"margineEuro":-40,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.06,"deficitLordoEuro":47.06,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[229,230],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":24.42,"ritornoBase":1.316,"totali":97.2},"costoKmEuro":58.32,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":58.32,"margineEuro":-40.47,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.61,"deficitLordoEuro":47.61,"economicamenteAttivabile":false},{"vehicleId":363,"opportunita":[229,232],"richiesteA":[439,442],"richiesteB":[445],"euroKm":0.6,"ricavoLordoEuro":21,"commissioneTurentuEuro":3.15,"ricavoNettoEuro":17.85,"km":{"avvicinamento":23.377,"missioni":48.087,"trasferimenti":24.42,"ritornoBase":1.316,"totali":97.2},"costoKmEuro":58.32,"costoAttesaEuro":0,"altriCostiEuro":0,"costoCompletoEuro":58.32,"margineEuro":-40.47,"margineMinimoEuro":0,"sogliaAttivazioneLordaEuro":68.61,"deficitLordoEuro":47.61,"economicamenteAttivabile":false}],"perVeicolo":[{"vehicleId":347,"cicli":170,"deficitMinimoEuro":104.09,"margineMiglioreEuro":-88.48},{"vehicleId":352,"cicli":170,"deficitMinimoEuro":64.35,"margineMiglioreEuro":-54.7},{"vehicleId":353,"cicli":170,"deficitMinimoEuro":52.15,"margineMiglioreEuro":-44.33},{"vehicleId":356,"cicli":170,"deficitMinimoEuro":320.38,"margineMiglioreEuro":-272.32},{"vehicleId":357,"cicli":170,"deficitMinimoEuro":267.33,"margineMiglioreEuro":-227.23},{"vehicleId":358,"cicli":170,"deficitMinimoEuro":364.41,"margineMiglioreEuro":-309.75},{"vehicleId":359,"cicli":170,"deficitMinimoEuro":108.45,"margineMiglioreEuro":-92.18},{"vehicleId":360,"cicli":170,"deficitMinimoEuro":152.56,"margineMiglioreEuro":-129.68},{"vehicleId":361,"cicli":170,"deficitMinimoEuro":52.96,"margineMiglioreEuro":-45.02},{"vehicleId":362,"cicli":170,"deficitMinimoEuro":103.99,"margineMiglioreEuro":-88.39},{"vehicleId":363,"cicli":170,"deficitMinimoEuro":46.88,"margineMiglioreEuro":-39.85},{"vehicleId":364,"cicli":170,"deficitMinimoEuro":69.51,"margineMiglioreEuro":-59.08},{"vehicleId":365,"cicli":170,"deficitMinimoEuro":52.15,"margineMiglioreEuro":-44.33},{"vehicleId":366,"cicli":170,"deficitMinimoEuro":125.31,"margineMiglioreEuro":-106.51}],"deficitMedioEuro":174.5},"miglioriCicli":[],"migliorCiclo":null},"confrontoStrategie":{"shadow":true,"attivabile":false,"dbWrites":0,"offerte":0,"diagnostica":{"candidati":1830,"candidatiOperativamenteFattibili":1708,"singoleAmmissibili":0,"coppieIndipendentiEsaminate":797342,"coppieIndipendentiAmmissibili":0,"scartiRichiesteComuni":322504,"scartiVincoliGlobali":0,"scartiEconomia":476546,"scartiOperativi":122,"chiamateRouting":48,"rotteInCache":48,"completo":true,"chiamateDisponibilita":870,"cacheHitsDisponibilita":960,"chiamateConflitti":812,"cacheHitsConflitti":896,"coppieEsclusePerEconomiaSenzaValidazione":476546,"tempiMs":{"singoleOperative":373,"validazioneSingole":0,"confrontoCoppie":276,"totale":650}},"diagnosticaEconomicaSingole":{"singoleAnalizzate":1708,"singoleEconomicamenteAmmissibili":0,"singoleEconomicamenteInsufficienti":1708,"deficitMinimoEuro":16.2,"margineMiglioreEuro":-13.77,"perVeicolo":[{"vehicleId":347,"candidati":122,"ammissibili":0,"deficitMinimoEuro":49.59,"margineMiglioreEuro":-42.15,"miglioreAlternativa":{"vehicleId":347,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":54.05,"margineEuro":-42.15,"deficitLordoEuro":49.59,"sogliaAttivazioneLordaEuro":63.59,"kmTotali":49.13,"kmAvvicinamento":0.667,"kmMissione":23.94,"kmRitornoBase":24.523,"kmVuoto":25.19,"quotaKmVuotoPercento":51.27,"economicamenteAmmissibile":false}},{"vehicleId":352,"candidati":122,"ammissibili":0,"deficitMinimoEuro":32.21,"margineMiglioreEuro":-27.38,"miglioreAlternativa":{"vehicleId":352,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":39.28,"margineEuro":-27.38,"deficitLordoEuro":32.21,"sogliaAttivazioneLordaEuro":46.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":353,"candidati":122,"ammissibili":0,"deficitMinimoEuro":21.66,"margineMiglioreEuro":-18.41,"miglioreAlternativa":{"vehicleId":353,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false}},{"vehicleId":356,"candidati":122,"ammissibili":0,"deficitMinimoEuro":170.81,"margineMiglioreEuro":-145.19,"miglioreAlternativa":{"vehicleId":356,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":157.09,"margineEuro":-145.19,"deficitLordoEuro":170.81,"sogliaAttivazioneLordaEuro":184.81,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}},{"vehicleId":357,"candidati":122,"ammissibili":0,"deficitMinimoEuro":230.55,"margineMiglioreEuro":-195.97,"miglioreAlternativa":{"vehicleId":357,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":246.97,"margineEuro":-195.97,"deficitLordoEuro":230.55,"sogliaAttivazioneLordaEuro":290.55,"kmTotali":411.616,"kmAvvicinamento":206.821,"kmMissione":54.117,"kmRitornoBase":150.678,"kmVuoto":357.499,"quotaKmVuotoPercento":86.85,"economicamenteAmmissibile":false}},{"vehicleId":358,"candidati":122,"ammissibili":0,"deficitMinimoEuro":327.41,"margineMiglioreEuro":-278.3,"miglioreAlternativa":{"vehicleId":358,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":329.3,"margineEuro":-278.3,"deficitLordoEuro":327.41,"sogliaAttivazioneLordaEuro":387.41,"kmTotali":411.616,"kmAvvicinamento":206.821,"kmMissione":54.117,"kmRitornoBase":150.678,"kmVuoto":357.499,"quotaKmVuotoPercento":86.85,"economicamenteAmmissibile":false}},{"vehicleId":359,"candidati":122,"ammissibili":0,"deficitMinimoEuro":71.67,"margineMiglioreEuro":-60.92,"miglioreAlternativa":{"vehicleId":359,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":111.92,"margineEuro":-60.92,"deficitLordoEuro":71.67,"sogliaAttivazioneLordaEuro":131.67,"kmTotali":186.52800000000002,"kmAvvicinamento":92.688,"kmMissione":54.117,"kmRitornoBase":39.723,"kmVuoto":132.411,"quotaKmVuotoPercento":70.99,"economicamenteAmmissibile":false}},{"vehicleId":360,"candidati":122,"ammissibili":0,"deficitMinimoEuro":115.56,"margineMiglioreEuro":-98.23,"miglioreAlternativa":{"vehicleId":360,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":149.23,"margineEuro":-98.23,"deficitLordoEuro":115.56,"sogliaAttivazioneLordaEuro":175.56,"kmTotali":186.52800000000002,"kmAvvicinamento":92.688,"kmMissione":54.117,"kmRitornoBase":39.723,"kmVuoto":132.411,"quotaKmVuotoPercento":70.99,"economicamenteAmmissibile":false}},{"vehicleId":361,"candidati":122,"ammissibili":0,"deficitMinimoEuro":16.2,"margineMiglioreEuro":-13.77,"miglioreAlternativa":{"vehicleId":361,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.77,"margineEuro":-13.77,"deficitLordoEuro":16.2,"sogliaAttivazioneLordaEuro":76.2,"kmTotali":107.934,"kmAvvicinamento":52.273,"kmMissione":54.117,"kmRitornoBase":1.544,"kmVuoto":53.817,"quotaKmVuotoPercento":49.86,"economicamenteAmmissibile":false}},{"vehicleId":362,"candidati":122,"ammissibili":0,"deficitMinimoEuro":62.54,"margineMiglioreEuro":-53.16,"miglioreAlternativa":{"vehicleId":362,"opportunitaId":231,"richiestaIds":[440],"ricavoLordoEuro":9,"ricavoNettoEuro":7.65,"remunerazioneNccEuro":60.81,"margineEuro":-53.16,"deficitLordoEuro":62.54,"sogliaAttivazioneLordaEuro":71.54,"kmTotali":60.806999999999995,"kmAvvicinamento":29.293,"kmMissione":29.97,"kmRitornoBase":1.544,"kmVuoto":30.837,"quotaKmVuotoPercento":50.71,"economicamenteAmmissibile":false}},{"vehicleId":363,"candidati":122,"ammissibili":0,"deficitMinimoEuro":16.29,"margineMiglioreEuro":-13.85,"miglioreAlternativa":{"vehicleId":363,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.85,"margineEuro":-13.85,"deficitLordoEuro":16.29,"sogliaAttivazioneLordaEuro":76.29,"kmTotali":108.077,"kmAvvicinamento":23.377,"kmMissione":54.117,"kmRitornoBase":30.583,"kmVuoto":53.96,"quotaKmVuotoPercento":49.93,"economicamenteAmmissibile":false}},{"vehicleId":364,"candidati":122,"ammissibili":0,"deficitMinimoEuro":31.78,"margineMiglioreEuro":-27.01,"miglioreAlternativa":{"vehicleId":364,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":38.91,"margineEuro":-27.01,"deficitLordoEuro":31.78,"sogliaAttivazioneLordaEuro":45.78,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false}},{"vehicleId":365,"candidati":122,"ammissibili":0,"deficitMinimoEuro":21.66,"margineMiglioreEuro":-18.41,"miglioreAlternativa":{"vehicleId":365,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":69.41,"margineEuro":-18.41,"deficitLordoEuro":21.66,"sogliaAttivazioneLordaEuro":81.66,"kmTotali":115.681,"kmAvvicinamento":3.7,"kmMissione":54.117,"kmRitornoBase":57.864,"kmVuoto":61.564,"quotaKmVuotoPercento":53.22,"economicamenteAmmissibile":false}},{"vehicleId":366,"candidati":122,"ammissibili":0,"deficitMinimoEuro":65.21,"margineMiglioreEuro":-55.43,"miglioreAlternativa":{"vehicleId":366,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":67.33,"margineEuro":-55.43,"deficitLordoEuro":65.21,"sogliaAttivazioneLordaEuro":79.21,"kmTotali":56.101,"kmAvvicinamento":3.7,"kmMissione":23.94,"kmRitornoBase":28.461,"kmVuoto":32.161,"quotaKmVuotoPercento":57.33,"economicamenteAmmissibile":false}}],"esempiMigliori":[{"vehicleId":361,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.77,"margineEuro":-13.77,"deficitLordoEuro":16.2,"sogliaAttivazioneLordaEuro":76.2,"kmTotali":107.934,"kmAvvicinamento":52.273,"kmMissione":54.117,"kmRitornoBase":1.544,"kmVuoto":53.817,"quotaKmVuotoPercento":49.86,"economicamenteAmmissibile":false},{"vehicleId":361,"opportunitaId":232,"richiestaIds":[442,443,444,445,446,447],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.77,"margineEuro":-13.77,"deficitLordoEuro":16.2,"sogliaAttivazioneLordaEuro":76.2,"kmTotali":107.934,"kmAvvicinamento":52.273,"kmMissione":54.117,"kmRitornoBase":1.544,"kmVuoto":53.817,"quotaKmVuotoPercento":49.86,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":231,"richiestaIds":[439,440,441,442,443,444],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.85,"margineEuro":-13.85,"deficitLordoEuro":16.29,"sogliaAttivazioneLordaEuro":76.29,"kmTotali":108.077,"kmAvvicinamento":23.377,"kmMissione":54.117,"kmRitornoBase":30.583,"kmVuoto":53.96,"quotaKmVuotoPercento":49.93,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":232,"richiestaIds":[442,443,444,445,446,447],"ricavoLordoEuro":60,"ricavoNettoEuro":51,"remunerazioneNccEuro":64.85,"margineEuro":-13.85,"deficitLordoEuro":16.29,"sogliaAttivazioneLordaEuro":76.29,"kmTotali":108.077,"kmAvvicinamento":23.377,"kmMissione":54.117,"kmRitornoBase":30.583,"kmVuoto":53.96,"quotaKmVuotoPercento":49.93,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":231,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":230,"richiestaIds":[442,445],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":232,"richiestaIds":[442,445],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.18,"margineEuro":-17.28,"deficitLordoEuro":20.33,"sogliaAttivazioneLordaEuro":34.33,"kmTotali":48.633,"kmAvvicinamento":23.377,"kmMissione":23.94,"kmRitornoBase":1.316,"kmVuoto":24.693,"quotaKmVuotoPercento":50.77,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":229,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.34,"margineEuro":-17.44,"deficitLordoEuro":20.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false},{"vehicleId":363,"opportunitaId":231,"richiestaIds":[439,442],"ricavoLordoEuro":14,"ricavoNettoEuro":11.9,"remunerazioneNccEuro":29.34,"margineEuro":-17.44,"deficitLordoEuro":20.52,"sogliaAttivazioneLordaEuro":34.52,"kmTotali":48.885,"kmAvvicinamento":23.377,"kmMissione":24.147,"kmRitornoBase":1.361,"kmVuoto":24.738,"quotaKmVuotoPercento":50.6,"economicamenteAmmissibile":false}]},"miglioreSingola":null,"miglioreCoppiaIndipendente":null,"miglioreConcatenata":null,"miglioreTraStrategieEsaminate":null,"nota":"Confronto diagnostico: il ranking usa richieste e margine, non certifica ottimo globale di flotta o qualita comparativa. I cicli concatenati provengono dal TOP-K del selettore."},"diagnosticaConflittiSnapshot":{"veicoli":15,"intervalli":61,"querySnapshot":1,"verificheInMemoria":3192},"offerte":0,"dbWrites":0,"attivabile":false}
+SCENARIO 9/12 OK: PIXEL 4 opportunita, SHADOW senza scritture
+SAVEPOINT_RIPRISTINATO: 9 richieste
+[PIXEL FORMAZIONI] {
+  opportunitaId: 233,
+  richiesteContesto: 2,
+  seed: [ 448, 451 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 448, 451 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 233,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 236,
+  richiesteContesto: 6,
+  seed: [ 448, 449, 450, 451, 452, 453 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 448, 449, 450, 451, 452, 453 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 236,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T12:15:00.000Z',
+    end: '2026-11-09T12:30:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 234,
+  richiesteContesto: 2,
+  seed: [ 451, 454 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 451, 454 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 234,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 237,
+  richiesteContesto: 6,
+  seed: [ 451, 452, 453, 454, 455, 456 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 451, 452, 453, 454, 455, 456 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 237,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:00:00.000Z',
+    end: '2026-11-09T13:15:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 235,
+  richiesteContesto: 2,
+  seed: [ 454, 457 ],
+  formazioniGenerate: 3,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 454, 457 ],
+    seedValutati: [ [Array], [Array], [Array] ],
+    fallback: true,
+    formazioni: 3,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 235,
+  formazioniGenerate: 3,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 3,
+  totaleControllato: 3,
+  finestra: {
+    start: '2026-11-09T13:45:00.000Z',
+    end: '2026-11-09T14:00:00.000Z'
+  }
+}
+[PIXEL FORMAZIONI] {
+  opportunitaId: 238,
+  richiesteContesto: 6,
+  seed: [ 454, 455, 456, 457, 458, 459 ],
+  formazioniGenerate: 31,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [ 454, 455, 456, 457, 458, 459 ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 31,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 238,
+  formazioniGenerate: 31,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 0,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 31,
+  totaleControllato: 31,
+  finestra: {
+    start: '2026-11-09T13:45:00.000Z',
+    end: '2026-11-09T14:00:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 233,
+      direttriceId: 127,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 236,
+      direttriceId: 128,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 234,
+      direttriceId: 127,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 237,
+      direttriceId: 128,
+      engineId: 'territorial:8>5>7'
+    },
+    {
+      opportunitaId: 235,
+      direttriceId: 127,
+      engineId: 'territorial:8>5'
+    },
+    {
+      opportunitaId: 238,
+      direttriceId: 128,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 233,
+      direttriceId: 127,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 233,
+      direttriceId: 127,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 233,
+      direttriceId: 127,
+      corridoioPixelId: 'territorial:8>5',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 236,
+      direttriceId: 128,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 236,
+      direttriceId: 128,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-10-26T23:16:38.686Z',
+  contestiPixel: 6,
+  missioniCandidate: 102,
+  veicoliCandidati: 15,
+  nodiTerritoriali: 3
+}
+SAVEPOINT_RIPRISTINATO: 12 richieste
+TEST_INCREMENTALE_SHADOW_FAIL: Error: POPBUS_STRATEGY_SHADOW: budget coppie indipendenti superato, nessun risultato parziale
+    at fail (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/popbus-physical-strategy-comparator.js:5:27)
+    at confrontaStrategieFisicheShadow (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/popbus-physical-strategy-comparator.js:206:68)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async processaPixelFirstMultimissione (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/pixel-first-multimission-service.js:842:32)
+    at async file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_popbus_v2_incrementale_shadow_rollback.mjs:140:22
+ROLLBACK ESEGUITO: nessuna scrittura confermata.

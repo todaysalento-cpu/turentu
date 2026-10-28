@@ -18,6 +18,11 @@ import { verificaPagamento } from './acceptance.js';
 import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
 import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimission-candidates.js';
 import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
+import { verificaCicloFisicoTransazionale } from './popbus-physical-writer-v2.js';
+import {
+  caricaImpegniVeicoliShadow,
+  verificaConflittoInMemoria
+} from './vehicle-commitments-shadow.js';
 
 const fail = m => { throw new Error('PIXEL_FIRST_MULTI: ' + m); };
 const positive = x => Number.isSafeInteger(Number(x)) && Number(x) > 0;
@@ -648,6 +653,7 @@ export async function processaPixelFirstMultimissione({
   rollbackTestHook = null,
   physicalShadow = false,
   physicalCycleShadow = false,
+  physicalTransactionTest = false,
   physicalShadowBridge = null,
   physicalOpportunityIds = null
 } = {}) {
@@ -655,6 +661,10 @@ export async function processaPixelFirstMultimissione({
   if (physicalCycleShadow !== false && physicalCycleShadow !== true) fail('physicalCycleShadow non booleano');
   if (physicalCycleShadow && (!physicalShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null))
     fail('physicalCycleShadow richiede physicalShadow ROLLBACK_ONLY senza hook');
+  if (typeof physicalTransactionTest !== 'boolean') fail('physicalTransactionTest non booleano');
+  if (physicalTransactionTest) {
+    if (!physicalShadow || !physicalCycleShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null) fail('physicalTransactionTest richiede SHADOW ROLLBACK_ONLY senza hook');
+  }
   if (physicalOpportunityIds !== null) {
     if (physicalShadow !== true || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null)
       fail('physicalOpportunityIds consentito solo in physicalShadow ROLLBACK_ONLY');
@@ -687,7 +697,7 @@ export async function processaPixelFirstMultimissione({
   if (!Number.isFinite(nowMs)) fail('timestamp invalido');
   if (mode==='LIVE') await pulisciScadenzeLive(pool);
   const reader=await pool.connect();
-  let readTx=false, snapshot, chosen, cyclesCount=0;
+  let readTx=false, snapshot, chosen, cyclesCount=0, physicalResult=null;
   try {
     await reader.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
     readTx=true;
@@ -726,7 +736,8 @@ export async function processaPixelFirstMultimissione({
     }
     if (physicalShadow) {
       const fisiche=await preparaCandidatiFisiciMultimissione({
-        client:reader,snapshot,maxTentativi:600,
+        client:reader,snapshot,
+maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         ...(physicalShadowBridge ? {bridge:physicalShadowBridge} : {})
       });
       // Il test storico dei candidati resta invariato se physicalCycleShadow=false.
@@ -744,6 +755,26 @@ export async function processaPixelFirstMultimissione({
             fail('configurazioni veicolo divergenti: selezione fisica non certificabile');
           veicoliUnici.set(Number(v.id),v);
         }
+        // Cache opzionale degli impegni: attiva solo nel selettore fisico SHADOW.
+        // La query avviene dentro la stessa transazione REPEATABLE READ READ ONLY.
+        // La rivalidazione transazionale finale continua a usare la query SQL originale.
+        const usaIndiceImpegni =
+          process.env.POPBUS_SHADOW_COMMITMENTS_CACHE === '1';
+
+        const indiceImpegni = usaIndiceImpegni
+          ? await caricaImpegniVeicoliShadow(
+              reader,
+              [...veicoliUnici.keys()]
+            )
+          : null;
+
+        if (indiceImpegni) {
+          console.log('[POPBUS SHADOW IMPEGNI VEICOLI]', {
+            cache: true,
+            ...indiceImpegni.diagnostica
+          });
+        }
+
         const costi = {
           costoAttesaOraEuro:Number(process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0),
           altriCostiEuro:Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
@@ -758,7 +789,9 @@ export async function processaPixelFirstMultimissione({
           isAvailable:async(v,start,end)=>snapshot.vehicles.some(d=>
             Number(d.id)===Number(v.id) && samePoint(d,v) &&
             verificaTurnoVeicolo(d,start,end)),
-          hasConflicts:async(v,start,end)=>conflicts(reader,v.id,start,end),
+          hasConflicts:async(v,start,end)=>indiceImpegni
+            ? verificaConflittoInMemoria(indiceImpegni,v.id,start,end)
+            : conflicts(reader,v.id,start,end),
           validateSingle:async(a)=>{
             const ids=a.requests.map(r=>Number(r.id));
             return new Set(ids).size===ids.length && arComplete(ids,snapshot.registro);
@@ -770,7 +803,7 @@ export async function processaPixelFirstMultimissione({
           ...costi
         });
       }
-      return {
+      physicalResult = {
         modalita:mode,
         percorso:physicalCycleShadow
           ? 'PIXEL_FERMATE_FISICHE_CICLI_SHADOW_V2'
@@ -784,6 +817,7 @@ export async function processaPixelFirstMultimissione({
         attivabile:false
       };
     }
+    if (!physicalShadow) {
     if (!snapshot.missioni.length || !snapshot.vehicles.length) {
       return {modalita:mode,offerte:0,motivo:'nessuna formazione/veicolo PIXEL candidato'};
     }
@@ -805,10 +839,21 @@ export async function processaPixelFirstMultimissione({
     const vehicle=rowsPerVehicle.get(Number(chosen.veicolo));
     chosen._shadow.baseLat=Number(vehicle.lat);
     chosen._shadow.baseLon=Number(vehicle.lon);
+    } // fine percorso territoriale V1
   } finally {
     // Rilasciare il reader PRIMA di pool.connect() per il writer:
     // pool con max=1 non deve creare deadlock applicativo.
     try {if(readTx) await reader.query('ROLLBACK');} finally {reader.release();}
+  }
+  if (physicalShadow) {
+    if (!physicalResult) fail('risultato fisico mancante');
+    if (!physicalTransactionTest) return physicalResult;
+    const ciclo = physicalResult.selezioneFisica?.migliorCiclo;
+    if (!ciclo) return {...physicalResult, testTransazionale:{eseguito:false,motivo:'nessun ciclo fisico selezionato'}};
+    const testTransazionale = await verificaCicloFisicoTransazionale({
+      pool, ciclo, mode:'ROLLBACK_ONLY'
+    });
+    return {...physicalResult, testTransazionale};
   }
   // UNA attivazione per invocazione. Nessun riuso di altre candidate dallo snapshot.
   const writer=await pool.connect();

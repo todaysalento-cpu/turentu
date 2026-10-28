@@ -119,6 +119,12 @@ export async function preparaCandidatiFisiciMultimissione({
   // Il numero non certifica l'esaustivita della ricerca interna alle fermate.
   const combinazioniElegibili = snapshot.missioni.reduce((tot, m) =>
     tot + veicoliValutabili.filter(v => Number(m.peak) <= Number(v.posti_totali)).length, 0);
+  const chiaviFisicheNecessarie = snapshot.missioni.reduce((tot, m) =>
+    tot + new Set(veicoliValutabili.filter(v => Number(m.peak) <= Number(v.posti_totali)).map(v => Number(v.posti_totali))).size, 0);
+  console.log('[POPBUS PHYSICAL CACHE CAPACITY]', {
+    combinazioniElegibili, chiaviFisicheNecessarie,
+    riusiTeorici: combinazioniElegibili - chiaviFisicheNecessarie
+  });
   // Cache limitata a questa singola esecuzione: non persiste e non attraversa snapshot.
   // La chiave include identità della formazione e capienza.
   // Il tipo veicolo non partecipa alla compatibilità delle fermate in questa fase.
@@ -157,7 +163,24 @@ departureShadow: {
   // Mission-first: le valutazioni della stessa missione vengono confrontate
   // sui veicoli prima di passare alla missione successiva.
   // In diagnostica limitata cambia l'ordine del campione, NON i vincoli.
-  for (const [indiceMissione, m] of snapshot.missioni.entries()) {
+  const gruppiMissioni = new Map();
+  for (const m of snapshot.missioni) {
+    const id = Number(m.pixelOpportunitaId);
+    if (!Number.isSafeInteger(id) || id <= 0) fail('opportunita PIXEL non valida');
+    if (!gruppiMissioni.has(id)) gruppiMissioni.set(id, []);
+    gruppiMissioni.get(id).push(m);
+  }
+  const missioniBilanciate = [];
+  const gruppi = [...gruppiMissioni.values()];
+  const maxFormazioni = Math.max(0, ...gruppi.map(g => g.length));
+  for (let i = 0; i < maxFormazioni; i++) {
+    for (const gruppo of gruppi) {
+      if (i < gruppo.length) missioniBilanciate.push(gruppo[i]);
+    }
+  }
+  if (missioniBilanciate.length !== snapshot.missioni.length)
+    fail('ordinamento missioni incompleto');
+  for (const [indiceMissione, m] of missioniBilanciate.entries()) {
     for (const v of veicoliValutabili) {
       if (Number(m.peak) > Number(v.posti_totali)) continue;
       if (diagnostica.tentativi >= limiteEffettivo) {

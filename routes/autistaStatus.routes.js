@@ -6,82 +6,45 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/status', authMiddleware, async (req, res) => {
+  if (!req.user?.id) return res.status(401).json({ error: 'Utente non autenticato' });
+
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        error: 'Utente non autenticato',
-        profilo: null,
-        veicolo: null,
-        disponibilita: null,
-        tariffe: []
-      });
-    }
-
     const userId = req.user.id;
-    console.log('👤 [STATUS_CHECK] Fetching onboarding status for:', userId);
+    // Una singola fotografia consistente: preferisce un veicolo con disponibilita e tariffe.
+    const [profileResult, vehicleResult] = await Promise.all([
+      pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1 ORDER BY id DESC LIMIT 1', [userId]),
+      pool.query(`
+        SELECT v.* FROM veicolo v
+        WHERE v.driver_id = $1
+        ORDER BY
+          (EXISTS (SELECT 1 FROM disponibilita_veicolo d WHERE d.veicolo_id = v.id)
+           AND EXISTS (SELECT 1 FROM tariffe t WHERE t.veicolo_id = v.id)) DESC,
+          v.id DESC
+        LIMIT 1
+      `, [userId])
+    ]);
 
-    // 🔹 PROFILO AUTISTA
-    let profilo = null;
-    try {
-      const resP = await pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1', [userId]);
-      profilo = resP.rowCount > 0 ? resP.rows[0] : null;
-    } catch (err) {
-      console.error('Errore query profilo:', err.message);
-    }
-
-    // 🔹 VEICOLO
-    let veicolo = null;
-    try {
-      const resV = await pool.query('SELECT * FROM veicolo WHERE driver_id = $1 LIMIT 1', [userId]);
-      veicolo = resV.rowCount > 0 ? resV.rows[0] : null;
-    } catch (err) {
-      console.error('Errore query veicolo:', err.message);
-    }
-
-    // 🔹 DISPONIBILITÀ
+    const profilo = profileResult.rows[0] ?? null;
+    const veicolo = vehicleResult.rows[0] ?? null;
     let disponibilita = null;
-    try {
-      const resD = await pool.query(
-        `SELECT d.* FROM disponibilita_veicolo d
-         JOIN veicolo v ON d.veicolo_id = v.id
-         WHERE v.driver_id = $1 LIMIT 1`,
-        [userId]
-      );
-      disponibilita = resD.rowCount > 0 ? resD.rows[0] : null;
-    } catch (err) {
-      console.error('Errore query disponibilita:', err.message);
-    }
-
-    // 🔹 TARIFFE
     let tariffe = [];
-    try {
-      const resT = await pool.query(
-        `SELECT t.* FROM tariffe t
-         JOIN veicolo v ON t.veicolo_id = v.id
-         WHERE v.driver_id = $1`,
-        [userId]
-      );
-      tariffe = resT.rows || [];
-    } catch (err) {
-      console.error('Errore query tariffe:', err.message);
+
+    if (veicolo) {
+      const [availabilityResult, tariffResult] = await Promise.all([
+        pool.query('SELECT * FROM disponibilita_veicolo WHERE veicolo_id = $1 LIMIT 1', [veicolo.id]),
+        pool.query('SELECT * FROM tariffe WHERE veicolo_id = $1', [veicolo.id])
+      ]);
+      disponibilita = availabilityResult.rows[0] ?? null;
+      tariffe = tariffResult.rows;
     }
 
-    const response = { profilo, veicolo, disponibilita, tariffe };
-    
-    // Log di verifica per monitorare cosa inviamo al client
-    console.log('🚀 [SERVER_SENDING_ONBOARDING_STATUS]:', JSON.stringify(response, null, 2));
-
-    return res.json(response);
-
+    const completo = Boolean(profilo && veicolo && disponibilita && tariffe.length > 0);
+    console.log('[STATUS_CHECK]', { userId, veicoloId: veicolo?.id ?? null, completo });
+    return res.json({ profilo, veicolo, disponibilita, tariffe, completo });
   } catch (err) {
-    console.error('Errore fatale onboarding status:', err.message);
-    res.status(500).json({
-      error: 'Errore interno server',
-      profilo: null,
-      veicolo: null,
-      disponibilita: null,
-      tariffe: []
-    });
+    console.error('[STATUS_CHECK] Errore verifica onboarding:', err);
+    // Mai restituire dati vuoti con HTTP 200 in caso di errore SQL.
+    return res.status(500).json({ error: 'Impossibile verificare lo stato onboarding' });
   }
 });
 

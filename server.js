@@ -56,6 +56,7 @@ import prenotazioniRouter from './routes/prenotazioni.routes.js';
 import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 import walletRouter from './routes/wallet.routes.js';
 import { eventiRouter } from './routes/eventi.routes.js';
+import gmailTestRouter from './routes/gmail-test.routes.js';
 
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -110,6 +111,7 @@ app.use('/api/veicolo', (req, res, next) => {
 
 // ======================= ROUTES =======================
 app.use('/api/auth', authRouter);
+app.use('/api/internal/gmail-test', gmailTestRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/booking', bookingClienteRouter);

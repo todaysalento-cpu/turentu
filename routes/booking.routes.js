@@ -12,6 +12,25 @@ const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 const sanitizedRequestedType = type => (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
 
+// Punti desiderati: non sostituiscono mai le coordinate usate per il ricalcolo della quotazione.
+function puntoDesiderato(raw, fallback, nome) {
+  const punto = raw ?? fallback;
+  const lat = Number(punto?.lat);
+  const lon = Number(punto?.lon);
+  if (!punto || punto.lat == null || punto.lon == null ||
+      !Number.isFinite(lat) || !Number.isFinite(lon) ||
+      Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) {
+    throw Object.assign(new Error(`Coordinate ${nome} non valide`), { status: 400 });
+  }
+  const indirizzo = typeof punto.address === 'string' ? punto.address.trim() :
+    typeof punto.indirizzo === 'string' ? punto.indirizzo.trim() : '';
+  if (indirizzo.length > 500) {
+    throw Object.assign(new Error(`Indirizzo ${nome} troppo lungo`), { status: 400 });
+  }
+  return { lat, lon, indirizzo };
+}
+
+
 
 // ======================= ROUTE =======================
 router.post('/payment-intent', authMiddleware, async (req, res) => {
@@ -89,16 +108,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         String(selected.id).startsWith('virtual_pop_') !== String(quotation.id).startsWith('virtual_pop_')) {
       return res.status(409).json({ error: 'Identita POPBUS cambiata: ripetere la ricerca' });
     }
-    // Mantiene i riferimenti PIXEL del client separati dai dati della quotazione.
-    const pixelPayload = {
-      origine_nodo_territoriale_id: selected.origine_nodo_territoriale_id,
-      destinazione_nodo_territoriale_id: selected.destinazione_nodo_territoriale_id,
-      origine_fermata_id: selected.origine_fermata_id,
-      destinazione_fermata_id: selected.destinazione_fermata_id,
-    };
-    Object.assign(selected, quotation, { start_datetime: when, posti_richiesti: count }, pixelPayload);
+    // La quotazione fresca prevale su tutti i campi operativi forniti dal client.
+    // Nessun ID di fermata o nodo territoriale viene accettato dal client.
+    const slot = { ...selected, ...quotation, start_datetime: when, posti_richiesti: count };
     // Non permettere che il tipo dichiarato dal client cambi il tipo della quotazione.
-    if (isPopbusSlot(selected) !== isPopbusSlot(quotation)) {
+    if (isPopbusSlot(slot) !== isPopbusSlot(quotation)) {
       return res.status(409).json({ error: 'Tipo di opzione cambiato: ripetere la ricerca' });
     }
     // Distinzione basata SOLO sulla quotazione fresca, non sul tipo manipolabile dal client.
@@ -107,7 +121,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       String(quotation.id).startsWith('priv_') && quotation.tipo === 'privata';
     await client.query('BEGIN');transaction=true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
-    const pixelValidated = isPopbusSlot(selected) ? await validatePixelStops(client, selected, quotation) : null;
+    const pixelValidated = isPopbusSlot(slot) ? await validatePixelStops(client, slot, quotation) : null;
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
     const sanitizedType = sanitizedRequestedType(type);
      // Non permettere di convertire un risultato privato in una nuova condivisa
@@ -151,7 +165,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(Number(prezzo) * 100),
         currency: 'eur',
-        metadata: { tipo: isPopbusSlot(selected) ? 'popbus' : sanitizedType, clienteId: clienteId.toString(), requestId },
+        metadata: { tipo: isPopbusSlot(slot) ? 'popbus' : sanitizedType, clienteId: clienteId.toString(), requestId },
         capture_method: 'manual',
       });
       console.log(`💳 [PAYMENT:${requestId}}] Stripe PaymentIntent creato con ID: ${paymentIntent.id}`);
@@ -172,13 +186,17 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     }
 
     // 🔒 GESTIONE SLOT UNICO E ESTRAZIONE INDIRIZZI (Con supporto a ricerca personalizzata)
-    const slot = slots[0];
-    
-    const finalOrigine = {lat:Number(o.lat),lon:Number(o.lon)};
-    const finalDestinazione = {lat:Number(d.lat),lon:Number(d.lon)};
+    // Compatibilità: in assenza dei punti dettagliati, si utilizzano quelli della ricerca.
+    // Il frontend deve inviare origineDesiderata/destinazioneDesiderata per i punti Google Places.
+    const origineRichiesta = puntoDesiderato(req.body.origineDesiderata, o, 'origine desiderata');
+    const destinazioneRichiesta = puntoDesiderato(req.body.destinazioneDesiderata, d, 'destinazione desiderata');
+    const finalOrigine = { lat: origineRichiesta.lat, lon: origineRichiesta.lon };
+    const finalDestinazione = { lat: destinazioneRichiesta.lat, lon: destinazioneRichiesta.lon };
 
-    const origineAddress = slot.origine_address || slot.origineAddress || (finalOrigine?.lat ? `Posizione (${finalOrigine.lat.toFixed(4)}, ${finalOrigine.lon.toFixed(4)})` : 'Partenza');
-    const destinazioneAddress = slot.destinazione_address || slot.destinazioneAddress || (finalDestinazione?.lat ? `Destinazione (${finalDestinazione.lat.toFixed(4)}, ${finalDestinazione.lon.toFixed(4)})` : 'Arrivo');
+    const origineAddress = origineRichiesta.indirizzo || slot.origine_address || slot.origineAddress ||
+      `Posizione (${finalOrigine.lat.toFixed(4)}, ${finalOrigine.lon.toFixed(4)})`;
+    const destinazioneAddress = destinazioneRichiesta.indirizzo || slot.destinazione_address || slot.destinazioneAddress ||
+      `Destinazione (${finalDestinazione.lat.toFixed(4)}, ${finalDestinazione.lon.toFixed(4)})`;
 
     console.log(`🔍 [PAYMENT:${requestId}] Analisi Slot Unico: ID=${slot.id}, VeicoloID=${slot.veicolo_id}, is_pool=${slot.is_pool}`);
 
@@ -227,8 +245,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           requestId,
           pixelValidated.origine_nodo_territoriale_id,
           pixelValidated.destinazione_nodo_territoriale_id,
-          pixelValidated.origine_fermata_id,
-          pixelValidated.destinazione_fermata_id
+          null, // fermata salita assegnata successivamente da POPBUS V2
+          null  // fermata discesa assegnata successivamente da POPBUS V2
         ]
       );
 

@@ -431,6 +431,17 @@ export async function accettaAttivazione(
     [a.id]
   );
 
+  // A/R VINCOLATO - guardia temporanea fail-closed.
+  // Il coordinatore A/R non e' ancora integrato in questa acceptance:
+  // non convertire unilateralmente una tratta in prenotazione definitiva.
+  // Nessun posto viene riservato sulla tratta PopBus gia' attiva.
+  if (requests.some(r => r.ar_vincolata === true)) {
+    const err = new Error('A/R vincolato: attivazione coordinata non ancora disponibile');
+    err.code = 'AR_COORDINATED_ACTIVATION_REQUIRED';
+    err.status = 409;
+    throw err;
+  }
+
   if (
     requests.length !== plan.evaluation.requests.length ||
     requests.some(

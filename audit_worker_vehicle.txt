@@ -1,0 +1,115 @@
+15:import { generaRitorniCompatibili } from './return-matching.js';
+142:  // La sequenza dei corridoi non determina da sola la compatibilita:
+166:          return (await conflittiVeicolo(client, v.id, start, end)).length === 0;
+182:          nodi: nodes, veicoloId: vehicle.id, postiTotali: vehicle.posti_totali,
+183:          busyStart: esito.busyStart,
+184:          busyEnd: esito.busyEnd, approach: esito.approach, returnTrip: esito.returnTrip
+196:          busyStart: esito.busyStart, busyEnd: esito.busyEnd,
+198:        veicolo: Number(vehicle.id),
+200:        partenza_base: esito.busyStart,
+201:        ritorno_base: esito.busyEnd,
+218:      veicolo: c.veicolo, missioni: c._pianoCiclo?.missioni?.length,
+221:      busyStart: c._pianoCiclo?.busyStart, busyEnd: c._pianoCiclo?.busyEnd
+235:    nodiMancanti: 0, richiesteIncompatibili: 0, geometrieNonValide: 0 };
+255:    // Compatibilita territoriale minima; quella temporale/operativa resta
+263:      esiti.richiesteIncompatibili++;
+373:    log('FLEET SHADOW SKIP', 'Nessuna richiesta o veicolo');
+435:      veicolo: c.veicolo, tipo: c.tipo_candidato,
+533:// driver_id e' il TITOLARE della flotta: l'esclusivita' e' per veicolo_id.
+539:async function conflittiVeicolo(client, veicoloId, busyStart, busyEnd) {
+542:           COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) AS inizio,
+543:           COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) AS fine
+545:    WHERE a.veicolo_id=$1
+547:      AND COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) < $3::timestamptz
+548:      AND COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) > $2::timestamptz
+555:    WHERE c.veicolo_id=$1
+561:        WHERE a.corsa_id=c.id AND a.veicolo_id=c.veicolo_id
+572:    WHERE d.veicolo_id=$1
+577:        WHERE a.direttrice_id=d.id AND a.veicolo_id=d.veicolo_id
+582:  `, [veicoloId, new Date(busyStart), new Date(busyEnd)]);
+713:// con lo stesso veicolo e senza richieste duplicate. I collegamenti sono
+723:  let compatible = 0;
+740:          // Il veicolo non può iniziare la seconda missione prima di arrivare.
+765:          compatible++;
+768:          const matches=generaRitorniCompatibili(joined,extra,first.evaluation.departure,{
+779:            veicolo:vehicleId,missioni:[first.plan.nodes,second.plan.nodes],
+791:  log('CICLI DIAGNOSTICA RIEPILOGO',{esaminati:examined,compatibili:compatible,conRichiesteAggiuntive:withReturn});
+827:      FROM veicolo v
+828:      JOIN disponibilita_veicolo dv ON dv.veicolo_id=v.id
+831:        WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0
+853:        const busyStart = evaluation.departure - approach.seconds * 1000;
+854:        const busyEnd = evaluation.arrival + returnTrip.seconds * 1000;
+855:        if (busyStart <= Date.now() || !turno(vehicle, busyStart, busyEnd)) { skip('turno'); continue; }
+871:        if ((await conflittiVeicolo(client, vehicle.id, busyStart, busyEnd)).length) {
+872:          skip('conflitto_veicolo'); continue;
+878:          vehicle, approach, returnTrip, busyStart, busyEnd,
+888:        veicoloId: c.vehicle.id, richiestaIds: c.evaluation.requests.map(r => r.id),
+904:      throw new Error('PIXEL AR WORKER SHADOW: flag incompatibili');
+909:  conflittiVeicolo,
+923:    if (POPBUS_PIXEL_FIRST) throw new Error('Flag PIXEL_FIRST e READONLY incompatibili');
+938:          veicolo_id: result.veicoloId,
+981:    scartiVeicolo: 0,
+1282:      FROM veicolo v
+1283:      JOIN disponibilita_veicolo dv
+1284:        ON dv.veicolo_id=v.id
+1288:        WHERE veicolo_id=v.id
+1338:      // formazioni miste, purché compatibili e di qualità valida.
+1432:            `veicolo=${vehicle.id}: ${e.message}`
+1438:        const busyStart =
+1442:        const busyEnd =
+1447:        // DIAGNOSTICA DISPONIBILITÀ VEICOLO
+1453:          busyStart <= adesso;
+1459:              busyStart,
+1460:              busyEnd
+1479:              'TURNO NON COMPATIBILE'
+1505:            veicolo: vehicle.id,
+1530:            busyStart:
+1532:                busyStart
+1535:            busyEnd:
+1537:                busyEnd
+1631:          veicolo: vehicle.id,
+1634:          origineVeicolo: {
+1717:          busyStart:
+1719:              busyStart
+1722:          busyEnd:
+1724:              busyEnd
+1749:            veicolo: vehicle.id, ricavoLordo: economia.ricavoLordoEuro,
+1765:            `veicolo=${vehicle.id} ` +
+1781:        const conflicts = await conflittiVeicolo(
+1782:          client, vehicle.id, busyStart, busyEnd
+1785:        if (conflicts.length) {
+1801:              veicolo:
+1807:              postiVeicolo:
+1823:              busyStart:
+1825:                  busyStart
+1828:              busyEnd:
+1830:                  busyEnd
+1834:                conflicts.length,
+1837:                conflicts.map(
+1838:                  (conflict, index) => ({
+1840:                    ...conflict
+1859:          busyStart,
+1860:          busyEnd
+1867:          `veicolo=${vehicle.id} ` +
+1913:    log('MULTI VEICOLO', chosen.map(x => ({
+1914:      veicolo: x.vehicle.id,
+1919:      busyStart: new Date(x.busyStart).toISOString(),
+1920:      busyEnd: new Date(x.busyEnd).toISOString()
+2018:         WHERE veicolo_id=$1 AND tipo='standard' AND euro_km>0
+2072:      // Il lock esclusivo e' sul veicolo, non sul titolare della flotta.
+2075:      // VERIFICA VEICOLO
+2082:        FROM veicolo
+2094:        stats.scartiVeicolo++;
+2097:          'VEICOLO',
+2108:      const busy = await conflittiVeicolo(
+2109:        client, c.vehicle.id, c.busyStart, c.busyEnd
+2117:          `Veicolo occupato: ${c.vehicle.id}`
+2184:        ON CONFLICT(
+2355:        busyStart:
+2357:            c.busyStart
+2360:        busyEnd:
+2362:            c.busyEnd
+2375:          veicolo_id,
+2411:        new Date(c.busyStart)
+2438:        `veicolo=${c.vehicle.id} ` +
+2553:          veicolo_id:

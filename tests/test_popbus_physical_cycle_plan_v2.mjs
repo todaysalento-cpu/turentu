@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import { preparaPianoCicloFisicoV2 } from "../services/popbus/v2/popbus-physical-cycle-plan-v2.js";
+const t=Date.now()+3600000;
+const fermate=[{id:101,lat:40.35,lon:18.17},{id:102,lat:40.36,lon:18.18},{id:103,lat:40.37,lon:18.19}];
+const leg={seconds:600,metres:1200,polyline:"test-polyline"};
+const missione={schemaVersion:2,tipoItinerario:"FERMATE_FISICHE",plan:{nodes:[101,102,103],legs:[leg,leg]},evaluation:{requests:[{id:1,start:0,end:2},{id:2,start:1,end:2}]},nodiFisici:fermate,departure:t,arrival:t+1200000,corridoioPixelId:"TEST"};
+const ciclo={vehicleId:1,missioni:[missione],richiestaIds:[1,2],partenzaBase:t-600000,ritornoBase:t+1800000,routingFisico:{approach:leg,transfer:null,returnTrip:leg,waitingHours:0}};
+const piano=preparaPianoCicloFisicoV2({ciclo,richiesteBloccate:[{id:1,posti_richiesti:2},{id:2,posti_richiesti:1}],postiTotali:3});
+assert.equal(piano.schemaVersion,2);
+assert.equal(piano.tipoItinerario,"FERMATE_FISICHE");
+assert.equal(piano.validazioneCapienza.verificata,true);
+assert.equal(piano.validazioneCapienza.peak,3);
+assert.equal(piano.evaluation.requests.length,2);
+console.log("PASS: piano fisico V2, mapping richieste e capienza");

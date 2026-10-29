@@ -316,7 +316,7 @@ export async function selezionaCicliFisiciShadow({
           continue;
         }
         diagnostica.singoleEconomicamenteAmmissibili++;
-        valid.push({vehicleId:vehicle.id,missioni:[a],richiestaIds:idsOf(a),
+        valid.push({vehicleId:vehicle.id,baseOperativa:{lat:vehicle.lat,lon:vehicle.lon},missioni:[a],richiestaIds:idsOf(a),
           numeroRichieste:idsOf(a).length,partenzaBase:busyStart,
           ritornoBase:busyEnd,economia:economy,attivabile:false,
           ...(contrattoRoutingFisicoV2 ? {routingFisico:{approach,transfer:null,returnTrip:ret,waitingHours:0}} : {})});
@@ -350,7 +350,7 @@ export async function selezionaCicliFisiciShadow({
         continue;
       }
       diagnostica.cicliEconomicamenteAmmissibili++;
-      valid.push({vehicleId:vehicle.id,missioni:[a,b],richiestaIds:c.richieste,
+      valid.push({vehicleId:vehicle.id,baseOperativa:{lat:vehicle.lat,lon:vehicle.lon},missioni:[a,b],richiestaIds:c.richieste,
         numeroRichieste:c.richieste.length,partenzaBase:c.partenza_base,
         ritornoBase:c.ritorno_base,economia:economy,attivabile:false,
         ...(contrattoRoutingFisicoV2 ? {routingFisico:{approach:s.approach,transfer:s.transfer,

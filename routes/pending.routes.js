@@ -8,6 +8,10 @@ import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
 import { upsertCorsa, upsertTratta } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
+import {
+  bloccaVeicoloPerAssegnazione,
+  verificaTrasferimentiVeicolo
+} from '../services/booking/vehicle-commitments.service.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
@@ -80,6 +84,19 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     const p = pendingRes.rows[0];
+    // A/R vincolato: non elaborare una sola tratta con il flusso NCC singolo.
+    // La conferma coordinata richiede un orchestratore che verifichi entrambe
+    // le tratte, le autorizzazioni Stripe e l'eventuale attivazione PopBus.
+    // Questa protezione non modifica il comportamento delle corse singole.
+    if (p.ar_vincolata === true) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Prenotazione A/R vincolata: accettazione coordinata non ancora disponibile',
+        code: 'AR_COORDINATED_ACCEPTANCE_REQUIRED',
+        ar_group_id: p.ar_group_id,
+        ar_tratta: p.ar_tratta
+      });
+    }
     console.log(`📋 [ACCETTA] Dati pending trovati:`, { id: p.id, stato: p.stato, veicolo_id: p.veicolo_id, cliente_id: p.cliente_id, tipo_corsa: p.tipo_corsa, corsa_id: p.corsa_id });
 
     const {rows:owner}=await client.query('SELECT driver_id FROM veicolo WHERE id=$1',[p.veicolo_id]);
@@ -94,6 +111,9 @@ router.post('/:id/accetta', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Non disponibile (stato non valido)' });
     }
+
+    // STEP 4.37: serializza le assegnazioni sul singolo veicolo nella transazione.
+    await bloccaVeicoloPerAssegnazione(client, p.veicolo_id);
 
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 
@@ -283,16 +303,65 @@ router.post('/:id/accetta', async (req, res) => {
           corsa = resCorsa.corsa ?? resCorsa;
           prenotazioneEffettuata = true; 
         } else {
-          // Controllo conflitti rigoroso per le corse private/dedicate
-          const conflictCheck = await client.query(
-              `SELECT id FROM corse WHERE veicolo_id = $1 AND start_datetime = $2 AND stato != 'terminata' LIMIT 1`,
-              [pRow.veicolo_id, pRow.start_datetime]
+          // STEP 4.37.25: continuita' operativa del singolo veicolo.
+          // Si controllano sia le sovrapposizioni sia i trasferimenti reali
+          // rispetto agli impegni NCC, POPBUS e A/R gia' presenti.
+          // Le prenotazioni aggiunte a una corsa condivisa esistente non
+          // entrano in questo ramo: non costituiscono una nuova missione.
+          const inizioMissione = new Date(pRow.start_datetime);
+          const fineMissione = new Date(
+            inizioMissione.getTime() + durataMinuti * 60 * 1000
           );
+          const origineLat = pRow.origine_lat == null ? NaN : Number(pRow.origine_lat);
+          const origineLon = pRow.origine_lon == null ? NaN : Number(pRow.origine_lon);
+          const destinazioneLat = pRow.destinazione_lat == null ? NaN : Number(pRow.destinazione_lat);
+          const destinazioneLon = pRow.destinazione_lon == null ? NaN : Number(pRow.destinazione_lon);
+          if (
+            !Number.isFinite(inizioMissione.getTime()) ||
+            !Number.isFinite(fineMissione.getTime()) ||
+            inizioMissione >= fineMissione ||
+            !Number.isFinite(origineLat) || Math.abs(origineLat) > 90 ||
+            !Number.isFinite(origineLon) || Math.abs(origineLon) > 180 ||
+            !Number.isFinite(destinazioneLat) || Math.abs(destinazioneLat) > 90 ||
+            !Number.isFinite(destinazioneLon) || Math.abs(destinazioneLon) > 180
+          ) {
+            const error = new Error('Coordinate o orari della missione NCC non validi');
+            error.code = 'NCC_MISSION_GEO_INVALID';
+            error.status = 409;
+            throw error;
+          }
 
-          if (conflictCheck.rows.length > 0) {
-              console.warn(`❌ [ACCETTA CONFLITTO] Il veicolo ${pRow.veicolo_id} è già impegnato nell'orario ${pRow.start_datetime}`);
-              await client.query('ROLLBACK');
-              return res.status(400).json({ error: "Il veicolo è già impegnato o prenotato in questo orario." });
+          const verifica = await verificaTrasferimentiVeicolo(
+            client,
+            pRow.veicolo_id,
+            {
+              inizio: inizioMissione,
+              fine: fineMissione,
+              origine: { lat: origineLat, lon: origineLon },
+              destinazione: { lat: destinazioneLat, lon: destinazioneLon }
+            }
+          );
+          if (!verifica.compatibile) {
+            console.warn('[VEHICLE COMMITMENTS] Assegnazione NCC non compatibile', {
+              pendingId: pRow.id,
+              veicoloId: pRow.veicolo_id,
+              conflitti: verifica.conflitti.map(x => ({
+                fonte: x.impegno?.fonte,
+                riferimento_id: x.impegno?.riferimento_id,
+                motivo: x.motivo
+              })),
+              nonVerificabili: verifica.nonVerificabili.map(x => ({
+                fonte: x.impegno?.fonte,
+                riferimento_id: x.impegno?.riferimento_id,
+                motivo: x.motivo
+              }))
+            });
+            const error = new Error(
+              'Veicolo non disponibile: sovrapposizione, trasferimento impossibile o non verificabile'
+            );
+            error.code = 'VEHICLE_COMMITMENT_CONFLICT';
+            error.status = 409;
+            throw error;
           }
 
           console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
@@ -539,14 +608,14 @@ router.post('/:id/accetta', async (req, res) => {
     try {
       // Errori di validazione/routing della missione NCC: non rifiutare
       // definitivamente il pending dopo il rollback; consentire un nuovo tentativo.
-      if (!['NCC_MISSION_GEO_INVALID', 'NCC_MODEL_A_PAYMENT_INVALID', 'NCC_SHARED_COURSE_UNAVAILABLE'].includes(err.code)) {
+      if (!['NCC_MISSION_GEO_INVALID', 'NCC_MODEL_A_PAYMENT_INVALID', 'NCC_SHARED_COURSE_UNAVAILABLE', 'VEHICLE_COMMITMENT_CONFLICT'].includes(err.code)) {
         await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
       }
     } catch (cleanupErr) {
       console.error('❌ Impossibile pulire lo stato della richiesta fallita:', cleanupErr);
     }
 
-    res.status(400).json({ error: err.message });
+    res.status(['VEHICLE_COMMITMENT_CONFLICT', 'NCC_MISSION_GEO_INVALID'].includes(err.code) ? 409 : 400).json({ error: err.message, ...(err.code === 'VEHICLE_COMMITMENT_CONFLICT' ? { code: err.code } : {}) });
   } finally {
     client.release();
   }

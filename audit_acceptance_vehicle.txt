@@ -1,0 +1,46 @@
+2:import { verificaTurnoVeicolo } from './popbus-vehicle-availability.js';
+65:  // BEGIN / COMMIT sono gestiti dal router.
+87:    FOR UPDATE OF o, a
+125:    FOR UPDATE
+151:    validaPianoMultiMissione(plan, { veicoloId: a.veicolo_id });
+153:      'SELECT id, posti_totali FROM veicolo WHERE id = $1 AND driver_id = $2 FOR UPDATE',
+154:      [a.veicolo_id, autistaId]
+156:    if (!veicoliPreflight[0]) throw new Error('Veicolo non trovato per preflight multi-missione');
+158:      attivazioneId: a.id, piano: plan, veicoloId: a.veicolo_id,
+193:  // 3. VERIFICA VEICOLO
+199:    FROM veicolo
+202:    FOR UPDATE
+204:    [a.veicolo_id, autistaId]
+217:  // Il router possiede BEGIN/COMMIT/ROLLBACK. Non usare cache.
+218:  // Il lock su veicolo (sopra) serializza le acceptance dello stesso mezzo.
+225:     FROM disponibilita_veicolo dv
+226:     WHERE dv.veicolo_id = $1
+227:     FOR UPDATE OF dv`,
+228:    [a.veicolo_id]
+234:  const turnoCompatibile = disponibilitaCorrenti.some(dv =>
+235:    verificaTurnoVeicolo(
+241:  if (!turnoCompatibile) {
+242:    throw new Error('Disponibilita veicolo non valida per l’intero ciclo operativo');
+257:      c.veicolo_id,
+263:    JOIN veicolo v
+264:      ON v.id = c.veicolo_id
+279:      a.veicolo_id,
+291:        veicoloId: a.veicolo_id,
+306:  // Allineamento con worker.js: anche le offerte in attesa riservano il veicolo.
+307:  // L'esclusivita' riguarda veicolo_id, non driver_id (titolare della flotta).
+314:      other.veicolo_id,
+323:      -- L'esclusivita' e' del VEICOLO, non del titolare della flotta.
+324:      AND other.veicolo_id = $2
+338:      a.veicolo_id,
+364:      veicoloId: a.veicolo_id,
+373:  // Allineamento alla UNION "direttrice" di worker.conflittiVeicolo.
+374:  // Il lock globale (734021,1) e il lock del veicolo sono gia' acquisiti.
+385:    WHERE d.veicolo_id = $1
+393:          AND other.veicolo_id = d.veicolo_id
+400:    [a.veicolo_id, busyStart, busyEnd, a.direttrice_id ?? null]
+407:      veicoloId: a.veicolo_id,
+410:    throw new Error('Veicolo impegnato su altra direttrice virtuale');
+429:    FOR UPDATE OF r, ar
+615:      veicolo_id,
+657:      a.veicolo_id,
+832:      veicoloId: a.veicolo_id,

@@ -58,6 +58,10 @@ import pagamentiAutistaRouter from './routes/pagamenti.autista.routes.js';
 import walletRouter from './routes/wallet.routes.js';
 import { eventiRouter } from './routes/eventi.routes.js';
 import gmailTestRouter from './routes/gmail-test.routes.js';
+// ======================= CONDUCENTI (MODULO AUTONOMO) =======================
+import { pool } from './db/db.js';
+import { authMiddleware } from './middleware/auth.js';
+import { creaRouterConducenti } from './routes/conducenti.routes.js';
 
 // ======================= SERVICES + WORKERS =======================
 import * as pendingService from './services/pending/pending.service.js';
@@ -134,6 +138,8 @@ app.use('/api/search', searchRouter);
 app.use('/api/autista/profilo', autistaProfiloRouter);
 app.use('/api/autista', autistaStatusRouter);
 app.use('/api/autista/documenti', documentiAutistaRouter);
+// API conducenti indipendenti da PIXEL e POPBUS
+app.use('/api/conducenti', creaRouterConducenti({ pool, authenticate: authMiddleware }));
 app.use('/api/documenti', documentiVeicoloRouter);
 app.use('/api/flows', flowsRouter);
 app.use('/api/wallet', walletRouter);

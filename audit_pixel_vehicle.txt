@@ -1,0 +1,51 @@
+13:import { verificaTurnoVeicolo } from './popbus-vehicle-availability.js';
+123:async function conflicts(client, vehicleId, start, end) {
+126:    WHERE a.veicolo_id=$1 AND a.stato IN ('in_attesa_autista','confermata')
+127:      AND COALESCE((a.piano->>'busyStart')::timestamptz,a.partenza) < $3
+128:      AND COALESCE((a.piano->>'busyEnd')::timestamptz,a.arrivo) > $2
+130:    SELECT 1 FROM corse c WHERE c.veicolo_id=$1 AND c.stato IN ('prenotabile','in_corso','da_attivare')
+152:    to_jsonb(v)->>'tipo' AS tipo_veicolo,
+156:    FROM veicolo v JOIN disponibilita_veicolo dv ON dv.veicolo_id=v.id
+158:      WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0) t ON t.euro_km IS NOT NULL
+161:  // Una configurazione del turno per ogni veicolo resta una scelta diversa
+258:    const tipoDb=String(v.tipo_veicolo??'').toLowerCase();
+263:      fail(`tipo veicolo ${v.id} assente/non supportato: impossibile certificare le fermate`);
+266:      fail(`tipo veicolo incoerente: ${key}`);
+270:  for (const m of snapshot.missioni) for (const [veicoloId,config] of vehicleTypes) {
+272:    combinations.push({m,veicoloId,...config});
+276:  const diagnostica={tentativi:0,alternative:0,perVeicolo:[],scarti:[],
+278:  for (const {m,veicoloId,tipo,postiTotali} of combinations) {
+284:      client,missionePixel:m,richieste,postiTotali,tipoVeicolo:tipo
+289:    diagnostica.perVeicolo.push({veicoloId,tipoVeicolo:tipo,
+293:    if (!result.ok) diagnostica.scarti.push({veicoloId,
+312:  const {rows:vs}=await client.query('SELECT id,driver_id,posti_totali,coord FROM veicolo WHERE id=$1 FOR UPDATE',[chosen.veicolo]);
+314:  if (!v || !positive(v.driver_id)) fail('veicolo scomparso o titolare assente');
+343:        fail('richiesta modificata o salita incompatibile: '+ref.id);
+368:  const {rows:tariffe}=await client.query(`SELECT euro_km FROM tariffe WHERE veicolo_id=$1 AND tipo='standard' AND euro_km>0 ORDER BY euro_km LIMIT 1 FOR SHARE`,[v.id]);
+371:    ST_Y(COALESCE(coord,(SELECT coord FROM veicolo WHERE id=$1))::geometry) AS lat,
+372:    ST_X(COALESCE(coord,(SELECT coord FROM veicolo WHERE id=$1))::geometry) AS lon
+373:    FROM disponibilita_veicolo WHERE veicolo_id=$1 FOR UPDATE`,[v.id]);
+405:  const busyStart=first.departure-Number(approach.seconds)*1000;
+406:  const busyEnd=second.arrival+Number(returnTrip.seconds)*1000;
+407:  if (!(busyStart>now+60000 && busyEnd>busyStart)) fail('avvicinamento gia iniziato');
+409:       verificaTurnoVeicolo(d,busyStart,busyEnd))) fail('turno non copre il ciclo completo');
+410:  if (await conflicts(client,v.id,busyStart,busyEnd)) fail('veicolo in conflitto');
+416:    nodi:snapshot.nodi,veicoloId:v.id,busyStart,busyEnd,approach,returnTrip,
+439:    veicoloId:v.id,postiTotali:Number(v.posti_totali),fingerprintRichiesta,economia
+446:  const expiresAt=new Date(Math.min(now+10*60000,busyStart));
+456:    (direttrice_id,pixel_opportunita_id,veicolo_id,autista_id,stato,partenza,arrivo,
+471:  return {attivazioneId,offertaId:offers[0].id,veicoloId:Number(v.id),autistaId:Number(v.driver_id),
+564:        samePoint(d,v) && verificaTurnoVeicolo(d,a,b)),
+565:      hasConflicts:async(v,a,b)=>conflicts(reader,v.id,a,b),
+584:          veicoloId:Number(p.v.id),
+755:            fail('configurazioni veicolo divergenti: selezione fisica non certificabile');
+791:            verificaTurnoVeicolo(d,start,end)),
+792:          hasConflicts:async(v,start,end)=>indiceImpegni
+794:            : conflicts(reader,v.id,start,end),
+822:      return {modalita:mode,offerte:0,motivo:'nessuna formazione/veicolo PIXEL candidato'};
+828:        fail('veicolo con basi diverse nelle disponibilita: selezione ambigua');
+839:    const vehicle=rowsPerVehicle.get(Number(chosen.veicolo));
+958:      motivo: 'nessuna formazione o veicolo candidato'
+974:      fail('veicolo con basi diverse nelle disponibilita');
+1007:  const vehicle = rowsPerVehicle.get(Number(chosen.veicolo));
+1010:    fail('veicolo selezionato assente dallo snapshot');

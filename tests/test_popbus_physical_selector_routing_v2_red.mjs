@@ -51,6 +51,7 @@ function checkLeg(leg,label) {
 await test('V2 singola: conserva avvicinamento e ritorno',async()=>{
   const out=await select();
   assert.equal(out.migliorCiclo.missioni.length,1);
+  assert.deepEqual(out.migliorCiclo.baseOperativa,BASE);
   const r=out.migliorCiclo.routingFisico;
   assert.ok(r,'routingFisico assente');
   checkLeg(r.approach,'approach');
@@ -61,6 +62,7 @@ await test('V2 singola: conserva avvicinamento e ritorno',async()=>{
 await test('V2 coppia: conserva tre segmenti e attesa',async()=>{
   const out=await select({candidati:[A,B],validateSingle:null});
   assert.equal(out.migliorCiclo.missioni.length,2);
+  assert.deepEqual(out.migliorCiclo.baseOperativa,BASE);
   const r=out.migliorCiclo.routingFisico;
   assert.ok(r,'routingFisico assente');
   for(const k of ['approach','transfer','returnTrip']) checkLeg(r[k],k);

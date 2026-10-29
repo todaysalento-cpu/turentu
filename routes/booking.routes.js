@@ -460,4 +460,104 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
   }
 });
 
+
+// ==============================================================
+// A/R STEP 2 — PREVIEW DI SOLA LETTURA, SENZA PREAUTORIZZAZIONI
+// L'endpoint singolo /payment-intent rimane invariato.
+// POST /api/booking/ar/preview
+// Body: { tratte: [{ ar_tratta:'andata', slot:{...}, type:'privata'|'condivisa'|'popbus' },
+//                 { ar_tratta:'ritorno', slot:{...}, type:'...' }] }
+// NON costituisce una prenotazione né una garanzia di disponibilità.
+// ==============================================================
+router.post('/ar/preview', authMiddleware, async (req, res) => {
+  const tratte = req.body?.tratte;
+  if (!Array.isArray(tratte) || tratte.length !== 2 ||
+      tratte[0]?.ar_tratta !== 'andata' || tratte[1]?.ar_tratta !== 'ritorno') {
+    return res.status(400).json({ code: 'AR_INVALID_LEGS', error: 'Servono andata e ritorno, in quest’ordine' });
+  }
+  const result = [];
+  try {
+    for (const item of tratte) {
+      const selected = item?.slot;
+      if (!selected || typeof selected !== 'object') {
+        return res.status(400).json({ code: 'AR_INVALID_SLOT', error: `Slot ${item.ar_tratta} mancante` });
+      }
+      const o = selected.origine;
+      const d = selected.destinazione;
+      // Non usare coordinate globali di ricerca: il ritorno ha origine/destinazione proprie.
+      const origine = puntoDesiderato(o, null, `${item.ar_tratta} origine`);
+      const destinazione = puntoDesiderato(d, null, `${item.ar_tratta} destinazione`);
+      const count = Number(selected.posti_richiesti);
+      const when = selected.start_datetime;
+      if (!Number.isSafeInteger(count) || count <= 0 ||
+          !when || !Number.isFinite(new Date(when).getTime()) || new Date(when).getTime() <= Date.now()) {
+        return res.status(400).json({ code: 'AR_INVALID_DATE_SEATS', error: `Data o passeggeri ${item.ar_tratta} non validi` });
+      }
+      const fresh = await cercaSlotUltra({
+        coord: { lat: origine.lat, lon: origine.lon },
+        coordDest: { lat: destinazione.lat, lon: destinazione.lon },
+        posti_richiesti: count,
+        start_datetime: when
+      });
+      const quote = fresh.find(x =>
+        String(x.id) === String(selected.id) &&
+        (x.tipo !== 'condivisa' ||
+          (selected.tratta_id != null && String(x.tratta_id) === String(selected.tratta_id)))
+      );
+      if (!quote || quote.prezzo == null || quote.prezzo === '' ||
+          !Number.isFinite(Number(quote.prezzo)) || Math.round(Number(quote.prezzo) * 100) < 50) {
+        return res.status(409).json({ code: 'AR_QUOTE_CHANGED', error: `Quotazione ${item.ar_tratta} non disponibile: ripetere la ricerca` });
+      }
+      const isPop = isPopbusSlot(quote);
+      const activePop = isPop && (quote.tipo_corsa === 'riempimento' ||
+        quote.attivazione_stato === 'confermata' ||
+        (quote.corsa_id != null && !String(quote.id).startsWith('virtual_pop_')));
+      if (activePop || (isPop && quote.is_pool && !String(quote.id).startsWith('virtual_pop_'))) {
+        return res.status(409).json({ code: 'POPBUS_ACTIVE_BOOKING_NOT_READY', error: `PopBus ${item.ar_tratta} già attivo: prenotazione diretta non disponibile` });
+      }
+      if (isPop && String(selected.id).startsWith('virtual_pop_') !== String(quote.id).startsWith('virtual_pop_')) {
+        return res.status(409).json({ code: 'AR_POPBUS_ID_CHANGED', error: `Identità PopBus ${item.ar_tratta} cambiata` });
+      }
+      if (item.type !== 'privata' && item.type !== 'condivisa' && item.type !== 'popbus') {
+        return res.status(400).json({ code: 'AR_INVALID_TYPE', error: `Tipo ${item.ar_tratta} non valido` });
+      }
+      if (isPop !== (item.type === 'popbus')) {
+        return res.status(409).json({ code: 'AR_TYPE_CHANGED', error: `Tipo ${item.ar_tratta} non coerente con la quotazione` });
+      }
+      if (!isPop && item.type === 'condivisa' &&
+          !(quote.tipo === 'condivisa' && quote.modello_a === true)) {
+        // La conversione da privata a condivisa richiede la verifica Modello A
+        // che verrà gestita dal coordinatore; non dichiararla disponibile qui.
+        return res.status(409).json({ code: 'AR_MODEL_A_NOT_VERIFIED', error: `Modello A ${item.ar_tratta} non verificato` });
+      }
+      if (!isPop && item.type === 'privata' && quote.tipo !== 'privata') {
+        return res.status(409).json({ code: 'AR_TYPE_CHANGED', error: `Opzione ${item.ar_tratta} non privata` });
+      }
+      result.push({
+        ar_tratta: item.ar_tratta,
+        tipo: item.type,
+        id: String(quote.id),
+        tratta_id: quote.tratta_id ?? null,
+        prezzo: Number((Math.round(Number(quote.prezzo) * 100) / 100).toFixed(2)),
+        posti_richiesti: count,
+        start_datetime: when
+      });
+    }
+    if (new Date(result[1].start_datetime).getTime() <= new Date(result[0].start_datetime).getTime()) {
+      return res.status(400).json({ code: 'AR_INVALID_ORDER', error: 'Il ritorno deve essere successivo all’andata' });
+    }
+    const totaleCentesimi = result.reduce((sum, r) => sum + Math.round(r.prezzo * 100), 0);
+    return res.json({
+      stato: 'preview_non_prenotabile',
+      pagamento_abilitato: false,
+      tratte: result,
+      prezzo_totale: totaleCentesimi / 100,
+      messaggio: 'Preventivo indicativo ricalcolato: nessuna richiesta o autorizzazione Stripe creata'
+    });
+  } catch (err) {
+    console.error('[AR PREVIEW]', err);
+    return res.status(err.status || 500).json({ code: 'AR_PREVIEW_ERROR', error: err.status ? err.message : 'Errore nel ricalcolo A/R' });
+  }
+});
+
 export default router;

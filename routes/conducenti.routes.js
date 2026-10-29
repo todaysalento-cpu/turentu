@@ -61,6 +61,33 @@ export function creaRouterConducenti({ pool, authenticate }) {
   router.post('/me/inviti/:rapportoId/accetta', route(req =>
     accettaInvitoConducente(pool, { rapportoId: rapporto(req), conducenteId: op(req) })));
 
+  // Le API operatore sono riservate agli account di tipo 'autista'.
+  // Verifica sul DB: non dipende da un ruolo JWT potenzialmente non aggiornato.
+  // NOTA: questo controllo non sostituisce la verifica professionale NCC.
+  const requireOperatoreNcc = async (req, res, next) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT tipo FROM utente WHERE id = $1`,
+        [op(req)]
+      );
+      if (rows[0]?.tipo !== 'autista') {
+        return res.status(403).json({
+          ok: false,
+          error: 'Accesso riservato agli operatori NCC'
+        });
+      }
+      next();
+    } catch (err) {
+      console.error('[conducenti] verifica operatore NCC:', err);
+      return res.status(500).json({
+        ok: false,
+        error: 'Errore verifica autorizzazione'
+      });
+    }
+  };
+
+  router.use('/operatori', requireOperatoreNcc);
+
   router.get('/operatori/me/conducenti', route(req => elencoConducenti(pool, op(req))));
   router.post('/operatori/me/conducenti/inviti', route(req =>
     invitaConducente(pool, { operatoreId: op(req), conducenteId: id(req.body?.conducenteId, 'conducenteId') })));

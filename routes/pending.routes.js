@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
+import { assegnaConducente } from '../services/conducenti/assegnazioni.service.js';
 import { upsertCorsa, upsertTratta } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
@@ -301,6 +302,7 @@ router.post('/:id/accetta', async (req, res) => {
           console.log(`🚌 [ACCETTA] Creazione corsa PopBus da pending...`);
           const resCorsa = await createCorsaFromPending(pRow, null, client, true, driverId);
           corsa = resCorsa.corsa ?? resCorsa;
+
           prenotazioneEffettuata = true; 
         } else {
           // STEP 4.37.25: continuita' operativa del singolo veicolo.
@@ -383,6 +385,36 @@ router.post('/:id/accetta', async (req, res) => {
             lon_base: v.lon_base
           }, client, false);
           corsa = resCorsa.corsa ?? resCorsa;
+          // Attivazione progressiva: in assenza della flag il flusso resta invariato.
+          // Il titolare NCC e' l'operatore, non necessariamente il conducente fisico.
+          if (process.env.NCC_CONDUCENTI_ENABLED === 'true') {
+            const ciclo = corsa?.cicloOperativoNcc;
+            if (!ciclo?.inizio || !ciclo?.fine) {
+              const error = new Error('Durata completa del ciclo NCC non verificabile');
+              error.code = 'NCC_CICLO_OPERATIVO_INVALIDO';
+              error.status = 409;
+              throw error;
+            }
+            const scelta = req.body?.conducente ?? {};
+            if (!['automatica', 'manuale', 'titolare'].includes(scelta.modalita)) {
+              const error = new Error('Selezionare una modalita di assegnazione conducente');
+              error.code = 'CONDUCENTE_SCELTA_RICHIESTA';
+              error.status = 409;
+              throw error;
+            }
+            await assegnaConducente(client, {
+              operatoreId: Number(req.user.id),
+              veicoloId: Number(pRow.veicolo_id),
+              corsaId: Number(corsa.id),
+              inizio: ciclo.inizio,
+              fine: ciclo.fine,
+              modalita: scelta.modalita,
+              ...(scelta.conducenteId == null ? {} : { conducenteId: scelta.conducenteId }),
+              ...(scelta.confermaDeroga == null ? {} : { confermaDeroga: scelta.confermaDeroga }),
+              ...(scelta.motivoDeroga == null ? {} : { motivoDeroga: scelta.motivoDeroga }),
+              ...(scelta.autorizzatoreId == null ? {} : { autorizzatoreId: scelta.autorizzatoreId })
+            });
+          }
           prenotazioneEffettuata = true; 
         }
         
@@ -608,14 +640,36 @@ router.post('/:id/accetta', async (req, res) => {
     try {
       // Errori di validazione/routing della missione NCC: non rifiutare
       // definitivamente il pending dopo il rollback; consentire un nuovo tentativo.
-      if (!['NCC_MISSION_GEO_INVALID', 'NCC_MODEL_A_PAYMENT_INVALID', 'NCC_SHARED_COURSE_UNAVAILABLE', 'VEHICLE_COMMITMENT_CONFLICT'].includes(err.code)) {
+      if (![
+        'NCC_MISSION_GEO_INVALID',
+        'NCC_MODEL_A_PAYMENT_INVALID',
+        'NCC_SHARED_COURSE_UNAVAILABLE',
+        'VEHICLE_COMMITMENT_CONFLICT',
+        'CONDUCENTE_DEROGA_RICHIESTA',
+        'CONDUCENTE_NON_DISPONIBILE',
+        'CONDUCENTE_CONFLITTO',
+        'CONDUCENTE_SCELTA_RICHIESTA',
+        'NCC_CICLO_OPERATIVO_INVALIDO'
+      ].includes(err.code)) {
         await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
       }
     } catch (cleanupErr) {
       console.error('❌ Impossibile pulire lo stato della richiesta fallita:', cleanupErr);
     }
 
-    res.status(['VEHICLE_COMMITMENT_CONFLICT', 'NCC_MISSION_GEO_INVALID'].includes(err.code) ? 409 : 400).json({ error: err.message, ...(err.code === 'VEHICLE_COMMITMENT_CONFLICT' ? { code: err.code } : {}) });
+    const erroriConflitto = [
+      'VEHICLE_COMMITMENT_CONFLICT',
+      'NCC_MISSION_GEO_INVALID',
+      'CONDUCENTE_DEROGA_RICHIESTA',
+      'CONDUCENTE_NON_DISPONIBILE',
+      'CONDUCENTE_CONFLITTO',
+      'CONDUCENTE_SCELTA_RICHIESTA',
+      'NCC_CICLO_OPERATIVO_INVALIDO'
+    ];
+    res.status(erroriConflitto.includes(err.code) ? 409 : 400).json({
+      error: err.message,
+      ...(err.code ? { code: err.code } : {})
+    });
   } finally {
     client.release();
   }

@@ -6,6 +6,7 @@ import { fingerprintRichiesta } from './request-fingerprint.js';
 import { verificaAccettazionePixel } from './popbus-pixel-acceptance-preflight.js';
 import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-preflight.js';
 
+import { assegnaConducente } from './assegnazioni.service.js';
 import Stripe from 'stripe';
 import polyline from 'polyline';
 import * as turf from '@turf/turf';
@@ -60,7 +61,8 @@ export async function verificaPagamento(client, r) {
 export async function accettaAttivazione(
   client,
   offertaId,
-  autistaId
+  autistaId,
+  sceltaConducente = null
 ) {
   // BEGIN / COMMIT sono gestiti dal router.
   // Nessuna cache o notifica viene aggiornata qui.
@@ -784,6 +786,51 @@ export async function accettaAttivazione(
       isMulti ? multiPreflight.peak : plan.evaluation.peak
     ]
   );
+
+  // Conducente fisico: flag separata, OFF per default.
+  // La prenotazione avviene nella transazione aperta dal router.
+  // Nessuna assegnazione al titolare implicita.
+  if (process.env.POPBUS_CONDUCENTI_ENABLED === 'true') {
+    if (!sceltaConducente || typeof sceltaConducente !== 'object' ||
+        Array.isArray(sceltaConducente) ||
+        !['automatica', 'manuale', 'titolare'].includes(sceltaConducente.modalita)) {
+      const err = new Error('Scelta del conducente obbligatoria per PopBus');
+      err.code = 'CONDUCENTE_SCELTA_RICHIESTA';
+      err.status = 409;
+      throw err;
+    }
+
+    // I tempi devono essere quelli del piano persistito, non quelli forniti dal client.
+    // Per il percorso fisico V2 sono partenzaBase -> ritornoBase.
+    const assegnazione = {
+      operatoreId: Number(autistaId),
+      veicoloId: Number(a.veicolo_id),
+      attivazioneId: Number(a.id),
+      inizio: busyStart.toISOString(),
+      fine: busyEnd.toISOString(),
+      modalita: sceltaConducente.modalita
+    };
+    if (sceltaConducente.modalita === 'titolare') {
+      // Il titolare e' scelto esplicitamente, mai come fallback automatico.
+      assegnazione.conducenteId = Number(autistaId);
+      if (sceltaConducente.conducenteId != null &&
+          Number(sceltaConducente.conducenteId) !== Number(autistaId)) {
+        throw new Error('Il conducente titolare deve coincidere con l’operatore');
+      }
+    } else if (sceltaConducente.modalita === 'manuale') {
+      assegnazione.conducenteId = sceltaConducente.conducenteId;
+      assegnazione.confermaDeroga = sceltaConducente.confermaDeroga;
+      assegnazione.motivoDeroga = sceltaConducente.motivoDeroga;
+      // L'identita' di chi autorizza la deroga deriva dall'operatore autenticato,
+      // mai da un identificativo dichiarato dal client.
+      if (sceltaConducente.confermaDeroga === true) {
+        assegnazione.autorizzatoreId = Number(autistaId);
+      }
+    } else if (sceltaConducente.conducenteId != null) {
+      throw new Error('In modalita automatica non indicare conducenteId');
+    }
+    await assegnaConducente(client, assegnazione);
+  }
 
   // =====================================================
   // 14. CONFERMA ATTIVAZIONE E OFFERTA

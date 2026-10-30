@@ -1,4 +1,4 @@
-// Turentu — assegnazioni conducenti, indipendente da PIXEL e POPBUS.
+﻿// Turentu — assegnazioni conducenti, indipendente da PIXEL e POPBUS.
 // Richiede un client pg con transazione BEGIN già aperta dal chiamante.
 // Non effettua COMMIT/ROLLBACK: il chiamante conferma o annulla l'intera operazione.
 
@@ -75,7 +75,7 @@ async function verificaCopertura(client, rapportoId, da, a) {
               @> tstzrange($2::timestamptz,$3::timestamptz,'[)')) AS coperto
     FROM copertura CROSS JOIN assenze`, [rapportoId, da, a]
   );
-  if (!rows[0]?.coperto) throw new Error('Turni e disponibilità non coprono l’intero ciclo operativo');
+  return rows[0]?.coperto === true;
 }
 
 async function verificaTarget(client, { corsaId, attivazioneId, veicoloId, operatoreId }) {
@@ -111,7 +111,15 @@ export async function assegnaConducente(client, input) {
   const attivazioneId = input.attivazioneId == null ? null : idValido(input.attivazioneId, 'attivazioneId');
   const [da, a] = intervallo(input.inizio, input.fine);
   const modalita = input.modalita;
+  const confermaDeroga = input.confermaDeroga === true;
+  const motivoDeroga = typeof input.motivoDeroga === 'string' ? input.motivoDeroga.trim() : '';
+  const autorizzatoreId = input.autorizzatoreId == null ? null : idValido(input.autorizzatoreId, 'autorizzatoreId');
   if (!['manuale', 'automatica', 'titolare'].includes(modalita)) throw new Error('Modalità non valida');
+  if (input.confermaDeroga != null && typeof input.confermaDeroga !== 'boolean') throw new Error('Conferma deroga non valida');
+  if (confermaDeroga && modalita !== 'manuale') throw new Error('Deroga consentita solo in manuale');
+  if (confermaDeroga && (motivoDeroga.length < 5 || motivoDeroga.length > 500)) throw new Error('Motivazione deroga richiesta (5-500 caratteri)');
+  if (confermaDeroga && autorizzatoreId !== operatoreId) throw new Error('Autorizzatore deroga non valido');
+  if (!confermaDeroga && (motivoDeroga || autorizzatoreId != null)) throw new Error('Dati deroga senza conferma');
   if (modalita === 'automatica' && input.conducenteId != null) throw new Error('In automatica non specificare conducenteId');
   if (modalita !== 'automatica' && input.conducenteId == null) throw new Error('Specificare conducenteId');
 
@@ -140,11 +148,16 @@ export async function assegnaConducente(client, input) {
   }
 
   for (const candidato of candidati) {
-    if (candidato.rapportoId != null) {
-      try { await verificaCopertura(client, candidato.rapportoId, da, a); }
-      catch (e) {
-        if (modalita !== 'automatica') throw e;
-        continue;
+    const coperto = candidato.rapportoId == null
+      ? true
+      : await verificaCopertura(client, candidato.rapportoId, da, a);
+    if (!coperto) {
+      if (modalita === 'automatica') continue;
+      if (!confermaDeroga) {
+        const err = new Error('Conferma esplicita richiesta per assegnazione fuori turno');
+        err.code = 'CONDUCENTE_DEROGA_RICHIESTA';
+        err.status = 409;
+        throw err;
       }
     }
     const { rows: conflitti } = await client.query(
@@ -159,11 +172,15 @@ export async function assegnaConducente(client, input) {
     }
     const { rows } = await client.query(
       `INSERT INTO assegnazioni_conducenti
-        (operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,intervallo_operativo,modalita)
-       VALUES ($1,$2,$3,$4,$5,tstzrange($6::timestamptz,$7::timestamptz,'[)'),$8)
+        (operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,intervallo_operativo,modalita,
+          deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il)
+       VALUES ($1,$2,$3,$4,$5,tstzrange($6::timestamptz,$7::timestamptz,'[)'),$8,
+                $9,$10,$11,CASE WHEN $9::boolean THEN NOW() ELSE NULL END)
        RETURNING id,operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,
-                 lower(intervallo_operativo) AS inizio,upper(intervallo_operativo) AS fine,modalita,stato`,
-      [operatoreId, candidato.id, veicoloId, corsaId, attivazioneId, da, a, modalita]
+                 lower(intervallo_operativo) AS inizio,upper(intervallo_operativo) AS fine,
+                  modalita,stato,deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il`,
+      [operatoreId, candidato.id, veicoloId, corsaId, attivazioneId, da, a, modalita,
+        !coperto, !coperto ? motivoDeroga : null, !coperto ? autorizzatoreId : null]
     );
     return rows[0];
   }
@@ -198,3 +215,4 @@ export async function annullaAssegnazione(client, { operatoreId, assegnazioneId 
   if (!rows.length) throw new Error('Assegnazione attiva non trovata');
   return rows[0];
 }
+

@@ -851,7 +851,12 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
     const ciclo = physicalResult.selezioneFisica?.migliorCiclo;
     if (!ciclo) return {...physicalResult, testTransazionale:{eseguito:false,motivo:'nessun ciclo fisico selezionato'}};
     const testTransazionale = await verificaCicloFisicoTransazionale({
-      pool, ciclo, mode:'ROLLBACK_ONLY'
+      pool,
+      ciclo,
+      mode: 'ROLLBACK_ONLY',
+      costoAttesaOraEuro: Number(process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0),
+      altriCostiEuro: Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
+      margineMinimoEuro: Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)
     });
     return {...physicalResult, testTransazionale};
   }

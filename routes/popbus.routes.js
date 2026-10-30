@@ -21,7 +21,7 @@ router.post('/:offerta_id/accetta',async(req,res)=>{
  try{
   const id=Number(req.params.offerta_id);if(!Number.isInteger(id)||id<=0)return res.status(400).json({error:'ID non valido'});
   await client.query('BEGIN');tx=true;
-  const corsa=await accettaAttivazione(client,id,req.user.id);
+  const corsa=await accettaAttivazione(client,id,req.user.id,req.body?.conducente ?? null);
   await client.query('COMMIT');tx=false;
   if(!corsa.giaAccettata){try{CacheManager.corsa.update(corsa);upsertCorsa(corsa);getIO().to(`autista_${req.user.id}`).emit('nuova_corsa_popbus',corsa);}catch(e){console.error('[V2 POST-COMMIT]',e.message);}}
   res.json({ok:true,corsa_id:corsa.id});

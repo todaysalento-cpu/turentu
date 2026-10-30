@@ -187,7 +187,7 @@ function distanzaAriaMetriNcc(a, b) {
     return 6371000 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-async function distanzaTrattaNcc(da, a, nome) {
+async function distanzaTrattaNcc(da, a, nome, { conDurata = false } = {}) {
     if (!coordinateBaseValide(Number(da?.lat), Number(da?.lon)) ||
         !coordinateBaseValide(Number(a?.lat), Number(a?.lon))) {
         throw erroreGeoNcc(`Coordinate ${nome} non valide`);
@@ -196,7 +196,7 @@ async function distanzaTrattaNcc(da, a, nome) {
     // Entro 50 m l'avvicinamento e' trascurabile: non serve interrogare il routing.
     if (nome === 'avvicinamento' && metriAria <= 50) {
         console.log(`[NCC ROUTING] Avvicinamento trascurabile: ${metriAria.toFixed(2)} m (soglia 50 m).`);
-        return 0;
+        return conDurata ? { km: 0, durataSecondi: 0 } : 0;
     }
     let route;
     try {
@@ -207,7 +207,14 @@ async function distanzaTrattaNcc(da, a, nome) {
     // Number(null) e Number('') sono zero: non confonderli con una risposta valida.
     const rawKm = route?.distanzaKm;
     const km = rawKm == null || rawKm === '' ? NaN : Number(rawKm);
-    if (Number.isFinite(km) && km > 0) return km;
+    if (Number.isFinite(km) && km > 0) {
+        if (!conDurata) return km;
+        const durataSecondi = route?.durata == null ? NaN : Number(route.durata);
+        if (!Number.isFinite(durataSecondi) || durataSecondi <= 0) {
+            throw erroreGeoNcc(`Durata stradale ${nome} non valida`);
+        }
+        return { km, durataSecondi };
+    }
     console.error('[NCC ROUTING] Distanza non valida', {
         nome, da, a, metriAria: Number(metriAria.toFixed(2)),
         distanzaKmRicevuta: rawKm ?? null,
@@ -266,6 +273,8 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
         let kmAvvicinamento = 0;
         let kmRiposizionamento = 0;
         let percorsoRitornoNcc = null;
+        let durataAvvicinamentoSecondi = null;
+        let durataRientroSecondi = null;
 
         // Le missioni NCC condivise richiedono una base reale e due tratte
         // stradali affidabili. Non usare l'origine del cliente come base fittizia.
@@ -276,7 +285,9 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 throw erroreGeoNcc(`Base operativa mancante o non valida per veicolo ${veicolo?.id ?? pending.veicolo_id}`);
             }
             const base = { lat: latBase, lon: lonBase };
-            kmAvvicinamento = await distanzaTrattaNcc(base, coordOrig, 'avvicinamento');
+            const avvicinamento = await distanzaTrattaNcc(base, coordOrig, 'avvicinamento', { conDurata: true });
+            kmAvvicinamento = avvicinamento.km;
+            durataAvvicinamentoSecondi = avvicinamento.durataSecondi;
             // La tratta di ritorno e' una direzione commerciale autonoma della stessa missione.
             // Conserviamo geometria e durata, oltre ai km gia' conteggiati nel costo fisso.
             if (stessoPunto(coordDest, base)) {
@@ -294,17 +305,22 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 throw erroreGeoNcc('Geometria, distanza o durata del ritorno non valide');
             }
             kmRiposizionamento = kmRitorno;
+            durataRientroSecondi = durataRitorno;
         } else {
             // Comportamento storico delle corse private, salvo correzione
             // della longitudine usata per il ritorno.
             try {
-                const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito ?? coordOrig.lat);
-                const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito ?? coordOrig.lon);
+                const latBaseV = Number(veicolo?.lat_base ?? veicolo?.lat_deposito);
+                const lonBaseV = Number(veicolo?.lon_base ?? veicolo?.lon_deposito);
                 if (latBaseV && lonBaseV) {
                     const routeAvv = await getRouteGeometry({ lat: latBaseV, lon: lonBaseV }, coordOrig);
                     if (routeAvv?.distanzaKm) kmAvvicinamento = routeAvv.distanzaKm;
+                    if (Number.isFinite(Number(routeAvv?.durata)) && Number(routeAvv?.durata) > 0)
+                        durataAvvicinamentoSecondi = Number(routeAvv.durata);
                     const routeRip = await getRouteGeometry(coordDest, { lat: latBaseV, lon: lonBaseV });
                     if (routeRip?.distanzaKm) kmRiposizionamento = routeRip.distanzaKm;
+                    if (Number.isFinite(Number(routeRip?.durata)) && Number(routeRip?.durata) > 0)
+                        durataRientroSecondi = Number(routeRip.durata);
                 }
             } catch (e) {
                 console.warn('⚠ [ROUTING WARNING] Errore calcolo avvicinamento/riposizionamento:', e);
@@ -377,6 +393,36 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
           ]
         );
         corsa = res.rows[0];
+
+        // Riserva conservativa del ciclo: avvicinamento, servizio e rientro.
+        // Per la condivisa il ritorno resta flessibile entro il buffer del matching.
+        const bufferRitornoMinuti = distanzaKm <= 15 ? 20 :
+            distanzaKm <= 30 ? 30 : distanzaKm <= 60 ? 45 :
+            distanzaKm <= 100 ? 60 : distanzaKm <= 150 ? 90 : 120;
+        const durateValide = [durataAvvicinamentoSecondi, durataRientroSecondi]
+            .every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0);
+        const inizioCiclo = durateValide
+            ? new Date(startDatetime.getTime() - durataAvvicinamentoSecondi * 1000)
+            : null;
+        const fineCiclo = durateValide
+            ? new Date(arrivoDatetime.getTime() +
+                (isNccCondivisa ? bufferRitornoMinuti * 60000 : 0) +
+                durataRientroSecondi * 1000)
+            : null;
+        // Dato transitorio non enumerabile, non scritto nel DB.
+        Object.defineProperty(corsa, 'cicloOperativoNcc', {
+            value: durateValide && Number.isFinite(inizioCiclo.getTime()) &&
+                Number.isFinite(fineCiclo.getTime()) && fineCiclo > inizioCiclo
+                ? {
+                    inizio: inizioCiclo.toISOString(),
+                    fine: fineCiclo.toISOString(),
+                    durataAvvicinamentoSecondi,
+                    durataRientroSecondi,
+                    bufferRitornoMinuti: isNccCondivisa ? bufferRitornoMinuti : 0
+                }
+                : null,
+            enumerable: false
+        });
         console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente.`);
 
         // --- GESTIONE E LOGGING DEGLI OFFSET E INDICI ---

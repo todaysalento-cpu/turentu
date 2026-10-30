@@ -12,7 +12,8 @@ import {
 } from '../services/conducenti/turni.service.js';
 import {
   elencoAssegnazioni,
-  elencoAssegnazioniConducente
+  elencoAssegnazioniConducente,
+  assegnaConducente
 } from '../services/conducenti/assegnazioni.service.js';
 
 const positive = (v) => Number.isSafeInteger(Number(v)) && Number(v) > 0;
@@ -39,6 +40,9 @@ export function creaRouterConducenti({ pool, authenticate }) {
     try { const result = await fn(req); res.json({ ok: true, data: result }); }
     catch (err) {
       // Errori applicativi noti e vincoli DB, senza esporre query/stack al client.
+      if (Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+        return res.status(err.status).json({ ok: false, error: err.message });
+      }
       if (err.code === '23P01' || err.code === '23505') {
         return res.status(409).json({ error: 'Conflitto di assegnazione o duplicato' });
       }
@@ -137,8 +141,41 @@ export function creaRouterConducenti({ pool, authenticate }) {
     eliminaEccezione(pool, { operatoreId: op(req), rapportoId: rapporto(req),
       eccezioneId: id(req.params.eccezioneId, 'eccezioneId') })));
 
-  // Solo lettura: scrittura assegnazioni da abilitare DOPO verifica intervalli
-  // operativi autorevoli, stato delle corse e autorizzazioni NCC.
+  // Scrittura NCC manuale: nessun intervallo ricevuto dal client viene usato.
+  // Non abilita l'assegnazione POPBUS ne' l'assegnazione automatica.
+  router.post('/operatori/me/assegnazioni', route(async req => {
+    const body = req.body ?? {};
+    const chiaviAmmesse = new Set(['corsaId', 'veicoloId', 'conducenteId',
+      'confermaDeroga', 'motivoDeroga']);
+    if (Object.keys(body).some(k => !chiaviAmmesse.has(k))) {
+      throw new Error('Campi non ammessi nella richiesta');
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const risultato = await assegnaConducente(client, {
+        operatoreId: op(req),
+        veicoloId: id(body.veicoloId, 'veicoloId'),
+        corsaId: id(body.corsaId, 'corsaId'),
+        conducenteId: id(body.conducenteId, 'conducenteId'),
+        modalita: 'manuale',
+        usaCicloPersistito: true,
+        confermaDeroga: body.confermaDeroga === true,
+        motivoDeroga: body.motivoDeroga,
+        autorizzatoreId: body.confermaDeroga === true ? op(req) : null
+      });
+      await client.query('COMMIT');
+      return risultato;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { console.error('[conducenti] rollback:', rollbackError); }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }));
+
+  // Consultazione assegnazioni per operatore.
   router.get('/operatori/me/assegnazioni', route(req =>
     elencoAssegnazioni(pool, { operatoreId: op(req),
       conducenteId: req.query.conducenteId == null ? null : id(req.query.conducenteId, 'conducenteId') })));

@@ -1,9 +1,12 @@
 /**
  * TURENTU - Vehicle Commitments - STEP 4.37.35
  * Lettura centralizzata degli impegni NCC, POPBUS e A/R.
- * NCC: intervallo completo persistito, senza fallback agli orari passeggeri.
- * Le concatenazioni NCC con estremi del ciclo diversi da quelli passeggeri
- * restano non verificabili fino a disponibilita' delle coordinate operative.
+ * NCC: ciclo operativo persistito quando disponibile; fallback storico
+ * agli orari passeggeri per le corse precedenti (solo compatibilita' commerciale).
+ * Per l'assegnazione dei conducenti il ciclo completo e' obbligatorio
+ * e deve essere validato separatamente dal servizio assegnazioni.
+ * Le concatenazioni con ciclo NCC esteso restano non verificabili
+ * senza coordinate operative affidabili.
  * Non modifica il database. Il lock richiede una transazione del chiamante.
  *
  * Politica conservativa: POPBUS mantiene l'intervallo busyStart/busyEnd
@@ -49,8 +52,15 @@ export async function caricaImpegniVeicolo(client, veicoloId) {
   const id = validId(veicoloId);
   const { rows } = await client.query(`
     SELECT 'NCC' AS fonte, c.id AS riferimento_id, c.veicolo_id, c.stato,
-      c.inizio_ciclo_operativo AS inizio,
-      c.fine_ciclo_operativo AS fine,
+     COALESCE(
+  c.inizio_ciclo_operativo,
+  c.start_datetime
+) AS inizio,
+COALESCE(
+  c.fine_ciclo_operativo,
+  c.arrivo_datetime,
+  c.start_datetime + c.durata
+) AS fine,
       ST_Y(c.origine::geometry) AS origine_lat,
       ST_X(c.origine::geometry) AS origine_lon,
       ST_Y(c.destinazione::geometry) AS destinazione_lat,

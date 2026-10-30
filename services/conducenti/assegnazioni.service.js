@@ -109,7 +109,12 @@ export async function assegnaConducente(client, input) {
   const veicoloId = idValido(input.veicoloId, 'veicoloId');
   const corsaId = input.corsaId == null ? null : idValido(input.corsaId, 'corsaId');
   const attivazioneId = input.attivazioneId == null ? null : idValido(input.attivazioneId, 'attivazioneId');
-  const [da, a] = intervallo(input.inizio, input.fine);
+  // L'endpoint NCC manuale deriva l'intervallo esclusivamente dal DB.
+  const usaCicloPersistito = input.usaCicloPersistito === true;
+  if (usaCicloPersistito && input.attivazioneId != null) {
+    throw new Error('Assegnazione POPBUS non abilitata da questo endpoint');
+  }
+  let [da, a] = usaCicloPersistito ? [null, null] : intervallo(input.inizio, input.fine);
   const modalita = input.modalita;
   const confermaDeroga = input.confermaDeroga === true;
   const motivoDeroga = typeof input.motivoDeroga === 'string' ? input.motivoDeroga.trim() : '';
@@ -128,6 +133,46 @@ export async function assegnaConducente(client, input) {
   await client.query('SELECT pg_advisory_xact_lock($1::integer,$2::integer)', [731904, operatoreId]);
   await verificaVeicolo(client, operatoreId, veicoloId);
   await verificaTarget(client, { corsaId, attivazioneId, veicoloId, operatoreId });
+
+  if (usaCicloPersistito) {
+    if (modalita !== 'manuale' || corsaId == null || attivazioneId != null) {
+      throw new Error('Endpoint abilitato soltanto per assegnazioni manuali NCC');
+    }
+    // La riga e' protetta da FOR SHARE in verificaTarget: impedisce
+    // modifiche concorrenti agli orari fino al termine della transazione.
+    const { rows: corse } = await client.query(`
+      SELECT stato, tipo_corsa, inizio_ciclo_operativo, fine_ciclo_operativo
+      FROM public.corse WHERE id=$1 AND veicolo_id=$2 FOR SHARE
+    `, [corsaId, veicoloId]);
+    const corsa = corse[0];
+    if (!corsa || !['privata', 'condivisa'].includes(corsa.tipo_corsa) ||
+        !['prenotabile', 'da_attivare'].includes(corsa.stato)) {
+      throw new Error('Corsa NCC non assegnabile nello stato attuale');
+    }
+    const start = corsa.inizio_ciclo_operativo;
+    const end = corsa.fine_ciclo_operativo;
+    if (!(start instanceof Date) || !(end instanceof Date) ||
+        !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) ||
+        start >= end || start <= new Date()) {
+      throw new Error('Ciclo operativo completo e futuro obbligatorio');
+    }
+    [da, a] = intervallo(start.toISOString(), end.toISOString());
+  }
+
+  // Impedisce due conducenti diversi sulla stessa missione o sullo
+  // stesso veicolo durante intervalli operativi sovrapposti.
+  const { rows: veicoloOccupato } = await client.query(`
+    SELECT id FROM assegnazioni_conducenti
+    WHERE veicolo_id=$1 AND stato='assegnata'
+      AND (corsa_id=$2 OR
+           intervallo_operativo && tstzrange($3::timestamptz,$4::timestamptz,'[)'))
+    LIMIT 1
+  `, [veicoloId, corsaId, da, a]);
+  if (veicoloOccupato.length) {
+    const err = new Error('Veicolo o corsa gia assegnati nel periodo');
+    err.status = 409;
+    throw err;
+  }
 
   let candidati;
   if (modalita === 'automatica') {

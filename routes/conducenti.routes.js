@@ -10,7 +10,10 @@ import {
   elencoTurni, aggiungiTurno, impostaTurnoAttivo, eliminaTurno,
   elencoEccezioni, aggiungiEccezione, eliminaEccezione
 } from '../services/conducenti/turni.service.js';
-import { elencoAssegnazioni } from '../services/conducenti/assegnazioni.service.js';
+import {
+  elencoAssegnazioni,
+  elencoAssegnazioniConducente
+} from '../services/conducenti/assegnazioni.service.js';
 
 const positive = (v) => Number.isSafeInteger(Number(v)) && Number(v) > 0;
 const bool = (v) => typeof v === 'boolean';
@@ -69,6 +72,11 @@ export function creaRouterConducenti({ pool, authenticate }) {
   ));
   router.get('/me/rapporto-attivo', route(req =>
     rapportoAttivoConducente(pool, op(req))
+  ));
+
+  // Il conducente autenticato consulta esclusivamente le proprie missioni.
+  router.get('/me/assegnazioni', route(req =>
+    elencoAssegnazioniConducente(pool, op(req))
   ));
 
   // Le API operatore sono riservate agli account di tipo 'autista'.

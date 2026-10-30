@@ -187,6 +187,49 @@ export async function assegnaConducente(client, input) {
   throw new Error('Nessun conducente disponibile per l’intero ciclo operativo');
 }
 
+// Elenco delle missioni del conducente autenticato.
+// La visibilità è limitata alle proprie assegnazioni ancora attive.
+// Il titolare-operatore può essere assegnato a sé stesso senza un rapporto
+// in conducenti_operatori; gli altri conducenti richiedono un rapporto attivo.
+export async function elencoAssegnazioniConducente(client, conducenteId) {
+  const id = idValido(conducenteId, 'conducenteId');
+
+  const { rows } = await client.query(
+    `SELECT
+        ac.id,
+        ac.operatore_id,
+        ac.conducente_id,
+        ac.veicolo_id,
+        ac.corsa_id,
+        ac.attivazione_id,
+        lower(ac.intervallo_operativo) AS inizio,
+        upper(ac.intervallo_operativo) AS fine,
+        ac.modalita,
+        ac.stato,
+        ac.creata_il,
+        u.nome AS nome_operatore
+     FROM assegnazioni_conducenti ac
+     LEFT JOIN utente u ON u.id = ac.operatore_id
+     WHERE ac.conducente_id = $1
+       AND ac.stato = 'assegnata'
+       AND (
+         ac.operatore_id = ac.conducente_id
+         OR EXISTS (
+           SELECT 1
+             FROM conducenti_operatori co
+            WHERE co.operatore_id = ac.operatore_id
+              AND co.conducente_id = ac.conducente_id
+              AND co.stato = 'attivo'
+         )
+       )
+     ORDER BY lower(ac.intervallo_operativo) ASC
+     LIMIT 200`,
+    [id]
+  );
+
+  return rows;
+}
+
 export async function elencoAssegnazioni(client, { operatoreId, conducenteId = null }) {
   const op = idValido(operatoreId, 'operatoreId');
   const cond = conducenteId == null ? null : idValido(conducenteId, 'conducenteId');

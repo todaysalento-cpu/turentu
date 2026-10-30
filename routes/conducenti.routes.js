@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import {
   elencoConducenti, invitaConducente, accettaInvitoConducente,
+  rifiutaInvitoConducente, rapportoAttivoConducente,
   sospendiConducente, impostaAssegnazioneAutomatica, elencoInvitiConducente
 } from '../services/conducenti/conducenti.service.js';
 import {
@@ -60,6 +61,15 @@ export function creaRouterConducenti({ pool, authenticate }) {
   router.get('/me/inviti', route(req => elencoInvitiConducente(pool, op(req))));
   router.post('/me/inviti/:rapportoId/accetta', route(req =>
     accettaInvitoConducente(pool, { rapportoId: rapporto(req), conducenteId: op(req) })));
+  router.post('/me/inviti/:rapportoId/rifiuta', route(req =>
+    rifiutaInvitoConducente(pool, {
+      rapportoId: rapporto(req),
+      conducenteId: op(req)
+    })
+  ));
+  router.get('/me/rapporto-attivo', route(req =>
+    rapportoAttivoConducente(pool, op(req))
+  ));
 
   // Le API operatore sono riservate agli account di tipo 'autista'.
   // Verifica sul DB: non dipende da un ruolo JWT potenzialmente non aggiornato.

@@ -2,7 +2,7 @@
 // Tutte le funzioni ricevono un client/pool pg già configurato.
 // Nessuna dipendenza da PIXEL, POPBUS o dai loro worker.
 
-const STATI = new Set(['invitato', 'attivo', 'sospeso']);
+const STATI = new Set(['invitato', 'attivo', 'sospeso', 'rifiutato']);
 
 function interoPositivo(value, nome) {
   const n = Number(value);
@@ -48,7 +48,13 @@ export async function invitaConducente(db, { operatoreId, conducenteId }) {
     `INSERT INTO conducenti_operatori
        (operatore_id, conducente_id, stato, assegnabile_automaticamente)
      VALUES ($1, $2, 'invitato', false)
-     ON CONFLICT (operatore_id, conducente_id) DO NOTHING
+     ON CONFLICT (operatore_id, conducente_id)
+     DO UPDATE SET
+       stato = 'invitato',
+       assegnabile_automaticamente = false,
+       creato_il = now(),
+       aggiornato_il = now()
+     WHERE conducenti_operatori.stato = 'rifiutato'
      RETURNING *`,
     [operatore, conducente]
   );
@@ -73,6 +79,56 @@ export async function accettaInvitoConducente(db, { rapportoId, conducenteId }) 
   );
   if (!rows[0]) throw new Error('Invito non trovato o non più accettabile');
   return rows[0];
+}
+
+// Il conducente autenticato può rifiutare esclusivamente un proprio invito pendente.
+export async function rifiutaInvitoConducente(db, { rapportoId, conducenteId }) {
+  verificaDb(db);
+  const rapporto = interoPositivo(rapportoId, 'rapportoId');
+  const conducente = interoPositivo(conducenteId, 'conducenteId');
+
+  const { rows } = await db.query(
+    `UPDATE conducenti_operatori
+        SET stato = 'rifiutato',
+            assegnabile_automaticamente = false,
+            aggiornato_il = now()
+      WHERE id = $1
+        AND conducente_id = $2
+        AND stato = 'invitato'
+      RETURNING *`,
+    [rapporto, conducente]
+  );
+
+  if (!rows[0]) {
+    throw new Error('Invito non trovato o non più rifiutabile');
+  }
+  return rows[0];
+}
+
+// Restituisce i rapporti attivi del conducente autenticato.
+// La lista evita di nascondere eventuali associazioni multiple preesistenti.
+export async function rapportoAttivoConducente(db, conducenteId) {
+  verificaDb(db);
+  const id = interoPositivo(conducenteId, 'conducenteId');
+
+  const { rows } = await db.query(
+    `SELECT co.id AS rapporto_id,
+            co.operatore_id,
+            co.conducente_id,
+            co.stato,
+            co.assegnabile_automaticamente,
+            co.creato_il,
+            u.nome AS nome_operatore,
+            u.email AS email_operatore
+       FROM conducenti_operatori co
+       JOIN utente u ON u.id = co.operatore_id
+      WHERE co.conducente_id = $1
+        AND co.stato = 'attivo'
+      ORDER BY co.creato_il DESC, co.id DESC`,
+    [id]
+  );
+
+  return rows;
 }
 
 // Riservata al titolare dell'operatore, con autorizzazione nel controller.

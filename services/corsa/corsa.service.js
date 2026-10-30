@@ -409,7 +409,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 (isNccCondivisa ? bufferRitornoMinuti * 60000 : 0) +
                 durataRientroSecondi * 1000)
             : null;
-        // Dato transitorio non enumerabile, non scritto nel DB.
+        // Dato transitorio non enumerabile; gli estremi vengono persistiti sotto.
         Object.defineProperty(corsa, 'cicloOperativoNcc', {
             value: durateValide && Number.isFinite(inizioCiclo.getTime()) &&
                 Number.isFinite(fineCiclo.getTime()) && fineCiclo > inizioCiclo
@@ -423,6 +423,24 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
                 : null,
             enumerable: false
         });
+        // Persistenza del ciclo operativo NCC nella stessa transazione della corsa.
+        // Se le durate non sono verificabili, i campi restano NULL (fail closed
+        // per le future assegnazioni dei conducenti).
+        if (corsa.cicloOperativoNcc) {
+            await client.query(`
+                UPDATE public.corse
+                SET inizio_ciclo_operativo = $1,
+                    fine_ciclo_operativo = $2
+                WHERE id = $3
+            `, [
+                corsa.cicloOperativoNcc.inizio,
+                corsa.cicloOperativoNcc.fine,
+                corsa.id
+            ]);
+            corsa.inizio_ciclo_operativo = new Date(corsa.cicloOperativoNcc.inizio);
+            corsa.fine_ciclo_operativo = new Date(corsa.cicloOperativoNcc.fine);
+        }
+
         console.log(`✅ [DB] Corsa ID ${corsa?.id} inserita correttamente.`);
 
         // --- GESTIONE E LOGGING DEGLI OFFSET E INDICI ---

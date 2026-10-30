@@ -1,6 +1,9 @@
 /**
  * TURENTU - Vehicle Commitments - STEP 4.37.35
  * Lettura centralizzata degli impegni NCC, POPBUS e A/R.
+ * NCC: intervallo completo persistito, senza fallback agli orari passeggeri.
+ * Le concatenazioni NCC con estremi del ciclo diversi da quelli passeggeri
+ * restano non verificabili fino a disponibilita' delle coordinate operative.
  * Non modifica il database. Il lock richiede una transazione del chiamante.
  *
  * Politica conservativa: POPBUS mantiene l'intervallo busyStart/busyEnd
@@ -46,14 +49,14 @@ export async function caricaImpegniVeicolo(client, veicoloId) {
   const id = validId(veicoloId);
   const { rows } = await client.query(`
     SELECT 'NCC' AS fonte, c.id AS riferimento_id, c.veicolo_id, c.stato,
-      c.start_datetime AS inizio,
-      COALESCE(c.arrivo_datetime, c.start_datetime + c.durata) AS fine,
+      c.inizio_ciclo_operativo AS inizio,
+      c.fine_ciclo_operativo AS fine,
       ST_Y(c.origine::geometry) AS origine_lat,
       ST_X(c.origine::geometry) AS origine_lon,
       ST_Y(c.destinazione::geometry) AS destinazione_lat,
       ST_X(c.destinazione::geometry) AS destinazione_lon,
-      NULL::timestamptz AS inizio_missione,
-      NULL::timestamptz AS fine_missione
+      c.start_datetime AS inizio_missione,
+      COALESCE(c.arrivo_datetime, c.start_datetime + c.durata) AS fine_missione
     FROM corse c
     WHERE c.veicolo_id = $1 AND c.stato IN ('prenotabile','da_attivare','in_corso')
 
@@ -140,6 +143,22 @@ export async function verificaTrasferimentiVeicolo(client, veicoloId, missione, 
     if (impegno.fonte === 'POPBUS') {
       nonVerificabili.push({ impegno, motivo: 'POPBUS_ESTREMI_BUSY_NON_VERIFICATI' });
       continue;
+    }
+    // Gli estremi geografici NCC rappresentano il servizio passeggeri,
+    // non gli estremi del ciclo riservato (base -> cliente -> base).
+    // Senza coordinate del ciclo completo non e' sicuro calcolare il
+    // trasferimento dai punti passeggeri: rifiuta la concatenazione.
+    if (impegno.fonte === 'NCC') {
+      const servizio = {
+        start: validDate(impegno.inizio_missione),
+        end: validDate(impegno.fine_missione)
+      };
+      if (!servizio.start || !servizio.end ||
+          servizio.start.getTime() !== a.getTime() ||
+          servizio.end.getTime() !== b.getTime()) {
+        nonVerificabili.push({ impegno, motivo: 'NCC_ESTREMI_CICLO_NON_VERIFICATI' });
+        continue;
+      }
     }
     const o = validCoord(impegno.origine_lat, impegno.origine_lon);
     const d = validCoord(impegno.destinazione_lat, impegno.destinazione_lon);

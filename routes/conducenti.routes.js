@@ -5,7 +5,8 @@ import {
   elencoConducenti, invitaConducente, accettaInvitoConducente,
   rifiutaInvitoConducente, rapportoAttivoConducente,
   sospendiConducente, impostaAssegnazioneAutomatica,
-  impostaSempreDisponibile, elencoInvitiConducente
+  impostaSempreDisponibile, elencoInvitiConducente,
+  leggiImpostazioniAssegnazione, salvaImpostazioniAssegnazione
 } from '../services/conducenti/conducenti.service.js';
 import {
   elencoTurni, aggiungiTurno, impostaTurnoAttivo, eliminaTurno,
@@ -110,6 +111,22 @@ export function creaRouterConducenti({ pool, authenticate }) {
   };
 
   router.use('/operatori', requireOperatoreNcc);
+
+  // Preferenza generale dell'operatore, indipendente dai singoli conducenti.
+  router.get('/operatori/me/impostazioni-assegnazione', route(req =>
+    leggiImpostazioniAssegnazione(pool, op(req))));
+  router.patch('/operatori/me/impostazioni-assegnazione', route(req => {
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).length !== 1 || !Object.hasOwn(body, 'modalita')) {
+      const err = new Error('Specificare esclusivamente il campo modalita');
+      err.status = 400;
+      throw err;
+    }
+    return salvaImpostazioniAssegnazione(pool, {
+      operatoreId: op(req), modalita: body.modalita
+    });
+  }));
 
   router.get('/operatori/me/conducenti', route(req => elencoConducenti(pool, op(req))));
   router.post('/operatori/me/conducenti/inviti', route(req =>

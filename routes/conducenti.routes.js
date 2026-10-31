@@ -1,6 +1,7 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
+import { preparaInvitoAnagrafica, accettaInvitoAnagrafica } from '../services/conducenti/inviti-anagrafica.service.js';
 import {
   elencoConducenti, invitaConducente, accettaInvitoConducente,
   rifiutaInvitoConducente, rapportoAttivoConducente,
@@ -71,6 +72,9 @@ export function creaRouterConducenti({ pool, authenticate }) {
     return v;
   };
   const rapporto = (req) => id(req.params.rapportoId, 'rapportoId');
+
+  router.post('/me/inviti-anagrafica/accetta', route(req =>
+    accettaInvitoAnagrafica(pool, {utenteId: op(req),token:req.body?.token})));
 
   router.get('/me/inviti', route(req => elencoInvitiConducente(pool, op(req))));
   router.post('/me/inviti/:rapportoId/accetta', route(req =>
@@ -146,6 +150,11 @@ export function creaRouterConducenti({ pool, authenticate }) {
     disattivaAnagraficaConducente(pool, {
       operatoreId: op(req), anagraficaId: id(req.params.anagraficaId, 'anagraficaId')
     })));
+
+  router.post('/operatori/me/anagrafiche-conducenti/:anagraficaId/invita', route(req =>
+    preparaInvitoAnagrafica(pool, {operatoreId:op(req),
+      anagraficaId:id(req.params.anagraficaId,'anagraficaId'),
+      baseUrl:process.env.TURENTU_INVITE_BASE_URL})));
 
   router.get('/operatori/me/conducenti', route(req => elencoConducenti(pool, op(req))));
   router.post('/operatori/me/conducenti/inviti', route(req =>

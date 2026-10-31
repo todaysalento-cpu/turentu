@@ -4,7 +4,8 @@ import { Router } from 'express';
 import {
   elencoConducenti, invitaConducente, accettaInvitoConducente,
   rifiutaInvitoConducente, rapportoAttivoConducente,
-  sospendiConducente, impostaAssegnazioneAutomatica, elencoInvitiConducente
+  sospendiConducente, impostaAssegnazioneAutomatica,
+  impostaSempreDisponibile, elencoInvitiConducente
 } from '../services/conducenti/conducenti.service.js';
 import {
   elencoTurni, aggiungiTurno, impostaTurnoAttivo, eliminaTurno,
@@ -119,6 +120,12 @@ export function creaRouterConducenti({ pool, authenticate }) {
     impostaAssegnazioneAutomatica(pool, {
       operatoreId: op(req), rapportoId: rapporto(req),
       abilitata: requireBool(req.body?.abilitata, 'abilitata')
+    })));
+
+  router.patch('/operatori/me/conducenti/:rapportoId/sempre-disponibile', route(req =>
+    impostaSempreDisponibile(pool, {
+      operatoreId: op(req), rapportoId: rapporto(req),
+      sempreDisponibile: requireBool(req.body?.sempreDisponibile, 'sempreDisponibile')
     })));
 
   router.get('/operatori/me/conducenti/:rapportoId/turni', route(req =>

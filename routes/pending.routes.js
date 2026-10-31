@@ -409,10 +409,16 @@ router.post('/:id/accetta', async (req, res) => {
               inizio: ciclo.inizio,
               fine: ciclo.fine,
               modalita: scelta.modalita,
-              ...(scelta.conducenteId == null ? {} : { conducenteId: scelta.conducenteId }),
+              ...(scelta.modalita === 'titolare'
+                ? { conducenteId: Number(req.user.id) }
+                : scelta.conducenteId == null
+                  ? {}
+                  : { conducenteId: scelta.conducenteId }),
               ...(scelta.confermaDeroga == null ? {} : { confermaDeroga: scelta.confermaDeroga }),
               ...(scelta.motivoDeroga == null ? {} : { motivoDeroga: scelta.motivoDeroga }),
-              ...(scelta.autorizzatoreId == null ? {} : { autorizzatoreId: scelta.autorizzatoreId })
+              ...(scelta.confermaDeroga === true
+                ? { autorizzatoreId: Number(req.user.id) }
+                : {})
             });
           }
           prenotazioneEffettuata = true; 
@@ -658,6 +664,7 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     const erroriConflitto = [
+      'NCC_SHARED_COURSE_UNAVAILABLE',
       'VEHICLE_COMMITMENT_CONFLICT',
       'NCC_MISSION_GEO_INVALID',
       'CONDUCENTE_DEROGA_RICHIESTA',

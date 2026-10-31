@@ -1,7 +1,9 @@
 // ======================= redis.js =======================
 import { createClient } from 'redis';
 
-const redisUrl = process.env.REDIS_URL;
+const redisUrl = process.env.NCC_TEST_ROLLBACK_ONLY === '1'
+  ? null
+  : process.env.REDIS_URL;
 
 // Se REDIS_URL non è impostato, disabilita Redis (utile in produzione)
 if (!redisUrl) {

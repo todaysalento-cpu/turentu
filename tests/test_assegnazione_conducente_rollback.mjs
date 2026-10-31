@@ -61,7 +61,7 @@ try {
       await assegnaConducente(client, { ...base, inizio: '2026-11-02T10:30:00+01:00', fine: '2026-11-02T11:30:00+01:00' });
       throw new Error('ERRORE: sovrapposizione accettata');
     } catch (e) {
-      if (e.message !== 'Conducente già impegnato nel periodo') throw e;
+      if (e.code !== 'CONDUCENTE_CONFLITTO') throw e;
     }
   });
 } catch (e) {

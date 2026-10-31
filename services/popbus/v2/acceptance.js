@@ -6,7 +6,7 @@ import { fingerprintRichiesta } from './request-fingerprint.js';
 import { verificaAccettazionePixel } from './popbus-pixel-acceptance-preflight.js';
 import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-preflight.js';
 
-import { assegnaConducente } from './assegnazioni.service.js';
+import { assegnaConducente } from '../../conducenti/assegnazioni.service.js';
 import Stripe from 'stripe';
 import polyline from 'polyline';
 import * as turf from '@turf/turf';

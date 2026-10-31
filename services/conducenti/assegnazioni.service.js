@@ -1,4 +1,5 @@
-﻿// Turentu — assegnazioni conducenti, indipendente da PIXEL e POPBUS.
+
+// Turentu — assegnazioni conducenti, indipendente da PIXEL e POPBUS.
 // Richiede un client pg con transazione BEGIN già aperta dal chiamante.
 // Non effettua COMMIT/ROLLBACK: il chiamante conferma o annulla l'intera operazione.
 
@@ -37,13 +38,20 @@ async function rapporto(client, operatoreId, conducenteId, { automatico = false 
       FOR SHARE`,
     [operatoreId, conducenteId, automatico]
   );
-  if (!rows.length) throw new Error('Conducente non associato, non attivo o non abilitato');
+  if (!rows.length) {
+    const err = new Error('Conducente non associato, non attivo o non abilitato');
+    err.code = 'CONDUCENTE_NON_DISPONIBILE';
+    err.status = 409;
+    throw err;
+  }
   return { titolare: false, rapportoId: rows[0].id };
 }
 
-// Verifica copertura completa del periodo, considerando turni settimanali ed eccezioni.
-// Le indisponibilità hanno sempre precedenza. Le disponibilità straordinarie
-// aggiungono copertura; i turni devono essere definiti in Europe/Rome.
+// Verifica copertura completa del periodo.
+// In modalità sempre_disponibile non richiede turni settimanali.
+// Le indisponibilità hanno sempre precedenza.
+// In modalità a turni, le disponibilità straordinarie aggiungono copertura.
+// I turni sono definiti in Europe/Rome.
 async function verificaCopertura(client, rapportoId, da, a) {
   const { rows } = await client.query(`
     WITH giorni AS (
@@ -64,16 +72,33 @@ async function verificaCopertura(client, rapportoId, da, a) {
       UNION ALL
       SELECT intervallo FROM eccezioni_turni_conducenti
        WHERE rapporto_id=$1 AND tipo='disponibile'
+    ), configurazione AS (
+      SELECT sempre_disponibile
+      FROM conducenti_operatori
+      WHERE id=$1 AND stato='attivo'
     ), copertura AS (
-      SELECT COALESCE(range_agg(fascia), '{}'::tstzmultirange) AS intervalli FROM fasce
+      SELECT COALESCE(range_agg(fascia), '{}'::tstzmultirange) AS intervalli
+      FROM fasce
     ), assenze AS (
       SELECT COALESCE(range_agg(intervallo), '{}'::tstzmultirange) AS intervalli
       FROM eccezioni_turni_conducenti
       WHERE rapporto_id=$1 AND tipo='indisponibile'
     )
-    SELECT ((copertura.intervalli - assenze.intervalli)
-              @> tstzrange($2::timestamptz,$3::timestamptz,'[)')) AS coperto
-    FROM copertura CROSS JOIN assenze`, [rapportoId, da, a]
+    SELECT CASE
+      WHEN configurazione.sempre_disponibile THEN
+        NOT (
+          assenze.intervalli &&
+          tstzrange($2::timestamptz,$3::timestamptz,'[)')
+        )
+      ELSE
+        (
+          (copertura.intervalli - assenze.intervalli)
+          @> tstzrange($2::timestamptz,$3::timestamptz,'[)')
+        )
+    END AS coperto
+    FROM configurazione
+    CROSS JOIN copertura
+    CROSS JOIN assenze`, [rapportoId, da, a]
   );
   return rows[0]?.coperto === true;
 }
@@ -109,16 +134,19 @@ export async function assegnaConducente(client, input) {
   const veicoloId = idValido(input.veicoloId, 'veicoloId');
   const corsaId = input.corsaId == null ? null : idValido(input.corsaId, 'corsaId');
   const attivazioneId = input.attivazioneId == null ? null : idValido(input.attivazioneId, 'attivazioneId');
+
   // L'endpoint NCC manuale deriva l'intervallo esclusivamente dal DB.
   const usaCicloPersistito = input.usaCicloPersistito === true;
   if (usaCicloPersistito && input.attivazioneId != null) {
     throw new Error('Assegnazione POPBUS non abilitata da questo endpoint');
   }
+
   let [da, a] = usaCicloPersistito ? [null, null] : intervallo(input.inizio, input.fine);
   const modalita = input.modalita;
   const confermaDeroga = input.confermaDeroga === true;
   const motivoDeroga = typeof input.motivoDeroga === 'string' ? input.motivoDeroga.trim() : '';
   const autorizzatoreId = input.autorizzatoreId == null ? null : idValido(input.autorizzatoreId, 'autorizzatoreId');
+
   if (!['manuale', 'automatica', 'titolare'].includes(modalita)) throw new Error('Modalità non valida');
   if (input.confermaDeroga != null && typeof input.confermaDeroga !== 'boolean') throw new Error('Conferma deroga non valida');
   if (confermaDeroga && modalita !== 'manuale') throw new Error('Deroga consentita solo in manuale');
@@ -170,6 +198,7 @@ export async function assegnaConducente(client, input) {
   `, [veicoloId, corsaId, da, a]);
   if (veicoloOccupato.length) {
     const err = new Error('Veicolo o corsa gia assegnati nel periodo');
+    err.code = 'CONDUCENTE_CONFLITTO';
     err.status = 409;
     throw err;
   }
@@ -212,9 +241,15 @@ export async function assegnaConducente(client, input) {
        LIMIT 1`, [candidato.id, da, a]
     );
     if (conflitti.length) {
-      if (modalita !== 'automatica') throw new Error('Conducente già impegnato nel periodo');
+      if (modalita !== 'automatica') {
+        const err = new Error('Conducente già impegnato nel periodo');
+        err.code = 'CONDUCENTE_CONFLITTO';
+        err.status = 409;
+        throw err;
+      }
       continue;
     }
+
     const { rows } = await client.query(
       `INSERT INTO assegnazioni_conducenti
         (operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,intervallo_operativo,modalita,
@@ -223,13 +258,17 @@ export async function assegnaConducente(client, input) {
                 $9,$10,$11,CASE WHEN $9::boolean THEN NOW() ELSE NULL END)
        RETURNING id,operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,
                  lower(intervallo_operativo) AS inizio,upper(intervallo_operativo) AS fine,
-                  modalita,stato,deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il`,
+                 modalita,stato,deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il`,
       [operatoreId, candidato.id, veicoloId, corsaId, attivazioneId, da, a, modalita,
         !coperto, !coperto ? motivoDeroga : null, !coperto ? autorizzatoreId : null]
     );
     return rows[0];
   }
-  throw new Error('Nessun conducente disponibile per l’intero ciclo operativo');
+
+  const err = new Error('Nessun conducente disponibile per l’intero ciclo operativo');
+  err.code = 'CONDUCENTE_NON_DISPONIBILE';
+  err.status = 409;
+  throw err;
 }
 
 // Elenco delle missioni del conducente autenticato.
@@ -303,4 +342,3 @@ export async function annullaAssegnazione(client, { operatoreId, assegnazioneId 
   if (!rows.length) throw new Error('Assegnazione attiva non trovata');
   return rows[0];
 }
-

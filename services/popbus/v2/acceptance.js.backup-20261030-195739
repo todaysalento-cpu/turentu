@@ -1,0 +1,885 @@
+// P0-C3: percorso multi-missione sperimentale, flag OFF per default.
+import { verificaTurnoVeicolo } from './popbus-vehicle-availability.js';
+import { validaPianoMultiMissione } from './popbus-multimission-preflight.js';
+import { verificaMissioniPersistite } from './popbus-multimission-db-preflight.js';
+import { fingerprintRichiesta } from './request-fingerprint.js';
+import { verificaAccettazionePixel } from './popbus-pixel-acceptance-preflight.js';
+import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-preflight.js';
+
+import { assegnaConducente } from './assegnazioni.service.js';
+import Stripe from 'stripe';
+import polyline from 'polyline';
+import * as turf from '@turf/turf';
+
+export async function verificaPagamento(client, r) {
+  const ref = r.payment_intent_id;
+
+  if (!ref) {
+    throw new Error(
+      `Richiesta ${r.id}: pagamento non collegato, riconciliare prima di accettare`
+    );
+  }
+
+  if (ref.startsWith('wallet_')) {
+    const { rows } = await client.query(
+      `SELECT COALESCE(SUM(importo), 0) AS totale
+       FROM transazioni_wallet
+       WHERE utente_id = $1
+         AND riferimento_id::text = $2`,
+      [r.cliente_id, String(r.request_id)]
+    );
+
+    if (Number(rows[0].totale) > -Number(r.prezzo)) {
+      throw new Error('Addebito wallet non verificato');
+    }
+
+    return 'pagato';
+  }
+
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('Stripe non configurato');
+  }
+
+  const pi = await new Stripe(
+    process.env.STRIPE_SECRET_KEY
+  ).paymentIntents.retrieve(ref);
+
+  if (
+    pi.currency !== 'eur' ||
+    String(pi.metadata?.clienteId) !== String(r.cliente_id) ||
+    pi.status !== 'requires_capture' ||
+    pi.amount_capturable < Math.round(Number(r.prezzo) * 100)
+  ) {
+    throw new Error(
+      `Richiesta ${r.id}: autorizzazione pagamento non valida`
+    );
+  }
+
+  return 'autorizzazione';
+}
+
+export async function accettaAttivazione(
+  client,
+  offertaId,
+  autistaId,
+  sceltaConducente = null
+) {
+  // BEGIN / COMMIT sono gestiti dal router.
+  // Nessuna cache o notifica viene aggiornata qui.
+
+  await client.query(
+    'SELECT pg_advisory_xact_lock(734021, 1)'
+  );
+
+  // =====================================================
+  // 1. BLOCCO E VERIFICA OFFERTA
+  // =====================================================
+
+  const { rows: offers } = await client.query(
+    `
+    SELECT
+      o.*,
+      a.stato AS att_stato,
+      a.corsa_id
+    FROM offerte_autisti o
+    JOIN popbus_attivazioni a
+      ON a.id = o.attivazione_id
+    WHERE o.id = $1
+      AND o.autista_id = $2
+    FOR UPDATE OF o, a
+    `,
+    [offertaId, autistaId]
+  );
+
+  const offer = offers[0];
+
+  if (!offer) {
+    throw new Error('Offerta non trovata o non tua');
+  }
+
+  if (
+    offer.stato === 'accettata' &&
+    offer.corsa_id
+  ) {
+    return {
+      id: offer.corsa_id,
+      giaAccettata: true
+    };
+  }
+
+  if (
+    offer.stato !== 'inviata' ||
+    offer.att_stato !== 'in_attesa_autista' ||
+    new Date(offer.expires_at) <= new Date()
+  ) {
+    throw new Error('Offerta non disponibile');
+  }
+
+  // =====================================================
+  // 2. RECUPERO ATTIVAZIONE E PIANO
+  // =====================================================
+
+  const { rows: acts } = await client.query(
+    `
+    SELECT *
+    FROM popbus_attivazioni
+    WHERE id = $1
+    FOR UPDATE
+    `,
+    [offer.attivazione_id]
+  );
+
+  const a = acts[0];
+
+  if (!a) {
+    throw new Error('Attivazione non trovata');
+  }
+
+  const plan = a.piano;
+  const isMultiPixel = Array.isArray(plan?.missioni) && plan.missioni.length > 1;
+  // P0-C6: nessuna opportunita principale obbligatoria nel ciclo multimissione.
+  // La verifica controlla tutte le opportunita delle missioni persistite.
+  if (isMultiPixel) {
+    await verificaAccettazionePixelMulti(client, a, plan);
+  } else if (a.pixel_opportunita_id != null) {
+    await verificaAccettazionePixel(client, a, plan);
+  }
+  // P0-C3: percorso multi-missione abilitabile solo in ambiente di collaudo.
+  // Il flag e' intenzionalmente OFF per default; non abilitarlo in produzione.
+  const isMulti = Array.isArray(plan?.missioni) && plan.missioni.length > 1;
+  const multiEnabled = process.env.POPBUS_MULTIMISSION_ACCEPTANCE_TEST === 'true';
+  let multiPreflight = null;
+  if (isMulti) {
+    validaPianoMultiMissione(plan, { veicoloId: a.veicolo_id });
+    const { rows: veicoliPreflight } = await client.query(
+      'SELECT id, posti_totali FROM veicolo WHERE id = $1 AND driver_id = $2 FOR UPDATE',
+      [a.veicolo_id, autistaId]
+    );
+    if (!veicoliPreflight[0]) throw new Error('Veicolo non trovato per preflight multi-missione');
+    multiPreflight = await verificaMissioniPersistite(client, {
+      attivazioneId: a.id, piano: plan, veicoloId: a.veicolo_id,
+      postiTotali: veicoliPreflight[0].posti_totali
+    });
+    if (plan.evaluation.peak != null &&
+        Number(plan.evaluation.peak) !== Number(multiPreflight.peak)) {
+      throw new Error('P0-C3: picco del piano diverso dalla capienza DB');
+    }
+    if (!multiEnabled) {
+      throw new Error('Accettazione ciclo multi-missione non ancora abilitata');
+    }
+    // I controlli di turno, inattivita' e direttrici richiedono il collaudo
+    // integrato prima dell'abilitazione su un server operativo.
+  }
+
+  if (
+    !plan ||
+    !plan.evaluation ||
+    !plan.busyStart ||
+    !plan.busyEnd
+  ) {
+    throw new Error('Piano attivazione non valido');
+  }
+
+  const busyStart = new Date(plan.busyStart);
+  const busyEnd = new Date(plan.busyEnd);
+
+  if (
+    !Number.isFinite(busyStart.getTime()) ||
+    !Number.isFinite(busyEnd.getTime()) ||
+    busyStart >= busyEnd
+  ) {
+    throw new Error('Intervallo temporale attivazione non valido');
+  }
+
+  // =====================================================
+  // 3. VERIFICA VEICOLO
+  // =====================================================
+
+  const { rows: vs } = await client.query(
+    `
+    SELECT *
+    FROM veicolo
+    WHERE id = $1
+      AND driver_id = $2
+    FOR UPDATE
+    `,
+    [a.veicolo_id, autistaId]
+  );
+
+  if (
+    !vs.length ||
+    Number(vs[0].posti_totali) <
+      Number(isMulti ? multiPreflight.peak : plan.evaluation.peak)
+  ) {
+    throw new Error('Mezzo non più idoneo');
+  }
+
+  // =====================================================
+  // P0-C5B. RIVALIDAZIONE DISPONIBILITA' NELLA TRANSAZIONE
+  // Il router possiede BEGIN/COMMIT/ROLLBACK. Non usare cache.
+  // Il lock su veicolo (sopra) serializza le acceptance dello stesso mezzo.
+  // Si bloccano anche le righe di disponibilita' per impedire modifiche
+  // concorrenti alle righe esistenti. Per inserimenti concorrenti di nuove
+  // righe serve inoltre coordinamento di chi modifica la disponibilita'.
+  // =====================================================
+  const { rows: disponibilitaCorrenti } = await client.query(
+    `SELECT dv.start, dv.fine, dv.giorni_esclusi, dv.inattivita
+     FROM disponibilita_veicolo dv
+     WHERE dv.veicolo_id = $1
+     FOR UPDATE OF dv`,
+    [a.veicolo_id]
+  );
+
+  // Fail closed: nessuna disponibilita' = nessuna accettazione.
+  // In caso di piu' configurazioni, e' sufficiente UNA che copra
+  // integralmente il ciclo; non si sommano frammenti di turni distinti.
+  const turnoCompatibile = disponibilitaCorrenti.some(dv =>
+    verificaTurnoVeicolo(
+      dv,
+      busyStart.getTime(),
+      busyEnd.getTime()
+    )
+  );
+  if (!turnoCompatibile) {
+    throw new Error('Disponibilita veicolo non valida per l’intero ciclo operativo');
+  }
+
+  // =====================================================
+  // 4. CONTROLLO CONFLITTI CORSE ESISTENTI
+  //
+  // FIX:
+  // Una corsa futura con arrivo_datetime NULL
+  // non deve bloccare una missione precedente.
+  // =====================================================
+
+  const { rows: conflicts } = await client.query(
+    `
+    SELECT
+      c.id,
+      c.veicolo_id,
+      v.driver_id,
+      c.stato,
+      c.start_datetime,
+      c.arrivo_datetime
+    FROM corse c
+    JOIN veicolo v
+      ON v.id = c.veicolo_id
+    WHERE v.id = $1
+      AND c.stato IN (
+        'prenotabile',
+        'in_corso',
+        'da_attivare'
+      )
+      AND c.start_datetime < $3::timestamptz
+      AND (
+        c.arrivo_datetime IS NULL
+        OR c.arrivo_datetime > $2::timestamptz
+      )
+    LIMIT 10
+    `,
+    [
+      a.veicolo_id,
+      busyStart,
+      busyEnd
+    ]
+  );
+
+  if (conflicts.length > 0) {
+    console.warn(
+      '❌ [POPBUS ACCETTA] CONFLITTO CORSA',
+      {
+        offertaId,
+        attivazioneId: a.id,
+        veicoloId: a.veicolo_id,
+        autistaId,
+        busyStart: busyStart.toISOString(),
+        busyEnd: busyEnd.toISOString(),
+        corseConflitto: conflicts
+      }
+    );
+
+    throw new Error('Autista o mezzo impegnato');
+  }
+
+  // =====================================================
+  // 5. CONTROLLO ALTRE ATTIVAZIONI POPBUS
+  //
+  // Escludiamo esplicitamente l'attivazione corrente.
+  // Allineamento con worker.js: anche le offerte in attesa riservano il veicolo.
+  // L'esclusivita' riguarda veicolo_id, non driver_id (titolare della flotta).
+  // =====================================================
+
+  const { rows: activationConflicts } = await client.query(
+    `
+    SELECT
+      other.id,
+      other.veicolo_id,
+      other.autista_id,
+      other.stato,
+      other.partenza,
+      other.arrivo,
+      other.piano->>'busyStart' AS busy_start,
+      other.piano->>'busyEnd' AS busy_end
+    FROM popbus_attivazioni other
+    WHERE other.id <> $1
+      -- L'esclusivita' e' del VEICOLO, non del titolare della flotta.
+      AND other.veicolo_id = $2
+      AND other.stato IN ('in_attesa_autista', 'confermata')
+      AND COALESCE(
+        (other.piano->>'busyStart')::timestamptz,
+        other.partenza
+      ) < $4::timestamptz
+      AND COALESCE(
+        (other.piano->>'busyEnd')::timestamptz,
+        other.arrivo
+      ) > $3::timestamptz
+    LIMIT 10
+    `,
+    [
+      a.id,
+      a.veicolo_id,
+      busyStart,
+      busyEnd
+    ]
+  );
+
+  if (activationConflicts.length > 0) {
+    console.warn(
+      '❌ [POPBUS ACCETTA] CONFLITTO ATTIVAZIONE',
+      {
+        offertaId,
+        attivazioneId: a.id,
+        attivazioniConflitto: activationConflicts
+      }
+    );
+
+    throw new Error(
+      'Autista o mezzo già assegnato ad altra attivazione POPBUS'
+    );
+  }
+
+  console.log(
+    '✅ [POPBUS ACCETTA] Disponibilità verificata',
+    {
+      offertaId,
+      attivazioneId: a.id,
+      veicoloId: a.veicolo_id,
+      autistaId,
+      busyStart: busyStart.toISOString(),
+      busyEnd: busyEnd.toISOString()
+    }
+  );
+
+  // =====================================================
+  // P0-C5C. CONFLITTI DIRETTRICI VIRTUALI LEGACY
+  // Allineamento alla UNION "direttrice" di worker.conflittiVeicolo.
+  // Il lock globale (734021,1) e il lock del veicolo sono gia' acquisiti.
+  // La direttrice corrente e quelle rappresentate da attivazioni attive
+  // non devono essere contate due volte.
+  // =====================================================
+  const { rows: direttriciConflitto } = await client.query(
+    `
+    SELECT d.id,
+           d.partenza_prevista AS inizio,
+           MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') AS fine
+    FROM direttrici_virtuali d
+    JOIN segmenti s ON s.direttrice_id = d.id
+    WHERE d.veicolo_id = $1
+      AND d.stato IN ('in_attesa_autista', 'attivo', 'confermata')
+      AND d.partenza_prevista < $3::timestamptz
+      AND ($4::bigint IS NULL OR d.id <> $4::bigint)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM popbus_attivazioni other
+        WHERE other.direttrice_id = d.id
+          AND other.veicolo_id = d.veicolo_id
+          AND other.stato IN ('in_attesa_autista', 'confermata')
+      )
+    GROUP BY d.id, d.partenza_prevista
+    HAVING MAX(s.start_datetime + s.tempo_stimato * INTERVAL '1 minute') > $2::timestamptz
+    LIMIT 10
+    `,
+    [a.veicolo_id, busyStart, busyEnd, a.direttrice_id ?? null]
+  );
+
+  if (direttriciConflitto.length > 0) {
+    console.warn('❌ [POPBUS ACCETTA] CONFLITTO DIRETTRICE', {
+      offertaId,
+      attivazioneId: a.id,
+      veicoloId: a.veicolo_id,
+      direttriciConflitto
+    });
+    throw new Error('Veicolo impegnato su altra direttrice virtuale');
+  }
+
+  // =====================================================
+  // 6. LOCK RICHIESTE POPBUS
+  // =====================================================
+
+  const { rows: requests } = await client.query(
+    `
+    SELECT
+      r.*,
+      ar.indice_salita,
+      ar.indice_discesa
+    FROM richieste_pop_bus r
+    JOIN popbus_attivazione_richieste ar
+      ON ar.richiesta_id = r.id
+    WHERE ar.attivazione_id = $1
+      AND ar.attiva
+    ORDER BY r.id
+    FOR UPDATE OF r, ar
+    `,
+    [a.id]
+  );
+
+  // A/R VINCOLATO - guardia temporanea fail-closed.
+  // Il coordinatore A/R non e' ancora integrato in questa acceptance:
+  // non convertire unilateralmente una tratta in prenotazione definitiva.
+  // Nessun posto viene riservato sulla tratta PopBus gia' attiva.
+  if (requests.some(r => r.ar_vincolata === true)) {
+    const err = new Error('A/R vincolato: attivazione coordinata non ancora disponibile');
+    err.code = 'AR_COORDINATED_ACTIVATION_REQUIRED';
+    err.status = 409;
+    throw err;
+  }
+
+  if (
+    requests.length !== plan.evaluation.requests.length ||
+    requests.some(
+      r =>
+        r.stato !== 'in_lavorazione' ||
+        r.corsa_id != null
+    )
+  ) {
+    throw new Error('Richieste modificate');
+  }
+
+  if (isMulti) {
+    // Il preflight DB ha gia' bloccato e verificato le stesse richieste.
+    // Qui controlliamo anche il set effettivamente letto dal flusso di conversione.
+    const attese = new Map(plan.evaluation.requests.map(r => [Number(r.id), r]));
+    if (requests.length !== multiPreflight.richiesteVerificate ||
+        requests.length !== attese.size ||
+        requests.some(r => {
+          const e = attese.get(Number(r.id));
+          return !e || Number(r.indice_salita) !== Number(e.start) ||
+            Number(r.indice_discesa) !== Number(e.end);
+        })) {
+      throw new Error('P0-C3: richieste o indici globali non coerenti');
+    }
+    if (!Array.isArray(plan.requestSnapshot) ||
+        plan.requestSnapshot.length !== requests.length) {
+      throw new Error('P0-C3: snapshot richieste incompleto');
+    }
+  }
+
+  // =====================================================
+  // 7. VALIDAZIONE SNAPSHOT E ORARI
+  // =====================================================
+
+  for (const r of requests) {
+    const fingerprint = fingerprintRichiesta(r);
+
+    if (
+      !Array.isArray(plan.requestSnapshot) || !plan.requestSnapshot.some(
+        x =>
+          Number(x.id) === Number(r.id) &&
+          x.fingerprint === fingerprint
+      )
+    ) {
+      throw new Error(
+        'Dati richiesta modificati dopo offerta'
+      );
+    }
+
+    const expected =
+      plan.evaluation.departure +
+      plan.evaluation.times[r.indice_salita];
+
+    if (
+      Math.abs(
+        new Date(r.start_datetime).getTime() - expected
+      ) > 1800000
+    ) {
+      throw new Error('Orario richiesta modificato');
+    }
+  }
+
+  // =====================================================
+  // 8. VERIFICA PAGAMENTI
+  // =====================================================
+
+  const states = [];
+
+  for (const r of requests) {
+    states.push(
+      await verificaPagamento(client, r)
+    );
+  }
+
+  if (isMulti) {
+    if (!Number.isFinite(Number(plan.approach?.metres)) ||
+        !Number.isFinite(Number(plan.returnTrip?.metres)) ||
+        Number(plan.approach.metres) < 0 || Number(plan.returnTrip.metres) < 0) {
+      throw new Error('P0-C3: avvicinamento o ritorno non validi');
+    }
+  }
+
+  // =====================================================
+  // 9. RICOSTRUZIONE GEOMETRIA E OFFSET
+  // =====================================================
+
+  const coords = [];
+  const indices = [0];
+  const offsets = [0];
+
+  for (const l of plan.legs) {
+    const decoded = polyline.decode(l.polyline);
+
+    if (decoded.length < 2) {
+      throw new Error('Geometria non valida');
+    }
+
+    coords.push(
+      ...(coords.length
+        ? decoded.slice(1)
+        : decoded)
+    );
+
+    indices.push(coords.length - 1);
+
+    const metres =
+      turf.length(
+        turf.lineString(
+          decoded.map(p => [p[1], p[0]])
+        ),
+        { units: 'kilometers' }
+      ) * 1000;
+
+    offsets.push(
+      offsets.at(-1) + metres
+    );
+  }
+
+  // =====================================================
+  // 10. ORIGINE, DESTINAZIONE E FERMATE
+  // =====================================================
+
+  const origin = plan.coordinates[0];
+  const dest = plan.coordinates.at(-1);
+
+  const stops = [];
+
+  for (const r of requests) {
+    for (const [i, tipo] of [
+      [r.indice_salita, 'ritiro'],
+      [r.indice_discesa, 'rilascio']
+    ]) {
+      const n = plan.coordinates[i];
+
+      stops.push({
+        cliente_id: r.cliente_id,
+        tipo,
+        nodo_id: n.id,
+        lat: n.lat,
+        lon: n.lon,
+        indirizzo: n.nome_nodo || 'Fermata',
+        ordine: i,
+        orario: new Date(
+          plan.evaluation.departure +
+          plan.evaluation.times[i]
+        ).toISOString()
+      });
+    }
+  }
+
+  stops.sort(
+    (x, y) =>
+      x.ordine - y.ordine ||
+      (x.tipo === 'rilascio' ? -1 : 1)
+  );
+
+  if (isMulti && (indices.length !== plan.nodes.length ||
+      offsets.length !== plan.nodes.length ||
+      coords.length < 2 ||
+      !Number.isFinite(offsets.at(-1)))) {
+    throw new Error('P0-C3: geometria globale incompleta');
+  }
+
+  // =====================================================
+  // 11. CREAZIONE CORSA POPBUS
+  // =====================================================
+
+  const { rows: corse } = await client.query(
+    `
+    INSERT INTO corse (
+      veicolo_id,
+      start_datetime,
+      arrivo_datetime,
+      durata,
+      tipo_corsa,
+      stato,
+      posti_totali,
+      posti_disponibili,
+      posti_prenotati,
+      origine,
+      destinazione,
+      origine_address,
+      destinazione_address,
+      distanza,
+      percorso_polyline,
+      fermate_pianificate,
+      km_avvicinamento,
+      km_riposizionamento
+    )
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4::double precision * INTERVAL '1 second',
+      'riempimento',
+      'prenotabile',
+      $5,
+      $5,
+      0,
+      ST_SetSRID(ST_MakePoint($6,$7),4326),
+      ST_SetSRID(ST_MakePoint($8,$9),4326),
+      $10,
+      $11,
+      $12,
+      $13,
+      $14::jsonb,
+      $15,
+      $16
+    )
+    RETURNING *
+    `,
+    [
+      a.veicolo_id,
+      a.partenza,
+      a.arrivo,
+      (new Date(a.arrivo) - new Date(a.partenza)) / 1000,
+      vs[0].posti_totali,
+      origin.lon,
+      origin.lat,
+      dest.lon,
+      dest.lat,
+      origin.nome_nodo || 'Partenza',
+      dest.nome_nodo || 'Arrivo',
+      offsets.at(-1) / 1000,
+      polyline.encode(coords),
+      JSON.stringify(stops),
+      plan.approach.metres / 1000,
+      plan.returnTrip.metres / 1000
+    ]
+  );
+
+  const corsa = corse[0];
+
+  // =====================================================
+  // 12. CREAZIONE PRENOTAZIONI E PAGAMENTI
+  // =====================================================
+
+  for (let i = 0; i < requests.length; i++) {
+    const r = requests[i];
+
+    const s = r.indice_salita;
+    const e = r.indice_discesa;
+
+    const start = plan.coordinates[s];
+    const end = plan.coordinates[e];
+
+    const { rows: ps } = await client.query(
+      `
+      INSERT INTO prenotazioni (
+        corsa_id,
+        cliente_id,
+        posti_richiesti,
+        posti_prenotati,
+        prezzo_totale,
+        start_index_polyline,
+        end_index_polyline,
+        start_offset,
+        end_offset,
+        km_utente,
+        lat_salita,
+        lon_salita,
+        lat_discesa,
+        lon_discesa
+      )
+      VALUES (
+        $1,$2,$3,$3,$4,$5,$6,
+        $7,$8,$9,$10,$11,$12,$13
+      )
+      RETURNING id
+      `,
+      [
+        corsa.id,
+        r.cliente_id,
+        r.posti_richiesti,
+        r.prezzo,
+        indices[s],
+        indices[e],
+        offsets[s],
+        offsets[e],
+        (offsets[e] - offsets[s]) / 1000,
+        start.lat,
+        start.lon,
+        end.lat,
+        end.lon
+      ]
+    );
+
+    await client.query(
+      `
+      INSERT INTO pagamenti (
+        prenotazione_id,
+        corsa_id,
+        importo,
+        stato,
+        stripe_payment_intent,
+        tipo_corsa
+      )
+      VALUES (
+        $1,$2,$3,$4,$5,'riempimento'
+      )
+      `,
+      [
+        ps[0].id,
+        corsa.id,
+        r.prezzo,
+        states[i],
+        r.payment_intent_id
+      ]
+    );
+
+    await client.query(
+      `
+      UPDATE richieste_pop_bus
+      SET stato = 'convertita',
+          corsa_id = $2
+      WHERE id = $1
+      `,
+      [r.id, corsa.id]
+    );
+  }
+
+  // =====================================================
+  // 13. AGGIORNAMENTO POSTI
+  // =====================================================
+
+  await client.query(
+    `
+    UPDATE corse
+    SET
+      posti_prenotati = $2,
+      posti_disponibili = posti_totali - $3
+    WHERE id = $1
+    `,
+    [
+      corsa.id,
+      requests.reduce(
+        (s, r) => s + Number(r.posti_richiesti),
+        0
+      ),
+      isMulti ? multiPreflight.peak : plan.evaluation.peak
+    ]
+  );
+
+  // Conducente fisico: flag separata, OFF per default.
+  // La prenotazione avviene nella transazione aperta dal router.
+  // Nessuna assegnazione al titolare implicita.
+  if (process.env.POPBUS_CONDUCENTI_ENABLED === 'true') {
+    if (!sceltaConducente || typeof sceltaConducente !== 'object' ||
+        Array.isArray(sceltaConducente) ||
+        !['automatica', 'manuale', 'titolare'].includes(sceltaConducente.modalita)) {
+      const err = new Error('Scelta del conducente obbligatoria per PopBus');
+      err.code = 'CONDUCENTE_SCELTA_RICHIESTA';
+      err.status = 409;
+      throw err;
+    }
+
+    // I tempi devono essere quelli del piano persistito, non quelli forniti dal client.
+    // Per il percorso fisico V2 sono partenzaBase -> ritornoBase.
+    const assegnazione = {
+      operatoreId: Number(autistaId),
+      veicoloId: Number(a.veicolo_id),
+      attivazioneId: Number(a.id),
+      inizio: busyStart.toISOString(),
+      fine: busyEnd.toISOString(),
+      modalita: sceltaConducente.modalita
+    };
+    if (sceltaConducente.modalita === 'titolare') {
+      // Il titolare e' scelto esplicitamente, mai come fallback automatico.
+      assegnazione.conducenteId = Number(autistaId);
+      if (sceltaConducente.conducenteId != null &&
+          Number(sceltaConducente.conducenteId) !== Number(autistaId)) {
+        throw new Error('Il conducente titolare deve coincidere con l’operatore');
+      }
+    } else if (sceltaConducente.modalita === 'manuale') {
+      assegnazione.conducenteId = sceltaConducente.conducenteId;
+      assegnazione.confermaDeroga = sceltaConducente.confermaDeroga;
+      assegnazione.motivoDeroga = sceltaConducente.motivoDeroga;
+      // L'identita' di chi autorizza la deroga deriva dall'operatore autenticato,
+      // mai da un identificativo dichiarato dal client.
+      if (sceltaConducente.confermaDeroga === true) {
+        assegnazione.autorizzatoreId = Number(autistaId);
+      }
+    } else if (sceltaConducente.conducenteId != null) {
+      throw new Error('In modalita automatica non indicare conducenteId');
+    }
+    await assegnaConducente(client, assegnazione);
+  }
+
+  // =====================================================
+  // 14. CONFERMA ATTIVAZIONE E OFFERTA
+  // =====================================================
+
+  await client.query(
+    `
+    UPDATE popbus_attivazioni
+    SET stato = 'confermata',
+        corsa_id = $2
+    WHERE id = $1
+    `,
+    [a.id, corsa.id]
+  );
+
+  await client.query(
+    `
+    UPDATE offerte_autisti
+    SET stato = 'accettata'
+    WHERE id = $1
+    `,
+    [offer.id]
+  );
+
+  // Il contenitore e i suoi segmenti non vengono chiusi.
+
+  // =====================================================
+  // 15. RITORNO CORSA AGGIORNATA
+  // =====================================================
+
+  const { rows: updated } = await client.query(
+    `
+    SELECT *
+    FROM corse
+    WHERE id = $1
+    `,
+    [corsa.id]
+  );
+
+  console.log(
+    '✅ [POPBUS ACCETTA] Corsa creata',
+    {
+      offertaId,
+      attivazioneId: a.id,
+      corsaId: corsa.id,
+      veicoloId: a.veicolo_id,
+      richieste: requests.length
+    }
+  );
+
+  return updated[0];
+}

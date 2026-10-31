@@ -1,4 +1,4 @@
-﻿// Turentu - test deroga manuale. Nessuna modifica persistente: ROLLBACK finale.
+// Turentu - test deroga manuale. Nessuna modifica persistente: ROLLBACK finale.
 import { pool } from '../db/db.js';
 import { assegnaConducente } from '../services/conducenti/assegnazioni.service.js';
 
@@ -80,7 +80,7 @@ try {
   } catch (e) {
     overlap = e;
   }
-  check(Boolean(overlap) && /impegnato|overlap|exclude|conflict/i.test(overlap.message),
+  check(overlap?.code === 'CONDUCENTE_CONFLITTO',
     'Sovrapposizione bloccata anche con deroga');
   console.log('ESITO: TUTTI I TEST SUPERATI');
 } catch (e) {

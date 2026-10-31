@@ -1,5 +1,5 @@
 // Turentu - modulo conducenti indipendente (ES modules)
-// Tutte le funzioni ricevono un client/pool pg già configurato.
+// Tutte le funzioni ricevono un client/pool pg gi├á configurato.
 // Nessuna dipendenza da PIXEL, POPBUS o dai loro worker.
 
 const STATI = new Set(['invitato', 'attivo', 'sospeso', 'rifiutato']);
@@ -23,7 +23,7 @@ export async function elencoConducenti(db, operatoreId) {
   const id = interoPositivo(operatoreId, 'operatoreId');
   const { rows } = await db.query(
     `SELECT co.id, co.operatore_id, co.conducente_id,
-            co.stato, co.assegnabile_automaticamente,
+            co.stato, co.assegnabile_automaticamente, co.sempre_disponibile,
             co.creato_il, co.aggiornato_il,
             u.nome, u.email
        FROM conducenti_operatori co
@@ -52,20 +52,21 @@ export async function invitaConducente(db, { operatoreId, conducenteId }) {
      DO UPDATE SET
        stato = 'invitato',
        assegnabile_automaticamente = false,
-       creato_il = now(),
+       sempre_disponibile = true,
+        creato_il = now(),
        aggiornato_il = now()
      WHERE conducenti_operatori.stato = 'rifiutato'
      RETURNING *`,
     [operatore, conducente]
   );
   if (!rows[0]) {
-    throw new Error('Associazione già esistente: verificare lo stato prima di procedere');
+    throw new Error('Associazione gi├á esistente: verificare lo stato prima di procedere');
   }
   return rows[0];
 }
 
 // Deve essere invocata da un endpoint autenticato come conducente invitato.
-// Un operatore NON può accettare l'invito al posto del conducente.
+// Un operatore NON pu├▓ accettare l'invito al posto del conducente.
 export async function accettaInvitoConducente(db, { rapportoId, conducenteId }) {
   verificaDb(db);
   const rapporto = interoPositivo(rapportoId, 'rapportoId');
@@ -77,11 +78,11 @@ export async function accettaInvitoConducente(db, { rapportoId, conducenteId }) 
       RETURNING *`,
     [rapporto, conducente]
   );
-  if (!rows[0]) throw new Error('Invito non trovato o non più accettabile');
+  if (!rows[0]) throw new Error('Invito non trovato o non pi├╣ accettabile');
   return rows[0];
 }
 
-// Il conducente autenticato può rifiutare esclusivamente un proprio invito pendente.
+// Il conducente autenticato pu├▓ rifiutare esclusivamente un proprio invito pendente.
 export async function rifiutaInvitoConducente(db, { rapportoId, conducenteId }) {
   verificaDb(db);
   const rapporto = interoPositivo(rapportoId, 'rapportoId');
@@ -100,7 +101,7 @@ export async function rifiutaInvitoConducente(db, { rapportoId, conducenteId }) 
   );
 
   if (!rows[0]) {
-    throw new Error('Invito non trovato o non più rifiutabile');
+    throw new Error('Invito non trovato o non pi├╣ rifiutabile');
   }
   return rows[0];
 }
@@ -144,7 +145,7 @@ export async function sospendiConducente(db, { operatoreId, rapportoId }) {
       RETURNING *`,
     [rapporto, operatore]
   );
-  if (!rows[0]) throw new Error('Associazione non trovata o già sospesa');
+  if (!rows[0]) throw new Error('Associazione non trovata o gi├á sospesa');
   return rows[0];
 }
 
@@ -161,6 +162,27 @@ export async function impostaAssegnazioneAutomatica(db, {
       WHERE id = $1 AND operatore_id = $2 AND stato = 'attivo'
       RETURNING *`,
     [rapporto, operatore, abilitata]
+  );
+  if (!rows[0]) throw new Error('Conducente non trovato o non attivo');
+  return rows[0];
+}
+
+// Solo l'operatore proprietario puo modificare la disponibilita del rapporto attivo.
+// Non modifica l'abilitazione alle assegnazioni automatiche.
+export async function impostaSempreDisponibile(db, { operatoreId, rapportoId, sempreDisponibile }) {
+  verificaDb(db);
+  const operatore = interoPositivo(operatoreId, 'operatoreId');
+  const rapporto = interoPositivo(rapportoId, 'rapportoId');
+  if (typeof sempreDisponibile !== 'boolean') {
+    throw new Error('sempreDisponibile deve essere booleano');
+  }
+  const { rows } = await db.query(
+    `UPDATE conducenti_operatori
+        SET sempre_disponibile = $3, aggiornato_il = now()
+      WHERE id = $1 AND operatore_id = $2 AND stato = 'attivo'
+      RETURNING id, operatore_id, conducente_id, stato,
+                sempre_disponibile, assegnabile_automaticamente, aggiornato_il`,
+    [rapporto, operatore, sempreDisponibile]
   );
   if (!rows[0]) throw new Error('Conducente non trovato o non attivo');
   return rows[0];

@@ -1,7 +1,7 @@
 // TURENTU - verifica email per account autenticati.
-// Dipendenze: pg Pool, nodemailer (gia' presente nel progetto).
+// Dipendenze: pg Pool, googleapis (gia' presente nel progetto).
 import { randomBytes, createHash } from 'node:crypto';
-import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const hash = (value) => createHash('sha256').update(value).digest('hex');
@@ -13,15 +13,27 @@ const id = (value) => {
 };
 const tokenValido = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 
-function smtpTransport() {
-  for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS']) {
-    if (!process.env[key]) throw fail('Configurazione SMTP incompleta', 503);
+async function inviaVerificaConGmail(to, link) {
+  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, GMAIL_SENDER } = process.env;
+  if (![GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, GMAIL_SENDER].every(Boolean)) {
+    throw fail('Configurazione Gmail incompleta', 503);
   }
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  const auth = new google.auth.OAuth2(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET);
+  auth.setCredentials({ refresh_token: GMAIL_REFRESH_TOKEN });
+  const gmail = google.gmail({ version: 'v1', auth });
+  const subject = 'Turentu - verifica il tuo indirizzo email';
+  const message = `Per verificare il tuo indirizzo email Turentu apri questo link entro 30 minuti:\n${link}\n\nSe non hai richiesto questa verifica, ignora il messaggio.`;
+  const raw = [
+    `From: ${GMAIL_SENDER}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    '', message,
+  ].join('\r\n');
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: { raw: Buffer.from(raw, 'utf8').toString('base64url') },
   });
 }
 
@@ -44,7 +56,6 @@ export async function statoVerificaEmail(pool, utenteId) {
 
 export async function richiediVerificaEmail(pool, utenteId) {
   const uid = id(utenteId);
-  const transport = smtpTransport();
   const token = randomBytes(32).toString('hex');
   const link = urlVerifica(token);
   const client = await pool.connect();
@@ -74,14 +85,10 @@ export async function richiediVerificaEmail(pool, utenteId) {
     client.release();
   }
   try {
-    await transport.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: email,
-      subject: 'Turentu - verifica il tuo indirizzo email',
-      text: `Per verificare il tuo indirizzo email Turentu apri questo link entro 30 minuti:\n${link}\n\nSe non hai richiesto questa verifica, ignora il messaggio.`,
-    });
+    await inviaVerificaConGmail(email, link);
   } catch (error) {
     // Un invio fallito non deve lasciare un link utilizzabile.
+    console.error('[verifica-email] Invio Gmail fallito:', error?.message || error);
     await pool.query(`UPDATE public.verifiche_email_utente SET revocato_il=NOW()
       WHERE id=$1 AND consumato_il IS NULL AND revocato_il IS NULL`, [verificaId]);
     throw fail('Impossibile inviare la verifica email. Riprova piu tardi.', 503);

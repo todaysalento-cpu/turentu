@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import twilio from 'twilio';
 import appleSignin from 'apple-signin-auth';
+import { statoVerificaEmail, richiediVerificaEmail, confermaVerificaEmail } from '../services/conducenti/verifica-email.service.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
@@ -100,6 +101,24 @@ router.delete('/me/delete', authenticate, async (req, res) => {
     client.release();
   }
 });
+
+// ===================== VERIFICA EMAIL NCC =====================
+// Non modifica il login o la registrazione ordinaria.
+const gestisciVerificaEmail = (fn) => async (req, res) => {
+  try { res.json({ ok: true, data: await fn(req) }); }
+  catch (error) {
+    const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 600
+      ? error.status : 500;
+    if (status === 500) console.error('[verifica-email]', error);
+    res.status(status).json({ ok: false, error: status === 500 ? 'Errore interno' : error.message });
+  }
+};
+router.get('/me/verifica-email', authenticate, gestisciVerificaEmail(req =>
+  statoVerificaEmail(pool, req.user.id)));
+router.post('/me/verifica-email/richiedi', authenticate, gestisciVerificaEmail(req =>
+  richiediVerificaEmail(pool, req.user.id)));
+router.post('/me/verifica-email/conferma', authenticate, gestisciVerificaEmail(req =>
+  confermaVerificaEmail(pool, { utenteId: req.user.id, token: req.body?.token })));
 
 // ===================== LOGIN =====================
 router.post('/login', async (req, res) => {

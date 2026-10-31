@@ -91,7 +91,7 @@ export async function accettaInvitoAnagrafica(pool, { utenteId, token }) {
       SELECT id, email, tipo, email_verificata_il
       FROM public.utente WHERE id = $1 FOR UPDATE`, [uid]);
     const user = users[0];
-    if (!user || user.tipo !== 'autista') {
+    if (!user || !['cliente', 'autista'].includes(user.tipo)) {
       throw fail('Account conducente non abilitato: verificare il ruolo', 403);
     }
     if (!user.email_verificata_il) {

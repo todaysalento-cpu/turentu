@@ -62,6 +62,9 @@ try {
     } catch (error) {
       failed++;
       console.error(`FAIL ${name}: ${error.message}`);
+      if (name.startsWith('Account cliente verificato')) {
+        console.error('DIAGNOSI: verificare in services/conducenti/inviti-anagrafica.service.js che il ruolo cliente sia ammesso in accettaInvitoAnagrafica. Non modificare il test per aggirare il controllo.');
+      }
     } finally {
       // Ogni scenario viene annullato, anche se il servizio ha rilasciato i propri savepoint.
       await db.query(`ROLLBACK TO SAVEPOINT ${sp}`);
@@ -76,9 +79,9 @@ try {
       [label, email, 'TEST_ONLY_NO_LOGIN', tipo, verified ? new Date() : null]);
     return rows[0];
   }
-  async function fixture({ verified = true, secondOperator = false } = {}) {
+  async function fixture({ verified = true, secondOperator = false, driverTipo = "autista" } = {}) {
     const op = await user('operatore', 'autista', true);
-    const driver = await user('conducente', 'autista', verified);
+    const driver = await user('conducente', driverTipo, verified);
     const op2 = secondOperator ? await user('operatore2', 'autista', true) : null;
     const { rows } = await db.query(`INSERT INTO public.anagrafica_conducenti
       (operatore_id,nome,cognome,email,stato) VALUES ($1,'Mario','Prova',$2,'bozza') RETURNING id`,
@@ -131,6 +134,22 @@ try {
     const { rows: i } = await db.query(`SELECT consumato_il FROM public.inviti_anagrafica_conducenti WHERE anagrafica_id=$1`, [f.anagraficaId]);
     assert(i[0].consumato_il !== null, 'Token non consumato');
     await expectError(() => accept(f), 409, 'Riutilizzo dopo accettazione');
+  });
+  await scenario('Account cliente verificato: accetta e collega il conducente', async () => {
+    const f = await fixture({ driverTipo: 'cliente' });
+    const result = await accept(f);
+    assert(result.stato === 'collegato', 'Stato risposta non collegato');
+    const { rows: a } = await db.query(`SELECT stato, utente_id FROM public.anagrafica_conducenti WHERE id=$1`, [f.anagraficaId]);
+    assert(a.length === 1 && a[0].stato === 'collegato' && a[0].utente_id === f.driver.id, 'Anagrafica cliente non collegata');
+    const { rows: c } = await db.query(`SELECT stato FROM public.conducenti_operatori WHERE operatore_id=$1 AND conducente_id=$2`, [f.op.id, f.driver.id]);
+    assert(c.length === 1 && c[0].stato === 'attivo', 'Rapporto cliente/NCC non attivo');
+    const { rows: i } = await db.query(`SELECT consumato_il FROM public.inviti_anagrafica_conducenti WHERE anagrafica_id=$1`, [f.anagraficaId]);
+    assert(i.length === 1 && i[0].consumato_il !== null, 'Token cliente non consumato');
+    await expectError(() => accept(f), 409, 'Riutilizzo token cliente');
+  });
+  await scenario('Account cliente non verificato: rifiuto 403', async () => {
+    const f = await fixture({ driverTipo: 'cliente', verified: false });
+    await expectError(() => accept(f), 403, 'Email cliente non verificata');
   });
   await scenario('Altro operatore attivo: rifiuto 409', async () => {
     const f = await fixture({ secondOperator: true });

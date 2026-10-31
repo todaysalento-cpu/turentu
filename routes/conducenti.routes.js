@@ -18,6 +18,11 @@ import {
   assegnaConducente
 } from '../services/conducenti/assegnazioni.service.js';
 
+import {
+  elencoAnagraficheConducenti, creaAnagraficaConducente,
+  modificaAnagraficaConducente, disattivaAnagraficaConducente
+} from '../services/conducenti/anagrafica.service.js';
+
 const positive = (v) => Number.isSafeInteger(Number(v)) && Number(v) > 0;
 const bool = (v) => typeof v === 'boolean';
 
@@ -127,6 +132,20 @@ export function creaRouterConducenti({ pool, authenticate }) {
       operatoreId: op(req), modalita: body.modalita
     });
   }));
+
+  // Anagrafiche non registrate: gestione isolata dai rapporti e dalle assegnazioni.
+  router.get('/operatori/me/anagrafiche-conducenti', route(req =>
+    elencoAnagraficheConducenti(pool, op(req))));
+  router.post('/operatori/me/anagrafiche-conducenti', route(req =>
+    creaAnagraficaConducente(pool, { operatoreId: op(req), body: req.body })));
+  router.patch('/operatori/me/anagrafiche-conducenti/:anagraficaId', route(req =>
+    modificaAnagraficaConducente(pool, {
+      operatoreId: op(req), anagraficaId: id(req.params.anagraficaId, 'anagraficaId'), body: req.body
+    })));
+  router.patch('/operatori/me/anagrafiche-conducenti/:anagraficaId/disattiva', route(req =>
+    disattivaAnagraficaConducente(pool, {
+      operatoreId: op(req), anagraficaId: id(req.params.anagraficaId, 'anagraficaId')
+    })));
 
   router.get('/operatori/me/conducenti', route(req => elencoConducenti(pool, op(req))));
   router.post('/operatori/me/conducenti/inviti', route(req =>

@@ -125,7 +125,7 @@ async function verificaTarget(client, { corsaId, attivazioneId, veicoloId, opera
  * Assegna manualmente o automaticamente un conducente a una missione già esistente.
  * Il chiamante deve aver aperto una transazione su client pg (non pool.query).
  * Per il titolare: modalita='titolare', conducenteId=operatoreId.
- * Per automatico: omettere conducenteId; seleziona solo rapporti abilitati.
+ * Per automatico: omettere conducenteId; considera tutti i rapporti attivi.
  * Gli intervalli sono forniti dal chiamante e devono comprendere TUTTO il ciclo operativo.
  */
 export async function assegnaConducente(client, input) {
@@ -159,6 +159,21 @@ export async function assegnaConducente(client, input) {
   // Serializza le assegnazioni per operatore; il vincolo GiST tutela anche
   // contro concorrenza tra operatori diversi sul medesimo conducente.
   await client.query('SELECT pg_advisory_xact_lock($1::integer,$2::integer)', [731904, operatoreId]);
+  // La modalita generale viene letta DOPO il lock dell'operatore.
+  // In assenza di configurazione, il default e' manuale.
+  // Le impostazioni devono essere modificate con la stessa disciplina di lock
+  // per garantire piena serializzazione rispetto alle assegnazioni in corso.
+  const { rows: impostazioni } = await client.query(
+    `SELECT modalita FROM impostazioni_assegnazione_operatori
+     WHERE operatore_id=$1`, [operatoreId]
+  );
+  const modalitaGenerale = impostazioni[0]?.modalita ?? 'manuale';
+  if (modalitaGenerale !== modalita) {
+    const err = new Error(`Modalita operatore impostata su ${modalitaGenerale}: assegnazione ${modalita} non consentita`);
+    err.code = 'MODALITA_ASSEGNAZIONE_NON_CONSENTITA';
+    err.status = 409;
+    throw err;
+  }
   await verificaVeicolo(client, operatoreId, veicoloId);
   await verificaTarget(client, { corsaId, attivazioneId, veicoloId, operatoreId });
 
@@ -208,7 +223,7 @@ export async function assegnaConducente(client, input) {
     const { rows } = await client.query(
       `SELECT conducente_id, id AS rapporto_id
        FROM conducenti_operatori
-       WHERE operatore_id=$1 AND stato='attivo' AND assegnabile_automaticamente=true
+       WHERE operatore_id=$1 AND stato='attivo'
        ORDER BY conducente_id`, [operatoreId]
     );
     candidati = rows.map(r => ({ id: Number(r.conducente_id), rapportoId: r.rapporto_id }));

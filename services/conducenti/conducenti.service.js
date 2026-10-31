@@ -202,3 +202,69 @@ export async function elencoInvitiConducente(db, conducenteId) {
   );
   return rows;
 }
+
+// Impostazione generale dell'operatore NCC. Nessuna attivazione di worker.
+const MODALITA_ASSEGNAZIONE = new Set(['manuale', 'automatica', 'titolare']);
+
+export async function leggiImpostazioniAssegnazione(db, operatoreId) {
+  verificaDb(db);
+  const operatore = interoPositivo(operatoreId, 'operatoreId');
+  const { rows } = await db.query(
+    `SELECT operatore_id, modalita, aggiornato_il
+       FROM impostazioni_assegnazione_operatori
+      WHERE operatore_id = $1`,
+    [operatore]
+  );
+  return rows[0] ?? { operatore_id: operatore, modalita: 'manuale', aggiornato_il: null };
+}
+
+// Il router passa un Pool: la connessione dedicata mantiene lock e scrittura
+// nella stessa transazione. Non usare pool.query per queste operazioni.
+export async function salvaImpostazioniAssegnazione(db, { operatoreId, modalita }) {
+  verificaDb(db);
+  const operatore = interoPositivo(operatoreId, 'operatoreId');
+  if (typeof modalita !== 'string' || !MODALITA_ASSEGNAZIONE.has(modalita)) {
+    const err = new Error('Modalita non valida: usare manuale, automatica o titolare');
+    err.status = 400;
+    throw err;
+  }
+  if (typeof db.connect !== 'function') {
+    throw new Error('Salvataggio impostazioni richiede un Pool PostgreSQL');
+  }
+
+  const client = await db.connect();
+  let transazioneAperta = false;
+  try {
+    await client.query('BEGIN');
+    transazioneAperta = true;
+    // Stessa chiave usata da assegnaConducente: serializza per operatore.
+    await client.query(
+      'SELECT pg_advisory_xact_lock($1::integer,$2::integer)',
+      [731904, operatore]
+    );
+    const { rows } = await client.query(
+      `INSERT INTO impostazioni_assegnazione_operatori
+         (operatore_id, modalita, aggiornato_il)
+       VALUES ($1, $2, now())
+       ON CONFLICT (operatore_id) DO UPDATE
+         SET modalita = EXCLUDED.modalita, aggiornato_il = now()
+       RETURNING operatore_id, modalita, aggiornato_il`,
+      [operatore, modalita]
+    );
+    await client.query('COMMIT');
+    transazioneAperta = false;
+    return rows[0];
+  } catch (err) {
+    if (transazioneAperta) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        err.rollbackError = rollbackErr;
+        throw err;
+      }
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}

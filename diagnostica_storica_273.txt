@@ -1,0 +1,73 @@
+[PIXEL SNAPSHOT ENGINE ID] { contesti: [], missioni: [] }
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-11-01T13:20:00.000Z',
+  contestiPixel: 0,
+  missioniCandidate: 0,
+  veicoliCandidati: 0,
+  nodiTerritoriali: 0
+}
+[POPBUS PHYSICAL CACHE CAPACITY] {
+  combinazioniElegibili: 0,
+  chiaviFisicheNecessarie: 0,
+  riusiTeorici: 0
+}
+POPBUS_PHYSICAL_SHADOW_RESULT={
+  "stato": "PASS_SHADOW_READ_ONLY",
+  "opportunita": [
+    273
+  ],
+  "percorso": "PIXEL_FERMATE_FISICHE_CANDIDATI_V2",
+  "missioniCandidateFisiche": 0,
+  "offerte": 0,
+  "dbWrites": 0,
+  "attivabile": false,
+  "diagnostica": {
+    "tentativi": 0,
+    "alternative": 0,
+    "scarti": [],
+    "completo": true,
+    "attivabile": false,
+    "diagnosticaLimitata": false,
+    "limiteEffettivo": 250,
+    "combinazioniElegibili": 0,
+    "combinazioniResidue": 0,
+    "ricercaInternaNonEsaustiva": 0,
+    "interrottoPerBudget": false,
+    "calcoliFisici": 0,
+    "cacheHits": 0,
+    "cacheEntries": 0,
+    "tempoCalcoliFisiciMs": 0,
+    "disabilitaCacheFisica": false,
+    "escludiVeicoliTest": false,
+    "veicoliEsclusi": [],
+    "numeroVeicoliEsclusi": 0,
+    "numeroVeicoliValutabili": 0,
+    "esitiFisiciVuoti": 0,
+    "scartiValutazioneTotali": 0,
+    "scartiValutazionePerFase": {},
+    "campioneScartiValutazione": [],
+    "departureShadow": {
+      "analizzate": 0,
+      "recuperabiliTemporalmente": 0,
+      "recuperabiliConQualita": 0,
+      "senzaIntersezione": 0,
+      "errori": 0,
+      "recuperateValidate": 0,
+      "recuperiRifiutati": 0,
+      "recuperiRifiutatiRoutingCapienza": 0,
+      "recuperiRifiutatiTemporale": 0,
+      "recuperiRifiutatiQualita": 0,
+      "recuperiRifiutatiErrore": 0
+    },
+    "sequenziamento": {
+      "sequenzeScartateEventi": 0,
+      "sequenzeScartateRouting": 0,
+      "routingEccezioni": 0,
+      "routingRisposteNonValide": 0,
+      "routingTratteDistinte": 0,
+      "campioneErroriRouting": []
+    }
+  }
+}
+ATTENZIONE: zero candidati. Il controllo di sicurezza passa, NON la fattibilita fisica.
+POPBUS_PHYSICAL_SHADOW_READONLY_OK

@@ -1,0 +1,2787 @@
+{
+  "purpose": "5Q fixture schema blueprint, READ ONLY",
+  "generatedAt": "2026-10-31T18:02:43.337Z",
+  "database": "corse_db",
+  "role": "corse_db_user",
+  "columns": [
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "id",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "cliente_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": "'preparazione'::character varying",
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "ar_gruppi",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "corse",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('corse_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "corse",
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "corse",
+      "column_name": "start_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "corse",
+      "column_name": "tipo_corsa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "corse",
+      "column_name": "durata",
+      "data_type": "interval",
+      "udt_name": "interval",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "corse",
+      "column_name": "origine",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "corse",
+      "column_name": "destinazione",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "corse",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'prenotabile'::character varying",
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "corse",
+      "column_name": "prezzo_fisso",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "corse",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "corse",
+      "column_name": "posti_disponibili",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0",
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "corse",
+      "column_name": "posti_totali",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0",
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "corse",
+      "column_name": "arrivo_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "corse",
+      "column_name": "posti_prenotati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "corse",
+      "column_name": "primo_posto",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "corse",
+      "column_name": "distanza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 16
+    },
+    {
+      "table_name": "corse",
+      "column_name": "destinazione_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": "'N/D'::text",
+      "ordinal_position": 17
+    },
+    {
+      "table_name": "corse",
+      "column_name": "origine_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": "'N/D'::text",
+      "ordinal_position": 18
+    },
+    {
+      "table_name": "corse",
+      "column_name": "percorso_polyline",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 19
+    },
+    {
+      "table_name": "corse",
+      "column_name": "fermate_pianificate",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": "'[]'::jsonb",
+      "ordinal_position": 20
+    },
+    {
+      "table_name": "corse",
+      "column_name": "max_fermate_consentite",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "3",
+      "ordinal_position": 21
+    },
+    {
+      "table_name": "corse",
+      "column_name": "path_geohashes",
+      "data_type": "ARRAY",
+      "udt_name": "_text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 22
+    },
+    {
+      "table_name": "corse",
+      "column_name": "evento_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 23
+    },
+    {
+      "table_name": "corse",
+      "column_name": "km_avvicinamento",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 24
+    },
+    {
+      "table_name": "corse",
+      "column_name": "km_riposizionamento",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 25
+    },
+    {
+      "table_name": "corse",
+      "column_name": "prenotazione_origine_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 26
+    },
+    {
+      "table_name": "corse",
+      "column_name": "inizio_ciclo_operativo",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 27
+    },
+    {
+      "table_name": "corse",
+      "column_name": "fine_ciclo_operativo",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 28
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('disponibilita_veicolo_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "start",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "fine",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "coord",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "manual",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "YES",
+      "column_default": "false",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "giorni_esclusi",
+      "data_type": "ARRAY",
+      "udt_name": "_int4",
+      "is_nullable": "YES",
+      "column_default": "'{}'::integer[]",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "column_name": "inattivita",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": "'[]'::jsonb",
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('offerte_autisti_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "autista_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'inviata'::character varying",
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "(now() + '00:15:00'::interval)",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "offerte_autisti",
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('pagamenti_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "prenotazione_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "importo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "stripe_payment_intent",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "tipo_corsa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "currency",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'eur'::character varying",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "commissione",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "guadagno_autista",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "importo_dovuto",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "importo_residuo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "pagamenti",
+      "column_name": "conguaglio_calcolato_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "engine_id",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "versione",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "1",
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "nodi",
+      "data_type": "ARRAY",
+      "udt_name": "_int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "legs",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "stato",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "'attiva'::text",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "direttrice_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "inizio_finestra",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "fine_finestra",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "stato",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "'candidata'::text",
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "dati_temporali",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": "'{}'::jsonb",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": "nextval('popbus_ar_accettazioni_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "offerta_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": "'provvisoria'::character varying",
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "accepted_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "column_name": "attivazione_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "column_name": "richiesta_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "column_name": "attiva",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "true",
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "column_name": "indice_salita",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "column_name": "indice_discesa",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": "nextval('popbus_attivazioni_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "veicolo_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "autista_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "stato",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "partenza",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "arrivo",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "costo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "ricavo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "tariffa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "piano",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "expires_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()",
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "column_name": "pixel_opportunita_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('prenotazioni_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "cliente_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "posti_prenotati",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "ticket_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "prezzo_totale",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "posti_richiesti",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "1",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "lat_salita",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "lon_salita",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "lat_discesa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "lon_discesa",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "start_index_polyline",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "end_index_polyline",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "start_offset",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "end_offset",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "km_utente",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 16
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "tipo_percorrenza",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 17
+    },
+    {
+      "table_name": "prenotazioni",
+      "column_name": "tratta_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 18
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('richieste_pop_bus_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "cliente_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "origine",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "destinazione",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "start_datetime",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "posti_richiesti",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'in_attesa'::character varying",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "corsa_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "start_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "end_node_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "target_missione_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "classe",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": "'STANDARD'::character varying",
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "origine_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "destinazione_address",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 16
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "prezzo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0.00",
+      "ordinal_position": 17
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "payment_intent_id",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 18
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "request_id",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 19
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "target_direttrice_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 20
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "origine_nodo_territoriale_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 21
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "destinazione_nodo_territoriale_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 22
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "origine_fermata_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 23
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "destinazione_fermata_id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 24
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "ar_group_id",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 25
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "ar_tratta",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 26
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "ar_vincolata",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false",
+      "ordinal_position": 27
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "column_name": "evento_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 28
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('transazioni_wallet_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "utente_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "importo",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "tipo",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "riferimento_id",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "udt_name": "timestamp",
+      "is_nullable": "YES",
+      "column_default": "CURRENT_TIMESTAMP",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "utente",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('utente_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "utente",
+      "column_name": "nome",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "utente",
+      "column_name": "email",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "utente",
+      "column_name": "tipo",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "utente",
+      "column_name": "rating",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "utente",
+      "column_name": "num_recensioni",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "utente",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "utente",
+      "column_name": "password",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "utente",
+      "column_name": "reset_token",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "utente",
+      "column_name": "reset_expires",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "utente",
+      "column_name": "phone",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "utente",
+      "column_name": "otp_code",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "utente",
+      "column_name": "otp_expires",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "utente",
+      "column_name": "apple_id",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "utente",
+      "column_name": "email_verificata_il",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "nextval('veicolo_id_seq'::regclass)",
+      "ordinal_position": 1
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "driver_id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 2
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "modello",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 3
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "posti_totali",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null,
+      "ordinal_position": 4
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "servizi",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 5
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "raggio_km",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "50",
+      "ordinal_position": 6
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "coord",
+      "data_type": "USER-DEFINED",
+      "udt_name": "geography",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 7
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "targa",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 8
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "rating",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 9
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "num_recensioni",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 10
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": "now()",
+      "ordinal_position": 11
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "distanza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0",
+      "ordinal_position": 12
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "marca",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 13
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "image_url",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 14
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "tipo",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 15
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "anno",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 16
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "numero_licenza_ncc",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 17
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "comune_licenza",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 18
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "id_flotta",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 19
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "stato_verifica",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 20
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "stato",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 21
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "localita",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 22
+    },
+    {
+      "table_name": "veicolo",
+      "column_name": "indice_efficienza",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null,
+      "ordinal_position": 23
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_cliente_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL cliente_id"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_created_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_expires_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_stato_check",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY ((ARRAY['preparazione'::character varying, 'in_autorizzazione'::character varying, 'autorizzato'::character varying, 'in_attesa'::character varying, 'pronto'::character varying, 'confermato'::character varying, 'annullamento_richiesto'::character varying, 'annullato'::character varying, 'scaduto'::character varying, 'errore'::character varying])::text[])))"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "ar_gruppi",
+      "name": "ar_gruppi_updated_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_evento_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (evento_id) REFERENCES eventi(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_posti_disponibili_not_null",
+      "kind": "n",
+      "definition": "NOT NULL posti_disponibili"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_posti_totali_not_null",
+      "kind": "n",
+      "definition": "NOT NULL posti_totali"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_start_datetime_not_null",
+      "kind": "n",
+      "definition": "NOT NULL start_datetime"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_stato_check",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY ((ARRAY['prenotabile'::character varying, 'in_corso'::character varying, 'completata'::character varying, 'annullata'::character varying, 'da_attivare'::character varying])::text[])))"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_tipo_corsa_check",
+      "kind": "c",
+      "definition": "CHECK (((tipo_corsa)::text = ANY ((ARRAY['privata'::character varying, 'condivisa'::character varying, 'riempimento'::character varying])::text[])))"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_tipo_corsa_not_null",
+      "kind": "n",
+      "definition": "NOT NULL tipo_corsa"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_veicolo_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "corse",
+      "name": "corse_veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "chk_manual_8h",
+      "kind": "c",
+      "definition": "CHECK (((manual = false) OR ((fine - start) <= '08:00:00'::interval)))"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "chk_start_end",
+      "kind": "c",
+      "definition": "CHECK ((start < fine))"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_fine_not_null",
+      "kind": "n",
+      "definition": "NOT NULL fine"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_start_not_null",
+      "kind": "n",
+      "definition": "NOT NULL start"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_veicolo_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "disponibilita_veicolo_veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "disponibilita_veicolo",
+      "name": "unique_disponibilita_veicolo",
+      "kind": "u",
+      "definition": "UNIQUE (veicolo_id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "check_stato_offerta",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY ((ARRAY['inviata'::character varying, 'accettata'::character varying, 'rifiutata'::character varying, 'scaduta'::character varying])::text[])))"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "offerte_autisti_attivazione_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "offerte_autisti_autista_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "offerte_autisti_direttrice_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "offerte_autisti_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "offerte_autisti",
+      "name": "offerte_autisti_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "fk_pagamenti_prenotazione",
+      "kind": "f",
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_importo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL importo"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_prenotazione_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (prenotazione_id) REFERENCES prenotazioni(id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_stato_check",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY ((ARRAY['pendente'::character varying, 'autorizzazione'::character varying, 'pagato'::character varying, 'rimborsato'::character varying, 'annullato'::character varying, 'fallito'::character varying])::text[])))"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "pagamenti_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "unique_pagamento_per_prenotazione",
+      "kind": "u",
+      "definition": "UNIQUE (prenotazione_id)"
+    },
+    {
+      "table_name": "pagamenti",
+      "name": "unique_stripe_payment_intent",
+      "kind": "u",
+      "definition": "UNIQUE (stripe_payment_intent)"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "chk_pixel_direttrice_legs",
+      "kind": "c",
+      "definition": "CHECK ((jsonb_typeof(legs) = 'array'::text))"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "chk_pixel_direttrice_nodi",
+      "kind": "c",
+      "definition": "CHECK ((cardinality(nodi) >= 2))"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "chk_pixel_direttrice_stato",
+      "kind": "c",
+      "definition": "CHECK ((stato = ANY (ARRAY['attiva'::text, 'superata'::text, 'archiviata'::text])))"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "chk_pixel_direttrice_versione",
+      "kind": "c",
+      "definition": "CHECK ((versione > 0))"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_created_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_engine_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL engine_id"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_legs_not_null",
+      "kind": "n",
+      "definition": "NOT NULL legs"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_nodi_not_null",
+      "kind": "n",
+      "definition": "NOT NULL nodi"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_updated_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL updated_at"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "pixel_direttrici_versione_not_null",
+      "kind": "n",
+      "definition": "NOT NULL versione"
+    },
+    {
+      "table_name": "pixel_direttrici",
+      "name": "uq_pixel_direttrice_versione",
+      "kind": "u",
+      "definition": "UNIQUE (engine_id, versione)"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "chk_pixel_opportunita_finestra",
+      "kind": "c",
+      "definition": "CHECK ((fine_finestra >= inizio_finestra))"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "chk_pixel_opportunita_stato",
+      "kind": "c",
+      "definition": "CHECK ((stato = ANY (ARRAY['candidata'::text, 'superata'::text, 'archiviata'::text])))"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_created_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_dati_temporali_not_null",
+      "kind": "n",
+      "definition": "NOT NULL dati_temporali"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_direttrice_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES pixel_direttrici(id)"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_direttrice_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL direttrice_id"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_fine_finestra_not_null",
+      "kind": "n",
+      "definition": "NOT NULL fine_finestra"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_inizio_finestra_not_null",
+      "kind": "n",
+      "definition": "NOT NULL inizio_finestra"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "pixel_opportunita",
+      "name": "pixel_opportunita_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_accepted_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL accepted_at"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_attivazione_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_attivazione_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL attivazione_id"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_attivazione_unique",
+      "kind": "u",
+      "definition": "UNIQUE (attivazione_id)"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_expires_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_offerta_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (offerta_id) REFERENCES offerte_autisti(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_offerta_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL offerta_id"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_offerta_unique",
+      "kind": "u",
+      "definition": "UNIQUE (offerta_id)"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_scadenza_chk",
+      "kind": "c",
+      "definition": "CHECK ((expires_at > accepted_at))"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_stato_chk",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY ((ARRAY['provvisoria'::character varying, 'confermata'::character varying, 'rilasciata'::character varying, 'scaduta'::character varying])::text[])))"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_veicolo_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "popbus_ar_accettazioni",
+      "name": "popbus_ar_accettazioni_veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_attiva_not_null",
+      "kind": "n",
+      "definition": "NOT NULL attiva"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_attivazione_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (attivazione_id) REFERENCES popbus_attivazioni(id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_attivazione_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL attivazione_id"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_check",
+      "kind": "c",
+      "definition": "CHECK ((indice_discesa > indice_salita))"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_indice_discesa_not_null",
+      "kind": "n",
+      "definition": "NOT NULL indice_discesa"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_indice_salita_not_null",
+      "kind": "n",
+      "definition": "NOT NULL indice_salita"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (attivazione_id, richiesta_id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_richiesta_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (richiesta_id) REFERENCES richieste_pop_bus(id)"
+    },
+    {
+      "table_name": "popbus_attivazione_richieste",
+      "name": "popbus_attivazione_richieste_richiesta_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL richiesta_id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "fk_popbus_attivazione_pixel_opportunita",
+      "kind": "f",
+      "definition": "FOREIGN KEY (pixel_opportunita_id) REFERENCES pixel_opportunita(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_arrivo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL arrivo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_autista_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (autista_id) REFERENCES utente(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_autista_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL autista_id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_check",
+      "kind": "c",
+      "definition": "CHECK ((arrivo > partenza))"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_corsa_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_costo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL costo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_created_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL created_at"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_direttrice_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_expires_at_not_null",
+      "kind": "n",
+      "definition": "NOT NULL expires_at"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_partenza_not_null",
+      "kind": "n",
+      "definition": "NOT NULL partenza"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_piano_not_null",
+      "kind": "n",
+      "definition": "NOT NULL piano"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_ricavo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL ricavo"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_stato_check",
+      "kind": "c",
+      "definition": "CHECK ((stato = ANY (ARRAY['in_attesa_autista'::text, 'confermata'::text, 'scaduta'::text, 'rifiutata'::text])))"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_stato_not_null",
+      "kind": "n",
+      "definition": "NOT NULL stato"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_tariffa_not_null",
+      "kind": "n",
+      "definition": "NOT NULL tariffa"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_veicolo_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (veicolo_id) REFERENCES veicolo(id)"
+    },
+    {
+      "table_name": "popbus_attivazioni",
+      "name": "popbus_attivazioni_veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL veicolo_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "fk_prenotazioni_tratta_corsa",
+      "kind": "f",
+      "definition": "FOREIGN KEY (tratta_id, corsa_id) REFERENCES corse_tratte(id, corsa_id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_cliente_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_cliente_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL cliente_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_corsa_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id) ON DELETE CASCADE"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_corsa_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL corsa_id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_posti_prenotati_not_null",
+      "kind": "n",
+      "definition": "NOT NULL posti_prenotati"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_posti_richiesti_not_null",
+      "kind": "n",
+      "definition": "NOT NULL posti_richiesti"
+    },
+    {
+      "table_name": "prenotazioni",
+      "name": "prenotazioni_ticket_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (ticket_id) REFERENCES ticket_condiviso(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "check_classe_valida",
+      "kind": "c",
+      "definition": "CHECK (((classe)::text = ANY ((ARRAY['SAVER'::character varying, 'STANDARD'::character varying, 'EXPRESS'::character varying])::text[])))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "check_stato_valido",
+      "kind": "c",
+      "definition": "CHECK (((stato)::text = ANY (ARRAY[('in_attesa'::character varying)::text, ('convertita'::character varying)::text, ('scaduta'::character varying)::text, ('annullata'::character varying)::text, ('in_lavorazione'::character varying)::text])))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "chk_popbus_pixel_coppia_completa",
+      "kind": "c",
+      "definition": "CHECK ((((origine_fermata_id IS NULL) AND (destinazione_fermata_id IS NULL)) OR ((origine_fermata_id IS NOT NULL) AND (destinazione_fermata_id IS NOT NULL))))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "chk_popbus_pixel_fermate_distinte",
+      "kind": "c",
+      "definition": "CHECK (((origine_fermata_id IS NULL) OR (destinazione_fermata_id IS NULL) OR (origine_fermata_id <> destinazione_fermata_id)))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "chk_popbus_pixel_nodi_presenti",
+      "kind": "c",
+      "definition": "CHECK ((((origine_fermata_id IS NULL) OR (origine_nodo_territoriale_id IS NOT NULL)) AND ((destinazione_fermata_id IS NULL) OR (destinazione_nodo_territoriale_id IS NOT NULL))))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "fk_popbus_pixel_destinazione_nodo",
+      "kind": "f",
+      "definition": "FOREIGN KEY (destinazione_fermata_id, destinazione_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "fk_popbus_pixel_origine_nodo",
+      "kind": "f",
+      "definition": "FOREIGN KEY (origine_fermata_id, origine_nodo_territoriale_id) REFERENCES pixel_fermate(id, nodo_territoriale_id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "fk_richieste_direttrice",
+      "kind": "f",
+      "definition": "FOREIGN KEY (direttrice_id) REFERENCES direttrici_virtuali(id) ON DELETE SET NULL"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_ar_coerenza_chk",
+      "kind": "c",
+      "definition": "CHECK ((((ar_vincolata = false) AND (ar_group_id IS NULL) AND (ar_tratta IS NULL)) OR ((ar_vincolata = true) AND (ar_group_id IS NOT NULL) AND ((ar_tratta)::text = ANY ((ARRAY['andata'::character varying, 'ritorno'::character varying])::text[])))))"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_ar_vincolata_not_null",
+      "kind": "n",
+      "definition": "NOT NULL ar_vincolata"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_cliente_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (cliente_id) REFERENCES utente(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_corsa_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (corsa_id) REFERENCES corse(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_destinazione_fermata_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (destinazione_fermata_id) REFERENCES pixel_fermate(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_destinazione_nodo_territoriale_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (destinazione_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_end_node_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (end_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_evento_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (evento_id) REFERENCES eventi(id) ON DELETE RESTRICT"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_origine_fermata_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (origine_fermata_id) REFERENCES pixel_fermate(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_origine_nodo_territoriale_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (origine_nodo_territoriale_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_start_node_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (start_node_id) REFERENCES nodi_territoriali(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_target_direttrice_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (target_direttrice_id) REFERENCES direttrici_virtuali(id)"
+    },
+    {
+      "table_name": "richieste_pop_bus",
+      "name": "richieste_pop_bus_target_missione_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (target_missione_id) REFERENCES missioni_ritorno(id)"
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "name": "transazioni_wallet_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "name": "transazioni_wallet_importo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL importo"
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "name": "transazioni_wallet_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "name": "transazioni_wallet_tipo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL tipo"
+    },
+    {
+      "table_name": "transazioni_wallet",
+      "name": "transazioni_wallet_utente_id_fkey",
+      "kind": "f",
+      "definition": "FOREIGN KEY (utente_id) REFERENCES utente(id)"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_email_key",
+      "kind": "u",
+      "definition": "UNIQUE (email)"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_email_not_null",
+      "kind": "n",
+      "definition": "NOT NULL email"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_nome_not_null",
+      "kind": "n",
+      "definition": "NOT NULL nome"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_password_not_null",
+      "kind": "n",
+      "definition": "NOT NULL password"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_phone_key",
+      "kind": "u",
+      "definition": "UNIQUE (phone)"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_rating_check",
+      "kind": "c",
+      "definition": "CHECK (((rating >= (0)::numeric) AND (rating <= (5)::numeric)))"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_tipo_check",
+      "kind": "c",
+      "definition": "CHECK (((tipo)::text = ANY (ARRAY['cliente'::text, 'autista'::text, 'admin'::text])))"
+    },
+    {
+      "table_name": "utente",
+      "name": "utente_tipo_not_null",
+      "kind": "n",
+      "definition": "NOT NULL tipo"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_id_not_null",
+      "kind": "n",
+      "definition": "NOT NULL id"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_modello_not_null",
+      "kind": "n",
+      "definition": "NOT NULL modello"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_pkey",
+      "kind": "p",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_posti_totali_not_null",
+      "kind": "n",
+      "definition": "NOT NULL posti_totali"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_rating_check",
+      "kind": "c",
+      "definition": "CHECK (((rating >= (0)::numeric) AND (rating <= (5)::numeric)))"
+    },
+    {
+      "table_name": "veicolo",
+      "name": "veicolo_targa_key",
+      "kind": "u",
+      "definition": "UNIQUE (targa)"
+    }
+  ],
+  "triggers": [
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "trg_check_posti",
+      "action_timing": "BEFORE",
+      "event_manipulation": "INSERT"
+    },
+    {
+      "table_name": "prenotazioni",
+      "trigger_name": "trg_check_posti",
+      "action_timing": "BEFORE",
+      "event_manipulation": "UPDATE"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "trg_veicolo_trig",
+      "action_timing": "AFTER",
+      "event_manipulation": "INSERT"
+    },
+    {
+      "table_name": "veicolo",
+      "trigger_name": "trg_veicolo_trig",
+      "action_timing": "AFTER",
+      "event_manipulation": "UPDATE"
+    }
+  ]
+}

@@ -26,11 +26,12 @@ async function main() {
     pool,
     mode: 'ROLLBACK_ONLY',
     physicalShadow: true,
+    physicalCycleShadow: true,
     physicalOpportunityIds: opportunityIds
   });
 
   assert(result?.modalita === 'ROLLBACK_ONLY', 'modalita errata');
-  assert(result?.percorso === 'PIXEL_FERMATE_FISICHE_CANDIDATI_V2', 'percorso fisico non eseguito');
+  assert(result?.percorso === 'PIXEL_FERMATE_FISICHE_CICLI_SHADOW_V2', 'percorso fisico non eseguito');
   assert(result?.offerte === 0, 'offerte non nulle');
   assert(result?.dbWrites === 0, 'dbWrites non nullo');
   assert(result?.attivabile === false, 'risultato attivabile');
@@ -39,6 +40,9 @@ async function main() {
   assert(result.missioniCandidateFisiche === result.candidati.length, 'conteggio candidati discordante');
   assert(result.candidati.every(c => c?.attivabile === false), 'candidato attivabile');
 
+  assert(result.selezioneFisica?.shadow === true, 'selezione cicli non eseguita');
+  assert(result.selezioneFisica?.attivabile === false, 'cicli attivabili');
+  assert(result.selezioneFisica?.dbWrites === 0, 'scritture cicli');
   const summary = {
     stato: 'PASS_SHADOW_READ_ONLY',
     opportunita: opportunityIds,
@@ -47,15 +51,22 @@ async function main() {
     offerte: result.offerte,
     dbWrites: result.dbWrites,
     attivabile: result.attivabile,
-    diagnostica: result.diagnostica
+    diagnostica: result.diagnostica,
+    diagnosticaCicli: result.selezioneFisica.diagnostica,
+    diagnosticaEconomica: result.selezioneFisica.diagnosticaEconomica,
+    migliorCiclo: result.selezioneFisica.migliorCiclo ? {
+      vehicleId:result.selezioneFisica.migliorCiclo.vehicleId,
+      richiestaIds:result.selezioneFisica.migliorCiclo.richiestaIds,
+      economia:result.selezioneFisica.migliorCiclo.economia
+    } : null
   };
-  console.log('POPBUS_PHYSICAL_SHADOW_RESULT=' + JSON.stringify(summary, null, 2));
+  console.log('POPBUS_PHYSICAL_CYCLES_SHADOW_RESULT=' + JSON.stringify(summary, null, 2));
   if (result.candidati.length === 0) {
     console.log('ATTENZIONE: zero candidati. Il controllo di sicurezza passa, NON la fattibilita fisica.');
   } else {
     console.log('Candidati fisici non attivabili:', result.candidati.length);
   }
-  console.log('POPBUS_PHYSICAL_SHADOW_READONLY_OK');
+  console.log('POPBUS_PHYSICAL_CYCLES_SHADOW_READONLY_OK');
 }
 
 try {

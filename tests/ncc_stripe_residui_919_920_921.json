@@ -1,0 +1,104 @@
+{
+  "createdAt": "2026-11-01T23:16:04.999Z",
+  "records": [
+    {
+      "corsa_id": 919,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792263936333_16392_COMPLETA",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1079,
+      "cliente_id": 1,
+      "pagamento_id": 609,
+      "pagamento_stato": "pagato",
+      "importo": "30.75",
+      "stripe_payment_intent": "pi_3URcvHEVCTpFHY210Fhk4K03"
+    },
+    {
+      "corsa_id": 919,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792263936333_16392_COMPLETA",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1080,
+      "cliente_id": 2,
+      "pagamento_id": 610,
+      "pagamento_stato": "pagato",
+      "importo": "18.45",
+      "stripe_payment_intent": "pi_3URcvIEVCTpFHY211522tPca"
+    },
+    {
+      "corsa_id": 919,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792263936333_16392_COMPLETA",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1081,
+      "cliente_id": 3,
+      "pagamento_id": 611,
+      "pagamento_stato": "pagato",
+      "importo": "18.45",
+      "stripe_payment_intent": "pi_3URcvLEVCTpFHY211DPz6Zs1"
+    },
+    {
+      "corsa_id": 920,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792266707457_3920_RECON",
+      "corsa_stato": "in_corso",
+      "prenotazione_id": 1082,
+      "cliente_id": 1,
+      "pagamento_id": 612,
+      "pagamento_stato": "pagato",
+      "importo": "30.75",
+      "stripe_payment_intent": "pi_3URddyEVCTpFHY210Stibl0F"
+    },
+    {
+      "corsa_id": 920,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792266707457_3920_RECON",
+      "corsa_stato": "in_corso",
+      "prenotazione_id": 1083,
+      "cliente_id": 2,
+      "pagamento_id": 613,
+      "pagamento_stato": "annullato",
+      "importo": "25.37",
+      "stripe_payment_intent": "pi_3URddzEVCTpFHY210f2WVtkK"
+    },
+    {
+      "corsa_id": 920,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792266707457_3920_RECON",
+      "corsa_stato": "in_corso",
+      "prenotazione_id": 1084,
+      "cliente_id": 3,
+      "pagamento_id": 614,
+      "pagamento_stato": "annullato",
+      "importo": "18.45",
+      "stripe_payment_intent": "pi_3URde0EVCTpFHY210IBYpyXz"
+    },
+    {
+      "corsa_id": 921,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792268111591_14404_CRASH",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1085,
+      "cliente_id": 1,
+      "pagamento_id": 615,
+      "pagamento_stato": "pagato",
+      "importo": "30.75",
+      "stripe_payment_intent": "pi_3URe0cEVCTpFHY210JHszgpu"
+    },
+    {
+      "corsa_id": 921,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792268111591_14404_CRASH",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1086,
+      "cliente_id": 2,
+      "pagamento_id": 616,
+      "pagamento_stato": "pagato",
+      "importo": "18.45",
+      "stripe_payment_intent": "pi_3URe0dEVCTpFHY210miY7vbn"
+    },
+    {
+      "corsa_id": 921,
+      "marker": "TURENTU_NCC_STRIPE_TEST_1792268111591_14404_CRASH",
+      "corsa_stato": "completata",
+      "prenotazione_id": 1087,
+      "cliente_id": 3,
+      "pagamento_id": 617,
+      "pagamento_stato": "pagato",
+      "importo": "18.45",
+      "stripe_payment_intent": "pi_3URe0eEVCTpFHY2106A3dn8G"
+    }
+  ]
+}

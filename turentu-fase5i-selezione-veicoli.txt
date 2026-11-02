@@ -1,0 +1,30 @@
+\echo 'TURENTU FASE 5I - SELEZIONE VEICOLI PER COLLAUDO A/R (READ ONLY)'
+\set ON_ERROR_STOP on
+BEGIN READ ONLY;
+\echo '1. Veicoli NCC con operatore valido (senza dati personali)'
+SELECT v.id AS veicolo_id, v.driver_id AS operatore_id, u.tipo AS tipo_operatore,
+       v.posti_totali, v.stato, v.stato_verifica, v.tipo AS tipo_veicolo,
+       v.id_flotta, v.numero_licenza_ncc IS NOT NULL AS licenza_presente
+FROM veicolo v
+JOIN utente u ON u.id = v.driver_id
+WHERE u.tipo = 'autista'
+ORDER BY v.id
+LIMIT 40;
+\echo '2. Conteggi per stato veicoli e validita operatore'
+SELECT COALESCE(v.stato,'NULL') AS stato_veicolo,
+       COALESCE(v.stato_verifica,'NULL') AS stato_verifica,
+       COALESCE(u.tipo,'NESSUNO') AS tipo_operatore,
+       count(*) AS totale
+FROM veicolo v LEFT JOIN utente u ON u.id=v.driver_id
+GROUP BY 1,2,3 ORDER BY totale DESC;
+\echo '3. Eventuali incarichi futuri per veicolo (solo conteggi)'
+SELECT count(*) AS corse_future,
+       count(DISTINCT veicolo_id) AS veicoli_con_corse_future
+FROM corse WHERE start_datetime > NOW() AND stato IN ('prenotabile','in_corso','da_attivare');
+\echo '4. Controllo trigger veicolo: definizione (non eseguito)'
+SELECT pg_get_triggerdef(t.oid) AS trigger_definizione
+FROM pg_trigger t
+JOIN pg_class c ON c.oid=t.tgrelid
+WHERE c.relname='veicolo' AND NOT t.tgisinternal;
+ROLLBACK;
+\echo 'FASE 5I: selezione completata. NESSUNA SCRITTURA.'

@@ -1,0 +1,39 @@
+-- TURENTU FASE 5I - VERIFICA BASE FIXTURE SU RENDER
+-- SOLO LETTURA. Nessuna scrittura e nessuna modifica ai dati.
+\set ON_ERROR_STOP on
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+\echo '1. Conteggi effettivi delle anagrafiche e delle attivazioni'
+SELECT 'utente' AS tabella, count(*) AS totale FROM public.utente
+UNION ALL SELECT 'veicolo', count(*) FROM public.veicolo
+UNION ALL SELECT 'popbus_attivazioni', count(*) FROM public.popbus_attivazioni
+UNION ALL SELECT 'offerte_autisti', count(*) FROM public.offerte_autisti
+UNION ALL SELECT 'richieste_pop_bus', count(*) FROM public.richieste_pop_bus
+UNION ALL SELECT 'pixel_opportunita', count(*) FROM public.pixel_opportunita
+ORDER BY tabella;
+\echo '2. Colonne di utente, veicolo, direttrici_virtuali e pixel_opportunita'
+SELECT table_name, ordinal_position, column_name, data_type,
+       is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema='public'
+  AND table_name IN ('utente','veicolo','direttrici_virtuali','pixel_opportunita')
+ORDER BY table_name, ordinal_position;
+\echo '3. Vincoli delle anagrafiche necessarie alla fixture'
+SELECT c.conrelid::regclass AS tabella, c.conname AS vincolo,
+       pg_get_constraintdef(c.oid) AS definizione
+FROM pg_constraint c
+WHERE c.conrelid IN ('public.utente'::regclass,
+                      'public.veicolo'::regclass,
+                      'public.direttrici_virtuali'::regclass,
+                      'public.pixel_opportunita'::regclass)
+ORDER BY tabella, vincolo;
+\echo '4. Trigger non interni su tabelle di collaudo'
+SELECT event_object_table AS tabella, trigger_name,
+       action_timing, event_manipulation
+FROM information_schema.triggers
+WHERE event_object_schema='public'
+AND event_object_table IN ('utente','veicolo','ar_gruppi','richieste_pop_bus',
+ 'popbus_attivazioni','popbus_attivazione_richieste',
+ 'popbus_ar_accettazioni','offerte_autisti','corse','prenotazioni','pagamenti')
+ORDER BY event_object_table,trigger_name;
+ROLLBACK;
+\echo 'FASE 5I: verifica completata. NESSUNA SCRITTURA.'

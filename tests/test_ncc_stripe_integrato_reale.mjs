@@ -34,7 +34,14 @@ async function makeFixture(scenario) {
   try {
     await c.query('BEGIN');
     await c.query("SET LOCAL lock_timeout='5s'");
-    const v = await c.query('SELECT id,posti_totali FROM public.veicolo WHERE posti_totali>=3 ORDER BY id LIMIT 1');
+    const v = await c.query(
+  `SELECT id, posti_totali
+   FROM public.veicolo
+   WHERE id = 357
+     AND driver_id = 2
+     AND stato = 'test'
+     AND posti_totali >= 3`
+);
     const u = await c.query('SELECT id FROM public.utente ORDER BY id LIMIT 3');
     if (!v.rows.length || u.rows.length < 3) throw new Error('Mancano veicolo capienza >=3 o tre utenti');
     const depart = new Date(Date.now() + 30 * 86400000);

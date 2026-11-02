@@ -81,6 +81,28 @@ async function main() {
   } else {
     console.log('DIAGNOSI: presenti coppie temporali; verificare scarti vincoli, routing ed economia.');
   }
+  if (process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1') {
+    assert(Array.isArray(result.finestreFisicheShadow), 'finestre temporali mancanti');
+    const finestre = result.finestreFisicheShadow;
+    assert(finestre.length === result.candidati.length, 'conteggio finestre discordante');
+    const conteggi = {};
+    for (const x of finestre) {
+      const motivo = x.temporalShadow?.motivo ?? 'SCONOSCIUTO';
+      conteggi[motivo] = (conteggi[motivo] ?? 0) + 1;
+    }
+    console.log('TIME_SHADOW_SUMMARY=' + JSON.stringify({
+      opportunita:opportunityIds,
+      candidatiAnalizzati:finestre.length,
+      generazioneCompleta:result.diagnostica?.completo === true,
+      generazioneParziale:result.diagnostica?.parziale ?? null,
+      conteggi,
+      perOpportunita:opportunityIds.map(id => ({
+        id,
+        candidati:finestre.filter(x => Number(x.pixelOpportunitaId) === id).length,
+        finestreValide:finestre.filter(x => Number(x.pixelOpportunitaId) === id && x.temporalShadow?.ok).length
+      }))
+    },null,2));
+  }
   console.log('POPBUS_TWO_OPPORTUNITIES_SHADOW_DIAGNOSTIC_OK');
 }
 

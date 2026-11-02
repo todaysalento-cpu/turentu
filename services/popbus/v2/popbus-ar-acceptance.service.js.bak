@@ -1,0 +1,201 @@
+function fail(message, code = 'POPBUS_AR_INVALID', status = 409) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  throw error;
+}
+
+/**
+ * Registrazione provvisoria POPBUS A/R - NON COLLEGARE AL ROUTER.
+ * Il chiamante deve aprire una transazione. Mancano ancora i controlli
+ * condivisi PIXEL, disponibilita', conflitti, snapshot e pagamenti.
+ * Non crea corse, non converte richieste e non acquisisce pagamenti.
+ */
+export async function registraAccettazioneProvvisoriaPopbus(
+  client,
+  { attivazioneId, offertaId, operatoreId }
+) {
+  for (const [nome, valore] of Object.entries({
+    attivazioneId, offertaId, operatoreId
+  })) {
+    if (!Number.isSafeInteger(Number(valore)) || Number(valore) <= 0) {
+      fail(`${nome} non valido`, 'POPBUS_AR_BAD_INPUT', 400);
+    }
+  }
+
+  // Stesso lock globale dell'acceptance ordinaria.
+  // Il chiamante deve avere gia' aperto BEGIN.
+  await client.query('SELECT pg_advisory_xact_lock(734021, 1)');
+
+  const { rows: attivazioni } = await client.query(
+    `SELECT a.id, a.veicolo_id, a.autista_id,
+            a.stato, a.expires_at, v.driver_id
+       FROM popbus_attivazioni a
+       JOIN veicolo v ON v.id = a.veicolo_id
+      WHERE a.id = $1
+      FOR UPDATE OF a, v`,
+    [attivazioneId]
+  );
+
+  const attivazione = attivazioni[0];
+  if (!attivazione) {
+    fail('Attivazione inesistente', 'POPBUS_AR_NOT_FOUND', 404);
+  }
+  if (
+    Number(attivazione.autista_id) !== Number(operatoreId) ||
+    Number(attivazione.driver_id) !== Number(operatoreId)
+  ) {
+    fail('Operatore non autorizzato', 'POPBUS_AR_FORBIDDEN', 403);
+  }
+
+  const { rows: offerte } = await client.query(
+    `SELECT id, attivazione_id, autista_id, stato, expires_at
+       FROM offerte_autisti
+      WHERE id = $1
+      FOR UPDATE`,
+    [offertaId]
+  );
+  const offerta = offerte[0];
+  if (
+    !offerta ||
+    Number(offerta.attivazione_id) !== Number(attivazioneId) ||
+    Number(offerta.autista_id) !== Number(operatoreId)
+  ) {
+    fail('Offerta non coerente con attivazione');
+  }
+
+  const { rows: esistenti } = await client.query(
+    `SELECT *
+       FROM popbus_ar_accettazioni
+      WHERE attivazione_id = $1 OR offerta_id = $2
+      FOR UPDATE`,
+    [attivazioneId, offertaId]
+  );
+  if (esistenti.length) {
+    const precedente = esistenti[0];
+    if (
+      esistenti.length !== 1 ||
+      Number(precedente.attivazione_id) !== Number(attivazioneId) ||
+      Number(precedente.offerta_id) !== Number(offertaId) ||
+      Number(precedente.veicolo_id) !== Number(attivazione.veicolo_id)
+    ) {
+      fail('Accettazione provvisoria incoerente');
+    }
+    if (precedente.stato !== 'provvisoria') {
+      fail('Accettazione non piu provvisoria');
+    }
+    if (new Date(precedente.expires_at).getTime() <= Date.now()) {
+      fail('Accettazione provvisoria scaduta');
+    }
+    return { ...precedente, giaRegistrata: true };
+  }
+
+  if (attivazione.stato !== 'in_attesa_autista') {
+    fail('Attivazione non piu accettabile');
+  }
+  if (offerta.stato !== 'inviata') {
+    fail('Offerta non piu accettabile');
+  }
+
+  const now = Date.now();
+  if (
+    new Date(attivazione.expires_at).getTime() <= now ||
+    new Date(offerta.expires_at).getTime() <= now
+  ) {
+    fail('Offerta o attivazione scaduta');
+  }
+
+  const { rows: richieste } = await client.query(
+    `SELECT r.id, r.ar_group_id, r.ar_tratta,
+            r.ar_vincolata, r.stato, r.corsa_id
+       FROM popbus_attivazione_richieste par
+       JOIN richieste_pop_bus r ON r.id = par.richiesta_id
+      WHERE par.attivazione_id = $1
+        AND par.attiva = TRUE
+      FOR UPDATE OF r`,
+    [attivazioneId]
+  );
+  if (!richieste.length) {
+    fail('Attivazione senza richieste attive');
+  }
+
+  const richiesteAR = richieste.filter(r => r.ar_vincolata === true);
+  if (!richiesteAR.length) {
+    fail('Attivazione senza richieste A/R vincolate');
+  }
+  if (richieste.some(r =>
+    r.stato !== 'in_lavorazione' || r.corsa_id != null
+  )) {
+    fail('Una o piu richieste non sono piu disponibili per attivazione');
+  }
+  for (const richiesta of richiesteAR) {
+    if (
+      !richiesta.ar_group_id ||
+      !['andata', 'ritorno'].includes(richiesta.ar_tratta)
+    ) {
+      fail('Richiesta A/R non valida');
+    }
+  }
+
+  // Una coppia A/R puo' essere distribuita su attivazioni differenti.
+  // Controlliamo tutte le coppie coinvolte, senza convertirle.
+  const gruppiAR = [...new Set(richiesteAR.map(r => r.ar_group_id))].sort();
+  const { rows: gruppi } = await client.query(
+    `SELECT id, stato, expires_at
+       FROM ar_gruppi
+      WHERE id = ANY($1::uuid[])
+      ORDER BY id
+      FOR UPDATE`,
+    [gruppiAR]
+  );
+  if (gruppi.length !== gruppiAR.length || gruppi.some(g =>
+    !['autorizzato', 'in_attesa', 'pronto'].includes(g.stato) ||
+    !g.expires_at || new Date(g.expires_at).getTime() <= Date.now()
+  )) {
+    fail('Gruppo A/R assente, scaduto o non autorizzato');
+  }
+
+  const { rows: coppie } = await client.query(
+    `SELECT ar_group_id,
+            COUNT(*)::integer AS totale,
+            COUNT(*) FILTER (WHERE ar_tratta = 'andata')::integer AS andate,
+            COUNT(*) FILTER (WHERE ar_tratta = 'ritorno')::integer AS ritorni,
+            COUNT(DISTINCT cliente_id)::integer AS clienti,
+            COUNT(*) FILTER (WHERE ar_vincolata IS TRUE)::integer AS vincolate,
+            COUNT(*) FILTER (WHERE corsa_id IS NULL AND stato IN
+              ('in_attesa', 'in_lavorazione'))::integer AS aperte
+       FROM richieste_pop_bus
+      WHERE ar_group_id = ANY($1::uuid[])
+      GROUP BY ar_group_id`,
+    [gruppiAR]
+  );
+  if (coppie.length !== gruppiAR.length || coppie.some(c =>
+    c.totale !== 2 || c.andate !== 1 || c.ritorni !== 1 ||
+    c.clienti !== 1 || c.vincolate !== 2 || c.aperte !== 2
+  )) {
+    fail('Coppia A/R incompleta o non valida');
+  }
+
+  const scadenza = new Date(Math.min(
+    new Date(offerta.expires_at).getTime(),
+    new Date(attivazione.expires_at).getTime(),
+    ...gruppi.map(g => new Date(g.expires_at).getTime())
+  ));
+  if (!Number.isFinite(scadenza.getTime()) || scadenza.getTime() <= Date.now()) {
+    fail('Scadenza provvisoria non valida');
+  }
+
+  const { rows: inserite } = await client.query(
+    `INSERT INTO popbus_ar_accettazioni
+       (attivazione_id, offerta_id, veicolo_id, stato, expires_at)
+     VALUES ($1, $2, $3, 'provvisoria', $4)
+     RETURNING *`,
+    [attivazioneId, offertaId, attivazione.veicolo_id, scadenza]
+  );
+
+  return {
+    ...inserite[0],
+    giaRegistrata: false,
+    gruppiAR
+  };
+}

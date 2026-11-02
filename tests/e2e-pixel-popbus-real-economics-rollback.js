@@ -415,7 +415,8 @@ async function main() {
       "SET LOCAL idle_in_transaction_session_timeout = '600000'"
     );
 
-    const now = new Date();
+    // Riferimento temporale controllato per fixture E2E del 01/11/2026.
+const now = new Date('2026-11-01T10:00:00.000Z');
 
     const nuoveRichiesteIds = await inserisciRichiesteEconomiche(client);
     console.log('[E2E NUOVA DOMANDA]', JSON.stringify({ richiesteInserite: nuoveRichiesteIds, ricavoAggiuntivoPotenzialeEuro: 28, rollbackOnly: true }));

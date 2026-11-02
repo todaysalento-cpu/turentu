@@ -1,0 +1,60 @@
+{
+  "runId": "TURENTU_NCC_STRIPE_TEST_1793616126171_14956",
+  "updatedAt": "2026-11-02T10:42:12.523Z",
+  "fixtures": [
+    {
+      "marker": "TURENTU_NCC_STRIPE_TEST_1793616126171_14956_COMPLETA",
+      "scenario": "COMPLETA",
+      "rideId": 990,
+      "trattaId": "46",
+      "items": [
+        {
+          "label": "A",
+          "km": 100,
+          "start": 0,
+          "end": 100000,
+          "authorized": 6765,
+          "due": 3075,
+          "prenId": 1191,
+          "piId": "pi_3UXIgnEVCTpFHY211nEtSoNx",
+          "paymentId": 691,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793616126171_14956_COMPLETA_create_A",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "B",
+          "km": 60,
+          "start": 20000,
+          "end": 80000,
+          "authorized": 2537,
+          "due": 1845,
+          "prenId": 1192,
+          "piId": "pi_3UXIgoEVCTpFHY21027Q63vx",
+          "paymentId": 692,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793616126171_14956_COMPLETA_create_B",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "C",
+          "km": 60,
+          "start": 40000,
+          "end": 100000,
+          "authorized": 1845,
+          "due": 1845,
+          "prenId": 1193,
+          "piId": "pi_3UXIgpEVCTpFHY210Ywz15gc",
+          "paymentId": 693,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793616126171_14956_COMPLETA_create_C",
+          "stripeCreatePending": false
+        }
+      ],
+      "complete": false,
+      "userIds": [
+        407,
+        408,
+        409
+      ],
+      "dbCommitted": true
+    }
+  ]
+}

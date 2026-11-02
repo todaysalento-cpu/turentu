@@ -98,9 +98,9 @@ export function generaFormazioniDaOpportunitaPixel(contesto, { maxFormazioniPerS
 // Lettura con lo stesso client del chiamante, anche se e dentro una transazione.
 // Fallisce in modo esplicito se il reader non restituisce tutte le richieste associate.
 // Il limite del reader PIXEL e massimo 1000 opportunita per chiamata.
-export async function leggiContestiOpportunitaPixel({ client, limit = 100, opportunityIds = null } = {}) {
+export async function leggiContestiOpportunitaPixel({ client, limit = 100, opportunityIds = null, historicalPhysicalShadow = false } = {}) {
   if (!client || typeof client.query !== 'function') fail('client PostgreSQL obbligatorio');
-  const opportunities = await leggiOpportunitaPixel({ client, limit, opportunityIds });
+  const opportunities = await leggiOpportunitaPixel({ client, limit, opportunityIds, historicalPhysicalShadow });
   if (!opportunities.length) return [];
   const ids = unique(opportunities.flatMap(o => o.richiesta_ids.map(Number)));
   const { rows } = await client.query(

@@ -18,7 +18,9 @@ import { verificaPagamento } from './acceptance.js';
 import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
 import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimission-candidates.js';
 import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
-import { verificaCicloFisicoTransazionale } from './popbus-physical-writer-v2.js';
+import { diagnosticaFinestreCandidatiFisiciShadow } from './popbus-physical-candidates-time-shadow.js';
+import { diagnosticaCoppieFisicheTemporaliShadow } from './popbus-physical-pairs-time-shadow.js';
+import { verificaCicloFisicoTransazionale, collaudaPersistenzaCicloFisicoV2 } from './popbus-physical-writer-v2.js';
 import {
   caricaImpegniVeicoliShadow,
   verificaConflittoInMemoria
@@ -132,11 +134,12 @@ async function conflicts(client, vehicleId, start, end) {
 `, [vehicleId,new Date(start),new Date(end)]);
   return rows.length > 0;
 }
-async function candidates(client, now, opportunityIds = null) {
+async function candidates(client, now, opportunityIds = null, historicalPhysicalShadow = false) {
   const contexts = await leggiContestiOpportunitaPixel({
     client,
     limit: limits.opportunita + 1,
-    opportunityIds
+    opportunityIds,
+    historicalPhysicalShadow
   });
   if (contexts.length > limits.opportunita) fail('limite opportunita raggiunto: niente troncamento');
   if (!contexts.length) return {contexts,missioni:[],vehicles:[],nodi:[],registro:null};
@@ -404,7 +407,19 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
   if (waitingMs < 0) fail('trasferimento non temporalmente fattibile');
   const busyStart=first.departure-Number(approach.seconds)*1000;
   const busyEnd=second.arrival+Number(returnTrip.seconds)*1000;
-  if (!(busyStart>now+60000 && busyEnd>busyStart)) fail('avvicinamento gia iniziato');
+  if (!(busyStart>now+60000 && busyEnd>busyStart)) {
+    if (mode === 'ROLLBACK_ONLY') {
+      console.error('[E2E DEBUG AVVICINAMENTO]', {
+        now: new Date(now).toISOString(),
+        firstDeparture: new Date(first.departure).toISOString(),
+        approachSeconds: Number(approach.seconds),
+        busyStart: new Date(busyStart).toISOString(),
+        margineMinuti: (busyStart-now)/60000,
+        busyEnd: new Date(busyEnd).toISOString()
+      });
+    }
+    fail('avvicinamento gia iniziato');
+  }
   if (!disponibilita.some(d=>numeric(d.lat)&&numeric(d.lon)&&samePoint(d,base)&&
        verificaTurnoVeicolo(d,busyStart,busyEnd))) fail('turno non copre il ciclo completo');
   if (await conflicts(client,v.id,busyStart,busyEnd)) fail('veicolo in conflitto');
@@ -654,14 +669,18 @@ export async function processaPixelFirstMultimissione({
   physicalShadow = false,
   physicalCycleShadow = false,
   physicalTransactionTest = false,
+  physicalPersistenceTest = false,
   physicalShadowBridge = null,
-  physicalOpportunityIds = null
+  physicalOpportunityIds = null,
+  historicalPhysicalShadow = false
 } = {}) {
   // Il filtro opportunita e' disponibile soltanto nel percorso fisico SHADOW.
   if (physicalCycleShadow !== false && physicalCycleShadow !== true) fail('physicalCycleShadow non booleano');
   if (physicalCycleShadow && (!physicalShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null))
     fail('physicalCycleShadow richiede physicalShadow ROLLBACK_ONLY senza hook');
   if (typeof physicalTransactionTest !== 'boolean') fail('physicalTransactionTest non booleano');
+  if (typeof physicalPersistenceTest !== 'boolean') fail('physicalPersistenceTest non booleano');
+  if (physicalPersistenceTest && !physicalTransactionTest) fail('physicalPersistenceTest richiede physicalTransactionTest');
   if (physicalTransactionTest) {
     if (!physicalShadow || !physicalCycleShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null) fail('physicalTransactionTest richiede SHADOW ROLLBACK_ONLY senza hook');
   }
@@ -677,6 +696,9 @@ export async function processaPixelFirstMultimissione({
   }
   if (physicalShadowBridge != null && (physicalShadow !== true || mode !== 'ROLLBACK_ONLY' || rollbackTestHook != null || typeof physicalShadowBridge !== 'function'))
     fail('bridge diagnostico consentito solo in physicalShadow ROLLBACK_ONLY');
+  if (typeof historicalPhysicalShadow !== 'boolean') fail('historicalPhysicalShadow non booleano');
+  if (historicalPhysicalShadow && (mode !== 'ROLLBACK_ONLY' || physicalShadow !== true || physicalCycleShadow !== false || physicalTransactionTest !== false || physicalPersistenceTest !== false || physicalOpportunityIds === null || rollbackTestHook !== null || physicalShadowBridge !== null))
+    fail('diagnostica storica consentita solo in physicalShadow ROLLBACK_ONLY isolato');
   if (physicalShadow && (mode!=='ROLLBACK_ONLY' || rollbackTestHook!=null))
     fail('physicalShadow richiede ROLLBACK_ONLY senza hook di scrittura');
   if (mode==='LIVE') fail('LIVE disabilitato: integrazione fermate fisiche V2 non ancora certificata');
@@ -706,7 +728,8 @@ export async function processaPixelFirstMultimissione({
       nowMs,
       physicalShadow && physicalOpportunityIds !== null
         ? physicalOpportunityIds.map(Number)
-        : null
+        : null,
+    historicalPhysicalShadow
     );
     // Diagnostica esclusivamente SHADOW: controlla la propagazione dell'engine_id PIXEL.
     // Non modifica snapshot, non interroga ulteriormente il DB e non abilita LIVE.
@@ -740,8 +763,15 @@ export async function processaPixelFirstMultimissione({
 maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         ...(physicalShadowBridge ? {bridge:physicalShadowBridge} : {})
       });
+      const timeShadowEnabled = mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1';
+      const finestreFisicheShadow = timeShadowEnabled
+        ? diagnosticaFinestreCandidatiFisiciShadow({ candidati:fisiche.candidati, contexts:snapshot.contexts })
+        : null;
       // Il test storico dei candidati resta invariato se physicalCycleShadow=false.
       // La selezione dei cicli e' un secondo livello diagnostico esplicitamente opt-in.
+      const coppieTemporaliShadow = timeShadowEnabled
+        ? diagnosticaCoppieFisicheTemporaliShadow({ finestre:finestreFisicheShadow })
+        : null;
       let selezioneFisica = null;
       if (physicalCycleShadow) {
         if (fisiche.diagnostica.completo !== true || fisiche.parziale === true)
@@ -811,6 +841,8 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         missioniCandidateFisiche:fisiche.candidati.length,
         diagnostica:fisiche.diagnostica,
         candidati:fisiche.candidati,
+        ...(timeShadowEnabled ? { finestreFisicheShadow: finestreFisicheShadow.map(x => ({ pixelOpportunitaId:x.candidato.pixelOpportunitaId, vehicleId:x.candidato.vehicleId, richiestaIds:x.candidato.requests.map(r => Number(r.id)), temporalShadow:x.temporalShadow })) } : {}),
+        ...(timeShadowEnabled ? {coppieTemporaliShadow} : {}),
         ...(physicalCycleShadow ? {selezioneFisica} : {}),
         offerte:0,
         dbWrites:0,
@@ -850,6 +882,12 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
     if (!physicalTransactionTest) return physicalResult;
     const ciclo = physicalResult.selezioneFisica?.migliorCiclo;
     if (!ciclo) return {...physicalResult, testTransazionale:{eseguito:false,motivo:'nessun ciclo fisico selezionato'}};
+    if (physicalPersistenceTest) {
+      const testPersistenza = await collaudaPersistenzaCicloFisicoV2({
+        pool, ciclo, mode: 'ROLLBACK_ONLY', now: nowMs
+      });
+      return {...physicalResult, testPersistenza};
+    }
     const testTransazionale = await verificaCicloFisicoTransazionale({
       pool,
       ciclo,
@@ -1037,7 +1075,7 @@ export async function collaudaPixelFirstInTransazione({
     chosen,
     snapshot,
     'ROLLBACK_ONLY',
-    Date.now()
+    nowMs
   );
 
   return {

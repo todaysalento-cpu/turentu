@@ -74,7 +74,10 @@ try {
   });
   console.log('PIXEL BOOTSTRAP:', JSON.stringify(report, null, 2));
   assert(report.richiesteEsaminate === 3, 'il bootstrap non ha letto le tre richieste');
-  assert(report.nuoveDirettrici >= 1, 'PIXEL non ha generato direttrici');
+  assert(
+  report.direttriciRisultanti >= 1,
+  'PIXEL non ha individuato direttrici utilizzabili'
+);
   const composed = report.opportunita.find(o => o.nodes.join('>') === '8>5>7');
   assert(composed, 'P1 non ha generato la direttrice composta 8>5>7');
   assert(inserted.every(id => composed.richiestaIds.includes(id)),

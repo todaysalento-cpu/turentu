@@ -6,6 +6,8 @@ import { fingerprintRichiesta } from './request-fingerprint.js';
 import { verificaAccettazionePixel } from './popbus-pixel-acceptance-preflight.js';
 import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-preflight.js';
 
+import { preflightTransazionaleAR } from './popbus-ar-transaction-preflight.service.js';
+import { verificaIdentitaOfferteAR } from './popbus-ar-fase5e-identity-guard.js';
 import { assegnaConducente } from '../../conducenti/assegnazioni.service.js';
 import Stripe from 'stripe';
 import polyline from 'polyline';
@@ -58,12 +60,16 @@ export async function verificaPagamento(client, r) {
   return 'autorizzazione';
 }
 
-export async function accettaAttivazione(
-  client,
-  offertaId,
-  autistaId,
-  sceltaConducente = null
-) {
+// Il simbolo non e' esportato: il percorso ordinario non puo' richiedere il bypass.
+const AR_INTERNAL = Symbol('turentu-ar-internal');
+
+export async function accettaAttivazione(client, offertaId, autistaId, sceltaConducente = null) {
+  return convertiAttivazioneInterna(client, offertaId, autistaId, sceltaConducente, null);
+}
+
+async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaConducente, capability) {
+  const coordinataAR = capability === AR_INTERNAL;
+
   // BEGIN / COMMIT sono gestiti dal router.
   // Nessuna cache o notifica viene aggiornata qui.
 
@@ -95,6 +101,24 @@ export async function accettaAttivazione(
 
   if (!offer) {
     throw new Error('Offerta non trovata o non tua');
+  }
+
+  // P0-AR: impedisce la conversione ordinaria di un'offerta
+  // gia' accettata provvisoriamente nel coordinamento A/R.
+  const { rows: arProvvisorie } = await client.query(
+    `SELECT id
+     FROM popbus_ar_accettazioni
+     WHERE offerta_id = $1
+       AND stato = 'provvisoria'
+     FOR UPDATE`,
+    [offertaId]
+  );
+
+  if (coordinataAR ? arProvvisorie.length !== 1 : arProvvisorie.length > 0) {
+    const err = new Error('Offerta A/R gia accettata provvisoriamente');
+    err.code = 'AR_COORDINATED_ACTIVATION_REQUIRED';
+    err.status = 409;
+    throw err;
   }
 
   if (
@@ -437,11 +461,15 @@ export async function accettaAttivazione(
   // Il coordinatore A/R non e' ancora integrato in questa acceptance:
   // non convertire unilateralmente una tratta in prenotazione definitiva.
   // Nessun posto viene riservato sulla tratta PopBus gia' attiva.
-  if (requests.some(r => r.ar_vincolata === true)) {
+  if (!coordinataAR && requests.some(r => r.ar_vincolata === true)) {
     const err = new Error('A/R vincolato: attivazione coordinata non ancora disponibile');
     err.code = 'AR_COORDINATED_ACTIVATION_REQUIRED';
     err.status = 409;
     throw err;
+  }
+
+  if (coordinataAR && !requests.some(r => r.ar_vincolata === true)) {
+    throw new Error('Attivazione coordinata senza richieste A/R');
   }
 
   if (
@@ -882,4 +910,133 @@ export async function accettaAttivazione(
   );
 
   return updated[0];
+}
+
+
+/**
+ * FASE 5E: finalizzazione A/R. Richiede un pool PG e assume la proprieta'
+ * esclusiva di BEGIN/COMMIT/ROLLBACK. NON collegare al router finche' i test
+ * DB e concorrenti non sono superati. Nessuna notifica/cache prima del commit.
+ * Le scelte dei conducenti vengono lette dal DB sotto lock nella stessa transazione.
+ * Il parametro scelteConducenti e mantenuto solo per compatibilita di firma:
+ * non sono ammesse mappe non vuote (nessun bypass dei dati persistiti).
+ */
+export async function finalizzaAttivazioniAR(pool, attivazioneId, scelteConducenti = new Map()) {
+  const root = Number(attivazioneId);
+  if (!pool || typeof pool.connect !== 'function' ||
+      !Number.isSafeInteger(root) || root <= 0 ||
+      !(scelteConducenti instanceof Map) || scelteConducenti.size !== 0) {
+    throw new Error('Parametri finalizzazione A/R non validi');
+  }
+  const client = await pool.connect();
+  let tx = false;
+  try {
+    await client.query('BEGIN');
+    tx = true;
+    const analisi = await preflightTransazionaleAR(client, root);
+    if (analisi.stato !== 'pronta' || analisi.fase !== 'preflight_transazionale' ||
+        !Array.isArray(analisi.gruppi) || !analisi.gruppi.length ||
+        !Array.isArray(analisi.attivazioniBloccate) ||
+        analisi.attivazioniBloccate.length < 2 ||
+        analisi.anomalie?.length) {
+      throw new Error('Dipendenze A/R non pronte');
+    }
+    const identita = await verificaIdentitaOfferteAR(client, analisi);
+    const ids = analisi.attivazioniBloccate.map(Number).sort((a,b) => a-b);
+    if (identita.length !== ids.length ||
+        identita.some((x,i) => x.attivazioneId !== ids[i])) {
+      throw new Error('Identita A/R non corrispondenti alle dipendenze');
+    }
+    const gruppiIds = analisi.gruppiBloccati;
+    if (!Array.isArray(gruppiIds) || gruppiIds.length !== analisi.gruppi.length ||
+        new Set(gruppiIds).size !== gruppiIds.length) {
+      throw new Error('Gruppi A/R incoerenti');
+    }
+    // FASE 2: lettura delle scelte persistite sotto gli stessi lock del preflight.
+    // Non usare scelte provenienti dal client o da letture esterne alla transazione.
+    const { rows: scelteRows } = await client.query(`
+      SELECT attivazione_id, scelta_conducente
+      FROM popbus_ar_accettazioni
+      WHERE attivazione_id = ANY($1::bigint[])
+        AND stato = 'provvisoria'
+        AND expires_at > NOW()
+      ORDER BY attivazione_id
+      FOR UPDATE
+    `, [ids]);
+    if (scelteRows.length !== ids.length ||
+        scelteRows.some((r, i) => Number(r.attivazione_id) !== ids[i])) {
+      throw new Error('Accettazioni A/R non complete per le scelte dei conducenti');
+    }
+    const conducentiAttivi = process.env.POPBUS_CONDUCENTI_ENABLED === 'true';
+    const sceltePersistite = new Map();
+    for (const r of scelteRows) {
+      const scelta = r.scelta_conducente ?? null;
+      if (conducentiAttivi &&
+          (!scelta || typeof scelta !== 'object' || Array.isArray(scelta) ||
+           !['automatica', 'manuale', 'titolare'].includes(scelta.modalita))) {
+        throw new Error(`Scelta conducente A/R mancante o non valida: ${r.attivazione_id}`);
+      }
+      if (!conducentiAttivi && scelta !== null) {
+        throw new Error(`Scelta conducente A/R presente con gestione disabilitata: ${r.attivazione_id}`);
+      }
+      sceltePersistite.set(Number(r.attivazione_id), scelta);
+    }
+
+    const corse = [];
+    for (const item of identita) {
+      const scelta = sceltePersistite.get(item.attivazioneId) ?? null;
+      const corsa = await convertiAttivazioneInterna(
+        client, item.offertaId, item.operatoreId, scelta, AR_INTERNAL
+      );
+      if (!corsa || corsa.giaAccettata || !Number.isSafeInteger(Number(corsa.id))) {
+        throw new Error(`Conversione A/R non valida: ${item.attivazioneId}`);
+      }
+      corse.push({attivazioneId: item.attivazioneId, corsa});
+    }
+    // Verifica esplicita post-conversione di ogni coppia A/R.
+    const {rows: pairs} = await client.query(`
+      SELECT g.id, COUNT(r.id)::integer AS totale,
+             COUNT(r.id) FILTER (WHERE r.ar_tratta = 'andata' AND r.stato = 'convertita'
+               AND r.corsa_id IS NOT NULL)::integer AS andate,
+             COUNT(r.id) FILTER (WHERE r.ar_tratta = 'ritorno' AND r.stato = 'convertita'
+               AND r.corsa_id IS NOT NULL)::integer AS ritorni
+      FROM ar_gruppi g
+      LEFT JOIN richieste_pop_bus r ON r.ar_group_id = g.id AND r.ar_vincolata = TRUE
+      WHERE g.id = ANY($1::uuid[])
+      GROUP BY g.id ORDER BY g.id
+    `, [gruppiIds]);
+    if (pairs.length !== gruppiIds.length ||
+        pairs.some(p => p.totale !== 2 || p.andate !== 1 || p.ritorni !== 1)) {
+      throw new Error('Coppia A/R non convertita integralmente');
+    }
+    const updatedGroups = await client.query(`
+      UPDATE ar_gruppi SET stato = 'confermato', updated_at = NOW()
+      WHERE id = ANY($1::uuid[]) AND stato IN ('autorizzato', 'in_attesa', 'pronto')
+        AND expires_at > NOW()
+      RETURNING id
+    `, [gruppiIds]);
+    if (updatedGroups.rowCount !== gruppiIds.length) {
+      throw new Error('Conferma gruppi A/R incompleta');
+    }
+    const updatedAcceptances = await client.query(`
+      UPDATE popbus_ar_accettazioni SET stato = 'confermata'
+      WHERE attivazione_id = ANY($1::bigint[]) AND stato = 'provvisoria'
+        AND expires_at > NOW()
+      RETURNING attivazione_id
+    `, [ids]);
+    if (updatedAcceptances.rowCount !== ids.length) {
+      throw new Error('Conferma accettazioni A/R incompleta');
+    }
+    await client.query('COMMIT');
+    tx = false;
+    return {stato: 'confermato', corse, gruppi: gruppiIds};
+  } catch (error) {
+    if (tx) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { error.rollbackError = rollbackError; }
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }

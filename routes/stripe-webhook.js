@@ -4,7 +4,6 @@ import Stripe from 'stripe';
 import { pool } from '../db/db.js';
 import * as pendingService from '../services/pending/pending.service.js';
 import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
-import { calcolaPrezzo } from '../utils/pricing.util.js';
 import { getIO } from '../socket.js';
 
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -45,9 +44,11 @@ router.post(
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    const client = await pool.connect();
-
+    let client;
+    const notifiche = [];
     try {
+      client = await pool.connect();
+      await client.query('BEGIN');
       const intent = event.data.object;
       const metadata = intent.metadata || {};
 
@@ -69,7 +70,8 @@ router.post(
           await aggiornaStato(
             intent.id,
             'autorizzazione',
-            client
+            client,
+            intent
           );
           break;
         }
@@ -83,6 +85,7 @@ router.post(
             clienteId,
             roomId,
             client,
+            notifiche,
           });
           break;
         }
@@ -93,6 +96,7 @@ router.post(
             roomId,
             stato: 'fallito',
             client,
+            notifiche,
           });
           break;
         }
@@ -103,6 +107,7 @@ router.post(
             roomId,
             stato: 'annullato',
             client,
+            notifiche,
           });
           break;
         }
@@ -113,8 +118,23 @@ router.post(
           );
       }
 
+      await client.query('COMMIT');
+      // Nessuna notifica prima del COMMIT. Un errore Socket.IO non
+      // deve far ritentare un evento Stripe gia' confermato nel DB.
+      for (const notifica of notifiche) {
+        try {
+          getIO().to(notifica.room).emit('prenotazione_update', notifica.payload);
+        } catch (notifyError) {
+          console.error('[STRIPE WEBHOOK] Notifica post-COMMIT fallita:', notifyError.message);
+        }
+      }
       return res.json({ received: true });
     } catch (err) {
+      if (client) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('[STRIPE WEBHOOK] Rollback fallito:', rollbackError.message);
+        }
+      }
       console.error(
         '[STRIPE WEBHOOK] Errore durante la gestione evento:',
         err.message
@@ -124,7 +144,7 @@ router.post(
         error: 'Webhook handling error',
       });
     } finally {
-      client.release();
+      if (client) client.release();
     }
   }
 );
@@ -133,49 +153,73 @@ router.post(
 // AGGIORNAMENTO STATO PAGAMENTO
 // =====================================================
 
-async function aggiornaStato(stripeIntentId, stato, client) {
-  const statiConsentiti = [
-    'pendente',
-    'autorizzazione',
-    'pagato',
-    'rimborsato',
-    'annullato',
-    'fallito',
-  ];
-
-  if (!statiConsentiti.includes(stato)) {
+// La funzione restituisce true soltanto se modifica realmente il database.
+// I pagamenti associati a una corsa NCC sono riconciliati esclusivamente
+// da corse.service.js: il webhook non anticipa la chiusura della corsa.
+async function aggiornaStato(stripeIntentId, stato, client, intent = null) {
+  const statiConsentiti = new Set([
+    'autorizzazione', 'pagato', 'annullato', 'fallito'
+  ]);
+  if (!statiConsentiti.has(stato)) {
     throw new Error(`Stato pagamento non consentito: ${stato}`);
   }
 
   const result = await client.query(
-    `UPDATE public.pagamenti
-     SET stato = $1,
-         updated_at = NOW()
-     WHERE stripe_payment_intent = $2
-       AND stato NOT IN ('pagato', 'rimborsato')
-     RETURNING id`,
-    [stato, stripeIntentId]
+    `SELECT p.id, p.stato, p.importo, p.currency,
+            COALESCE(p.corsa_id, pr.corsa_id) AS corsa_id
+       FROM public.pagamenti p
+       LEFT JOIN public.prenotazioni pr ON pr.id = p.prenotazione_id
+      WHERE p.stripe_payment_intent = $1
+      FOR UPDATE OF p`,
+    [stripeIntentId]
   );
-
-  if (result.rowCount === 0) {
-    const existing = await client.query(
-      `SELECT id, stato
-       FROM public.pagamenti
-       WHERE stripe_payment_intent = $1`,
-      [stripeIntentId]
-    );
-
-    if (existing.rowCount === 0) {
-      console.warn(
-        `[STRIPE WEBHOOK] Nessun pagamento DB trovato per ${stripeIntentId}`
-      );
-    } else {
-      console.log(
-        `[STRIPE WEBHOOK] Stato non modificato per ${stripeIntentId}:`,
-        existing.rows[0].stato
-      );
-    }
+  if (!result.rowCount) {
+    console.warn(`[STRIPE WEBHOOK] Pagamento DB non trovato: ${stripeIntentId}`);
+    return false;
   }
+
+  const pagamento = result.rows[0];
+  if (pagamento.stato === stato ||
+      ['pagato', 'rimborsato'].includes(pagamento.stato)) {
+    return false;
+  }
+
+  // Non far retrocedere stati terminali e non riaprire autorizzazioni.
+  if (stato === 'autorizzazione') {
+    if (pagamento.stato !== 'pendente' ||
+        (intent && intent.status !== 'requires_capture')) return false;
+  } else if (stato === 'pagato') {
+    if (!intent || intent.status !== 'succeeded' ||
+        String(intent.currency).toLowerCase() !== 'eur') {
+      throw new Error('Incasso Stripe non valido');
+    }
+    const ricevuto = Number(intent.amount_received);
+    if (!Number.isSafeInteger(ricevuto) || ricevuto <= 0) {
+      throw new Error('Importo Stripe non valido');
+    }
+    // Non confrontare importo autorizzato e importo finale Modello A:
+    // possono differire. La riconciliazione è nel servizio di chiusura.
+    if (pagamento.corsa_id != null) {
+      console.log(`[STRIPE WEBHOOK] Incasso corsa ${pagamento.corsa_id}: riconciliazione NCC delegata`);
+      return false;
+    }
+    const previsto = Math.round(Number(pagamento.importo) * 100);
+    if (!Number.isSafeInteger(previsto) || previsto <= 0 || ricevuto !== previsto ||
+        (pagamento.currency && String(pagamento.currency).toLowerCase() !== 'eur')) {
+      throw new Error(`Incasso Stripe non coerente con pagamento DB ${pagamento.id}`);
+    }
+    if (!['pendente', 'autorizzazione'].includes(pagamento.stato)) return false;
+  } else if (stato === 'fallito') {
+    if (pagamento.stato !== 'pendente') return false;
+  } else if (stato === 'annullato') {
+    if (!['pendente', 'autorizzazione'].includes(pagamento.stato)) return false;
+  }
+
+  await client.query(
+    `UPDATE public.pagamenti SET stato = $1, updated_at = NOW() WHERE id = $2`,
+    [stato, pagamento.id]
+  );
+  return true;
 }
 
 // =====================================================
@@ -190,21 +234,14 @@ async function handlePaymentSuccess({
   clienteId,
   roomId,
   client,
+  notifiche,
 }) {
-  await aggiornaStato(intent.id, 'pagato', client);
-
-  const io = getIO();
+  const aggiornato = await aggiornaStato(intent.id, 'pagato', client, intent);
+  if (!aggiornato) return;
 
   // Prenotazione già esistente.
   if (tipo === 'prenota' && corsaId) {
-    io.to(`prenotazione_cliente_${roomId}`).emit(
-      'prenotazione_update',
-      {
-        status: 'pagato',
-        paymentIntentId: intent.id,
-        corsaId,
-      }
-    );
+    notifiche.push({ room: `prenotazione_cliente_${roomId}`, payload: { status: 'pagato', paymentIntentId: intent.id, corsaId } });
 
     return;
   }
@@ -253,150 +290,13 @@ async function handlePaymentSuccess({
       client
     );
 
-    io.to(`prenotazione_cliente_${roomId}`).emit(
-      'prenotazione_update',
-      {
-        status: 'pagato',
-        paymentIntentId: intent.id,
-        pendingId,
-      }
-    );
+    notifiche.push({ room: `prenotazione_cliente_${roomId}`, payload: { status: 'pagato', paymentIntentId: intent.id, pendingId } });
 
     return;
   }
 
-  // Cattura delle altre prenotazioni autorizzate
-  // associate alla stessa corsa.
-  if (corsaId) {
-    const { rows: prenotazioni } = await client.query(
-      `SELECT
-         pr.id AS prenotazione_id,
-         pr.posti_prenotati,
-         p.id AS pagamento_id,
-         p.stripe_payment_intent
-       FROM public.prenotazioni pr
-       JOIN public.pagamenti p
-         ON p.prenotazione_id = pr.id
-       WHERE pr.corsa_id = $1
-         AND p.stato = 'autorizzazione'
-         AND p.stripe_payment_intent IS NOT NULL`,
-      [corsaId]
-    );
-
-    const { rows: corsaRes } = await client.query(
-      `SELECT
-         id,
-         veicolo_id,
-         distanza,
-         posti_prenotati,
-         primo_posto
-       FROM public.corse
-       WHERE id = $1`,
-      [corsaId]
-    );
-
-    if (!corsaRes[0]) {
-      throw new Error(`Corsa ${corsaId} non trovata`);
-    }
-
-    const corsa = corsaRes[0];
-
-    corsa.distanza = Number.parseFloat(corsa.distanza);
-
-    if (!Number.isFinite(corsa.distanza)) {
-      corsa.distanza = 0;
-    }
-
-    for (const p of prenotazioni) {
-      try {
-        // Controlla lo stato reale prima di tentare una cattura.
-        const pi = await stripe.paymentIntents.retrieve(
-          p.stripe_payment_intent
-        );
-
-        if (pi.status !== 'requires_capture') {
-          console.warn(
-            `[STRIPE CAPTURE] Prenotazione ${p.prenotazione_id}: ` +
-            `stato Stripe ${pi.status}; cattura non eseguita.`
-          );
-
-          continue;
-        }
-
-        const prezzoFinale = await calcolaPrezzo(
-          {
-            ...corsa,
-            distanza: corsa.distanza,
-            posti_prenotati: corsa.posti_prenotati,
-            primo_posto: corsa.primo_posto,
-          },
-          p.posti_prenotati,
-          'prenotabile'
-        );
-
-        const amount = Math.round(prezzoFinale * 100);
-
-        if (
-          !Number.isSafeInteger(amount) ||
-          amount <= 0 ||
-          amount > pi.amount
-        ) {
-          console.error(
-            `[STRIPE CAPTURE] Importo non valido per pagamento ${p.pagamento_id}`,
-            {
-              amount_calcolato: amount,
-              amount_autorizzato: pi.amount,
-            }
-          );
-
-          continue;
-        }
-
-        const captured = await stripe.paymentIntents.capture(
-          p.stripe_payment_intent,
-          {
-            amount_to_capture: amount,
-          }
-        );
-
-        if (captured.status !== 'succeeded') {
-          console.warn(
-            `[STRIPE CAPTURE] Pagamento ${p.pagamento_id}: ` +
-            `stato dopo cattura ${captured.status}`
-          );
-
-          continue;
-        }
-
-        await client.query(
-          `UPDATE public.pagamenti
-           SET stato = 'pagato',
-               importo = $1,
-               updated_at = NOW()
-           WHERE id = $2
-             AND stato = 'autorizzazione'`,
-          [amount / 100, p.pagamento_id]
-        );
-
-        io.to(
-          `prenotazione_cliente_${p.prenotazione_id}`
-        ).emit('prenotazione_update', {
-          status: 'pagato',
-          paymentIntentId: p.stripe_payment_intent,
-          corsaId,
-        });
-      } catch (err) {
-        console.error(
-          `[STRIPE CAPTURE] Errore pagamento ${p.pagamento_id}:`,
-          err.message
-        );
-
-        // Non impostare automaticamente "pendente":
-        // Stripe potrebbe aver completato la cattura
-        // anche se la risposta è andata persa.
-      }
-    }
-  }
+  // Nessuna cattura a cascata nel webhook.
+  // La cattura NCC avviene esclusivamente alla chiusura in corse.service.js.
 
   // Evita variabili inutilizzate e mantiene disponibili
   // i riferimenti cliente nel flusso webhook.
@@ -412,22 +312,16 @@ async function handlePaymentFailed({
   roomId,
   stato,
   client,
+  notifiche,
 }) {
   if (!['fallito', 'annullato'].includes(stato)) {
     throw new Error(`Esito pagamento non valido: ${stato}`);
   }
 
-  await aggiornaStato(intent.id, stato, client);
+  const aggiornato = await aggiornaStato(intent.id, stato, client, intent);
+  if (!aggiornato) return;
 
-  const io = getIO();
-
-  io.to(`prenotazione_cliente_${roomId}`).emit(
-    'prenotazione_update',
-    {
-      status: stato,
-      paymentIntentId: intent.id,
-    }
-  );
+  notifiche.push({ room: `prenotazione_cliente_${roomId}`, payload: { status: stato, paymentIntentId: intent.id } });
 
   console.log(
     `[STRIPE WEBHOOK] PaymentIntent ${intent.id}: ${stato}`

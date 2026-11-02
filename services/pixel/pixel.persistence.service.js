@@ -518,7 +518,8 @@ export async function pubblicaOpportunitaPixel({
 export async function leggiOpportunitaPixel({
   limit = 100,
   client = null,
-  opportunityIds = null
+  opportunityIds = null,
+historicalPhysicalShadow = false
 } = {}) {
   assert(
     Number.isSafeInteger(limit) &&
@@ -538,6 +539,9 @@ export async function leggiOpportunitaPixel({
     ),
     'opportunityIds non validi'
   );
+
+  assert(typeof historicalPhysicalShadow === 'boolean', 'historicalPhysicalShadow non booleano');
+  assert(!historicalPhysicalShadow || (client !== null && Array.isArray(opportunityIds) && opportunityIds.length > 0), 'storico richiede client e opportunityIds espliciti');
 
   const { rows } = await (client ?? pool).query(
     `SELECT
@@ -559,8 +563,11 @@ export async function leggiOpportunitaPixel({
        ON d.id = o.direttrice_id
      JOIN public.pixel_opportunita_richieste r
        ON r.opportunita_id = o.id
-     WHERE o.stato = 'candidata'
-       AND d.stato = 'attiva'
+     WHERE (o.stato = 'candidata' OR ($3::boolean AND o.stato = 'superata'))
+       AND (
+  d.stato = 'attiva'
+  OR ($3::boolean AND d.stato = 'superata')
+)
        AND (
          $2::bigint[] IS NULL
          OR o.id = ANY($2::bigint[])
@@ -572,7 +579,8 @@ export async function leggiOpportunitaPixel({
       limit,
       opportunityIds === null
         ? null
-        : opportunityIds.map(Number)
+        : opportunityIds.map(Number),
+      historicalPhysicalShadow
     ]
   );
 

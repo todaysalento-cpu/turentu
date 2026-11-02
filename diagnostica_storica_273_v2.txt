@@ -1,0 +1,113 @@
+[PIXEL FORMAZIONI] {
+  opportunitaId: 273,
+  richiesteContesto: 8,
+  seed: [
+    196, 197, 198,
+    199, 200, 201,
+    520, 522
+  ],
+  formazioniGenerate: 57,
+  diagnostica: {
+    esclusiIds: [],
+    seedOriginali: [
+      196, 197, 198,
+      199, 200, 201,
+      520, 522
+    ],
+    seedValutati: [
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array], [Array],
+      [Array]
+    ],
+    fallback: true,
+    formazioni: 57,
+    nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+  }
+}
+[PIXEL FILTRI] {
+  opportunitaId: 273,
+  formazioniGenerate: 57,
+  partenzaNonNumerica: 0,
+  arrivoNonNumerico: 0,
+  partenzaNonFutura: 39,
+  partenzaPrimaFinestra: 0,
+  partenzaDopoFinestra: 0,
+  arrivoNonSuccessivo: 0,
+  richiesteNonCorrispondenti: 0,
+  qualitaNonValida: 0,
+  statoNonInAttesa: 0,
+  corsaGiaAssociata: 0,
+  clienteNonValido: 0,
+  postiNonValidi: 0,
+  prezzoNonValido: 0,
+  paymentIntentMancante: 0,
+  dataRichiestaNonValida: 0,
+  ammesse: 18,
+  totaleControllato: 57,
+  finestra: {
+    start: '2026-11-01T13:15:00.000Z',
+    end: '2026-11-01T13:30:00.000Z'
+  }
+}
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: [
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    },
+    {
+      opportunitaId: 273,
+      direttriceId: 68,
+      corridoioPixelId: 'territorial:8>5>7',
+      tipo: 'string'
+    }
+  ]
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-11-01T13:20:00.000Z',
+  contestiPixel: 1,
+  missioniCandidate: 18,
+  veicoliCandidati: 16,
+  nodiTerritoriali: 3
+}
+[POPBUS PHYSICAL CACHE CAPACITY] {
+  combinazioniElegibili: 288,
+  chiaviFisicheNecessarie: 144,
+  riusiTeorici: 144
+}
+POPBUS_PHYSICAL_SHADOW_READONLY_FAIL: Error: POPBUS_PHYSICAL_MULTI: budget combinazioni superato: nessun risultato parziale
+    at fail (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/popbus-physical-multimission-candidates.js:6:33)
+    at preparaCandidatiFisiciMultimissione (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/popbus-physical-multimission-candidates.js:188:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async processaPixelFirstMultimissione (file:///D:/TURENTU/Servizi/project-root/services/popbus/v2/pixel-first-multimission-service.js:749:21)
+    at async main (file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_physical_historical_273.mjs:25:16)
+    at async file:///D:/TURENTU/Servizi/project-root/tests/test_pixel_first_physical_historical_273.mjs:64:3

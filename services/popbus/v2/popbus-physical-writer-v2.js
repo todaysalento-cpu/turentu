@@ -1,3 +1,8 @@
+import { preparaPianoCicloFisicoV2 } from './popbus-physical-cycle-plan-v2.js';
+import { preparaCicloPixelPerPersistenza } from './popbus-p0-c8-adapter.js';
+import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
+import { fingerprintRichiesta } from './request-fingerprint.js';
+
 import { adattaMissioneFermate }
   from './popbus-stop-mission-adapter.service.js';
 
@@ -125,17 +130,20 @@ export function rivalidaEconomiaCicloFisicoV2({
   return economia;
 }
 
-export async function verificaCicloFisicoTransazionale({
-  pool,
+/**
+ * Rivalida un ciclo fisico usando una transazione READ WRITE gia' aperta.
+ * Il chiamante mantiene la proprieta' di BEGIN / COMMIT / ROLLBACK.
+ * Non crea attivazioni, non verifica Stripe e non autorizza LIVE.
+ */
+export async function rivalidaCicloFisicoInTransazioneV2({
+  client,
   ciclo,
-  mode = 'ROLLBACK_ONLY',
   costoAttesaOraEuro = process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0,
   altriCostiEuro = process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0,
   margineMinimoEuro = process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0
 } = {}) {
-  if (mode !== 'ROLLBACK_ONLY') fail('LIVE non abilitato');
-  if (!pool || typeof pool.connect !== 'function') {
-    fail('pool PostgreSQL mancante');
+  if (!client || typeof client.query !== 'function') {
+    fail('client PostgreSQL transazionale mancante');
   }
   if (!ciclo || !Array.isArray(ciclo.missioni) ||
       ciclo.missioni.length < 1 || ciclo.missioni.length > 2) {
@@ -164,223 +172,244 @@ export async function verificaCicloFisicoTransazionale({
     fail('identificativi richieste invalidi o duplicati');
   }
 
+  // Stesso advisory lock del percorso PIXEL esistente.
+  await client.query('SELECT pg_advisory_xact_lock(734021,1)');
+
+  const { rows: reserved } = await client.query(
+    `SELECT richiesta_id
+     FROM popbus_attivazione_richieste
+     WHERE richiesta_id = ANY($1::integer[])
+       AND attiva = TRUE
+     LIMIT 1`,
+    [ids]
+  );
+  if (reserved.length) fail('richiesta gia riservata');
+
+  const { rows: vehicles } = await client.query(
+    `SELECT id, driver_id, posti_totali
+     FROM veicolo
+     WHERE id = $1
+     FOR UPDATE`,
+    [vehicleId]
+  );
+  const vehicle = vehicles[0];
+  if (!vehicle ||
+      !Number.isSafeInteger(Number(vehicle.driver_id)) ||
+      Number(vehicle.driver_id) <= 0 ||
+      !Number.isSafeInteger(Number(vehicle.posti_totali)) ||
+      Number(vehicle.posti_totali) <= 0) {
+    fail('veicolo o titolare non valido');
+  }
+
+  // Rivalidazione della disponibilita' operativa sotto transazione.
+  // Si bloccano le righe esistenti per evitare modifiche concorrenti
+  // alla configurazione del turno durante questo preflight.
+  const { rows: disponibilitaRows } = await client.query(
+    `SELECT
+       dv.veicolo_id,
+       dv.start,
+       dv.fine,
+       dv.giorni_esclusi,
+       dv.inattivita,
+       ST_Y(COALESCE(dv.coord, v.coord)::geometry) AS lat,
+       ST_X(COALESCE(dv.coord, v.coord)::geometry) AS lon
+     FROM disponibilita_veicolo dv
+     JOIN veicolo v ON v.id = dv.veicolo_id
+     WHERE dv.veicolo_id = $1
+       AND COALESCE(dv.coord, v.coord) IS NOT NULL
+     ORDER BY dv.start, dv.fine
+     FOR UPDATE OF dv`,
+    [vehicleId]
+  );
+
+  const busyStart = Number(ciclo.partenzaBase);
+  const busyEnd = Number(ciclo.ritornoBase);
+  if (!Number.isFinite(busyStart) || !Number.isFinite(busyEnd) ||
+      busyEnd <= busyStart) {
+    fail('intervallo operativo del ciclo non valido');
+  }
+
+  const baseOperativa = ciclo.baseOperativa;
+  if (!baseOperativa ||
+      !Number.isFinite(Number(baseOperativa.lat)) ||
+      !Number.isFinite(Number(baseOperativa.lon)) ||
+      Math.abs(Number(baseOperativa.lat)) > 90 ||
+      Math.abs(Number(baseOperativa.lon)) > 180) {
+    fail('base operativa del ciclo assente o non valida');
+  }
+
+  const disponibilita = disponibilitaRows.map(row => ({
+    ...row,
+    lat: Number(row.lat),
+    lon: Number(row.lon)
+  }));
+
+  if (!verificaDisponibilitaCicloFisico({
+    disponibilita,
+    baseOperativa: {
+      lat: Number(baseOperativa.lat),
+      lon: Number(baseOperativa.lon)
+    },
+    busyStart,
+    busyEnd
+  })) {
+    fail('veicolo non disponibile per l’intero ciclo operativo o base discordante');
+  }
+
+  // Verifica gli impegni gia' presenti sullo stesso veicolo per tutto
+  // l'intervallo base-partenza -> rientro-base. Il controllo viene eseguito
+  // dopo l'advisory lock condiviso con il percorso PIXEL.
+  const { rows: conflitti } = await client.query(
+    `SELECT 1 AS found
+     FROM popbus_attivazioni a
+     WHERE a.veicolo_id = $1
+       AND a.stato IN ('in_attesa_autista', 'confermata')
+       AND COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) < $3
+       AND COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) > $2
+     UNION ALL
+     SELECT 1 AS found
+     FROM corse c
+     WHERE c.veicolo_id = $1
+       AND c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
+       AND c.start_datetime < $3
+       AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime > $2)
+     LIMIT 1`,
+    [vehicleId, new Date(busyStart), new Date(busyEnd)]
+  );
+  if (conflitti.length) {
+    fail('conflitto con un altro impegno del veicolo nell’intero ciclo operativo');
+  }
+
+  const operativita = {
+    ok: true,
+    busyStart,
+    busyEnd,
+    disponibilitaVerificate: disponibilita.length,
+    conflitti: 0
+  };
+
+  const { rows: locked } = await client.query(
+    `SELECT *
+     FROM richieste_pop_bus
+     WHERE id = ANY($1::integer[])
+     ORDER BY id
+     FOR UPDATE`,
+    [ids]
+  );
+  if (locked.length !== ids.length) {
+    fail('richieste non trovate');
+  }
+
+  for (const r of locked) {
+    if (r.stato !== 'in_attesa' ||
+        r.corsa_id != null ||
+        !Number.isSafeInteger(Number(r.cliente_id)) ||
+        Number(r.cliente_id) <= 0 ||
+        !Number.isSafeInteger(Number(r.posti_richiesti)) ||
+        Number(r.posti_richiesti) <= 0 ||
+        r.prezzo == null ||
+        !Number.isFinite(Number(r.prezzo)) ||
+        Number(r.prezzo) < 0 ||
+        !r.payment_intent_id ||
+        !Number.isFinite(new Date(r.start_datetime).getTime())) {
+      fail(`richiesta non prenotabile: ${r.id}`);
+    }
+  }
+
+  // Le richieste A/R vincolate devono essere presenti entrambe.
+  for (const r of locked.filter(x => x.ar_vincolata === true)) {
+    if (!r.ar_group_id) fail('A/R senza gruppo');
+    const group = locked.filter(
+      x => String(x.ar_group_id) === String(r.ar_group_id)
+    );
+    if (group.length !== 2 ||
+        !group.some(x => x.ar_tratta === 'andata') ||
+        !group.some(x => x.ar_tratta === 'ritorno')) {
+      fail('A/R incompleta nel ciclo');
+    }
+  }
+
+  const fermate = await validaFermateFisicheTransazionali({
+    client,
+    missioni: ciclo.missioni
+  });
+  if (fermate.ok !== true) {
+    fail('rivalidazione fermate fallita');
+  }
+
+  const rivalidazione = rivalidaMissioniFisicheV2({
+    ciclo,
+    richiesteBloccate: locked
+  });
+  if (rivalidazione.ok !== true) {
+    fail('rivalidazione operativa fallita');
+  }
+
+  // La tariffa e' riletta nel medesimo snapshot transazionale delle richieste.
+  // Il lock sul veicolo e il lock della riga tariffaria sono gia' attivi.
+  const { rows: tariffe } = await client.query(
+    `SELECT euro_km FROM tariffe
+     WHERE veicolo_id = $1 AND tipo = 'standard' AND euro_km > 0
+     ORDER BY euro_km LIMIT 1 FOR SHARE`,
+    [vehicleId]
+  );
+  if (!tariffe.length) fail('tariffa NCC standard assente');
+  const economia = rivalidaEconomiaCicloFisicoV2({
+    ciclo,
+    richiesteBloccate: locked,
+    euroKm: Number(tariffe[0].euro_km),
+    costoAttesaOraEuro,
+    altriCostiEuro,
+    margineMinimoEuro
+  });
+
+
+  return {
+    ok: true,
+    percorso: 'POPBUS_PHYSICAL_V2_TRANSACTION_PREFLIGHT',
+    fermate,
+    rivalidazione,
+    operativita,
+    economia,
+    veicoloId: vehicleId,
+    autistaId: Number(vehicle.driver_id),
+    postiTotali: Number(vehicle.posti_totali),
+    euroKm: Number(tariffe[0].euro_km),
+    richiesteBloccate: locked,
+    numeroMissioni: ciclo.missioni.length,
+    numeroRichieste: ids.length,
+    dbWrites: 0,
+    persistita: false,
+    attivabile: false
+  };
+}
+
+export async function verificaCicloFisicoTransazionale({
+  pool,
+  ciclo,
+  mode = 'ROLLBACK_ONLY',
+  costoAttesaOraEuro = process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0,
+  altriCostiEuro = process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0,
+  margineMinimoEuro = process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0
+} = {}) {
+  if (mode !== 'ROLLBACK_ONLY') fail('LIVE non abilitato');
+  if (!pool || typeof pool.connect !== 'function') {
+    fail('pool PostgreSQL mancante');
+  }
   const client = await pool.connect();
   let transactionOpen = false;
-
   try {
     await client.query('BEGIN');
     transactionOpen = true;
     await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query("SET LOCAL statement_timeout = '90s'");
-
-    // Stesso advisory lock del percorso PIXEL esistente.
-    await client.query('SELECT pg_advisory_xact_lock(734021,1)');
-
-    const { rows: reserved } = await client.query(
-      `SELECT richiesta_id
-       FROM popbus_attivazione_richieste
-       WHERE richiesta_id = ANY($1::integer[])
-         AND attiva = TRUE
-       LIMIT 1`,
-      [ids]
-    );
-    if (reserved.length) fail('richiesta gia riservata');
-
-    const { rows: vehicles } = await client.query(
-      `SELECT id, driver_id, posti_totali
-       FROM veicolo
-       WHERE id = $1
-       FOR UPDATE`,
-      [vehicleId]
-    );
-    const vehicle = vehicles[0];
-    if (!vehicle ||
-        !Number.isSafeInteger(Number(vehicle.driver_id)) ||
-        Number(vehicle.driver_id) <= 0 ||
-        !Number.isSafeInteger(Number(vehicle.posti_totali)) ||
-        Number(vehicle.posti_totali) <= 0) {
-      fail('veicolo o titolare non valido');
-    }
-
-    // Rivalidazione della disponibilita' operativa sotto transazione.
-    // Si bloccano le righe esistenti per evitare modifiche concorrenti
-    // alla configurazione del turno durante questo preflight.
-    const { rows: disponibilitaRows } = await client.query(
-      `SELECT
-         dv.veicolo_id,
-         dv.start,
-         dv.fine,
-         dv.giorni_esclusi,
-         dv.inattivita,
-         ST_Y(COALESCE(dv.coord, v.coord)::geometry) AS lat,
-         ST_X(COALESCE(dv.coord, v.coord)::geometry) AS lon
-       FROM disponibilita_veicolo dv
-       JOIN veicolo v ON v.id = dv.veicolo_id
-       WHERE dv.veicolo_id = $1
-         AND COALESCE(dv.coord, v.coord) IS NOT NULL
-       ORDER BY dv.start, dv.fine
-       FOR UPDATE OF dv`,
-      [vehicleId]
-    );
-
-    const busyStart = Number(ciclo.partenzaBase);
-    const busyEnd = Number(ciclo.ritornoBase);
-    if (!Number.isFinite(busyStart) || !Number.isFinite(busyEnd) ||
-        busyEnd <= busyStart) {
-      fail('intervallo operativo del ciclo non valido');
-    }
-
-    const baseOperativa = ciclo.baseOperativa;
-    if (!baseOperativa ||
-        !Number.isFinite(Number(baseOperativa.lat)) ||
-        !Number.isFinite(Number(baseOperativa.lon)) ||
-        Math.abs(Number(baseOperativa.lat)) > 90 ||
-        Math.abs(Number(baseOperativa.lon)) > 180) {
-      fail('base operativa del ciclo assente o non valida');
-    }
-
-    const disponibilita = disponibilitaRows.map(row => ({
-      ...row,
-      lat: Number(row.lat),
-      lon: Number(row.lon)
-    }));
-
-    if (!verificaDisponibilitaCicloFisico({
-      disponibilita,
-      baseOperativa: {
-        lat: Number(baseOperativa.lat),
-        lon: Number(baseOperativa.lon)
-      },
-      busyStart,
-      busyEnd
-    })) {
-      fail('veicolo non disponibile per l’intero ciclo operativo o base discordante');
-    }
-
-    // Verifica gli impegni gia' presenti sullo stesso veicolo per tutto
-    // l'intervallo base-partenza -> rientro-base. Il controllo viene eseguito
-    // dopo l'advisory lock condiviso con il percorso PIXEL.
-    const { rows: conflitti } = await client.query(
-      `SELECT 1 AS found
-       FROM popbus_attivazioni a
-       WHERE a.veicolo_id = $1
-         AND a.stato IN ('in_attesa_autista', 'confermata')
-         AND COALESCE((a.piano->>'busyStart')::timestamptz, a.partenza) < $3
-         AND COALESCE((a.piano->>'busyEnd')::timestamptz, a.arrivo) > $2
-       UNION ALL
-       SELECT 1 AS found
-       FROM corse c
-       WHERE c.veicolo_id = $1
-         AND c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
-         AND c.start_datetime < $3
-         AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime > $2)
-       LIMIT 1`,
-      [vehicleId, new Date(busyStart), new Date(busyEnd)]
-    );
-    if (conflitti.length) {
-      fail('conflitto con un altro impegno del veicolo nell’intero ciclo operativo');
-    }
-
-    const operativita = {
-      ok: true,
-      busyStart,
-      busyEnd,
-      disponibilitaVerificate: disponibilita.length,
-      conflitti: 0
-    };
-
-    const { rows: locked } = await client.query(
-      `SELECT *
-       FROM richieste_pop_bus
-       WHERE id = ANY($1::integer[])
-       ORDER BY id
-       FOR UPDATE`,
-      [ids]
-    );
-    if (locked.length !== ids.length) {
-      fail('richieste non trovate');
-    }
-
-    for (const r of locked) {
-      if (r.stato !== 'in_attesa' ||
-          r.corsa_id != null ||
-          !Number.isSafeInteger(Number(r.cliente_id)) ||
-          Number(r.cliente_id) <= 0 ||
-          !Number.isSafeInteger(Number(r.posti_richiesti)) ||
-          Number(r.posti_richiesti) <= 0 ||
-          r.prezzo == null ||
-          !Number.isFinite(Number(r.prezzo)) ||
-          Number(r.prezzo) < 0 ||
-          !r.payment_intent_id ||
-          !Number.isFinite(new Date(r.start_datetime).getTime())) {
-        fail(`richiesta non prenotabile: ${r.id}`);
-      }
-    }
-
-    // Le richieste A/R vincolate devono essere presenti entrambe.
-    for (const r of locked.filter(x => x.ar_vincolata === true)) {
-      if (!r.ar_group_id) fail('A/R senza gruppo');
-      const group = locked.filter(
-        x => String(x.ar_group_id) === String(r.ar_group_id)
-      );
-      if (group.length !== 2 ||
-          !group.some(x => x.ar_tratta === 'andata') ||
-          !group.some(x => x.ar_tratta === 'ritorno')) {
-        fail('A/R incompleta nel ciclo');
-      }
-    }
-
-    const fermate = await validaFermateFisicheTransazionali({
-      client,
-      missioni: ciclo.missioni
+    const result = await rivalidaCicloFisicoInTransazioneV2({
+      client, ciclo, costoAttesaOraEuro, altriCostiEuro, margineMinimoEuro
     });
-    if (fermate.ok !== true) {
-      fail('rivalidazione fermate fallita');
-    }
-
-    const rivalidazione = rivalidaMissioniFisicheV2({
-      ciclo,
-      richiesteBloccate: locked
-    });
-    if (rivalidazione.ok !== true) {
-      fail('rivalidazione operativa fallita');
-    }
-
-    // La tariffa e' riletta nel medesimo snapshot transazionale delle richieste.
-    // Il lock sul veicolo e il lock della riga tariffaria sono gia' attivi.
-    const { rows: tariffe } = await client.query(
-      `SELECT euro_km FROM tariffe
-       WHERE veicolo_id = $1 AND tipo = 'standard' AND euro_km > 0
-       ORDER BY euro_km LIMIT 1 FOR SHARE`,
-      [vehicleId]
-    );
-    if (!tariffe.length) fail('tariffa NCC standard assente');
-    const economia = rivalidaEconomiaCicloFisicoV2({
-      ciclo,
-      richiesteBloccate: locked,
-      euroKm: Number(tariffe[0].euro_km),
-      costoAttesaOraEuro,
-      altriCostiEuro,
-      margineMinimoEuro
-    });
-
     await client.query('ROLLBACK');
     transactionOpen = false;
-
-    return {
-      ok: true,
-      percorso: 'POPBUS_PHYSICAL_V2_TRANSACTION_PREFLIGHT',
-      fermate,
-      rivalidazione,
-      operativita,
-      economia,
-      veicoloId: vehicleId,
-      numeroMissioni: ciclo.missioni.length,
-      numeroRichieste: ids.length,
-      dbWrites: 0,
-      persistita: false,
-      attivabile: false
-    };
+    const { richiesteBloccate, autistaId, postiTotali, euroKm, ...publicResult } = result;
+    return publicResult;
   } catch (error) {
     if (transactionOpen) {
       try {
@@ -388,6 +417,143 @@ export async function verificaCicloFisicoTransazionale({
       } catch (rollbackError) {
         error.rollbackError = rollbackError;
       }
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
+ * Fase 2: prova l'intera persistenza in una transazione che termina SEMPRE
+ * con ROLLBACK. Non effettua capture Stripe, COMMIT o invio notifiche.
+ * I dati PIXEL sono letti dal ciclo selezionato, non ricostruiti per ipotesi.
+ */
+// Fase preparatoria LIVE: persistenza riutilizzabile nella transazione del chiamante.
+// Non gestisce BEGIN/COMMIT/ROLLBACK e non autorizza il LIVE.
+async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
+  const ids = pre.richiesteBloccate.map(r => Number(r.id));
+    const meta = ciclo.missioni.map((m, i) => {
+      const pix = {
+        pixelOpportunitaId: m.pixelOpportunitaId,
+        pixelDirettriceId: m.pixelDirettriceId,
+        pixelVersione: m.pixelVersione,
+        corridoioPixelId: m.corridoioPixelId,
+        nodiTerritoriali: m.nodiTerritoriali
+      };
+      if (!Number.isSafeInteger(Number(pix.pixelOpportunitaId)) ||
+          !Number.isSafeInteger(Number(pix.pixelDirettriceId)) ||
+          !Number.isSafeInteger(Number(pix.pixelVersione)) ||
+          !Array.isArray(pix.nodiTerritoriali) || pix.nodiTerritoriali.length < 2 ||
+          typeof pix.corridoioPixelId !== 'string' || !pix.corridoioPixelId) {
+        fail(`missione ${i + 1}: metadati PIXEL incompleti nel ciclo selezionato`);
+      }
+      return pix;
+    });
+    const plan = preparaPianoCicloFisicoV2({
+      ciclo, richiesteBloccate: pre.richiesteBloccate,
+      postiTotali: pre.postiTotali
+    });
+    const busyStart = new Date(plan.busyStart).getTime();
+    const expiresAt = new Date(Math.min(nowMs + 10 * 60000, busyStart));
+    if (!Number.isFinite(busyStart) || busyStart <= nowMs ||
+        expiresAt.getTime() <= nowMs) fail('offerta scaduta o ciclo gia iniziato');
+    const update = await client.query(`
+      UPDATE richieste_pop_bus SET stato = 'in_lavorazione'
+      WHERE id = ANY($1::integer[]) AND stato = 'in_attesa' AND corsa_id IS NULL
+    `, [ids]);
+    if (update.rowCount !== ids.length) fail('transizione richieste non completa');
+    const richiesteInLavorazione = pre.richiesteBloccate.map(r => ({
+      ...r, stato: 'in_lavorazione'
+    }));
+    const {piano, missioniPersistibili} = preparaCicloPixelPerPersistenza({
+      plan, richiesteBloccate: richiesteInLavorazione,
+      opportunitaMissioni: meta, veicoloId: pre.veicoloId,
+      postiTotali: pre.postiTotali, fingerprintRichiesta,
+      economia: pre.economia
+    });
+    const persistedPlan = {
+      ...piano,
+      economia: pre.economia,
+      requestSnapshot: richiesteInLavorazione.map(r => ({
+        id: Number(r.id), fingerprint: fingerprintRichiesta(r)
+      }))
+    };
+    const {rows: attivazioni} = await client.query(`
+      INSERT INTO popbus_attivazioni
+        (direttrice_id, pixel_opportunita_id, veicolo_id, autista_id,
+         stato, partenza, arrivo, costo, ricavo, tariffa, piano, expires_at)
+      VALUES (NULL, NULL, $1, $2, 'in_attesa_autista',
+              $3, $4, $5, $6, $7, $8::jsonb, $9)
+      RETURNING id
+    `, [pre.veicoloId, pre.autistaId,
+        new Date(piano.evaluation.departure), new Date(piano.evaluation.arrival),
+        pre.economia.costoCompletoEuro, pre.economia.ricavoLordoEuro,
+        pre.euroKm, JSON.stringify(persistedPlan), expiresAt]);
+    const attivazioneId = Number(attivazioni[0]?.id);
+    if (!Number.isSafeInteger(attivazioneId) || attivazioneId <= 0)
+      fail('attivazione non creata');
+    const missioniIds = await registraMissioniAttivazione(client, {
+      attivazioneId, missioni: missioniPersistibili,
+      pianoGlobale: persistedPlan
+    });
+    const attive = await client.query(`
+      UPDATE popbus_attivazione_richieste SET attiva = TRUE
+      WHERE attivazione_id = $1
+    `, [attivazioneId]);
+    if (attive.rowCount !== ids.length) fail('associazioni attive incomplete');
+    const {rows: offerte} = await client.query(`
+      INSERT INTO offerte_autisti
+        (direttrice_id, autista_id, attivazione_id, stato, expires_at)
+      VALUES (NULL, $1, $2, 'inviata', $3) RETURNING id
+    `, [pre.autistaId, attivazioneId, expiresAt]);
+    const offertaId = Number(offerte[0]?.id);
+    if (!Number.isSafeInteger(offertaId) || offertaId <= 0)
+      fail('offerta non creata');
+    return {
+      numeroMissioni: missioniIds.length,
+      numeroRichieste: ids.length,
+      attivazioneId,
+      offertaId,
+      veicoloId: pre.veicoloId,
+      autistaId: pre.autistaId
+    };
+}
+
+export async function collaudaPersistenzaCicloFisicoV2({
+  pool, ciclo, mode = 'ROLLBACK_ONLY', now = Date.now()
+} = {}) {
+  if (mode !== 'ROLLBACK_ONLY') fail('LIVE non abilitato');
+  if (!pool || typeof pool.connect !== 'function') fail('pool PostgreSQL mancante');
+  const nowMs = new Date(now).getTime();
+  if (!Number.isFinite(nowMs)) fail('now non valido');
+  const client = await pool.connect();
+  let tx = false;
+  try {
+    await client.query('BEGIN');
+    tx = true;
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query("SET LOCAL statement_timeout = '90s'");
+    const pre = await rivalidaCicloFisicoInTransazioneV2({client, ciclo});
+    const result = await persistiCicloFisicoInTransazioneV2({
+      client, ciclo, pre, nowMs
+    });
+    const esito = {
+      ok: true, modo: 'ROLLBACK_ONLY', percorso: 'POPBUS_PHYSICAL_V2_PERSISTENCE_TEST',
+      numeroMissioni: result.numeroMissioni,
+      numeroRichieste: result.numeroRichieste,
+      attivazioneIdSimulata: result.attivazioneId,
+      offertaIdSimulata: result.offertaId,
+      dbWritesTentate: true, persistita: false, attivabile: false
+    };
+    await client.query('ROLLBACK');
+    tx = false;
+    return esito;
+  } catch (error) {
+    if (tx) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { error.rollbackError = rollbackError; }
     }
     throw error;
   } finally {

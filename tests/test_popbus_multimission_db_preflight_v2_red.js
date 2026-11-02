@@ -95,5 +95,11 @@ await negative('mapping locale alterato',f=>{f.locali[0].indice_discesa=1;});
 await negative('mapping globale alterato',f=>{f.globali[0].indice_discesa=1;});
 await negative('richiesta DB non disponibile',f=>{f.richieste[0].stato='in_attesa';});
 await negative('capienza DB superata',f=>{f.richieste[0].posti_richiesti=5;});
+await negative('flag attesa persistito alterato', f => {
+  f.dbMissioni[0].piano.legs[0].attesa = true;
+});
+await negative('flag roadCoincident persistito alterato', f => {
+  f.dbMissioni[0].piano.legs[1].roadCoincident = true;
+});
 console.log(`\nRISULTATO: ${pass} PASS, ${fail} RED/FAIL. PostgreSQL mock; DB reale 0 scritture; LIVE NO.`);
 if(fail)process.exitCode=1;

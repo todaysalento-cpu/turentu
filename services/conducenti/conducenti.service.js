@@ -1,270 +1,360 @@
-// Turentu - modulo conducenti indipendente (ES modules)
-// Tutte le funzioni ricevono un client/pool pg gi├á configurato.
-// Nessuna dipendenza da PIXEL, POPBUS o dai loro worker.
 
-const STATI = new Set(['invitato', 'attivo', 'sospeso', 'rifiutato']);
+// Turentu — assegnazioni conducenti, indipendente da PIXEL e POPBUS.
+// Richiede un client pg con transazione BEGIN già aperta dal chiamante.
+// Non effettua COMMIT/ROLLBACK: il chiamante conferma o annulla l'intera operazione.
 
-function interoPositivo(value, nome) {
-  const n = Number(value);
-  if (!Number.isSafeInteger(n) || n <= 0) {
-    throw new Error(`${nome} deve essere un intero positivo`);
-  }
+const idValido = (v, nome) => {
+  const n = Number(v);
+  if (!Number.isSafeInteger(n) || n <= 0) throw new Error(`${nome} non valido`);
   return n;
-}
+};
 
-function verificaDb(db) {
-  if (!db || typeof db.query !== 'function') {
-    throw new Error('Client PostgreSQL non valido');
+function intervallo(inizio, fine) {
+  // Richiedere timestamp ISO con offset esplicito per evitare ambiguità di fuso.
+  const iso = /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/i;
+  if (typeof inizio !== 'string' || typeof fine !== 'string' || !iso.test(inizio) || !iso.test(fine)) {
+    throw new Error('Usare date ISO 8601 con fuso orario esplicito');
   }
+  const da = new Date(inizio), a = new Date(fine);
+  if (!Number.isFinite(+da) || !Number.isFinite(+a) || a <= da) throw new Error('Intervallo operativo non valido');
+  if (+a - +da > 31 * 86400000) throw new Error('Intervallo superiore a 31 giorni');
+  return [da.toISOString(), a.toISOString()];
 }
 
-export async function elencoConducenti(db, operatoreId) {
-  verificaDb(db);
-  const id = interoPositivo(operatoreId, 'operatoreId');
-  const { rows } = await db.query(
-    `SELECT co.id, co.operatore_id, co.conducente_id,
-            co.stato, co.assegnabile_automaticamente, co.sempre_disponibile,
-            co.creato_il, co.aggiornato_il,
-            u.nome, u.email
-       FROM conducenti_operatori co
-       JOIN utente u ON u.id = co.conducente_id
-      WHERE co.operatore_id = $1
-      ORDER BY u.nome NULLS LAST, co.id`,
-    [id]
+async function verificaVeicolo(client, operatoreId, veicoloId) {
+  const { rows } = await client.query(
+    'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2 FOR SHARE',
+    [veicoloId, operatoreId]
   );
-  return rows;
+  if (!rows.length) throw new Error('Veicolo non appartenente all’operatore');
 }
 
-// L'associazione nasce come invito: non autorizza ancora il conducente.
-// Il controller deve verificare prima che il richiedente sia l'operatore.
-export async function invitaConducente(db, { operatoreId, conducenteId }) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  const conducente = interoPositivo(conducenteId, 'conducenteId');
-  if (operatore === conducente) {
-    throw new Error('Il titolare va gestito con il percorso dedicato');
-  }
-  const { rows } = await db.query(
-    `INSERT INTO conducenti_operatori
-       (operatore_id, conducente_id, stato, assegnabile_automaticamente)
-     VALUES ($1, $2, 'invitato', false)
-     ON CONFLICT (operatore_id, conducente_id)
-     DO UPDATE SET
-       stato = 'invitato',
-       assegnabile_automaticamente = false,
-       sempre_disponibile = true,
-        creato_il = now(),
-       aggiornato_il = now()
-     WHERE conducenti_operatori.stato = 'rifiutato'
-     RETURNING *`,
-    [operatore, conducente]
+async function rapporto(client, operatoreId, conducenteId, { automatico = false } = {}) {
+  if (operatoreId === conducenteId) return { titolare: true };
+  const { rows } = await client.query(
+    `SELECT id FROM conducenti_operatori
+      WHERE operatore_id=$1 AND conducente_id=$2 AND stato='attivo'
+        AND ($3::boolean = false OR assegnabile_automaticamente=true)
+      FOR SHARE`,
+    [operatoreId, conducenteId, automatico]
   );
-  if (!rows[0]) {
-    throw new Error('Associazione gi├á esistente: verificare lo stato prima di procedere');
-  }
-  return rows[0];
-}
-
-// Deve essere invocata da un endpoint autenticato come conducente invitato.
-// Un operatore NON pu├▓ accettare l'invito al posto del conducente.
-export async function accettaInvitoConducente(db, { rapportoId, conducenteId }) {
-  verificaDb(db);
-  const rapporto = interoPositivo(rapportoId, 'rapportoId');
-  const conducente = interoPositivo(conducenteId, 'conducenteId');
-  const { rows } = await db.query(
-    `UPDATE conducenti_operatori
-        SET stato = 'attivo', aggiornato_il = now()
-      WHERE id = $1 AND conducente_id = $2 AND stato = 'invitato'
-      RETURNING *`,
-    [rapporto, conducente]
-  );
-  if (!rows[0]) throw new Error('Invito non trovato o non pi├╣ accettabile');
-  return rows[0];
-}
-
-// Il conducente autenticato pu├▓ rifiutare esclusivamente un proprio invito pendente.
-export async function rifiutaInvitoConducente(db, { rapportoId, conducenteId }) {
-  verificaDb(db);
-  const rapporto = interoPositivo(rapportoId, 'rapportoId');
-  const conducente = interoPositivo(conducenteId, 'conducenteId');
-
-  const { rows } = await db.query(
-    `UPDATE conducenti_operatori
-        SET stato = 'rifiutato',
-            assegnabile_automaticamente = false,
-            aggiornato_il = now()
-      WHERE id = $1
-        AND conducente_id = $2
-        AND stato = 'invitato'
-      RETURNING *`,
-    [rapporto, conducente]
-  );
-
-  if (!rows[0]) {
-    throw new Error('Invito non trovato o non pi├╣ rifiutabile');
-  }
-  return rows[0];
-}
-
-// Restituisce i rapporti attivi del conducente autenticato.
-// La lista evita di nascondere eventuali associazioni multiple preesistenti.
-export async function rapportoAttivoConducente(db, conducenteId) {
-  verificaDb(db);
-  const id = interoPositivo(conducenteId, 'conducenteId');
-
-  const { rows } = await db.query(
-    `SELECT co.id AS rapporto_id,
-            co.operatore_id,
-            co.conducente_id,
-            co.stato,
-            co.assegnabile_automaticamente,
-            co.creato_il,
-            u.nome AS nome_operatore,
-            u.email AS email_operatore
-       FROM conducenti_operatori co
-       JOIN utente u ON u.id = co.operatore_id
-      WHERE co.conducente_id = $1
-        AND co.stato = 'attivo'
-      ORDER BY co.creato_il DESC, co.id DESC`,
-    [id]
-  );
-
-  return rows;
-}
-
-// Riservata al titolare dell'operatore, con autorizzazione nel controller.
-export async function sospendiConducente(db, { operatoreId, rapportoId }) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  const rapporto = interoPositivo(rapportoId, 'rapportoId');
-  const { rows } = await db.query(
-    `UPDATE conducenti_operatori
-        SET stato = 'sospeso', assegnabile_automaticamente = false,
-            aggiornato_il = now()
-      WHERE id = $1 AND operatore_id = $2 AND stato <> 'sospeso'
-      RETURNING *`,
-    [rapporto, operatore]
-  );
-  if (!rows[0]) throw new Error('Associazione non trovata o gi├á sospesa');
-  return rows[0];
-}
-
-export async function impostaAssegnazioneAutomatica(db, {
-  operatoreId, rapportoId, abilitata
-}) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  const rapporto = interoPositivo(rapportoId, 'rapportoId');
-  if (typeof abilitata !== 'boolean') throw new Error('abilitata deve essere boolean');
-  const { rows } = await db.query(
-    `UPDATE conducenti_operatori
-        SET assegnabile_automaticamente = $3, aggiornato_il = now()
-      WHERE id = $1 AND operatore_id = $2 AND stato = 'attivo'
-      RETURNING *`,
-    [rapporto, operatore, abilitata]
-  );
-  if (!rows[0]) throw new Error('Conducente non trovato o non attivo');
-  return rows[0];
-}
-
-// Solo l'operatore proprietario puo modificare la disponibilita del rapporto attivo.
-// Non modifica l'abilitazione alle assegnazioni automatiche.
-export async function impostaSempreDisponibile(db, { operatoreId, rapportoId, sempreDisponibile }) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  const rapporto = interoPositivo(rapportoId, 'rapportoId');
-  if (typeof sempreDisponibile !== 'boolean') {
-    throw new Error('sempreDisponibile deve essere booleano');
-  }
-  const { rows } = await db.query(
-    `UPDATE conducenti_operatori
-        SET sempre_disponibile = $3, aggiornato_il = now()
-      WHERE id = $1 AND operatore_id = $2 AND stato = 'attivo'
-      RETURNING id, operatore_id, conducente_id, stato,
-                sempre_disponibile, assegnabile_automaticamente, aggiornato_il`,
-    [rapporto, operatore, sempreDisponibile]
-  );
-  if (!rows[0]) throw new Error('Conducente non trovato o non attivo');
-  return rows[0];
-}
-
-export async function elencoInvitiConducente(db, conducenteId) {
-  verificaDb(db);
-  const id = interoPositivo(conducenteId, 'conducenteId');
-  const { rows } = await db.query(
-    `SELECT co.id, co.operatore_id, co.stato, co.creato_il,
-            u.nome AS nome_operatore
-       FROM conducenti_operatori co
-       JOIN utente u ON u.id = co.operatore_id
-      WHERE co.conducente_id = $1 AND co.stato = 'invitato'
-      ORDER BY co.creato_il DESC`,
-    [id]
-  );
-  return rows;
-}
-
-// Impostazione generale dell'operatore NCC. Nessuna attivazione di worker.
-const MODALITA_ASSEGNAZIONE = new Set(['manuale', 'automatica', 'titolare']);
-
-export async function leggiImpostazioniAssegnazione(db, operatoreId) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  const { rows } = await db.query(
-    `SELECT operatore_id, modalita, aggiornato_il
-       FROM impostazioni_assegnazione_operatori
-      WHERE operatore_id = $1`,
-    [operatore]
-  );
-  return rows[0] ?? { operatore_id: operatore, modalita: 'manuale', aggiornato_il: null };
-}
-
-// Il router passa un Pool: la connessione dedicata mantiene lock e scrittura
-// nella stessa transazione. Non usare pool.query per queste operazioni.
-export async function salvaImpostazioniAssegnazione(db, { operatoreId, modalita }) {
-  verificaDb(db);
-  const operatore = interoPositivo(operatoreId, 'operatoreId');
-  if (typeof modalita !== 'string' || !MODALITA_ASSEGNAZIONE.has(modalita)) {
-    const err = new Error('Modalita non valida: usare manuale, automatica o titolare');
-    err.status = 400;
+  if (!rows.length) {
+    const err = new Error('Conducente non associato, non attivo o non abilitato');
+    err.code = 'CONDUCENTE_NON_DISPONIBILE';
+    err.status = 409;
     throw err;
   }
-  if (typeof db.connect !== 'function') {
-    throw new Error('Salvataggio impostazioni richiede un Pool PostgreSQL');
+  return { titolare: false, rapportoId: rows[0].id };
+}
+
+// Verifica copertura completa del periodo.
+// In modalità sempre_disponibile non richiede turni settimanali.
+// Le indisponibilità hanno sempre precedenza.
+// In modalità a turni, le disponibilità straordinarie aggiungono copertura.
+// I turni sono definiti in Europe/Rome.
+async function verificaCopertura(client, rapportoId, da, a) {
+  const { rows } = await client.query(`
+    WITH giorni AS (
+      SELECT generate_series(
+        ($2::timestamptz AT TIME ZONE 'Europe/Rome')::date - 1,
+        ($3::timestamptz AT TIME ZONE 'Europe/Rome')::date + 1,
+        interval '1 day'
+      )::date AS giorno
+    ), fasce AS (
+      SELECT tstzrange(
+        (g.giorno + t.ora_inizio) AT TIME ZONE 'Europe/Rome',
+        (g.giorno + t.ora_fine) AT TIME ZONE 'Europe/Rome', '[)'
+      ) AS fascia
+      FROM giorni g JOIN turni_conducenti t
+        ON t.rapporto_id=$1 AND t.attivo=true
+       AND t.giorno_settimana=EXTRACT(ISODOW FROM g.giorno)
+       AND t.fuso_orario='Europe/Rome'
+      UNION ALL
+      SELECT intervallo FROM eccezioni_turni_conducenti
+       WHERE rapporto_id=$1 AND tipo='disponibile'
+    ), configurazione AS (
+      SELECT sempre_disponibile
+      FROM conducenti_operatori
+      WHERE id=$1 AND stato='attivo'
+    ), copertura AS (
+      SELECT COALESCE(range_agg(fascia), '{}'::tstzmultirange) AS intervalli
+      FROM fasce
+    ), assenze AS (
+      SELECT COALESCE(range_agg(intervallo), '{}'::tstzmultirange) AS intervalli
+      FROM eccezioni_turni_conducenti
+      WHERE rapporto_id=$1 AND tipo='indisponibile'
+    )
+    SELECT CASE
+      WHEN configurazione.sempre_disponibile THEN
+        NOT (
+          assenze.intervalli &&
+          tstzrange($2::timestamptz,$3::timestamptz,'[)')
+        )
+      ELSE
+        (
+          (copertura.intervalli - assenze.intervalli)
+          @> tstzrange($2::timestamptz,$3::timestamptz,'[)')
+        )
+    END AS coperto
+    FROM configurazione
+    CROSS JOIN copertura
+    CROSS JOIN assenze`, [rapportoId, da, a]
+  );
+  return rows[0]?.coperto === true;
+}
+
+async function verificaTarget(client, { corsaId, attivazioneId, veicoloId, operatoreId }) {
+  if ((corsaId == null) === (attivazioneId == null)) throw new Error('Specificare solo corsaId oppure attivazioneId');
+  if (corsaId != null) {
+    const { rows } = await client.query(
+      `SELECT c.id FROM corse c WHERE c.id=$1 AND c.veicolo_id=$2 FOR SHARE`,
+      [corsaId, veicoloId]
+    );
+    if (!rows.length) throw new Error('Corsa inesistente o non associata al veicolo');
+  } else {
+    const { rows } = await client.query(
+      `SELECT a.id FROM popbus_attivazioni a
+       WHERE a.id=$1 AND a.veicolo_id=$2 AND a.autista_id=$3 FOR SHARE`,
+      [attivazioneId, veicoloId, operatoreId]
+    );
+    if (!rows.length) throw new Error('Attivazione inesistente o non appartenente all’operatore');
+  }
+}
+
+/**
+ * Assegna manualmente o automaticamente un conducente a una missione già esistente.
+ * Il chiamante deve aver aperto una transazione su client pg (non pool.query).
+ * Per il titolare: modalita='titolare', conducenteId=operatoreId.
+ * Per automatico: omettere conducenteId; considera tutti i rapporti attivi.
+ * Gli intervalli sono forniti dal chiamante e devono comprendere TUTTO il ciclo operativo.
+ */
+export async function assegnaConducente(client, input) {
+  if (!client || typeof client.query !== 'function') throw new Error('Client PostgreSQL richiesto');
+  const operatoreId = idValido(input.operatoreId, 'operatoreId');
+  const veicoloId = idValido(input.veicoloId, 'veicoloId');
+  const corsaId = input.corsaId == null ? null : idValido(input.corsaId, 'corsaId');
+  const attivazioneId = input.attivazioneId == null ? null : idValido(input.attivazioneId, 'attivazioneId');
+
+  // L'endpoint NCC manuale deriva l'intervallo esclusivamente dal DB.
+  const usaCicloPersistito = input.usaCicloPersistito === true;
+  if (usaCicloPersistito && input.attivazioneId != null) {
+    throw new Error('Assegnazione POPBUS non abilitata da questo endpoint');
   }
 
-  const client = await db.connect();
-  let transazioneAperta = false;
-  try {
-    await client.query('BEGIN');
-    transazioneAperta = true;
-    // Stessa chiave usata da assegnaConducente: serializza per operatore.
-    await client.query(
-      'SELECT pg_advisory_xact_lock($1::integer,$2::integer)',
-      [731904, operatore]
-    );
+  let [da, a] = usaCicloPersistito ? [null, null] : intervallo(input.inizio, input.fine);
+  const modalita = input.modalita;
+  const confermaDeroga = input.confermaDeroga === true;
+  const motivoDeroga = typeof input.motivoDeroga === 'string' ? input.motivoDeroga.trim() : '';
+  const autorizzatoreId = input.autorizzatoreId == null ? null : idValido(input.autorizzatoreId, 'autorizzatoreId');
+
+  if (!['manuale', 'automatica', 'titolare'].includes(modalita)) throw new Error('Modalità non valida');
+  if (input.confermaDeroga != null && typeof input.confermaDeroga !== 'boolean') throw new Error('Conferma deroga non valida');
+  if (confermaDeroga && modalita !== 'manuale') throw new Error('Deroga consentita solo in manuale');
+  if (confermaDeroga && (motivoDeroga.length < 5 || motivoDeroga.length > 500)) throw new Error('Motivazione deroga richiesta (5-500 caratteri)');
+  if (confermaDeroga && autorizzatoreId !== operatoreId) throw new Error('Autorizzatore deroga non valido');
+  if (!confermaDeroga && (motivoDeroga || autorizzatoreId != null)) throw new Error('Dati deroga senza conferma');
+  if (modalita === 'automatica' && input.conducenteId != null) throw new Error('In automatica non specificare conducenteId');
+  if (modalita !== 'automatica' && input.conducenteId == null) throw new Error('Specificare conducenteId');
+
+  // Serializza le assegnazioni per operatore; il vincolo GiST tutela anche
+  // contro concorrenza tra operatori diversi sul medesimo conducente.
+  await client.query('SELECT pg_advisory_xact_lock($1::integer,$2::integer)', [731904, operatoreId]);
+  // La modalita generale viene letta DOPO il lock dell'operatore.
+  // In assenza di configurazione, il default e' manuale.
+  // Le impostazioni devono essere modificate con la stessa disciplina di lock
+  // per garantire piena serializzazione rispetto alle assegnazioni in corso.
+  const { rows: impostazioni } = await client.query(
+    `SELECT modalita FROM impostazioni_assegnazione_operatori
+     WHERE operatore_id=$1`, [operatoreId]
+  );
+  const modalitaGenerale = impostazioni[0]?.modalita ?? 'manuale';
+  if (modalitaGenerale !== modalita) {
+    const err = new Error(`Modalita operatore impostata su ${modalitaGenerale}: assegnazione ${modalita} non consentita`);
+    err.code = 'MODALITA_ASSEGNAZIONE_NON_CONSENTITA';
+    err.status = 409;
+    throw err;
+  }
+  await verificaVeicolo(client, operatoreId, veicoloId);
+  await verificaTarget(client, { corsaId, attivazioneId, veicoloId, operatoreId });
+
+  if (usaCicloPersistito) {
+    if (modalita !== 'manuale' || corsaId == null || attivazioneId != null) {
+      throw new Error('Endpoint abilitato soltanto per assegnazioni manuali NCC');
+    }
+    // La riga e' protetta da FOR SHARE in verificaTarget: impedisce
+    // modifiche concorrenti agli orari fino al termine della transazione.
+    const { rows: corse } = await client.query(`
+      SELECT stato, tipo_corsa, inizio_ciclo_operativo, fine_ciclo_operativo
+      FROM public.corse WHERE id=$1 AND veicolo_id=$2 FOR SHARE
+    `, [corsaId, veicoloId]);
+    const corsa = corse[0];
+    if (!corsa || !['privata', 'condivisa'].includes(corsa.tipo_corsa) ||
+        !['prenotabile', 'da_attivare'].includes(corsa.stato)) {
+      throw new Error('Corsa NCC non assegnabile nello stato attuale');
+    }
+    const start = corsa.inizio_ciclo_operativo;
+    const end = corsa.fine_ciclo_operativo;
+    if (!(start instanceof Date) || !(end instanceof Date) ||
+        !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) ||
+        start >= end || start <= new Date()) {
+      throw new Error('Ciclo operativo completo e futuro obbligatorio');
+    }
+    [da, a] = intervallo(start.toISOString(), end.toISOString());
+  }
+
+  // Impedisce due conducenti diversi sulla stessa missione o sullo
+  // stesso veicolo durante intervalli operativi sovrapposti.
+  const { rows: veicoloOccupato } = await client.query(`
+    SELECT id FROM assegnazioni_conducenti
+    WHERE veicolo_id=$1 AND stato='assegnata'
+      AND (corsa_id=$2 OR
+           intervallo_operativo && tstzrange($3::timestamptz,$4::timestamptz,'[)'))
+    LIMIT 1
+  `, [veicoloId, corsaId, da, a]);
+  if (veicoloOccupato.length) {
+    const err = new Error('Veicolo o corsa gia assegnati nel periodo');
+    err.code = 'CONDUCENTE_CONFLITTO';
+    err.status = 409;
+    throw err;
+  }
+
+  let candidati;
+  if (modalita === 'automatica') {
     const { rows } = await client.query(
-      `INSERT INTO impostazioni_assegnazione_operatori
-         (operatore_id, modalita, aggiornato_il)
-       VALUES ($1, $2, now())
-       ON CONFLICT (operatore_id) DO UPDATE
-         SET modalita = EXCLUDED.modalita, aggiornato_il = now()
-       RETURNING operatore_id, modalita, aggiornato_il`,
-      [operatore, modalita]
+      `SELECT conducente_id, id AS rapporto_id
+       FROM conducenti_operatori
+       WHERE operatore_id=$1 AND stato='attivo'
+         AND assegnabile_automaticamente=true
+       ORDER BY conducente_id`, [operatoreId]
     );
-    await client.query('COMMIT');
-    transazioneAperta = false;
-    return rows[0];
-  } catch (err) {
-    if (transazioneAperta) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackErr) {
-        err.rollbackError = rollbackErr;
+    candidati = rows.map(r => ({ id: Number(r.conducente_id), rapportoId: r.rapporto_id }));
+    // Titolare non incluso automaticamente: attivazione esplicita con modalita=titolare.
+  } else {
+    const conducenteId = idValido(input.conducenteId, 'conducenteId');
+    if (modalita === 'titolare' && conducenteId !== operatoreId) throw new Error('Titolare diverso dall’operatore');
+    if (modalita === 'manuale' && conducenteId === operatoreId) throw new Error('Usare modalità titolare');
+    const r = await rapporto(client, operatoreId, conducenteId);
+    candidati = [{ id: conducenteId, rapportoId: r.rapportoId }];
+  }
+
+  for (const candidato of candidati) {
+    const coperto = candidato.rapportoId == null
+      ? true
+      : await verificaCopertura(client, candidato.rapportoId, da, a);
+    if (!coperto) {
+      if (modalita === 'automatica') continue;
+      if (!confermaDeroga) {
+        const err = new Error('Conferma esplicita richiesta per assegnazione fuori turno');
+        err.code = 'CONDUCENTE_DEROGA_RICHIESTA';
+        err.status = 409;
         throw err;
       }
     }
-    throw err;
-  } finally {
-    client.release();
+    const { rows: conflitti } = await client.query(
+      `SELECT id FROM assegnazioni_conducenti
+       WHERE conducente_id=$1 AND stato='assegnata'
+         AND intervallo_operativo && tstzrange($2::timestamptz,$3::timestamptz,'[)')
+       LIMIT 1`, [candidato.id, da, a]
+    );
+    if (conflitti.length) {
+      if (modalita !== 'automatica') {
+        const err = new Error('Conducente già impegnato nel periodo');
+        err.code = 'CONDUCENTE_CONFLITTO';
+        err.status = 409;
+        throw err;
+      }
+      continue;
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO assegnazioni_conducenti
+        (operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,intervallo_operativo,modalita,
+          deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il)
+       VALUES ($1,$2,$3,$4,$5,tstzrange($6::timestamptz,$7::timestamptz,'[)'),$8,
+                $9,$10,$11,CASE WHEN $9::boolean THEN NOW() ELSE NULL END)
+       RETURNING id,operatore_id,conducente_id,veicolo_id,corsa_id,attivazione_id,
+                 lower(intervallo_operativo) AS inizio,upper(intervallo_operativo) AS fine,
+                 modalita,stato,deroga_turno,deroga_motivo,deroga_autorizzata_da,deroga_autorizzata_il`,
+      [operatoreId, candidato.id, veicoloId, corsaId, attivazioneId, da, a, modalita,
+        !coperto, !coperto ? motivoDeroga : null, !coperto ? autorizzatoreId : null]
+    );
+    return rows[0];
   }
+
+  const err = new Error('Nessun conducente disponibile per l’intero ciclo operativo');
+  err.code = 'CONDUCENTE_NON_DISPONIBILE';
+  err.status = 409;
+  throw err;
+}
+
+// Elenco delle missioni del conducente autenticato.
+// La visibilità è limitata alle proprie assegnazioni ancora attive.
+// Il titolare-operatore può essere assegnato a sé stesso senza un rapporto
+// in conducenti_operatori; gli altri conducenti richiedono un rapporto attivo.
+export async function elencoAssegnazioniConducente(client, conducenteId) {
+  const id = idValido(conducenteId, 'conducenteId');
+
+  const { rows } = await client.query(
+    `SELECT
+        ac.id,
+        ac.operatore_id,
+        ac.conducente_id,
+        ac.veicolo_id,
+        ac.corsa_id,
+        ac.attivazione_id,
+        lower(ac.intervallo_operativo) AS inizio,
+        upper(ac.intervallo_operativo) AS fine,
+        ac.modalita,
+        ac.stato,
+        ac.creata_il,
+        u.nome AS nome_operatore
+     FROM assegnazioni_conducenti ac
+     LEFT JOIN utente u ON u.id = ac.operatore_id
+     WHERE ac.conducente_id = $1
+       AND ac.stato = 'assegnata'
+       AND (
+         ac.operatore_id = ac.conducente_id
+         OR EXISTS (
+           SELECT 1
+             FROM conducenti_operatori co
+            WHERE co.operatore_id = ac.operatore_id
+              AND co.conducente_id = ac.conducente_id
+              AND co.stato = 'attivo'
+         )
+       )
+     ORDER BY lower(ac.intervallo_operativo) ASC
+     LIMIT 200`,
+    [id]
+  );
+
+  return rows;
+}
+
+export async function elencoAssegnazioni(client, { operatoreId, conducenteId = null }) {
+  const op = idValido(operatoreId, 'operatoreId');
+  const cond = conducenteId == null ? null : idValido(conducenteId, 'conducenteId');
+  const { rows } = await client.query(
+    `SELECT id, operatore_id, conducente_id, veicolo_id, corsa_id, attivazione_id,
+            lower(intervallo_operativo) AS inizio, upper(intervallo_operativo) AS fine,
+            modalita, stato, creata_il
+       FROM assegnazioni_conducenti
+      WHERE operatore_id=$1 AND ($2::integer IS NULL OR conducente_id=$2)
+      ORDER BY lower(intervallo_operativo) DESC LIMIT 200`, [op, cond]
+  );
+  return rows;
+}
+
+// Il chiamante deve validare il diritto di annullare la missione e gestire
+// lo stato commerciale della corsa; questa funzione modifica solo l'assegnazione.
+export async function annullaAssegnazione(client, { operatoreId, assegnazioneId }) {
+  const op = idValido(operatoreId, 'operatoreId');
+  const id = idValido(assegnazioneId, 'assegnazioneId');
+  const { rows } = await client.query(
+    `UPDATE assegnazioni_conducenti
+        SET stato='annullata', aggiornata_il=now()
+      WHERE id=$1 AND operatore_id=$2 AND stato='assegnata'
+      RETURNING id,stato`, [id, op]
+  );
+  if (!rows.length) throw new Error('Assegnazione attiva non trovata');
+  return rows[0];
 }

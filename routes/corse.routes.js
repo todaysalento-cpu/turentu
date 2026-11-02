@@ -1,6 +1,6 @@
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { getCorseByAutista, accettaCorsa, toggleCorsa } from '../services/corsa/corse.service.js';
+import { getCorseByAutista, toggleCorsa } from '../services/corsa/corse.service.js';
 import { getIO } from '../socket.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { upsertCorsa, removeCorsa } from '../services/search/search.cache.js'; 
@@ -58,24 +58,12 @@ corseRouter.get('/autista/all', async (req, res) => {
 // ======================================================
 // 3️⃣ ACCETTA CORSA
 // ======================================================
-corseRouter.post('/:id/accetta', async (req, res) => {
-  const corsaId = Number(req.params.id);
-  try {
-    let corsa = await accettaCorsa(corsaId);
-    if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
-
-    corsa = await populateAddresses(corsa);
-
-    CacheManager.corsa.update(corsa);
-    upsertCorsa(corsa); 
-
-    const io = getIO();
-    io.to(`autista_${corsa.veicolo_id}`).emit('nuova_corsa', corsa);
-
-    res.json({ nuovaCorsa: corsa });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Endpoint legacy disabilitato: accettazione consentita solo nel flusso pending.
+corseRouter.post('/:id/accetta', (req, res) => {
+  return res.status(410).json({
+    error: 'Endpoint di accettazione corsa non più disponibile',
+    code: 'ACCETTA_CORSA_LEGACY_DISABILITATA'
+  });
 });
 
 // ======================================================
@@ -84,7 +72,7 @@ corseRouter.post('/:id/accetta', async (req, res) => {
 corseRouter.post('/:id/start', async (req, res) => {
   const corsaId = Number(req.params.id);
   try {
-    const corsa = await toggleCorsa(corsaId, 'start');
+    const corsa = await toggleCorsa(corsaId, 'start', req.user.id);
     if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
     
     CacheManager.corsa.update(corsa);
@@ -96,7 +84,9 @@ corseRouter.post('/:id/start', async (req, res) => {
     res.json({ success: true, corsa });
   } catch (err) {
     console.error("❌ Errore in POST /api/corse/:id/start:", err);
-    res.status(500).json({ error: err.message });
+    const status = [400, 401, 403, 404, 409].includes(Number(err.status))
+      ? Number(err.status) : 500;
+    res.status(status).json({ error: status === 500 ? 'Errore interno' : err.message });
   }
 });
 
@@ -106,7 +96,7 @@ corseRouter.post('/:id/start', async (req, res) => {
 corseRouter.post('/:id/end', async (req, res) => {
   const corsaId = Number(req.params.id);
   try {
-    const corsa = await toggleCorsa(corsaId, 'end');
+    const corsa = await toggleCorsa(corsaId, 'end', req.user.id);
     if (!corsa) return res.status(404).json({ error: 'Corsa non trovata' });
     
     CacheManager.corsa.update(corsa);
@@ -118,6 +108,8 @@ corseRouter.post('/:id/end', async (req, res) => {
     res.json({ success: true, corsa });
   } catch (err) {
     console.error("❌ Errore in POST /api/corse/:id/end:", err);
-    res.status(500).json({ error: err.message });
+    const status = [400, 401, 403, 404, 409].includes(Number(err.status))
+      ? Number(err.status) : 500;
+    res.status(status).json({ error: status === 500 ? 'Errore interno' : err.message });
   }
 });

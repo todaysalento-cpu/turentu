@@ -521,6 +521,32 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
     };
 }
 
+/**
+ * Interfaccia di integrazione FISICA V2 per collaudi transazionali.
+ * Il chiamante possiede BEGIN/ROLLBACK. NON effettua COMMIT.
+ * Non abilita LIVE e non deve essere esposta a endpoint pubblici.
+ */
+export async function persistiCicloFisicoPerCollaudoInTransazioneV2({
+  client, ciclo, now = Date.now()
+} = {}) {
+  if (!client || typeof client.query !== 'function') fail('client transazionale mancante');
+  const nowMs = new Date(now).getTime();
+  if (!Number.isFinite(nowMs)) fail('now non valido');
+  const pre = await rivalidaCicloFisicoInTransazioneV2({client, ciclo});
+  const result = await persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs});
+  return {
+    ok: true,
+    percorso: 'POPBUS_PHYSICAL_V2_TRANSACTION_TEST_ONLY',
+    numeroMissioni: result.numeroMissioni,
+    numeroRichieste: result.numeroRichieste,
+    attivazioneIdSimulata: result.attivazioneId,
+    offertaIdSimulata: result.offertaId,
+    dbWritesTentate: true,
+    persistita: false,
+    attivabile: false
+  };
+}
+
 export async function collaudaPersistenzaCicloFisicoV2({
   pool, ciclo, mode = 'ROLLBACK_ONLY', now = Date.now()
 } = {}) {

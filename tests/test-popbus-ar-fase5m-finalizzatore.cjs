@@ -26,6 +26,16 @@ function makeScenario(failure) {
       if (q === 'BEGIN' || q === 'COMMIT' || q === 'ROLLBACK') {
         events.push(q); return { rows: [], rowCount: 0 };
       }
+      if (/^SELECT attivazione_id, scelta_conducente\s+FROM popbus_ar_accettazioni/.test(q)) {
+        events.push('READ_DRIVER_CHOICES');
+        return {
+          rows: [
+            { attivazione_id: 101, scelta_conducente: null },
+            { attivazione_id: 102, scelta_conducente: null }
+          ],
+          rowCount: 2
+        };
+      }
       if (/^SELECT g\.id, COUNT\(r\.id\)/.test(q)) {
         events.push('VERIFY_PAIRS');
         return { rows: [{ id: uuid, totale: 2, andate: 1, ritorni: 1 }] };
@@ -43,6 +53,7 @@ function makeScenario(failure) {
   const pool = { async connect() { events.push('CONNECT'); return client; } };
   const context = {
     Map, Number, Array, Set, Error,
+    process: { env: { POPBUS_CONDUCENTI_ENABLED: 'false' } },
     preflightTransazionaleAR: async () => {
       events.push('PREFLIGHT');
       return failure === 'preflight'

@@ -20,7 +20,7 @@ import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimiss
 import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
 import { diagnosticaFinestreCandidatiFisiciShadow } from './popbus-physical-candidates-time-shadow.js';
 import { diagnosticaCoppieFisicheTemporaliShadow } from './popbus-physical-pairs-time-shadow.js';
-import { verificaCicloFisicoTransazionale, collaudaPersistenzaCicloFisicoV2 } from './popbus-physical-writer-v2.js';
+import { verificaCicloFisicoTransazionale, collaudaPersistenzaCicloFisicoV2, persistiCicloFisicoPerCollaudoInTransazioneV2 } from './popbus-physical-writer-v2.js';
 import {
   caricaImpegniVeicoliShadow,
   verificaConflittoInMemoria
@@ -1090,3 +1090,217 @@ export async function collaudaPixelFirstInTransazione({
     opportunitaE2E: opportunityIds.map(Number)
   };
 }
+
+export async function collaudaPixelFirstFisicoInTransazione({
+  client,
+  now = Date.now(),
+  opportunityIds
+} = {}) {
+  if (!client || typeof client.query !== 'function') {
+    fail('client PostgreSQL mancante');
+  }
+
+  if (
+    !Array.isArray(opportunityIds) ||
+    !opportunityIds.length ||
+    opportunityIds.length > limits.opportunita ||
+    opportunityIds.some(id => !positive(id)) ||
+    new Set(opportunityIds.map(Number)).size !== opportunityIds.length
+  ) {
+    fail('opportunityIds non validi');
+  }
+
+  const nowMs = millis(now);
+  if (!Number.isFinite(nowMs)) fail('timestamp invalido');
+
+  // 1. SNAPSHOT PIXEL
+  const snapshot = await candidates(
+    client,
+    nowMs,
+    opportunityIds.map(Number)
+  );
+
+  if (!snapshot.contexts.length) {
+    return {
+      modalita: 'E2E_PHYSICAL_V2_ROLLBACK',
+      fase: 'PIXEL',
+      offerte: 0,
+      motivo: 'nessun contesto PIXEL'
+    };
+  }
+
+  // 2. GENERAZIONE CANDIDATI FISICI
+  const fisiche = await preparaCandidatiFisiciMultimissione({
+    client,
+    snapshot,
+    maxTentativi: 2000
+  });
+
+  if (
+    fisiche.parziale ||
+    fisiche.diagnostica?.completo !== true
+  ) {
+    fail('generazione fisica incompleta');
+  }
+
+  if (!fisiche.candidati.length) {
+    return {
+      modalita: 'E2E_PHYSICAL_V2_ROLLBACK',
+      fase: 'CANDIDATI_FISICI',
+      offerte: 0,
+      contesti: snapshot.contexts.length,
+      missioniCandidate: snapshot.missioni.length,
+      diagnosticaFisica: fisiche.diagnostica,
+      motivo: 'nessun candidato fisico'
+    };
+  }
+
+  // 3. VEICOLI UNICI
+  const veicoliUnici = new Map();
+
+  for (const v of snapshot.vehicles) {
+    const id = Number(v.id);
+    const previous = veicoliUnici.get(id);
+
+    if (
+      previous &&
+      (
+        !samePoint(previous, v) ||
+        Number(previous.euro_km) !== Number(v.euro_km) ||
+        Number(previous.posti_totali) !== Number(v.posti_totali)
+      )
+    ) {
+      fail('configurazioni veicolo divergenti');
+    }
+
+    if (!previous) veicoliUnici.set(id, v);
+  }
+
+  // 4. SELEZIONE CICLO FISICO
+  const costi = {
+    costoAttesaOraEuro: Number(
+      process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0
+    ),
+    altriCostiEuro: Number(
+      process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0
+    ),
+    margineMinimoEuro: Number(
+      process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0
+    )
+  };
+
+  const selezione = await selezionaCicliFisiciShadow({
+    contrattoRoutingFisicoV2: true,
+
+    candidati: fisiche.candidati,
+
+    vehicles: [...veicoliUnici.values()].map(v => ({
+      ...v,
+      euroKm: Number(v.euro_km)
+    })),
+
+    now: nowMs,
+    movement,
+
+    isAvailable: async (v, start, end) =>
+      snapshot.vehicles.some(d =>
+        Number(d.id) === Number(v.id) &&
+        samePoint(d, v) &&
+        verificaTurnoVeicolo(d, start, end)
+      ),
+
+    hasConflicts: async (v, start, end) =>
+      conflicts(client, v.id, start, end),
+
+    validateSingle: async a => {
+      const ids = a.requests.map(r => Number(r.id));
+      return new Set(ids).size === ids.length &&
+        arComplete(ids, snapshot.registro);
+    },
+
+    validatePair: async (a, b) => {
+      const ids = [
+        ...a.requests,
+        ...b.requests
+      ].map(r => Number(r.id));
+
+      return new Set(ids).size === ids.length &&
+        arComplete(ids, snapshot.registro);
+    },
+
+    ...costi
+  });
+
+  if (!selezione.migliorCiclo) {
+    return {
+      modalita: 'E2E_PHYSICAL_V2_ROLLBACK',
+      fase: 'SELEZIONE_FISICA',
+      offerte: 0,
+      candidatiFisici: fisiche.candidati.length,
+      diagnosticaFisica: fisiche.diagnostica,
+      diagnosticaSelezione: selezione.diagnostica,
+      diagnosticaEconomica: selezione.diagnosticaEconomica,
+      motivo: 'nessun ciclo fisico economicamente ammissibile'
+    };
+  }
+
+  const ciclo = selezione.migliorCiclo;
+
+  // 5. CONTROLLO PERIMETRO OPPORTUNITA
+  const expectedIds = new Set(opportunityIds.map(Number));
+
+  if (
+    ciclo.missioni.length < 1 ||
+    ciclo.missioni.length > 2 ||
+    ciclo.missioni.some(m =>
+      !expectedIds.has(Number(m.pixelOpportunitaId))
+    )
+  ) {
+    fail('ciclo fuori dal perimetro E2E');
+  }
+
+  // 6. RIVALIDAZIONE E SIMULAZIONE PERSISTENZA V2
+  // Stessa transazione del chiamante.
+  // Nessun COMMIT: il chiamante deve eseguire ROLLBACK.
+  const testPersistenza =
+    await persistiCicloFisicoPerCollaudoInTransazioneV2({
+      client,
+      ciclo,
+      now: nowMs
+    });
+
+  return {
+    modalita: 'E2E_PHYSICAL_V2_ROLLBACK',
+    fase: 'PERSISTENZA_SIMULATA',
+    offerte: 0,
+
+    contesti: snapshot.contexts.length,
+    missioniCandidate: snapshot.missioni.length,
+    veicoliCandidati: veicoliUnici.size,
+
+    candidatiFisici: fisiche.candidati.length,
+
+    ciclo: {
+      vehicleId: ciclo.vehicleId,
+      opportunita: ciclo.missioni.map(
+        m => Number(m.pixelOpportunitaId)
+      ),
+      richiestaIds: ciclo.richiestaIds,
+      numeroMissioni: ciclo.missioni.length,
+      numeroRichieste: ciclo.numeroRichieste,
+      economia: ciclo.economia
+    },
+
+    diagnosticaFisica: fisiche.diagnostica,
+    diagnosticaSelezione: selezione.diagnostica,
+    diagnosticaEconomica: selezione.diagnosticaEconomica,
+
+    testPersistenza,
+
+    dbWritesTentate: testPersistenza.dbWritesTentate,
+    persistita: false,
+    attivabile: false,
+    rollbackRichiesto: true
+  };
+}
+

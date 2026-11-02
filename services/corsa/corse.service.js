@@ -102,9 +102,14 @@ export async function accettaCorsa(corsa_id) {
 }
 
 /* ===================== 3️⃣ START / END CORSA ===================== */
-export async function toggleCorsa(corsa_id, action) {
+export async function toggleCorsa(corsa_id, action, utenteId) {
   if (!['start', 'end'].includes(action)) throw new Error('Azione non valida');
   if (!corsa_id) throw new Error('ID corsa mancante');
+  if (!Number.isSafeInteger(Number(utenteId)) || Number(utenteId) <= 0) {
+    const err = new Error('Utente non autenticato');
+    err.status = 401;
+    throw err;
+  }
 
   const client = await pool.connect();
   try {
@@ -136,6 +141,48 @@ export async function toggleCorsa(corsa_id, action) {
       );
     }
     const corsa = corsaRes.rows[0];
+
+    // Autorizzazione esecuzione: mai dedurre il conducente da veicolo.driver_id.
+    // La verifica e il lock avvengono nella stessa transazione della corsa.
+    const assegnazioni = await client.query(`
+      SELECT ac.id
+      FROM public.assegnazioni_conducenti ac
+      JOIN public.veicolo v ON v.id = ac.veicolo_id
+      WHERE ac.stato = 'assegnata'
+        AND ac.conducente_id = $2
+        AND ac.operatore_id = v.driver_id
+        AND ac.veicolo_id = $3
+        AND (
+          ac.corsa_id = $1
+          OR EXISTS (
+            SELECT 1 FROM public.popbus_attivazioni pa
+            WHERE pa.id = ac.attivazione_id
+              AND pa.corsa_id = $1
+              AND pa.veicolo_id = ac.veicolo_id
+              AND pa.autista_id = ac.operatore_id
+          )
+        )
+        AND (
+          (ac.modalita = 'titolare' AND ac.conducente_id = ac.operatore_id)
+          OR (ac.modalita IN ('manuale','automatica')
+              AND ac.conducente_id <> ac.operatore_id
+              AND EXISTS (
+                SELECT 1 FROM public.conducenti_operatori co
+                WHERE co.operatore_id = ac.operatore_id
+                  AND co.conducente_id = ac.conducente_id
+                  AND co.stato = 'attivo'
+              ))
+        )
+      FOR UPDATE OF ac
+    `, [corsa_id, Number(utenteId), corsa.veicolo_id]);
+
+    if (assegnazioni.rows.length !== 1) {
+      const err = new Error('Conducente non autorizzato o assegnazione ambigua/assente');
+      err.status = 403;
+      err.code = 'CONDUCENTE_NON_AUTORIZZATO';
+      throw err;
+    }
+    const assegnazioneId = assegnazioni.rows[0].id;
 
     if (action === 'end') {
       console.log(`\n🚀 [CAPTURE FLOW START] Chiusura corsa ID: ${corsa_id} in corso...`);
@@ -505,6 +552,18 @@ export async function toggleCorsa(corsa_id, action) {
       console.log(
         `🏁 [CAPTURE FLOW END] Preflight e riconciliazione completati per corsa ${corsa_id}.`
       );
+    }
+
+    if (action === 'end') {
+      const completata = await client.query(`
+        UPDATE public.assegnazioni_conducenti
+        SET stato = 'completata', aggiornata_il = NOW()
+        WHERE id = $1 AND stato = 'assegnata'
+        RETURNING id
+      `, [assegnazioneId]);
+      if (completata.rowCount !== 1) {
+        throw new Error('Impossibile completare assegnazione conducente');
+      }
     }
 
     await client.query('COMMIT');

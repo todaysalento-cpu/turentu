@@ -223,7 +223,9 @@ export async function assegnaConducente(client, input) {
     const { rows } = await client.query(
       `SELECT conducente_id, id AS rapporto_id
        FROM conducenti_operatori
-       WHERE operatore_id=$1 AND stato='attivo'
+       WHERE operatore_id=$1
+         AND stato='attivo'
+         AND assegnabile_automaticamente=true
        ORDER BY conducente_id`, [operatoreId]
     );
     candidati = rows.map(r => ({ id: Number(r.conducente_id), rapportoId: r.rapporto_id }));

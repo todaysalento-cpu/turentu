@@ -1,6 +1,7 @@
 // TURENTU POPBUS P0-C2 — verifica relazionale multi-missione.
 // Da eseguire all'interno della transazione del chiamante. Solo SELECT con lock;
 // nessuna scrittura, nessun accesso Stripe, nessuna apertura di transazioni.
+import { isDeepStrictEqual } from 'node:util';
 import { validaPianoMultiMissione, validaOccupazioneMultiMissione } from './popbus-multimission-preflight.js';
 
 const id = (v, label) => {
@@ -78,6 +79,10 @@ export async function verificaMissioniPersistite(client, { attivazioneId, piano,
       if (!local || !global || String(local.polyline)!==String(global.polyline) ||
           !same(local.seconds,global.seconds) || !same(local.metres,global.metres))
         fail('tratte missione discordanti');
+      // V2: verifica tutti gli attributi serializzati, indipendentemente
+      // dall'ordine delle chiavi del JSONB PostgreSQL. V1 resta invariato.
+      if (v2 && !isDeepStrictEqual(local, global))
+        fail('attributi fisici della tratta discordanti');
     }
     for (const r of payload.requests) {
       const rid=id(r.id,'richiesta locale'), s=idx(r.start,'salita locale'), e=idx(r.end,'discesa locale');

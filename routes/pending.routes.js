@@ -22,6 +22,21 @@ router.get('/autista/:veicolo_id', async (req, res) => {
     const client = await pool.connect();
     try {
         const { veicolo_id } = req.params;
+        const veicoloId = Number(veicolo_id);
+        const operatoreId = Number(req.user?.id);
+        if (!Number.isSafeInteger(veicoloId) || veicoloId <= 0) {
+            return res.status(400).json({ error: 'ID veicolo non valido' });
+        }
+        if (!Number.isSafeInteger(operatoreId) || operatoreId <= 0) {
+            return res.status(403).json({ error: 'Operatore non autorizzato' });
+        }
+        const { rows: proprietari } = await client.query(
+            'SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2',
+            [veicoloId, operatoreId]
+        );
+        if (!proprietari.length) {
+            return res.status(403).json({ error: 'Veicolo non tuo' });
+        }
         const result = await client.query(
             `SELECT 
                 id, veicolo_id, cliente_id, start_datetime, durata, posti_richiesti, tipo_corsa, created_at, expires_at, stato, 
@@ -39,7 +54,7 @@ router.get('/autista/:veicolo_id', async (req, res) => {
                 END AS destinazione_address
                FROM pending 
                WHERE veicolo_id = $1 AND stato = 'pending'`,
-            [veicolo_id]
+            [veicoloId]
         );
         res.json({ pendings: result.rows });
     } catch (err) {
@@ -655,6 +670,7 @@ router.post('/:id/accetta', async (req, res) => {
         'CONDUCENTE_NON_DISPONIBILE',
         'CONDUCENTE_CONFLITTO',
         'CONDUCENTE_SCELTA_RICHIESTA',
+        'MODALITA_ASSEGNAZIONE_NON_CONSENTITA',
         'NCC_CICLO_OPERATIVO_INVALIDO'
       ].includes(err.code)) {
         await pool.query(`UPDATE pending SET stato = 'rifiutata' WHERE id = $1 AND stato = 'pending'`, [id]);
@@ -671,6 +687,7 @@ router.post('/:id/accetta', async (req, res) => {
       'CONDUCENTE_NON_DISPONIBILE',
       'CONDUCENTE_CONFLITTO',
       'CONDUCENTE_SCELTA_RICHIESTA',
+        'MODALITA_ASSEGNAZIONE_NON_CONSENTITA',
       'NCC_CICLO_OPERATIVO_INVALIDO'
     ];
     res.status(erroriConflitto.includes(err.code) ? 409 : 400).json({

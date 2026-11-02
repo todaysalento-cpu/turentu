@@ -1,176 +1,124 @@
-
 import assert from 'node:assert/strict';
+import { adattaMissioneFermate } from '../services/popbus/v2/popbus-stop-mission-adapter.service.js';
+import { rivalidaMissioniFisicheV2 } from '../services/popbus/v2/popbus-physical-writer-v2.js';
 
-import { rivalidaMissioniFisicheV2 }
-  from '../services/popbus/v2/popbus-physical-writer-v2.js';
-
+// Fixture locale: geometria di test, NON routing stradale certificato per LIVE.
 const BASE = Date.parse('2026-11-01T10:00:00+01:00');
-
-function creaMissione(id = 900001) {
-  const partenza = BASE;
-  const arrivo = BASE + 188000;
-
-  const itinerario = {
-    ok: true,
-    routingVerificato: true,
-    visite: [
-      {
-        fermata_id: 14,
-        arrivo: partenza,
-        partenza: partenza + 50000,
-       eventi: [{
-  richiesta_id: id,
-  tipo: 'salita',
-  posti: 2,
-  timestampOperazione: partenza
-}]
-      },
-      {
-        fermata_id: 15,
-        arrivo,
-        partenza: arrivo + 50000,
- eventi: [{
-  richiesta_id: id,
-  tipo: 'discesa',
-  posti: 2,
-  timestampOperazione: arrivo
-}]
-      }
-    ],
-    legs: [{
-      metres: 869,
-      seconds: 138,
-      roadCoincident: false
-    }]
-  };
-
-  return {
-    schemaVersion: 2,
-    tipoItinerario: 'FERMATE_FISICHE',
-    pixelOpportunitaId: 500001,
-    evaluation: {
-      requests: [{ id, start: 0, end: 1 }]
-    },
-    plan: {
-      nodes: [14, 15],
-      legs: itinerario.legs
-    },
-    validazioneFisica: { itinerario }
-  };
-}
-
-const missione = creaMissione();
-
+const ID = 900001;
 const richiesta = {
-  id: 900001,
+  id: ID,
   posti_richiesti: 2,
   start_datetime: new Date(BASE).toISOString()
 };
 
-const ciclo = {
-  missioni: [missione]
-};
+function creaMissione(id = ID) {
+  const arrivo = BASE + 188000;
+  const req = { ...richiesta, id };
+  const itinerario = {
+    ok: true,
+    routingVerificato: true,
+    departure: BASE,
+    fineOperazioni: arrivo + 50000,
+    visite: [
+      {
+        fermata_id: 14, lat: 40.121583, lon: 18.305914,
+        arrivo: BASE, partenza: BASE + 50000, sostaSecondi: 50,
+        eventi: [{ richiesta_id: id, tipo: 'salita', posti: 2, timestampOperazione: BASE }]
+      },
+      {
+        fermata_id: 15, lat: 40.12584865, lon: 18.29992067,
+        arrivo, partenza: arrivo + 50000, sostaSecondi: 50,
+        eventi: [{ richiesta_id: id, tipo: 'discesa', posti: 2, timestampOperazione: arrivo }]
+      }
+    ],
+    legs: [{ metres: 869, seconds: 138, polyline: 'fixture-non-certificata' }]
+  };
+  const alternativa = {
+    sequenza: { ok: true },
+    temporale: { ok: true },
+    qualita: { ok: true },
+    itinerario
+  };
+  const adattata = adattaMissioneFermate({
+    alternativa, richieste: [req], corridorId: 'TEST'
+  });
+  assert.equal(adattata.ok, true);
+  return {
+    schemaVersion: 2,
+    tipoItinerario: 'FERMATE_FISICHE',
+    pixelOpportunitaId: 500001,
+    corridoioPixelId: 'TEST',
+    departure: adattata.missione.departure,
+    arrival: adattata.missione.arrival,
+    plan: {
+      nodes: adattata.missione.nodes,
+      legs: adattata.missione.legs
+    },
+    evaluation: { requests: adattata.missione.requests },
+    validazioneFisica: alternativa,
+    nodiFisici: adattata.nodi
+  };
+}
 
-// TEST 1: missione compatibile.
-const positivo = rivalidaMissioniFisicheV2({
-  ciclo,
-  richiesteBloccate: [richiesta]
-});
+const missione = creaMissione();
+const verifica = (missioni, richiesteBloccate = [richiesta]) =>
+  rivalidaMissioniFisicheV2({ ciclo: { missioni }, richiesteBloccate });
 
+// 1. Missione positiva costruita tramite adapter, comprese le soste.
+const positivo = verifica([missione]);
 assert.equal(positivo.ok, true);
 assert.equal(positivo.numeroMissioni, 1);
 assert.equal(positivo.numeroRichieste, 1);
 assert.equal(positivo.attivabile, false);
-
 console.log('PASS 1 - rivalidazione fisica positiva');
 
-// TEST 2: salita fuori tolleranza.
+// 2. Orario fuori tolleranza.
 assert.throws(
-  () => rivalidaMissioniFisicheV2({
-    ciclo,
-    richiesteBloccate: [{
-      ...richiesta,
-      start_datetime: new Date(BASE + 90 * 60000).toISOString()
-    }]
-  }),
+  () => verifica([missione], [{
+    ...richiesta,
+    start_datetime: new Date(BASE + 90 * 60000).toISOString()
+  }]),
   /compatibilita temporale fallita/
 );
-
 console.log('PASS 2 - orario modificato rifiutato');
 
-// TEST 3: richiesta non bloccata.
+// 3. Richiesta non bloccata.
 assert.throws(
-  () => rivalidaMissioniFisicheV2({
-    ciclo,
-    richiesteBloccate: [{
-      ...richiesta,
-      id: 900002
-    }]
-  }),
+  () => verifica([missione], [{ ...richiesta, id: 900002 }]),
   /richiesta non bloccata/
 );
-
 console.log('PASS 3 - richiesta non bloccata rifiutata');
 
-// TEST 4: richiesta duplicata fra missioni.
+// 4. Richiesta duplicata fra due missioni.
 assert.throws(
-  () => rivalidaMissioniFisicheV2({
-    ciclo: {
-      missioni: [
-        creaMissione(900001),
-        creaMissione(900001)
-      ]
-    },
-    richiesteBloccate: [richiesta]
-  }),
+  () => verifica([creaMissione(ID), creaMissione(ID)]),
   /richiesta duplicata nel ciclo/
 );
-
 console.log('PASS 4 - richiesta duplicata rifiutata');
 
-
-// TEST 5: il piano non può usare fermate differenti.
+// 5. Fermata alterata: preserviamo la lunghezza del piano operativo.
+const nodesAlterati = [...missione.plan.nodes];
+nodesAlterati[2] = 16;
 assert.throws(
-  () => rivalidaMissioniFisicheV2({
-    ciclo: {
-      missioni: [{
-        ...missione,
-        plan: {
-          ...missione.plan,
-          nodes: [14, 16]
-        }
-      }]
-    },
-    richiesteBloccate: [richiesta]
-  }),
-  /fermata fisica discordante/
+  () => verifica([{
+    ...missione,
+    plan: { ...missione.plan, nodes: nodesAlterati }
+  }]),
+  /fermata operativa discordante/
 );
-
 console.log('PASS 5 - fermata discordante rifiutata');
 
-// TEST 6: il piano non può alterare le percorrenze.
-assert.throws(
-  () => rivalidaMissioniFisicheV2({
-    ciclo: {
-      missioni: [{
-        ...missione,
-        plan: {
-          ...missione.plan,
-          legs: [{
-            ...missione.plan.legs[0],
-            metres: 9999
-          }]
-        }
-      }]
-    },
-    richiesteBloccate: [richiesta]
-  }),
-  /segmento fisico discordante/
+// 6. Distanza stradale alterata, senza modificare il numero dei segmenti.
+const legsAlterati = missione.plan.legs.map((leg, i) =>
+  i === 1 ? { ...leg, metres: 9999 } : leg
 );
-
+assert.throws(
+  () => verifica([{
+    ...missione,
+    plan: { ...missione.plan, legs: legsAlterati }
+  }]),
+  /segmento operativo discordante/
+);
 console.log('PASS 6 - segmento discordante rifiutato');
 
-
-console.log(
-  'RISULTATO: 6/6 test rivalidazione fisica V2 superati'
-);
+console.log('RISULTATO: 6/6 test rivalidazione fisica V2 superati (fixture locale, NON certificazione LIVE)');

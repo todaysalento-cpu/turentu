@@ -165,6 +165,10 @@ async function main() {
  ids={marker:'TURENTU_AR_COMMIT_FIXTURE_V1',cliente:vals[0],requests:[vals[1],vals[2]],activations:[vals[3],vals[4]],offers:[vals[5],vals[6]],wallets:[vals[7],vals[8]],gid:randomUUID(),rida:randomUUID(),ridr:randomUUID(),expiry:new Date(Date.now()+3600000).toISOString(),startA:start.toISOString(),startR:new Date(start.getTime()+4*3600000).toISOString()};
  writeJournal();
  let server;
+ let io;
+ let socketClient;
+ const socketEvents = [];
+ const socketMode = process.argv.includes('--socket');
  try {
    await createFixture();
    const expressMod=await import('express');
@@ -174,6 +178,51 @@ async function main() {
    const app=express();app.use(express.json());app.use('/api/popbus',routerMod.popbusRouter);
    server=await new Promise((ok,fail)=>{const srv=app.listen(0,'127.0.0.1',()=>ok(srv));srv.on('error',fail);});
    const base='http://127.0.0.1:'+server.address().port;
+   if (socketMode) {
+     const { Server } = require('socket.io');
+     const { io: connect } = require('socket.io-client');
+     const socketModule = await import(pathToFileURL(resolve('socket.js')).href);
+
+     io = new Server(server, {
+       path: '/socket.io/',
+       transports: ['websocket']
+     });
+     socketModule.setupSocket(io);
+
+     socketClient = connect(base, {
+       path: '/socket.io/',
+       transports: ['websocket'],
+       auth: {
+         token: jwt.sign(
+           { id: 2, role: 'autista' },
+           process.env.JWT_SECRET,
+           { expiresIn: '5m' }
+         )
+       },
+       reconnection: false,
+       timeout: 5000
+     });
+
+     await new Promise((resolve, reject) => {
+       const timer = setTimeout(
+         () => reject(new Error('Timeout connessione Socket.IO')),
+         7000
+       );
+       socketClient.once('connect', () => {
+         clearTimeout(timer);
+         resolve();
+       });
+       socketClient.once('connect_error', error => {
+         clearTimeout(timer);
+         reject(error);
+       });
+     });
+
+     socketClient.on('nuova_corsa_popbus', corsa => {
+       socketEvents.push(corsa);
+     });
+     console.log('PASS: Socket.IO NCC 2 connesso');
+   }
    const token=id=>jwt.sign({id,role:'autista'},process.env.JWT_SECRET,{expiresIn:'5m'});
    const request=async(off,id)=>{
      const response=await fetch(base+'/api/popbus/'+off+'/accetta',{method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+token(id)},body:'{}'});
@@ -197,17 +246,46 @@ async function main() {
    // Test 2: real HTTP A/R lifecycle
    r=await request(ids.offers[0],2);expect(r,202,'in_attesa');
    console.log('PASS: prima accettazione HTTP -> 202');
+   if (socketMode) {
+     await new Promise(resolve => setTimeout(resolve, 250));
+     assert.equal(socketEvents.length, 0,
+       'Notifica anticipata prima della finalizzazione A/R');
+     console.log('PASS: nessuna notifica dopo la prima accettazione');
+   }
    r=await request(ids.offers[1],2);expect(r,200,'confermato');
    assert.equal(r.body.corse?.length,2,JSON.stringify(r));
    console.log('PASS: seconda accettazione HTTP -> 200 con 2 corse');
+   if (socketMode) {
+     const deadline = Date.now() + 5000;
+     while (socketEvents.length < 2 && Date.now() < deadline) {
+       await new Promise(resolve => setTimeout(resolve, 50));
+     }
+     assert.equal(socketEvents.length, 2,
+       'Attese esattamente due notifiche Socket.IO');
+
+     const expectedIds = r.body.corse.map(x => Number(x.corsa_id)).sort((a,b)=>a-b);
+     const receivedIds = socketEvents.map(x => Number(x.id)).sort((a,b)=>a-b);
+     assert.deepEqual(receivedIds, expectedIds,
+       'Gli ID notificati non coincidono con le corse confermate');
+
+     console.log('PASS: due notifiche Socket.IO corrispondenti alle corse A/R');
+   }
    const before=await verify();console.log('PASS: COMMIT verificato su nuova connessione');
    r=await request(ids.offers[0],2);expect(r,200,'confermato');
    assert.equal(r.body.gia_confermato,true,JSON.stringify(r));
    assert.deepEqual(await verify(),before);
    console.log('PASS: retry HTTP idempotente');
+   if (socketMode) {
+     await new Promise(resolve => setTimeout(resolve, 300));
+     assert.equal(socketEvents.length, 2,
+       'Il retry ha generato notifiche duplicate');
+     console.log('PASS: retry senza notifiche duplicate');
+   }
  } finally {
    process.env.POPBUS_AR_FINALIZATION_ENABLED='false';
-   if(server) await new Promise(resolve=>server.close(resolve));
+   if(socketClient) socketClient.disconnect();
+   if(io) await new Promise(resolve=>io.close(resolve));
+   else if(server) await new Promise(resolve=>server.close(resolve));
    try {await cleanup();}catch(e){console.error('ATTENZIONE: cleanup manuale necessario: node tests\\test-popbus-http-ar-e2e.cjs --cleanup');throw e;}
  }
  console.log('PASS: HTTP A/R E2E e sicurezza NCC completati');

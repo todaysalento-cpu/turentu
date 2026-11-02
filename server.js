@@ -22,7 +22,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 
 // ======================= SOCKET + REDIS =======================
 import { setupSocket } from './socket.js';
-import { redisClient } from './redis.js';
+import { ensureRedisReady } from './redis.js';
 
 // ======================= FLOW REGISTRY =======================
 import { flowRegistry } from './core/registry/flowRegistry.js';
@@ -160,19 +160,22 @@ const io = new Server(server, {
 });
 
 const startServer = async () => {
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
-  });
-
   try {
     console.log('🔄 [INIT] Inizializzazione asincrona servizi...');
 
-    if (redisClient && !redisClient.isOpen) await redisClient.connect();
-    
+    // Redis principale: una sola connect(), gestita da redis.js.
+    // In produzione Redis è obbligatorio per l'adapter distribuito Socket.IO.
+    const redisClient = await ensureRedisReady();
+
     const pubClient = redisClient.duplicate();
-    const subClient = pubClient.duplicate();
+    const subClient = redisClient.duplicate();
+    pubClient.on('error', err => console.error('❌ [SOCKET PUB] Redis:', err));
+    subClient.on('error', err => console.error('❌ [SOCKET SUB] Redis:', err));
     await Promise.all([pubClient.connect(), subClient.connect()]);
-    
+    if (!pubClient.isReady || !subClient.isReady) {
+      throw new Error('SOCKET_REDIS_ADAPTER_NOT_READY');
+    }
+
     io.adapter(createAdapter(pubClient, subClient));
     setupSocket(io);
 
@@ -240,6 +243,17 @@ const startServer = async () => {
       console.log('⏸️ [PIXEL TERRITORIALE] Scheduler disabilitato.');
     }
 
+    // Render non riceve traffico HTTP finché Redis, Socket.IO e le cache
+    // non sono stati inizializzati correttamente.
+    await new Promise((resolve, reject) => {
+      const onError = error => reject(error);
+      server.once('error', onError);
+      server.listen(port, '0.0.0.0', () => {
+        server.off('error', onError);
+        console.log(`🚀 [SERVER] In ascolto su porta ${port}`);
+        resolve();
+      });
+    });
     console.log('✅ [INIT] Sistema pienamente operativo.');
   } catch (err) {
     console.error('💥 [CRITICAL] Errore durante l\'inizializzazione:', err);

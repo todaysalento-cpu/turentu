@@ -160,7 +160,8 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
   }
 
   const plan = a.piano;
-  const isMultiPixel = Array.isArray(plan?.missioni) && plan.missioni.length > 1;
+  const isPhysicalV2 = plan?.schemaVersion === 2 && plan?.tipoItinerario === 'FERMATE_FISICHE';
+  const isMultiPixel = isPhysicalV2 || (Array.isArray(plan?.missioni) && plan.missioni.length > 1);
   // P0-C6: nessuna opportunita principale obbligatoria nel ciclo multimissione.
   // La verifica controlla tutte le opportunita delle missioni persistite.
   if (isMultiPixel) {
@@ -170,7 +171,7 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
   }
   // P0-C3: percorso multi-missione abilitabile solo in ambiente di collaudo.
   // Il flag e' intenzionalmente OFF per default; non abilitarlo in produzione.
-  const isMulti = Array.isArray(plan?.missioni) && plan.missioni.length > 1;
+  const isMulti = isPhysicalV2 || (Array.isArray(plan?.missioni) && plan.missioni.length > 1);
   const multiEnabled = process.env.POPBUS_MULTIMISSION_ACCEPTANCE_TEST === 'true';
   let multiPreflight = null;
   if (isMulti) {

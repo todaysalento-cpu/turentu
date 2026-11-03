@@ -17,7 +17,7 @@ const state = { scenario: '', failOn: null, db: null, stripe: null, calls: [], q
 const deep = x => structuredClone(x);
 function initial() {
   return {
-    corsa: { id: 991001, stato: 'in_corso', tipo_corsa: 'condivisa', prezzo_fisso: 67.65, prenotazione_origine_id: 991011, distanza: 100 },
+    corsa: { id: 991001, veicolo_id: 359, stato: 'in_corso', tipo_corsa: 'condivisa', prezzo_fisso: 67.65, prenotazione_origine_id: 991011, distanza: 100 },
     prenotazioni: [
       { id: 991011, corsa_id: 991001, prezzo_totale: 30.75, posti_richiesti: 1, km_utente: 100, start_offset: 0, end_offset: 100000 },
       { id: 991012, corsa_id: 991001, prezzo_totale: 18.45, posti_richiesti: 1, km_utente: 60, start_offset: 20000, end_offset: 80000 },
@@ -64,6 +64,15 @@ const client = {
     if (q.startsWith('select stato from public.corse where id = $1')) {
       return { rows: state.db.corsa.id === Number(args[0]) ? [{ stato: state.db.corsa.stato }] : [] };
     }
+
+    if (q.includes('from public.assegnazioni_conducenti ac')) {
+      const [rideId, userId, vehicleId] = args;
+      return {
+        rows: rideId === 991001 && userId === 9 && vehicleId === 359
+          ? [{ id: 991031 }]
+          : []
+      };
+    }
     if (q.includes('from public.prenotazioni pr left join public.pagamenti p')) {
       return { rows: state.db.prenotazioni.flatMap(pr => {
         const payments = state.db.pagamenti.filter(p => p.prenotazione_id === pr.id && p.corsa_id === pr.corsa_id);
@@ -97,6 +106,15 @@ const client = {
       if (q.includes('importo = $1')) p.importo = args[0];
       return { rows: [] };
     }
+if (q.startsWith("update public.assegnazioni_conducenti set stato = 'completata'")) {
+  if (Number(args[0]) !== 991031) {
+    return { rows: [], rowCount: 0 };
+  }
+  return {
+    rows: [{ id: 991031 }],
+    rowCount: 1
+  };
+}
     throw Error('SQL non simulato: ' + q.slice(0, 180));
   }, release() {}
 };
@@ -128,7 +146,7 @@ async function check(name, fn) {
 console.log('\nTURENTU NCC - TEST STRIPE MOCK ISOLATO (NESSUNA RETE)\n');
 reset();
 await check('Cattura completa Modello A', async () => {
-  await toggleCorsa(991001, 'end');
+  await toggleCorsa(991001, 'end', 9);
   assert.equal(state.db.corsa.stato, 'completata');
   assert.deepEqual(state.calls.map(x => x.amount), [3075,1845,1845]);
   assert.deepEqual(state.db.pagamenti.map(x => Math.round(x.importo*100)), [3075,1845,1845]);
@@ -140,7 +158,7 @@ await check('Idempotency key presente su ogni cattura', async () => {
 });
 reset(); state.failOn = 'pi_test_B';
 await check('Errore intermedio: rollback DB, incasso A rimane su Stripe', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /ERRORE_STRIPE_SIMULATO/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /ERRORE_STRIPE_SIMULATO/);
   assert.equal(state.db.corsa.stato, 'in_corso');
   assert.ok(state.db.pagamenti.every(x => x.stato === 'autorizzazione'));
   assert.equal(state.stripe.pi_test_A.status, 'succeeded');
@@ -150,7 +168,7 @@ await check('Errore intermedio: rollback DB, incasso A rimane su Stripe', async 
 });
 await check('Retry: riconcilia A, cattura solo B e C', async () => {
   const prev = state.calls.length;
-  await toggleCorsa(991001, 'end');
+  await toggleCorsa(991001, 'end', 9);
   assert.deepEqual(state.calls.slice(prev).map(x => x.id), ['pi_test_B','pi_test_C']);
   assert.deepEqual(state.db.pagamenti.map(x => Math.round(x.importo*100)), [3075,1845,1845]);
   assert.ok(state.db.pagamenti.every(x => x.stato === 'pagato'));
@@ -158,92 +176,92 @@ await check('Retry: riconcilia A, cattura solo B e C', async () => {
 });
 reset(); state.stripe.pi_test_A.status = 'succeeded'; state.stripe.pi_test_A.amount_received = 3000; state.stripe.pi_test_A.amount_capturable = 0;
 await check('Incasso già effettuato ma errato: blocco preventivo', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /Modello A/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /Modello A/);
   assert.equal(state.calls.length, 0);
   assert.equal(state.db.corsa.stato, 'in_corso');
 });
 reset(); state.stripe.pi_test_B.amount_capturable = 100;
 await check('Autorizzazione insufficiente: nessuna cattura', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /Modello A/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /Modello A/);
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.prenotazioni[2].prezzo_totale = 18.44;
 await check('Quote non quadrate: nessuna cattura', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /ripartizione non quadrata/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /ripartizione non quadrata/);
   assert.equal(state.calls.length, 0);
 });
 
 // Verifiche delle transizioni introdotte nel servizio.
 reset(); state.db.corsa.stato = 'accettata';
 await check('Start: accettata -> in_corso, nessuna cattura', async () => {
-  await toggleCorsa(991001, 'start');
+  await toggleCorsa(991001, 'start', 9);
   assert.equal(state.db.corsa.stato, 'in_corso');
   assert.equal(state.calls.length, 0);
   assert.equal(state.commits, 1);
 });
 await check('Start ripetuto: rifiutato senza cattura', async () => {
-  await assert.rejects(toggleCorsa(991001, 'start'), /Transizione non consentita/);
+  await assert.rejects(toggleCorsa(991001, 'start', 9), /Transizione non consentita/);
   assert.equal(state.db.corsa.stato, 'in_corso');
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.corsa.stato = 'accettata';
 await check('End anticipato: accettata -> completata bloccato', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /Transizione non consentita/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /Transizione non consentita/);
   assert.equal(state.db.corsa.stato, 'accettata');
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.corsa.stato = 'completata';
 await check('Start su completata: bloccato', async () => {
-  await assert.rejects(toggleCorsa(991001, 'start'), /Transizione non consentita/);
+  await assert.rejects(toggleCorsa(991001, 'start', 9), /Transizione non consentita/);
   assert.equal(state.db.corsa.stato, 'completata');
   assert.equal(state.calls.length, 0);
 });
 reset();
 await check('End ripetuto: nessuna seconda cattura', async () => {
-  await toggleCorsa(991001, 'end');
+  await toggleCorsa(991001, 'end', 9);
   const firstCount = state.calls.length;
-  await assert.rejects(toggleCorsa(991001, 'end'), /Transizione non consentita/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /Transizione non consentita/);
   assert.equal(state.calls.length, firstCount);
   assert.equal(state.db.corsa.stato, 'completata');
   assert.ok(state.db.pagamenti.every(p => p.stato === 'pagato'));
 });
 reset();
 await check('Corsa inesistente: rifiutata senza catture', async () => {
-  await assert.rejects(toggleCorsa(999999, 'end'), /non trovata/);
+  await assert.rejects(toggleCorsa(999999, 'end', 9), /non trovata/);
   assert.equal(state.calls.length, 0);
 });
 
 reset(); state.db.pagamenti.pop();
 await check('Pagamento mancante: chiusura bloccata senza catture', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /pagamento mancante/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /pagamento mancante/);
   assert.equal(state.calls.length, 0);
   assert.equal(state.db.corsa.stato, 'in_corso');
 });
 reset(); state.db.pagamenti.push({...state.db.pagamenti[0], id:991099});
 await check('Pagamento duplicato: chiusura bloccata senza catture', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /pagamenti duplicati/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /pagamenti duplicati/);
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.pagamenti[0].stato = 'annullato';
 await check('Stato pagamento non ammesso: chiusura bloccata', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /stato pagamento non ammesso/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /stato pagamento non ammesso/);
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.pagamenti[0].stato = 'pagato'; state.db.pagamenti[0].importo = 30.75;
 state.stripe.pi_test_A.status = 'succeeded'; state.stripe.pi_test_A.amount_received = 3075;
 await check('Pagamento gia pagato: verifica Stripe e cattura solo altri', async () => {
-  await toggleCorsa(991001, 'end');
+  await toggleCorsa(991001, 'end', 9);
   assert.deepEqual(state.calls.map(x => x.id), ['pi_test_B','pi_test_C']);
   assert.equal(state.db.corsa.stato, 'completata');
 });
 reset(); state.db.pagamenti[0].stato = 'pagato'; state.db.pagamenti[0].importo = 30.75;
 await check('Pagamento pagato senza incasso Stripe: blocco', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /incasso Stripe non riconciliato/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /incasso Stripe non riconciliato/);
   assert.equal(state.calls.length, 0);
 });
 reset(); state.db.pagamenti.push({id:991099, prenotazione_id:999999, corsa_id:991001, stato:'pagato', stripe_payment_intent:'pi_test_X', importo:10});
 await check('Pagamento orfano: chiusura bloccata', async () => {
-  await assert.rejects(toggleCorsa(991001, 'end'), /pagamento senza prenotazione/);
+  await assert.rejects(toggleCorsa(991001, 'end', 9), /pagamento senza prenotazione/);
   assert.equal(state.calls.length, 0);
 });
 

@@ -25,7 +25,7 @@ export async function verificaAccettazionePixelMulti(client, attivazione, plan) 
   if ((plan?.schemaVersion === 2 || plan?.tipoItinerario === 'FERMATE_FISICHE') && !physical)
     fail('contratto V2 incompleto');
   if (attivazione.direttrice_id != null) fail('direttrice legacy nell attivazione');
-  if (!Array.isArray(plan?.missioni) || plan.missioni.length < 2 || plan.missioni.length > 3 ||
+  if (!Array.isArray(plan?.missioni) || plan.missioni.length < (physical ? 1 : 2) || plan.missioni.length > 3 ||
       !Array.isArray(plan.nodes) || !Array.isArray(plan.legs) ||
       plan.legs.length !== plan.nodes.length - 1 ||
       !Array.isArray(plan.evaluation?.requests)) fail('piano globale non valido');

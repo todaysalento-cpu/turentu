@@ -109,8 +109,12 @@ export const upsertCorsa = async (c, indicizzare = false) => {
 export const removeCorsa = async (corsaId) => {
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
-    await syncGeoIndex('corsa', id, []);
-    for (const trattaId of [...(CacheStore.tratteByCorsa.get(id) || [])]) await removeTratta(trattaId);
+    const errors = [];
+    try { await syncGeoIndex('corsa', id, []); } catch (e) { errors.push(e); }
+    for (const trattaId of [...(CacheStore.tratteByCorsa.get(id) || [])]) {
+        try { await removeTratta(trattaId); } catch (e) { errors.push(e); }
+    }
+    if (errors.length) throw new AggregateError(errors, 'REDIS_INDEX_CLEANUP_FAILED');
 };
 
 export async function upsertTratta(t, indicizzare = false) {
@@ -137,13 +141,13 @@ export async function upsertTratta(t, indicizzare = false) {
 export async function removeTratta(trattaId) {
     const id = Number(trattaId);
     const t = CacheStore.tratteCache.get(id);
-    await syncGeoIndex('tratta', id, []);
     CacheStore.tratteCache.delete(id);
     if (t) {
         const set = CacheStore.tratteByCorsa.get(Number(t.corsa_id));
         set?.delete(id);
         if (set?.size === 0) CacheStore.tratteByCorsa.delete(Number(t.corsa_id));
     }
+    await syncGeoIndex('tratta', id, []);
 };
 
 // --- SYNC ENGINE ---
@@ -225,6 +229,7 @@ export async function loadCachesUltra(force = false) {
             CacheStore.nodiCache.set(String(nodo.id), nodo);
         });
 
+        // Riconciliazione Redis globale sospesa fino al test di concorrenza.
         CacheStore.lastSync = Date.now();
         console.log(`✅ [SYNC] Completata con successo. Totale veicoli attivi in memoria (veicoloToDisponibilita): ${CacheStore.veicoloToDisponibilita.size}`);
     } catch (err) {
@@ -265,6 +270,22 @@ async function syncGeoIndex(prefix, id, coords) {
     if (next.size) tx.set(hashesKey, JSON.stringify([...next]));
     else tx.del(hashesKey);
     await tx.exec();
+}
+
+async function reconcileGeoIndexes(activeCorse, activeTratte) {
+    if (!redisClient?.isReady) throw new Error('REDIS_NOT_READY_FOR_RECONCILIATION');
+    for (const [prefix, activeIds] of [['corsa', activeCorse], ['tratta', activeTratte]]) {
+        let removed = 0;
+        for await (const keys of redisClient.scanIterator({ MATCH: `${prefix}:hashes:*`, COUNT: 100 })) {
+            for (const key of keys) {
+            const idText = key.slice(`${prefix}:hashes:`.length);
+            const id = Number(idText);
+            if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== idText) throw new Error(`REDIS_INVALID_GEO_INDEX_KEY: ${key}`);
+            if (!activeIds.has(id)) { await syncGeoIndex(prefix, id, []); removed++; }
+        }
+        }
+        console.log(`[REDIS RECONCILE] ${prefix}: indici obsoleti rimossi=${removed}`);
+    }
 }
 
 async function aggiornaIndiciRedis(corsaId, coords) {

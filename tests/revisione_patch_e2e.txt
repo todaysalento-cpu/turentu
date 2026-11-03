@@ -1,0 +1,126 @@
+diff --git a/tests/test_ncc_stripe_integrato_sicuro.mjs b/tests/test_ncc_stripe_integrato_sicuro.mjs
+index a1fa568b..eb016540 100644
+--- a/tests/test_ncc_stripe_integrato_sicuro.mjs
++++ b/tests/test_ncc_stripe_integrato_sicuro.mjs
+@@ -14,8 +14,9 @@ import { toggleCorsa } from '../services/corsa/corse.service.js';
+ 
+ const key = process.env.STRIPE_SECRET_KEY || '';
+ if (!key.startsWith('sk_test_')) throw new Error('BLOCCO: richiede STRIPE_SECRET_KEY sk_test_');
+-if (process.env.TURENTU_ALLOW_INTEGRATION_DB_WRITE !== 'YES') {
+-  throw new Error('BLOCCO: imposta TURENTU_ALLOW_INTEGRATION_DB_WRITE=YES solo per esecuzione autorizzata');
++if (process.env.TURENTU_ALLOW_INTEGRATION_DB_WRITE !== 'YES' ||
++    process.env.TURENTU_ACK_SHARED_RENDER_DB !== 'YES') {
++  throw new Error('BLOCCO: richiede TURENTU_ALLOW_INTEGRATION_DB_WRITE=YES e TURENTU_ACK_SHARED_RENDER_DB=YES');
+ }
+ const stripe = new Stripe(key);
+ const runId = `TURENTU_NCC_STRIPE_TEST_${Date.now()}_${process.pid}`;
+@@ -56,14 +57,14 @@ async function makeFixture(scenario) {
+     if (!v.rows.length) throw new Error('Veicolo TEST 357 non disponibile: nessuna scrittura consentita');
+     const u = await c.query(`INSERT INTO public.utente (nome,email,tipo,password) SELECT $1 || n, $2 || n || chr(64) || 'example.invalid', 'cliente', $3 FROM generate_series(1,3) AS n RETURNING id`, [marker, marker.toLowerCase(), 'DISABLED_TEST_ACCOUNT_' + marker]); fixture.userIds = u.rows.map(x => x.id);
+     if (!v.rows.length || u.rows.length < 3) throw new Error('Mancano veicolo capienza >=3 o tre utenti');
+-    const depart = new Date(Date.now() + 30 * 86400000);
++    const depart = new Date(Date.now() + (scenario === 'COMPLETA' ? 30 : 31) * 86400000);
+     const arrival = new Date(depart.getTime() + 2 * 3600000);
+     const ride = await c.query(`
+       INSERT INTO public.corse
+       (veicolo_id,start_datetime,arrivo_datetime,tipo_corsa,stato,posti_totali,
+        posti_disponibili,posti_prenotati,distanza,prezzo_fisso,
+        km_avvicinamento,km_riposizionamento,origine_address,destinazione_address)
+-      VALUES ($1,$2,$3,'condivisa','in_corso',$4,$5,3,100,67.65,0,0,$6,'TEST STRIPE DESTINAZIONE')
++      VALUES ($1,$2,$3,'condivisa','accettata',$4,$5,3,100,67.65,0,0,$6,'TEST STRIPE DESTINAZIONE')
+       RETURNING id`, [v.rows[0].id, depart, arrival, v.rows[0].posti_totali,
+         v.rows[0].posti_totali - 3, marker]);
+     fixture.rideId = ride.rows[0].id;
+@@ -73,6 +74,14 @@ async function makeFixture(scenario) {
+       VALUES ($1,'andata',100,7200,$2,$3,'programmato') RETURNING id`,
+       [fixture.rideId, depart, arrival]);
+     fixture.trattaId = tr.rows[0].id;
++    // Assegnazione esplicita al titolare che guida fisicamente il veicolo TEST.
++    const assigned = await c.query(`
++      INSERT INTO public.assegnazioni_conducenti
++      (id, operatore_id, conducente_id, veicolo_id, corsa_id, intervallo_operativo, modalita, stato)
++      VALUES (nextval('public.assegnazioni_conducenti_id_seq'), 2, 2, $1, $2,
++              tstzrange($3::timestamptz, $4::timestamptz, '[)'), 'titolare', 'assegnata')
++      RETURNING id`, [v.rows[0].id, fixture.rideId, depart, arrival]);
++    fixture.assignmentId = Number(assigned.rows[0].id);
+     for (let i=0;i<3;i++) {
+       const p = passengers[i];
+       const pr = await c.query(`
+@@ -132,9 +141,23 @@ async function makeFixture(scenario) {
+   }
+   return fixture;
+ }
++async function verifyDriverAndStart(f, label) {
++  // Il cliente sintetico non assegnato deve essere respinto con 403.
++  let denied = false;
++  try { await toggleCorsa(f.rideId, 'start', f.userIds[0]); }
++  catch (e) { denied = e.status === 403 && e.code === 'CONDUCENTE_NON_AUTORIZZATO'; }
++  check(denied, `${label}: conducente non assegnato respinto`);
++  const before = await pool.query('SELECT stato FROM public.corse WHERE id=$1', [f.rideId]);
++  check(before.rows[0]?.stato === 'accettata', `${label}: avvio non autorizzato senza effetti`);
++  await toggleCorsa(f.rideId, 'start', 2);
++  const after = await pool.query('SELECT stato FROM public.corse WHERE id=$1', [f.rideId]);
++  check(after.rows[0]?.stato === 'in_corso', `${label}: avvio del titolare assegnato`);
++}
+ async function verify(f, label) {
+   const r = await pool.query('SELECT stato,prezzo_fisso FROM public.corse WHERE id=$1',[f.rideId]);
+   check(r.rows[0]?.stato === 'completata', `${label}: corsa completata`);
++  const assignment = await pool.query('SELECT stato FROM public.assegnazioni_conducenti WHERE id=$1 AND corsa_id=$2 AND conducente_id=2 AND operatore_id=2 AND veicolo_id=357', [f.assignmentId, f.rideId]);
++  check(assignment.rows.length === 1 && assignment.rows[0].stato === 'completata', `${label}: assegnazione conducente completata`);
+   const db = await pool.query('SELECT prenotazione_id,stato,importo FROM public.pagamenti WHERE corsa_id=$1',[f.rideId]);
+   check(db.rows.length === 3 && db.rows.every(p=>p.stato==='pagato'), `${label}: tre pagamenti DB pagati`);
+   let total = 0;
+@@ -148,7 +171,7 @@ async function verify(f, label) {
+   }
+   check(total === 6765, `${label}: totale catturato 6765 cent`);
+   let rejected = false;
+-  try { await toggleCorsa(f.rideId,'end'); }
++  try { await toggleCorsa(f.rideId,'end',2); }
+   catch(e) { rejected = /Transizione non consentita/.test(e.message); }
+   check(rejected, `${label}: seconda chiusura respinta`);
+   for (const item of f.items) {
+@@ -175,6 +198,18 @@ async function cleanup(f) {
+     const bookings = await c.query('SELECT id, cliente_id FROM public.prenotazioni WHERE cliente_id = ANY($1::int[]) FOR UPDATE', [f.userIds]); if (bookings.rows.length !== 3 || bookings.rows.some(x => !f.items.some(i => Number(i.prenId) === Number(x.id)) || !f.userIds.includes(Number(x.cliente_id)))) throw new Error('CLEANUP BLOCCATO: prenotazioni sintetiche non corrispondenti');
+     const payments = await c.query('SELECT id FROM public.pagamenti WHERE corsa_id=$1 FOR UPDATE', [f.rideId]);
+     if (payments.rows.length !== 3 || payments.rows.some(x => !f.items.some(i => Number(i.paymentId) === Number(x.id)))) throw new Error('CLEANUP BLOCCATO: pagamenti non corrispondenti alla fixture');
++    const assignments = await c.query('SELECT id,operatore_id,conducente_id,veicolo_id,modalita,stato FROM public.assegnazioni_conducenti WHERE corsa_id=$1 FOR UPDATE',[f.rideId]);
++    if (!Number.isSafeInteger(f.assignmentId) || assignments.rows.length !== 1 ||
++        Number(assignments.rows[0].id) !== f.assignmentId ||
++        Number(assignments.rows[0].operatore_id) !== 2 ||
++        Number(assignments.rows[0].conducente_id) !== 2 ||
++        Number(assignments.rows[0].veicolo_id) !== 357 ||
++        assignments.rows[0].modalita !== 'titolare' ||
++        assignments.rows[0].stato !== 'completata') {
++      throw new Error('CLEANUP BLOCCATO: assegnazione non corrispondente alla fixture');
++    }
++    const removedAssignment = await c.query('DELETE FROM public.assegnazioni_conducenti WHERE id=$1 AND corsa_id=$2 RETURNING id',[f.assignmentId,f.rideId]);
++    if (removedAssignment.rowCount !== 1) throw new Error('CLEANUP BLOCCATO: assegnazione non eliminata');
+     await c.query('DELETE FROM public.pagamenti WHERE corsa_id=$1',[f.rideId]);
+     await c.query('DELETE FROM public.prenotazioni WHERE corsa_id=$1',[f.rideId]);
+     await c.query('DELETE FROM public.corse_tratte WHERE corsa_id=$1',[f.rideId]);
+@@ -193,13 +228,15 @@ try {
+   const account = await stripe.accounts.retrieve();
+   check(!!account.id, 'Account Stripe TEST raggiungibile');
+   const one = await makeFixture('COMPLETA');
+-  await toggleCorsa(one.rideId,'end');
++  await verifyDriverAndStart(one, 'COMPLETA');
++  await toggleCorsa(one.rideId,'end',2);
+   await verify(one,'COMPLETA');
+ // const one = await makeFixture('COMPLETA');
+ // await toggleCorsa(one.rideId, 'end');
+ // await verify(one, 'COMPLETA');
+ 
+ const two = await makeFixture('RICONCILIA');
++  await verifyDriverAndStart(two, 'RICONCILIA');
+   // Simula il caso di cattura Stripe riuscita e COMMIT DB non ancora eseguito:
+   // A e gia succeeded su Stripe, ma il DB e ancora autorizzazione.
+   const a = two.items[0];
+@@ -209,7 +246,7 @@ const two = await makeFixture('RICONCILIA');
+     'RICONCILIA: A gia catturato su Stripe prima della chiusura');
+   const state = await pool.query('SELECT stato FROM public.pagamenti WHERE id=$1',[a.paymentId]);
+   check(state.rows[0]?.stato==='autorizzazione', 'RICONCILIA: A ancora autorizzazione nel DB');
+-  await toggleCorsa(two.rideId,'end');
++  await toggleCorsa(two.rideId,'end',2);
+   await verify(two,'RICONCILIA');
+   console.log(`\nRISULTATO: ${pass} PASS / 0 FAIL`);
+ } catch(e) {

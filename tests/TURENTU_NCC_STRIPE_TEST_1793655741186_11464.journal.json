@@ -1,0 +1,14 @@
+{
+  "runId": "TURENTU_NCC_STRIPE_TEST_1793655741186_11464",
+  "updatedAt": "2026-11-02T21:42:22.611Z",
+  "fixtures": [
+    {
+      "marker": "TURENTU_NCC_STRIPE_TEST_1793655741186_11464_COMPLETA",
+      "scenario": "COMPLETA",
+      "rideId": null,
+      "trattaId": null,
+      "items": [],
+      "complete": false
+    }
+  ]
+}

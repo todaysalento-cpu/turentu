@@ -92,8 +92,11 @@ export async function accettaCorsa(corsa_id) {
 
     const c = res.rows[0];
     if (c) {
-      removeCorsa(corsa_id);
-      CacheManager.corsa.update(c);
+      try {
+        await removeCorsa(corsa_id);
+      } catch (cacheErr) {
+        console.error('[POST-UPDATE REDIS CLEANUP FAILED] corsa=', corsa_id, cacheErr);
+      }
     }
     return c || null;
   } finally {
@@ -568,8 +571,11 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
 
     await client.query('COMMIT');
     const result = { ...corsa, stato: newStato };
-    CacheManager.corsa.update(result);
-    await removeCorsa(corsa_id);
+    try {
+      await removeCorsa(corsa_id);
+    } catch (cacheErr) {
+      console.error('[POST-COMMIT REDIS CLEANUP FAILED] corsa=', corsa_id, cacheErr);
+    }
     return result;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

@@ -126,7 +126,7 @@ router.post('/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ message: 'Email e password richieste' });
 
   try {
-    const result = await pool.query('SELECT id, email, password, tipo, nome FROM utente WHERE email=$1', [email]);
+    const result = await pool.query('SELECT id, email, password, tipo, nome, modalita_operativa FROM utente WHERE email=$1', [email]);
     const user = result.rows[0];
     if (!user) return res.status(401).json({ message: 'Utente non trovato' });
 
@@ -138,7 +138,7 @@ router.post('/login', async (req, res) => {
 
     res.cookie('token', token, cookieOptions);
     console.log(`✅ [POST /login] Login riuscito per: ${email}`);
-    res.json({ ...payload, token });
+    res.json({ ...payload, modalita_operativa: user.modalita_operativa, token });
   } catch (err) {
     console.error('❌ [POST /login] Errore server:', err);
     res.status(500).json({ message: 'Errore server' });
@@ -153,7 +153,7 @@ router.post('/logout', (req, res) => {
 
 // ===================== REGISTER =====================
 router.post('/register', async (req, res) => {
-  const { nome, email, password, tipo } = req.body;
+  const { nome, email, password, tipo, modalita_operativa } = req.body;
   if (!nome || !email || !password) return res.status(400).json({ message: 'Nome, email e password richiesti' });
 
   // La registrazione pubblica può creare solo clienti e autisti.
@@ -163,6 +163,11 @@ router.post('/register', async (req, res) => {
     return res.status(403).json({ message: 'Ruolo non consentito per la registrazione pubblica' });
   }
 
+  const modalitaConsentita = modalita_operativa == null ? null : modalita_operativa;
+  if (modalitaConsentita !== null && (tipoConsentito !== "autista" || !["singolo", "flotta"].includes(modalitaConsentita))) {
+    return res.status(400).json({ message: "Modalita operativa non valida" });
+  }
+
   const client = await pool.connect();
   try {
     const exists = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
@@ -170,8 +175,8 @@ router.post('/register', async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const insert = await client.query(
-      `INSERT INTO utente (nome, email, password, tipo) VALUES ($1, $2, $3, $4) RETURNING id, tipo, email, nome`,
-      [nome, email, hashed, tipoConsentito]
+      `INSERT INTO utente (nome, email, password, tipo, modalita_operativa) VALUES ($1, $2, $3, $4, $5) RETURNING id, tipo, email, nome, modalita_operativa`,
+      [nome, email, hashed, tipoConsentito, modalitaConsentita]
     );
 
     const user = insert.rows[0];

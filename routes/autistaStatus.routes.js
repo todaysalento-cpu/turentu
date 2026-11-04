@@ -11,7 +11,8 @@ router.get('/status', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     // Una singola fotografia consistente: preferisce un veicolo con disponibilita e tariffe.
-    const [profileResult, vehicleResult] = await Promise.all([
+    const [modeResult, profileResult, vehicleResult] = await Promise.all([
+      pool.query("SELECT modalita_operativa FROM utente WHERE id = $1 AND tipo = $2", [userId, "autista"]),
       pool.query('SELECT * FROM autista_profilo WHERE utente_id = $1 ORDER BY id DESC LIMIT 1', [userId]),
       pool.query(`
         SELECT v.* FROM veicolo v
@@ -24,6 +25,7 @@ router.get('/status', authMiddleware, async (req, res) => {
       `, [userId])
     ]);
 
+    const modalita_operativa = modeResult.rows[0]?.modalita_operativa ?? null;
     const profilo = profileResult.rows[0] ?? null;
     const veicolo = vehicleResult.rows[0] ?? null;
     let disponibilita = null;
@@ -38,9 +40,10 @@ router.get('/status', authMiddleware, async (req, res) => {
       tariffe = tariffResult.rows;
     }
 
-    const completo = Boolean(profilo && veicolo && disponibilita && tariffe.length > 0);
+    const operativo = Boolean(profilo && veicolo && disponibilita && tariffe.length > 0);
+    const completo = modalita_operativa === "singolo" ? operativo : Boolean(profilo);
     console.log('[STATUS_CHECK]', { userId, veicoloId: veicolo?.id ?? null, completo });
-    return res.json({ profilo, veicolo, disponibilita, tariffe, completo });
+    return res.json({ profilo, veicolo, disponibilita, tariffe, modalita_operativa, completo, operativo });
   } catch (err) {
     console.error('[STATUS_CHECK] Errore verifica onboarding:', err);
     // Mai restituire dati vuoti con HTTP 200 in caso di errore SQL.

@@ -1,4 +1,3 @@
-
 import express from 'express';
 import Stripe from 'stripe';
 import { pool } from '../db/db.js';
@@ -150,10 +149,63 @@ router.post(
 );
 
 // =====================================================
+// RICONOSCIMENTO AUTORIZZAZIONI POPBUS PRIMA DELL'ATTIVAZIONE
+// =====================================================
+
+// Le richieste POPBUS sono inizialmente in richieste_pop_bus.
+// Il record in pagamenti nasce solo durante la conversione in corsa.
+// Questa funzione NON crea pagamenti, NON converte richieste e NON cattura fondi.
+async function riconosciRichiestaPopbus(client, stripeIntentId, stato, intent) {
+  const result = await client.query(
+    `SELECT id, stato, cliente_id, prezzo, payment_intent_id
+       FROM public.richieste_pop_bus
+      WHERE payment_intent_id = $1
+      FOR UPDATE`,
+    [stripeIntentId]
+  );
+
+  if (!result.rowCount) return false;
+  if (result.rowCount !== 1) {
+    throw new Error(`PaymentIntent POPBUS associato a piu richieste: ${stripeIntentId}`);
+  }
+
+  const richiesta = result.rows[0];
+  const metadata = intent?.metadata || {};
+  if (metadata.tipo !== 'popbus' ||
+      (metadata.clienteId && Number(metadata.clienteId) !== Number(richiesta.cliente_id))) {
+    throw new Error(`Identita PaymentIntent POPBUS incoerente: ${stripeIntentId}`);
+  }
+
+  if (stato === 'autorizzazione') {
+    if (!intent || intent.id !== stripeIntentId ||
+        intent.status !== 'requires_capture' ||
+        intent.capture_method !== 'manual' ||
+        String(intent.currency).toLowerCase() !== 'eur') {
+      throw new Error(`Autorizzazione POPBUS Stripe non valida: ${stripeIntentId}`);
+    }
+    const previsto = Math.round(Number(richiesta.prezzo) * 100);
+    const disponibile = Number(intent.amount_capturable);
+    if (!Number.isSafeInteger(previsto) || previsto <= 0 ||
+        !Number.isSafeInteger(disponibile) || disponibile < previsto) {
+      throw new Error(`Importo autorizzato POPBUS insufficiente: ${stripeIntentId}`);
+    }
+    // Il webhook puo arrivare dopo la conversione o dopo una variazione di stato.
+    // Non alterare mai lo stato commerciale della richiesta.
+    console.log(`[STRIPE WEBHOOK] POPBUS ${richiesta.id}: autorizzazione riconosciuta (${richiesta.stato}); pagamento differito all'attivazione`);
+    return true;
+  }
+
+  // Il webhook non e' il proprietario della cattura o della riconciliazione
+  // POPBUS. In particolare, un succeeded non converte la richiesta in corsa.
+  console.log(`[STRIPE WEBHOOK] POPBUS ${richiesta.id}: evento ${stato} riconosciuto; nessuna modifica automatica alla richiesta`);
+  return true;
+}
+
+// =====================================================
 // AGGIORNAMENTO STATO PAGAMENTO
 // =====================================================
 
-// La funzione restituisce true soltanto se modifica realmente il database.
+// La funzione restituisce true soltanto se modifica realmente pagamenti.
 // I pagamenti associati a una corsa NCC sono riconciliati esclusivamente
 // da corse.service.js: il webhook non anticipa la chiusura della corsa.
 async function aggiornaStato(stripeIntentId, stato, client, intent = null) {
@@ -174,7 +226,10 @@ async function aggiornaStato(stripeIntentId, stato, client, intent = null) {
     [stripeIntentId]
   );
   if (!result.rowCount) {
-    console.warn(`[STRIPE WEBHOOK] Pagamento DB non trovato: ${stripeIntentId}`);
+    const riconosciuto = await riconosciRichiestaPopbus(client, stripeIntentId, stato, intent);
+    if (!riconosciuto) {
+      console.warn(`[STRIPE WEBHOOK] Pagamento DB non trovato: ${stripeIntentId}`);
+    }
     return false;
   }
 
@@ -198,7 +253,7 @@ async function aggiornaStato(stripeIntentId, stato, client, intent = null) {
       throw new Error('Importo Stripe non valido');
     }
     // Non confrontare importo autorizzato e importo finale Modello A:
-    // possono differire. La riconciliazione è nel servizio di chiusura.
+    // possono differire. La riconciliazione e' nel servizio di chiusura.
     if (pagamento.corsa_id != null) {
       console.log(`[STRIPE WEBHOOK] Incasso corsa ${pagamento.corsa_id}: riconciliazione NCC delegata`);
       return false;
@@ -239,10 +294,9 @@ async function handlePaymentSuccess({
   const aggiornato = await aggiornaStato(intent.id, 'pagato', client, intent);
   if (!aggiornato) return;
 
-  // Prenotazione già esistente.
+  // Prenotazione gia' esistente.
   if (tipo === 'prenota' && corsaId) {
     notifiche.push({ room: `prenotazione_cliente_${roomId}`, payload: { status: 'pagato', paymentIntentId: intent.id, corsaId } });
-
     return;
   }
 
@@ -291,15 +345,11 @@ async function handlePaymentSuccess({
     );
 
     notifiche.push({ room: `prenotazione_cliente_${roomId}`, payload: { status: 'pagato', paymentIntentId: intent.id, pendingId } });
-
     return;
   }
 
   // Nessuna cattura a cascata nel webhook.
   // La cattura NCC avviene esclusivamente alla chiusura in corse.service.js.
-
-  // Evita variabili inutilizzate e mantiene disponibili
-  // i riferimenti cliente nel flusso webhook.
   void clienteId;
 }
 

@@ -758,11 +758,29 @@ export async function processaPixelFirstMultimissione({
       });
     }
     if (physicalShadow || mode === 'LIVE') {
-      const fisiche=await preparaCandidatiFisiciMultimissione({
-        client:reader,snapshot,
-maxTentativi: Number(mode === 'LIVE' ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600) : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
-        ...(physicalShadowBridge ? {bridge:physicalShadowBridge} : {})
-      });
+      let fisiche;
+      try {
+        fisiche = await preparaCandidatiFisiciMultimissione({
+          client: reader,
+          snapshot,
+          maxTentativi: Number(mode === 'LIVE'
+            ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600)
+            : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
+          ...(physicalShadowBridge ? {bridge: physicalShadowBridge} : {})
+        });
+      } catch (error) {
+        const budgetEsaurito = error?.message ===
+          'POPBUS_PHYSICAL_MULTI: budget combinazioni superato: nessun risultato parziale';
+        if (mode !== 'LIVE' || !budgetEsaurito) throw error;
+        console.warn('[PIXEL FIRST LIVE] Budget fisico esaurito: nessuna attivazione.');
+        return {
+          modalita: 'LIVE',
+          offerte: 0,
+          persistita: false,
+          attivabile: false,
+          motivo: 'BUDGET_FISICO_ESAURITO'
+        };
+      }
       const timeShadowEnabled = mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1';
       const finestreFisicheShadow = timeShadowEnabled
         ? diagnosticaFinestreCandidatiFisiciShadow({ candidati:fisiche.candidati, contexts:snapshot.contexts })

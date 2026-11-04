@@ -34,8 +34,21 @@ function checkPhysicalRoute(route,from,to) {
     fail('routing fisico V2: geometria non valida');
   const start = [Number(from.lat),Number(from.lon)];
   const end = [Number(to.lat),Number(to.lon)];
-  if (distanceMetres(pts[0],start) > 250 || distanceMetres(pts.at(-1),end) > 250)
+  const scostamentoOrigine = distanceMetres(pts[0], start);
+  const scostamentoDestinazione = distanceMetres(pts.at(-1), end);
+  if (scostamentoOrigine > 250 || scostamentoDestinazione > 250) {
+    console.error('[POPBUS ROUTING ANCORAGGIO]', {
+      origineRichiesta: start,
+      destinazioneRichiesta: end,
+      originePolyline: pts[0],
+      destinazionePolyline: pts.at(-1),
+      scostamentoOrigineMetri: Math.round(scostamentoOrigine),
+      scostamentoDestinazioneMetri: Math.round(scostamentoDestinazione),
+      distanzaStradaleMetri: route.metres,
+      durataSecondi: route.seconds
+    });
     fail('routing fisico V2: geometria non ancorata agli estremi');
+  }
   if (typeof route.roadCoincident !== 'boolean')
     fail('routing fisico V2: roadCoincident mancante');
   const metres = Number(route.metres), seconds = Number(route.seconds);

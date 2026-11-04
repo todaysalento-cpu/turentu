@@ -7,6 +7,13 @@ import { generaCicliDueMissioniShadow } from './pixel-multimission-shadow.js';
 import { valutaEconomiaCiclo } from './cycle-pricing.js';
 
 const fail = m => { throw new Error(`POPBUS_PHYSICAL_CYCLE: ${m}`); };
+const ROUTE_ENDPOINT_MISMATCH = 'POPBUS_ROUTE_ENDPOINT_MISMATCH';
+function failRouteEndpointMismatch() {
+  const error = new Error('POPBUS_PHYSICAL_CYCLE: routing fisico V2: geometria non ancorata agli estremi');
+  error.code = ROUTE_ENDPOINT_MISMATCH;
+  throw error;
+}
+const isRouteEndpointMismatch = error => error?.code === ROUTE_ENDPOINT_MISMATCH;
 const validId = x => Number.isSafeInteger(Number(x)) && Number(x) > 0;
 const nonNegative = x => x !== null && x !== undefined && Number.isFinite(Number(x)) && Number(x) >= 0;
 const finite = x => x !== null && x !== undefined && Number.isFinite(Number(x));
@@ -47,7 +54,7 @@ function checkPhysicalRoute(route,from,to) {
       distanzaStradaleMetri: route.metres,
       durataSecondi: route.seconds
     });
-    fail('routing fisico V2: geometria non ancorata agli estremi');
+    failRouteEndpointMismatch();
   }
   if (typeof route.roadCoincident !== 'boolean')
     fail('routing fisico V2: roadCoincident mancante');
@@ -151,12 +158,12 @@ export async function selezionaCicliFisiciShadow({
   }
   const diagnostica = {candidati:candidati.length,veicoliConCandidati:groups.size,
     singoleEsaminate:0,singoleScartateOrario:0,singoleScartateVincoli:0,
-    singoleScartateOperativita:0,singoleFisicamenteFattibili:0,
+    singoleScartateOperativita:0,singoleScartateRoutingAncoraggio:0,singoleFisicamenteFattibili:0,
     singoleEconomicamenteAmmissibili:0,singoleScartateEconomia:0,
     singoleNonValutateSenzaCallback:validateSingle === null,
     coppieEsaminate:0,coppieTemporali:0,coppieConRichiesteDisgiunte:0,
     coppieAmmesseDaVincoli:0,coppieScartateVincoli:0,
-    coppieValutateRouting:0,cicliFisicamenteFattibili:0,
+    coppieValutateRouting:0,coppieScartateRoutingAncoraggio:0,cicliFisicamenteFattibili:0,
     cicliEconomicamenteAmmissibili:0,cicliScartatiEconomia:0,
     completo:true,attivabile:false,dbWrites:0,
     coppieTeoricheOrdinate:0,coppieStessaAlternativa:0,
@@ -298,8 +305,19 @@ export async function selezionaCicliFisiciShadow({
           continue;
         }
         const base = {lat:vehicle.lat,lon:vehicle.lon};
-        const approach = await cachedMovement(base,a.from);
-        const ret = await cachedMovement(a.to,base);
+        let approach, ret;
+        try {
+          approach = await cachedMovement(base,a.from);
+          ret = await cachedMovement(a.to,base);
+        } catch (error) {
+          if (!isRouteEndpointMismatch(error)) throw error;
+          diagnostica.singoleScartateRoutingAncoraggio++;
+          console.warn('[POPBUS CICLO SCARTATO ROUTING]', {
+            tipo:'SINGOLA', vehicleId:vehicle.id,
+            opportunitaId:a.pixelOpportunitaId, motivo:error.code
+          });
+          continue;
+        }
         const busyStart = Number(a.departure)-Number(approach.seconds)*1000;
         const busyEnd = Number(a.arrival)+Number(ret.seconds)*1000;
         if (busyStart <= Number(now) ||
@@ -338,12 +356,23 @@ export async function selezionaCicliFisiciShadow({
   }
   for (const {a,b,vehicle} of pairs) {
     diagnostica.coppieValutateRouting++;
-    const result = await generaCicliDueMissioniShadow({
-      missions:[a,b],vehicles:[vehicle],movement:cachedMovement,
-      isAvailable,hasConflicts,now:Number(now),maxPairs:2,maxRoutingCalls:3,
-      costoAttesaOraEuro:Number(costoAttesaOraEuro),
-      contrattoRoutingFisicoV2
-    });
+    let result;
+    try {
+      result = await generaCicliDueMissioniShadow({
+        missions:[a,b],vehicles:[vehicle],movement:cachedMovement,
+        isAvailable,hasConflicts,now:Number(now),maxPairs:2,maxRoutingCalls:3,
+        costoAttesaOraEuro:Number(costoAttesaOraEuro),
+        contrattoRoutingFisicoV2
+      });
+    } catch (error) {
+      if (!isRouteEndpointMismatch(error)) throw error;
+      diagnostica.coppieScartateRoutingAncoraggio++;
+      console.warn('[POPBUS CICLO SCARTATO ROUTING]', {
+        tipo:'COPPIA', vehicleId:vehicle.id,
+        opportunitaIds:[a.pixelOpportunitaId,b.pixelOpportunitaId], motivo:error.code
+      });
+      continue;
+    }
     for (const c of result.cicli) {
       diagnostica.cicliFisicamenteFattibili++;
       const s = c._shadow;

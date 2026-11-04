@@ -91,8 +91,14 @@ export async function verificaAccettazionePixelMulti(client, attivazione, plan) 
       WHERE o.id = $1 FOR SHARE OF o, d
     `, [oid]);
     const op = opportunities[0];
-    if (!op || op.opportunita_stato !== 'candidata' || op.direttrice_stato !== 'attiva')
-      fail(`missione ${i + 1}: opportunita o direttrice non attiva`);
+    if (!op) fail(`missione ${i + 1}: opportunita PIXEL inesistente`);
+    // Lo stato 'superata' non invalida da solo un'offerta gia' persistita.
+    // Il writer ha richiesto 'candidata'/'attiva' alla creazione; restano
+    // obbligatori tutti i controlli di identita', geometria e richieste qui sotto.
+    if (!['candidata', 'superata'].includes(op.opportunita_stato))
+      fail(`missione ${i + 1}: stato opportunita PIXEL non valido`);
+    if (!['attiva', 'superata'].includes(op.direttrice_stato))
+      fail(`missione ${i + 1}: stato direttrice PIXEL non valido`);
     if (!sameArray(op.nodi, nodes)) fail(`missione ${i + 1}: direttrice modificata`);
     if (String(m.corridoio_pixel_id) !== String(op.engine_id))
       fail(`missione ${i + 1}: engine_id discordante`);

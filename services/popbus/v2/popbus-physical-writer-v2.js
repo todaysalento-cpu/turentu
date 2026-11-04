@@ -1,3 +1,4 @@
+import { verificaPagamento } from './acceptance.js';
 import { preparaPianoCicloFisicoV2 } from './popbus-physical-cycle-plan-v2.js';
 import { preparaCicloPixelPerPersistenza } from './popbus-p0-c8-adapter.js';
 import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
@@ -517,7 +518,13 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
       attivazioneId,
       offertaId,
       veicoloId: pre.veicoloId,
-      autistaId: pre.autistaId
+      autistaId: pre.autistaId,
+      peak: Number(plan.evaluation.peak),
+      partenza: new Date(plan.evaluation.departure).toISOString(),
+      startNodeId: Number(ciclo.missioni[0].nodiTerritoriali[0]),
+      endNodeId: Number(ciclo.missioni.at(-1).nodiTerritoriali.at(-1)),
+      origineAddress: plan.coordinates[0]?.nome_nodo ?? null,
+      destinazioneAddress: plan.coordinates.at(-1)?.nome_nodo ?? null
     };
 }
 
@@ -526,6 +533,16 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
  * Il chiamante possiede BEGIN/ROLLBACK. NON effettua COMMIT.
  * Non abilita LIVE e non deve essere esposta a endpoint pubblici.
  */
+export async function persistiCicloFisicoLiveInTransazioneV2({client,ciclo,now=Date.now(),costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro}={}) {
+  if (!client || !client.query) fail('client transazionale mancante');
+  const nowMs = new Date(now).getTime();
+  if (!Number.isFinite(nowMs)) fail('now non valido');
+  const pre = await rivalidaCicloFisicoInTransazioneV2({client,ciclo,costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro});
+  for (const r of pre.richiesteBloccate) await verificaPagamento(client,r);
+  const result = await persistiCicloFisicoInTransazioneV2({client,ciclo,pre,nowMs});
+  return {ok:true,percorso:'POPBUS_PHYSICAL_V2_LIVE',...result};
+}
+
 export async function persistiCicloFisicoPerCollaudoInTransazioneV2({
   client, ciclo, now = Date.now()
 } = {}) {

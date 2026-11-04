@@ -145,6 +145,111 @@ export async function getLocalitaSafe(coord) {
   }
 }
 
+
+// ============================================
+// PIXEL — IDENTIFICAZIONE TERRITORIALE
+// Reverse geocoding strutturato.
+// Non modifica getLocalitaSafe().
+// ============================================
+
+const reverseDetailsCache = new Map();
+
+export async function getLocalitaDetails(coord) {
+  const c = normalizeCoord(coord);
+
+  if (!c ||
+      !Number.isFinite(c.lat) ||
+      !Number.isFinite(c.lon) ||
+      c.lat < -90 || c.lat > 90 ||
+      c.lon < -180 || c.lon > 180 ||
+      !GOOGLE_MAPS_API_KEY) {
+    return null;
+  }
+
+  const key = `${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
+  const cached = reverseDetailsCache.get(key);
+
+  if (cached && Date.now() - cached.timestamp < REVERSE_CACHE_TTL) {
+    return cached.value;
+  }
+
+  try {
+    const url =
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${c.lat},${c.lon}&key=${GOOGLE_MAPS_API_KEY}&language=it`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Google Geocoding HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status !== "OK" || !data.results?.length) {
+      return null;
+    }
+
+    const result = data.results[0];
+    const components = result.address_components || [];
+
+    const get = (...types) => {
+      for (const type of types) {
+        const component = components.find(
+          item => Array.isArray(item.types) && item.types.includes(type)
+        );
+
+        if (component) return component.long_name;
+      }
+
+      return null;
+    };
+
+    // La località identifica il centro abitato quando Google lo restituisce.
+    // Il comune amministrativo resta separato: una frazione può appartenere
+    // a un comune diverso dal nome della località.
+    const localita = get(
+      "locality",
+      "postal_town",
+      "administrative_area_level_3",
+      "administrative_area_level_2"
+    );
+
+    const comune = get(
+      "administrative_area_level_3",
+      "locality"
+    );
+
+    if (!localita || !comune) {
+      return null;
+    }
+
+    const value = {
+      localita,
+      comune,
+      provincia: get("administrative_area_level_2"),
+      regione: get("administrative_area_level_1"),
+      place_id: result.place_id ?? null,
+      lat: c.lat,
+      lon: c.lon,
+      formatted_address: result.formatted_address ?? null
+    };
+
+    reverseDetailsCache.set(key, {
+      value,
+      timestamp: Date.now()
+    });
+
+    return value;
+  } catch (error) {
+    console.error(
+      "[PIXEL TERRITORIAL] Reverse geocoding:",
+      error.message
+    );
+
+    return null;
+  }
+}
+
 // =========================
 // PLACES API (NEW) - ricerca transitoria per PIXEL
 // Non persistere i dettagli Places senza un diritto di utilizzo appropriato.

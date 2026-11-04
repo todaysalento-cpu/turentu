@@ -1,0 +1,128 @@
+[PIXEL SNAPSHOT ENGINE ID] {
+  contesti: [
+    {
+      opportunitaId: 324,
+      direttriceId: 168,
+      engineId: 'territorial:8>5>7'
+    }
+  ],
+  missioni: []
+}
+[PIXEL FIRST DIAGNOSTICA] {
+  timestamp: '2026-11-04T14:50:13.668Z',
+  contestiPixel: 1,
+  missioniCandidate: 0,
+  veicoliCandidati: 16,
+  nodiTerritoriali: 3
+}
+[POPBUS PHYSICAL CACHE CAPACITY] {
+  combinazioniElegibili: 0,
+  chiaviFisicheNecessarie: 0,
+  riusiTeorici: 0
+}
+POPBUS_PHYSICAL_CYCLES_SHADOW_RESULT={
+  "stato": "PASS_SHADOW_READ_ONLY",
+  "opportunita": [
+    324
+  ],
+  "percorso": "PIXEL_FERMATE_FISICHE_CICLI_SHADOW_V2",
+  "missioniCandidateFisiche": 0,
+  "offerte": 0,
+  "dbWrites": 0,
+  "attivabile": false,
+  "diagnostica": {
+    "tentativi": 0,
+    "alternative": 0,
+    "scarti": [],
+    "completo": true,
+    "attivabile": false,
+    "diagnosticaLimitata": false,
+    "limiteEffettivo": 600,
+    "combinazioniElegibili": 0,
+    "combinazioniResidue": 0,
+    "ricercaInternaNonEsaustiva": 0,
+    "interrottoPerBudget": false,
+    "calcoliFisici": 0,
+    "cacheHits": 0,
+    "cacheEntries": 0,
+    "tempoCalcoliFisiciMs": 0,
+    "disabilitaCacheFisica": false,
+    "escludiVeicoliTest": false,
+    "veicoliEsclusi": [],
+    "numeroVeicoliEsclusi": 0,
+    "numeroVeicoliValutabili": 16,
+    "esitiFisiciVuoti": 0,
+    "scartiValutazioneTotali": 0,
+    "scartiValutazionePerFase": {},
+    "campioneScartiValutazione": [],
+    "departureShadow": {
+      "analizzate": 0,
+      "recuperabiliTemporalmente": 0,
+      "recuperabiliConQualita": 0,
+      "senzaIntersezione": 0,
+      "errori": 0,
+      "recuperateValidate": 0,
+      "recuperiRifiutati": 0,
+      "recuperiRifiutatiRoutingCapienza": 0,
+      "recuperiRifiutatiTemporale": 0,
+      "recuperiRifiutatiQualita": 0,
+      "recuperiRifiutatiErrore": 0
+    },
+    "sequenziamento": {
+      "sequenzeScartateEventi": 0,
+      "sequenzeScartateRouting": 0,
+      "routingEccezioni": 0,
+      "routingRisposteNonValide": 0,
+      "routingTratteDistinte": 0,
+      "campioneErroriRouting": []
+    }
+  },
+  "diagnosticaCicli": {
+    "candidati": 0,
+    "veicoliConCandidati": 0,
+    "singoleEsaminate": 0,
+    "singoleScartateOrario": 0,
+    "singoleScartateVincoli": 0,
+    "singoleScartateOperativita": 0,
+    "singoleFisicamenteFattibili": 0,
+    "singoleEconomicamenteAmmissibili": 0,
+    "singoleScartateEconomia": 0,
+    "singoleNonValutateSenzaCallback": false,
+    "coppieEsaminate": 0,
+    "coppieTemporali": 0,
+    "coppieConRichiesteDisgiunte": 0,
+    "coppieAmmesseDaVincoli": 0,
+    "coppieScartateVincoli": 0,
+    "coppieValutateRouting": 0,
+    "cicliFisicamenteFattibili": 0,
+    "cicliEconomicamenteAmmissibili": 0,
+    "cicliScartatiEconomia": 0,
+    "completo": true,
+    "attivabile": false,
+    "dbWrites": 0,
+    "coppieTeoricheOrdinate": 0,
+    "coppieStessaAlternativa": 0,
+    "coppieScartatePartenzaNonFutura": 0,
+    "coppieScartateSovrapposizione": 0,
+    "coppieScartateRichiesteComuni": 0,
+    "diagnosticaPerVeicolo": [],
+    "chiamateRouting": 0,
+    "rotteInCache": 0,
+    "cicliTotaliAmmissibili": 0
+  },
+  "diagnosticaEconomica": {
+    "cicliAnalizzati": 0,
+    "singoleAnalizzate": 0,
+    "coppieAnalizzate": 0,
+    "deficitTotaleEuro": 0,
+    "deficitMinimoEuro": null,
+    "deficitMassimoEuro": null,
+    "margineMiglioreEuro": null,
+    "esempiMigliori": [],
+    "perVeicolo": [],
+    "deficitMedioEuro": null
+  },
+  "migliorCiclo": null
+}
+ATTENZIONE: zero candidati. Il controllo di sicurezza passa, NON la fattibilita fisica.
+POPBUS_PHYSICAL_CYCLES_SHADOW_READONLY_OK

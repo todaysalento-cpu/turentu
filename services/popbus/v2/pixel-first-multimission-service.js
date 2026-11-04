@@ -20,7 +20,7 @@ import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimiss
 import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
 import { diagnosticaFinestreCandidatiFisiciShadow } from './popbus-physical-candidates-time-shadow.js';
 import { diagnosticaCoppieFisicheTemporaliShadow } from './popbus-physical-pairs-time-shadow.js';
-import { verificaCicloFisicoTransazionale, collaudaPersistenzaCicloFisicoV2, persistiCicloFisicoPerCollaudoInTransazioneV2 } from './popbus-physical-writer-v2.js';
+import { verificaCicloFisicoTransazionale, collaudaPersistenzaCicloFisicoV2, persistiCicloFisicoPerCollaudoInTransazioneV2, persistiCicloFisicoLiveInTransazioneV2 } from './popbus-physical-writer-v2.js';
 import {
   caricaImpegniVeicoliShadow,
   verificaConflittoInMemoria
@@ -701,7 +701,7 @@ export async function processaPixelFirstMultimissione({
     fail('diagnostica storica consentita solo in physicalShadow ROLLBACK_ONLY isolato');
   if (physicalShadow && (mode!=='ROLLBACK_ONLY' || rollbackTestHook!=null))
     fail('physicalShadow richiede ROLLBACK_ONLY senza hook di scrittura');
-  if (mode==='LIVE') fail('LIVE disabilitato: integrazione fermate fisiche V2 non ancora certificata');
+
   if (rollbackTestHook != null && (mode !== 'ROLLBACK_ONLY' || typeof rollbackTestHook !== 'function'))
     fail('hook diagnostico consentito soltanto in ROLLBACK_ONLY');
   if (!pool?.connect) fail('pool mancante');
@@ -719,7 +719,7 @@ export async function processaPixelFirstMultimissione({
   if (!Number.isFinite(nowMs)) fail('timestamp invalido');
   if (mode==='LIVE') await pulisciScadenzeLive(pool);
   const reader=await pool.connect();
-  let readTx=false, snapshot, chosen, cyclesCount=0, physicalResult=null;
+  let readTx=false, snapshot, chosen, cyclesCount=0, physicalResult=null, cicloFisicoLive=null;
   try {
     await reader.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
     readTx=true;
@@ -757,10 +757,10 @@ export async function processaPixelFirstMultimissione({
         nodiTerritoriali: snapshot.nodi.length
       });
     }
-    if (physicalShadow) {
+    if (physicalShadow || mode === 'LIVE') {
       const fisiche=await preparaCandidatiFisiciMultimissione({
         client:reader,snapshot,
-maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
+maxTentativi: Number(mode === 'LIVE' ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600) : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
         ...(physicalShadowBridge ? {bridge:physicalShadowBridge} : {})
       });
       const timeShadowEnabled = mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1';
@@ -773,7 +773,7 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         ? diagnosticaCoppieFisicheTemporaliShadow({ finestre:finestreFisicheShadow })
         : null;
       let selezioneFisica = null;
-      if (physicalCycleShadow) {
+      if (physicalCycleShadow || mode === 'LIVE') {
         if (fisiche.diagnostica.completo !== true || fisiche.parziale === true)
           fail('selezione cicli vietata su candidati fisici incompleti');
         const veicoliUnici = new Map();
@@ -789,7 +789,7 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         // La query avviene dentro la stessa transazione REPEATABLE READ READ ONLY.
         // La rivalidazione transazionale finale continua a usare la query SQL originale.
         const usaIndiceImpegni =
-          process.env.POPBUS_SHADOW_COMMITMENTS_CACHE === '1';
+          mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_COMMITMENTS_CACHE === '1';
 
         const indiceImpegni = usaIndiceImpegni
           ? await caricaImpegniVeicoliShadow(
@@ -832,6 +832,7 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
           },
           ...costi
         });
+        if (mode === 'LIVE') cicloFisicoLive = selezioneFisica.migliorCiclo;
       }
       physicalResult = {
         modalita:mode,
@@ -849,7 +850,7 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
         attivabile:false
       };
     }
-    if (!physicalShadow) {
+    if (!physicalShadow && mode === 'ROLLBACK_ONLY') {
     if (!snapshot.missioni.length || !snapshot.vehicles.length) {
       return {modalita:mode,offerte:0,motivo:'nessuna formazione/veicolo PIXEL candidato'};
     }
@@ -897,6 +898,29 @@ maxTentativi: Number(process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600),
       margineMinimoEuro: Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)
     });
     return {...physicalResult, testTransazionale};
+  }
+  if (mode === 'LIVE') {
+    if (!cicloFisicoLive) return {modalita:mode,offerte:0,persistita:false,motivo:'nessun ciclo fisico V2 attivabile'};
+    const writerFisico = await pool.connect();
+    let txFisica = false;
+    try {
+      await writerFisico.query('BEGIN');
+      txFisica = true;
+       await writerFisico.query("SET LOCAL lock_timeout = '5s'");
+       await writerFisico.query("SET LOCAL statement_timeout = '90s'");
+      const result = await persistiCicloFisicoLiveInTransazioneV2({
+        client:writerFisico, ciclo:cicloFisicoLive, now:Date.now(),
+        costoAttesaOraEuro:Number(process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0),
+        altriCostiEuro:Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
+        margineMinimoEuro:Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)
+      });
+      await writerFisico.query('COMMIT');
+      txFisica = false;
+      return {...result,modalita:mode,persistita:true,offerte:1};
+    } catch(error) {
+      if(txFisica) await writerFisico.query('ROLLBACK');
+      throw error;
+    } finally {writerFisico.release();}
   }
   // UNA attivazione per invocazione. Nessun riuso di altre candidate dallo snapshot.
   const writer=await pool.connect();

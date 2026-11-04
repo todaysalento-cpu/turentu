@@ -12,47 +12,35 @@ import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
+import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
-const MAX_DISTANZA_NODO_TERRITORIALE_METRI = 3000;
-
-// PIXEL e POPBUS V2 condividono i nodi territoriali.
-async function getNearestTerritorialNode(lat, lon) {
-    const { rows } = await pool.query(`
-        SELECT id, ST_Distance(
-            posizione,
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-        ) AS distanza_metri
-        FROM public.nodi_territoriali
-        WHERE attivo = TRUE AND posizione IS NOT NULL
-          AND ST_DWithin(
-              posizione,
-              ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-              $3
-          )
-        ORDER BY distanza_metri ASC, id ASC
-        LIMIT 1
-    `, [lon, lat, MAX_DISTANZA_NODO_TERRITORIALE_METRI]);
-    return rows[0] ?? null;
-}
-
-// Disponibilita' PIXEL commerciale e discovery informativa per il collaudo.
-// I candidati Google restano transitori: non sono fermate persistenti prenotabili.
+// PIXEL e POPBUS V2 condividono i nodi territoriali persistenti.
+// Il resolver identifica la localita' e il comune ISTAT: non usa una soglia
+// di distanza dal nodo piu' vicino e distingue le frazioni dello stesso comune.
 async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
     const [origine, destinazione] = await Promise.all([
-        getNearestTerritorialNode(lat, lon),
-        getNearestTerritorialNode(destLat, destLon)
+        resolveOrCreateTerritorialNode({ lat, lon }),
+        resolveOrCreateTerritorialNode({ lat: destLat, lon: destLon })
     ]);
 
+    if (!origine?.id || !destinazione?.id) {
+        return {
+            origine_nodo_territoriale_id: origine?.id ? Number(origine.id) : null,
+            destinazione_nodo_territoriale_id: destinazione?.id ? Number(destinazione.id) : null,
+            pixel_fermate_disponibili: false,
+            pixel_stato: 'nodi_non_disponibili'
+        };
+    }
+
     const base = {
-        origine_nodo_territoriale_id: origine ? Number(origine.id) : null,
-        destinazione_nodo_territoriale_id: destinazione ? Number(destinazione.id) : null,
+        origine_nodo_territoriale_id: Number(origine.id),
+        destinazione_nodo_territoriale_id: Number(destinazione.id),
         pixel_fermate_disponibili: false,
-        pixel_stato: 'nodi_non_disponibili'
+        pixel_stato: 'nodi_risolti'
     };
 
-    if (!origine || !destinazione) return base;
     if (String(origine.id) === String(destinazione.id)) {
         return { ...base, pixel_stato: 'nodi_coincidenti' };
     }
@@ -115,23 +103,25 @@ function determinaClasse(indice) {
 }
 
 async function caricaAnteprimaFormazione({
-    lat,
-    lon,
-    destLat,
-    destLon,
+    origineNodoId,
+    destinazioneNodoId,
     start_datetime,
     postiRichiesti,
     slot
 }) {
-    const [origine, destinazione] = await Promise.all([
-        getNearestTerritorialNode(lat, lon),
-        getNearestTerritorialNode(destLat, destLon)
-    ]);
+    const origine = origineNodoId != null ? { id: Number(origineNodoId) } : null;
+    const destinazione = destinazioneNodoId != null
+        ? { id: Number(destinazioneNodoId) }
+        : null;
 
     if (
         !origine ||
         !destinazione ||
-        Number(origine.id) === Number(destinazione.id)
+        !Number.isSafeInteger(origine.id) ||
+        !Number.isSafeInteger(destinazione.id) ||
+        origine.id <= 0 ||
+        destinazione.id <= 0 ||
+        origine.id === destinazione.id
     ) {
         console.log(
             '[POPBUS PREVIEW] Nodi non disponibili o non distinti; anteprima omessa'
@@ -171,9 +161,7 @@ async function caricaAnteprimaFormazione({
 
     console.log('[POPBUS PREVIEW INPUT]', JSON.stringify({
         nodo_origine: Number(origine.id),
-        distanza_nodo_origine_metri: Number(origine.distanza_metri),
         nodo_destinazione: Number(destinazione.id),
-        distanza_nodo_destinazione_metri: Number(destinazione.distanza_metri),
         start_datetime,
         posti_richiesti: postiRichiesti,
         prezzi_totali_simulati: prezzi,
@@ -1057,10 +1045,8 @@ export async function cercaSlotUltra(richiesta) {
         try {
             const anteprima =
                 await caricaAnteprimaFormazione({
-                    lat,
-                    lon,
-                    destLat,
-                    destLon,
+                    origineNodoId: pixelContext.origine_nodo_territoriale_id,
+                    destinazioneNodoId: pixelContext.destinazione_nodo_territoriale_id,
                     start_datetime:
                         orarioAndataUtente.toISOString(),
                     postiRichiesti,

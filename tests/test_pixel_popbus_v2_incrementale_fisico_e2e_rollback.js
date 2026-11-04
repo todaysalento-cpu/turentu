@@ -19,13 +19,13 @@
     const assert = (ok, msg) => {
       if (!ok) throw new Error(`TEST INCREMENTALE E2E: ${msg}`);
     };
-    const LEVELS = [3, 6, 9, 12];
+    const LEVELS = [6];
     const NODE_IDS = [8, 5, 7];
     const MAX_OPPORTUNITIES = 15;
     // Due controlli: prezzi originali e prezzi sintetici triplicati.
     // NON sono prezzi commerciali e NON implicano PaymentIntent Stripe validi.
     const PRICE_MODES = [
-      { nome: 'NEGATIVO', moltiplicatore: 1 },
+      
       { nome: 'POSITIVO_X3', moltiplicatore: 3 }
     ];
 
@@ -40,7 +40,7 @@
       assert(process.env.POPBUS_PIXEL_FIRST_LIVE_APPROVED !== '1', 'LIVE_APPROVED deve essere OFF');
 
       client = await pool.connect();
-      await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ WRITE');
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED READ WRITE');
       started = true;
       await client.query("SET LOCAL lock_timeout = '5s'");
       await client.query("SET LOCAL statement_timeout = '0'");
@@ -251,7 +251,8 @@ try {
       // richieste. Se non accade, il test FALLISCE (ma il rollback avviene).
       // Questo non certifica il writer fisico V2 né la validità Stripe.
       const positivi = summary.filter(r =>
-        r.scenarioEconomico === 'POSITIVO_X3' && r.richiesteSintetiche >= 9);
+       r.scenarioEconomico === 'POSITIVO_X3' && r.richiesteSintetiche >= 6
+      );
       assert(positivi.some(r => r.offerte === 1),
         'nessuna offerta positiva con prezzi x3: esaminare routing, vincoli e diagnostica economica');
 

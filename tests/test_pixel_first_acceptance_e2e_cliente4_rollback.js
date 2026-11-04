@@ -34,7 +34,27 @@ try {
     f.evaluation?.departure > Date.now() + 20 * 60000 &&
     Number(f.evaluation?.peak) <= Number(vehicle.posti_totali));
   assert(options.length, 'nessuna formazione futura con capienza idonea; non forzare dati');
-  const f = options[0];
+  // Scegli una formazione con richieste appartenenti a clienti reali.
+  // Non alterare mai cliente_id; richieste senza cliente non sono utilizzabili.
+  let f = null;
+  for (const option of options) {
+    const ids = option.richiestaIds.map(Number);
+    if (!ids.length || new Set(ids).size !== ids.length ||
+        ids.some(id => !Number.isSafeInteger(id) || id <= 0)) continue;
+    const {rows} = await client.query(`
+      SELECT r.id, r.cliente_id, r.stato, r.corsa_id, u.id AS cliente_valido
+      FROM public.richieste_pop_bus r
+      LEFT JOIN public.utente u ON u.id=r.cliente_id AND u.tipo='cliente'
+      WHERE r.id=ANY($1::bigint[])
+    `,[ids]);
+    if (rows.length===ids.length && rows.every(r =>
+      r.cliente_id != null && r.cliente_valido != null &&
+      r.stato==='in_attesa' && r.corsa_id==null)) {
+      f = option;
+      break;
+    }
+  }
+  assert(f, 'nessuna formazione PIXEL con clienti validi e richieste in attesa');
   const nodeRows = (await client.query(`
     SELECT id, nome, ST_Y(posizione::geometry) AS lat, ST_X(posizione::geometry) AS lon
     FROM public.nodi_territoriali WHERE id = ANY($1::bigint[]) AND attivo=TRUE
@@ -62,57 +82,62 @@ try {
     evaluation:{...f.evaluation,revenue},
     economia:{economicamenteAttivabile:true}, cost:0
   };
-  // Fixture E2E: cliente reale gia presente (utente 4, tipo cliente).
-  // Le richieste PIXEL di collaudo possono avere cliente_id/request_id NULL.
-  // Completiamo tali campi SOLO nella transazione, prima del fingerprint e
-  // della persistenza; ROLLBACK ripristina i valori originari.
-  const testClienteId = 4;
-  const cliente = (await client.query(
-    `SELECT id FROM public.utente WHERE id=$1 AND tipo='cliente'`,
-    [testClienteId]
-  )).rows[0];
-  assert(cliente, 'utente 4 non e piu un cliente valido: fermare il test');
+  // Fixture E2E: preservare sempre il cliente effettivo di ciascuna richiesta.
+  // Integrare soltanto gli UUID assenti, esclusivamente in questa transazione.
   const idsToPrepare = [...f.richiestaIds].map(Number).sort((a,b)=>a-b);
   const prepared = (await client.query(`
-    SELECT id, cliente_id, request_id, stato, corsa_id
+    SELECT id, cliente_id, request_id, payment_intent_id, stato, corsa_id
     FROM public.richieste_pop_bus
     WHERE id=ANY($1::bigint[])
     ORDER BY id FOR UPDATE
   `,[idsToPrepare])).rows;
   assert(prepared.length===idsToPrepare.length,'fixture: richieste non disponibili');
-  originalIdentity = prepared.map(r=>({id:Number(r.id),cliente_id:r.cliente_id,request_id:r.request_id}));
+  originalIdentity = prepared.map(r=>({
+    id:Number(r.id), cliente_id:r.cliente_id, request_id:r.request_id,
+    payment_intent_id:r.payment_intent_id, stato:r.stato, corsa_id:r.corsa_id
+  }));
   testedRequestIds = idsToPrepare;
   for (const r of prepared) {
     assert(r.stato==='in_attesa' && r.corsa_id==null,
       `fixture: richiesta ${r.id} non in attesa`);
-    // Non sovrascrivere dati cliente gia presenti; evitare di mescolare utenti.
-    assert(r.cliente_id==null || Number(r.cliente_id)===testClienteId,
-      `fixture: richiesta ${r.id} associata ad altro cliente`);
-    // UUID di test deterministico, diverso per richiesta e valido come UUID.
+    assert(Number.isSafeInteger(Number(r.cliente_id)) && Number(r.cliente_id)>0,
+      `fixture: richiesta ${r.id} senza cliente valido`);
     const syntheticUuid = `00000000-0000-4000-8000-${Number(r.id).toString(16).padStart(12,'0')}`;
     await client.query(`
       UPDATE public.richieste_pop_bus
-      SET cliente_id=COALESCE(cliente_id,$2),
-          request_id=COALESCE(request_id,$3::uuid)
+      SET request_id=COALESCE(request_id,$2::uuid)
       WHERE id=$1
-    `,[r.id,testClienteId,syntheticUuid]);
+    `,[r.id,syntheticUuid]);
   }
   const fixtureAfter=(await client.query(`
     SELECT id,cliente_id,request_id FROM public.richieste_pop_bus
     WHERE id=ANY($1::bigint[])
   `,[idsToPrepare])).rows;
+  const originalOwners=new Map(originalIdentity.map(r=>[r.id,String(r.cliente_id)]));
+  const requestUuids=fixtureAfter.map(r=>String(r.request_id));
   assert(fixtureAfter.length===idsToPrepare.length &&
-    fixtureAfter.every(r=>Number(r.cliente_id)===testClienteId && r.request_id),
-    'fixture: identita cliente/richiesta incompleta');
+    fixtureAfter.every(r=>r.request_id &&
+      String(r.cliente_id)===originalOwners.get(Number(r.id))) &&
+    new Set(requestUuids).size===requestUuids.length,
+    'fixture: identita cliente/richiesta incompleta o UUID duplicati');
   console.log('PIXEL_FIRST_E2E_FIXTURE_JSON:'+JSON.stringify({
-    passed:true,clienteId:testClienteId,richieste:fixtureAfter.length,
+    passed:true,richieste:fixtureAfter.length,
+    clientiDistinti:new Set(fixtureAfter.map(r=>String(r.cliente_id))).size,
     scope:'BEGIN/ROLLBACK; nessuna modifica permanente'}));
   // Soltanto nella transazione: ref wallet fittizi; niente Stripe e nessun addebito wallet.
   // La query di verifica saldo viene intercettata in memoria (vedi proxy sotto).
-  const {rowCount: refsUpdated} = await client.query(
-    `UPDATE richieste_pop_bus SET payment_intent_id='wallet_pixel_e2e_test_only'
-     WHERE id=ANY($1::int[]) AND stato='in_attesa'`, [f.richiestaIds]);
-  assert(refsUpdated===f.richiestaIds.length,'non tutte le richieste possono essere isolate per test wallet');
+ const { rowCount: refsUpdated } = await client.query(
+  `UPDATE richieste_pop_bus
+   SET payment_intent_id = 'wallet_pixel_e2e_test_' || id::text
+   WHERE id = ANY($1::int[])
+     AND stato = 'in_attesa'`,
+  [f.richiestaIds]
+);
+
+assert(
+  refsUpdated === f.richiestaIds.length,
+  'non tutte le richieste possono essere isolate per test wallet'
+);
   const result = await persistiCandidatoPixelInTransazione(client,candidate,{coordinates});
   activationId = result.attivazioneId; offerId = result.offertaId;
   const rows = (await client.query(`
@@ -133,10 +158,12 @@ try {
   // Tutte le altre query usano il vero client nella stessa transazione.
   // Se cambia la query di verifica, il test fallisce chiuso (nessun wallet reale).
   let walletChecks=0;
+  const walletCheckedIds=new Set();
   const requestPrices=new Map(requestRows.map(r=>[Number(r.id),Number(r.prezzo)]));
   const requestOwners=new Map((await client.query(
     'SELECT id,request_id,cliente_id,prezzo FROM richieste_pop_bus WHERE id=ANY($1::int[])',
     [f.richiestaIds])).rows.map(r=>[String(r.request_id),r]));
+  assert(requestOwners.size===f.richiestaIds.length, 'wallet test: request_id duplicati');
   const acceptanceClient={
     query: async (sql,params=[]) => {
       const q=String(sql).replace(/\s+/g,' ').trim();
@@ -145,6 +172,8 @@ try {
         assert(row && Number(row.cliente_id)===Number(params[0]),'wallet test: identita cliente/richiesta non coerente');
         const prezzo=requestPrices.get(Number(row.id));
         assert(Number.isFinite(prezzo) && prezzo>=0,'wallet test: prezzo non valido');
+        assert(!walletCheckedIds.has(Number(row.id)), 'wallet test: richiesta verificata due volte');
+        walletCheckedIds.add(Number(row.id));
         walletChecks++;
         return {rows:[{totale:String(-prezzo)}],rowCount:1};
       }
@@ -154,10 +183,19 @@ try {
   };
   // accettaAttivazione usa la vera logica, incluso INSERT corsa/prenotazioni/pagamenti.
   // Il pagamento e' l'unica dipendenza simulata, e non viene chiamato Stripe.
-  const ride=await accettaAttivazione(acceptanceClient,offerId,Number(vehicle.driver_id));
+const ride = await accettaAttivazione(
+  acceptanceClient,
+  offerId,
+  Number(vehicle.driver_id),
+  {
+    modalita: 'manuale',
+    conducenteId: 9
+  }
+);
   assert(ride?.id,'acceptance non ha restituito una corsa');
   rideId=ride.id;
-  assert(walletChecks===f.richiestaIds.length,'numero verifiche wallet simulate non coerente');
+  assert(walletChecks===f.richiestaIds.length && walletCheckedIds.size===f.richiestaIds.length,
+    'numero verifiche wallet simulate non coerente');
   const {rows: e2eRows}=await client.query(`
     SELECT
       (SELECT count(*)::int FROM corse WHERE id=$1) AS corse,
@@ -165,12 +203,19 @@ try {
       (SELECT count(*)::int FROM pagamenti WHERE corsa_id=$1) AS pagamenti,
       (SELECT count(*)::int FROM richieste_pop_bus WHERE id=ANY($2::int[]) AND stato='convertita' AND corsa_id=$1) AS convertite,
       (SELECT count(*)::int FROM popbus_attivazioni WHERE id=$3 AND stato='confermata' AND corsa_id=$1 AND direttrice_id IS NULL) AS attivazioni_confermate,
-      (SELECT count(*)::int FROM offerte_autisti WHERE id=$4 AND stato='accettata') AS offerte_accettate
+      (SELECT count(*)::int FROM offerte_autisti
+ WHERE id=$4 AND stato='accettata') AS offerte_accettate,
+(SELECT count(*)::int FROM assegnazioni_conducenti
+ WHERE attivazione_id=$3
+   AND conducente_id=9
+   AND operatore_id=2
+   AND veicolo_id=361
+   AND stato='assegnata') AS assegnazioni
   `,[ride.id,f.richiestaIds,activationId,offerId]);
   const v=e2eRows[0];
   assert(v.corse===1 && v.prenotazioni===f.richiestaIds.length &&
     v.pagamenti===f.richiestaIds.length && v.convertite===f.richiestaIds.length &&
-    v.attivazioni_confermate===1 && v.offerte_accettate===1,
+    v.attivazioni_confermate===1 && v.offerte_accettate===1 && v.assegnazioni===1,
     'conversione DB incompleta: '+JSON.stringify(v));
   console.log('PIXEL_FIRST_ACCEPTANCE_E2E_JSON:'+JSON.stringify({passed:true,
     corsaId:ride.id,attivazioneId:activationId,offertaId:offerId,
@@ -197,19 +242,23 @@ try {
         (SELECT count(*)::int FROM offerte_autisti WHERE id=$2) AS offerte,
         (SELECT count(*)::int FROM corse WHERE id=$3) AS corse,
         (SELECT count(*)::int FROM prenotazioni WHERE corsa_id=$3) AS prenotazioni,
-        (SELECT count(*)::int FROM pagamenti WHERE corsa_id=$3) AS pagamenti`,[activationId,offerId,rideId]);
+        (SELECT count(*)::int FROM pagamenti WHERE corsa_id=$3) AS pagamenti,
+        (SELECT count(*)::int FROM assegnazioni_conducenti WHERE corsa_id=$3) AS assegnazioni`,[activationId,offerId,rideId]);
       const clean=Object.values(rows[0]).every(n=>n===0);
-      console.log('PIXEL_FIRST_ACCEPTANCE_E2E_VERIFY_JSON:'+JSON.stringify({passed:clean,attivazioneAssente:rows[0].attivazioni===0,offertaAssente:rows[0].offerte===0,corsaAssente:rows[0].corse===0,prenotazioniAssenti:rows[0].prenotazioni===0,pagamentiAssenti:rows[0].pagamenti===0}));
+      console.log('PIXEL_FIRST_ACCEPTANCE_E2E_VERIFY_JSON:'+JSON.stringify({passed:clean,attivazioneAssente:rows[0].attivazioni===0,offertaAssente:rows[0].offerte===0,corsaAssente:rows[0].corse===0,prenotazioniAssenti:rows[0].prenotazioni===0,pagamentiAssenti:rows[0].pagamenti===0,assegnazioniAssenti:rows[0].assegnazioni===0}));
       if(testedRequestIds) {
         const restored=(await verify.query(`
-          SELECT id,cliente_id,request_id FROM public.richieste_pop_bus
+          SELECT id,cliente_id,request_id,payment_intent_id,stato,corsa_id FROM public.richieste_pop_bus
           WHERE id=ANY($1::bigint[])
         `,[testedRequestIds])).rows;
         const original=new Map(originalIdentity.map(r=>[r.id,r]));
         const identitiesRestored=restored.length===original.size && restored.every(r=>{
           const o=original.get(Number(r.id));
           return o && String(r.cliente_id??'')===String(o.cliente_id??'') &&
-            String(r.request_id??'')===String(o.request_id??'');
+            String(r.request_id??'')===String(o.request_id??'') &&
+            String(r.payment_intent_id??'')===String(o.payment_intent_id??'') &&
+            String(r.stato??'')===String(o.stato??'') &&
+            String(r.corsa_id??'')===String(o.corsa_id??'');
         });
         console.log('PIXEL_FIRST_E2E_FIXTURE_ROLLBACK_JSON:'+JSON.stringify({
           passed:identitiesRestored,richieste:restored.length,
@@ -221,5 +270,6 @@ try {
     }catch(e){console.error('PIXEL_FIRST_STAGING_VERIFY_ERROR:',e.message);process.exitCode=1;}
     finally{verify.release();}
   }
+  if(!passed && process.exitCode==null)process.exitCode=1;
   await pool.end();
 }

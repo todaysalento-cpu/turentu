@@ -1,0 +1,55 @@
+{
+  "test": "PIXEL322_SHADOW",
+  "createdAt": "2026-11-04T09:30:15.307Z",
+  "attached": false,
+  "items": [
+    {
+      "id": 562,
+      "clienteId": 2,
+      "amount": 700,
+      "requestId": "c02d5884-c3f9-4502-9549-2c6e7c4dbccd",
+      "paymentIntentId": "pi_3UY0WHEVCTpFHY211p5mCwip",
+      "status": "cancelled"
+    },
+    {
+      "id": 563,
+      "clienteId": 3,
+      "amount": 900,
+      "requestId": "e7fc5b6c-a087-4d74-8e6e-8e88b1d49e48",
+      "paymentIntentId": "pi_3UY0WIEVCTpFHY210J9rVw4u",
+      "status": "cancelled"
+    },
+    {
+      "id": 564,
+      "clienteId": 4,
+      "amount": 1400,
+      "requestId": "69bcbf54-d126-4d01-849c-7f691bc44a84",
+      "paymentIntentId": "pi_3UY0WKEVCTpFHY210OZrxjcz",
+      "status": "cancelled"
+    },
+    {
+      "id": 565,
+      "clienteId": 5,
+      "amount": 700,
+      "requestId": "924aece8-865b-4140-9077-f272946aa1bf",
+      "paymentIntentId": "pi_3UY0WLEVCTpFHY210rqpwp95",
+      "status": "cancelled"
+    },
+    {
+      "id": 566,
+      "clienteId": 6,
+      "amount": 900,
+      "requestId": "2dfea6e2-9a7d-4292-9bd5-dba72244e934",
+      "paymentIntentId": "pi_3UY0WMEVCTpFHY211LemKbxE",
+      "status": "cancelled"
+    },
+    {
+      "id": 567,
+      "clienteId": 8,
+      "amount": 1400,
+      "requestId": "39e0f7ce-0ccd-4a67-b44f-834930ff1092",
+      "paymentIntentId": "pi_3UY0WNEVCTpFHY210NXFOyO7",
+      "status": "cancelled"
+    }
+  ]
+}

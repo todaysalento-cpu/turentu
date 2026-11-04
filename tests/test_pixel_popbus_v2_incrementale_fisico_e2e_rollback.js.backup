@@ -1,0 +1,283 @@
+    // TURENTU - PIXEL -> POPBUS V2, test incrementale E2E con ROLLBACK.
+    // Esecuzione: node --env-file=.env tests\test_pixel_popbus_v2_incrementale_shadow_rollback.mjs
+    // Stessa connessione/transazione per fixture PIXEL e collaudo POPBUS.
+    // Il collaudo puo' scrivere nella transazione esterna: ROLLBACK obbligatorio.
+    // NON abilita LIVE e NON lascia scritture permanenti.
+    // Questo percorso E2E tradizionale NON certifica il writer fisico V2.
+    // PaymentIntent sintetici: nessuna certificazione del pagamento Stripe.
+
+    import { performance } from 'node:perf_hooks';
+    import { pool } from '../db/db.js';
+    import { leg } from '../services/popbus/v2/planner.js';
+    import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+    import { pubblicaOpportunitaPixel, leggiOpportunitaPixel } from '../services/pixel/pixel.persistence.service.js';
+    import {
+  collaudaPixelFirstInTransazione,
+  collaudaPixelFirstFisicoInTransazione
+} from '../services/popbus/v2/pixel-first-multimission-service.js';
+
+    const assert = (ok, msg) => {
+      if (!ok) throw new Error(`TEST INCREMENTALE E2E: ${msg}`);
+    };
+    const LEVELS = [3, 6, 9, 12];
+    const NODE_IDS = [8, 5, 7];
+    const MAX_OPPORTUNITIES = 15;
+    // Due controlli: prezzi originali e prezzi sintetici triplicati.
+    // NON sono prezzi commerciali e NON implicano PaymentIntent Stripe validi.
+    const PRICE_MODES = [
+      { nome: 'NEGATIVO', moltiplicatore: 1 },
+      { nome: 'POSITIVO_X3', moltiplicatore: 3 }
+    ];
+
+    let client;
+    let started = false;
+    let failed = false;
+    const summary = [];
+
+    try {
+      assert(process.env.POPBUS_PIXEL_FIRST !== '1', 'POPBUS_PIXEL_FIRST deve essere OFF');
+      assert(process.env.POPBUS_PIXEL_FIRST_ENABLED !== 'true', 'scheduler PIXEL-first deve essere OFF');
+      assert(process.env.POPBUS_PIXEL_FIRST_LIVE_APPROVED !== '1', 'LIVE_APPROVED deve essere OFF');
+
+      client = await pool.connect();
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED READ WRITE');
+      started = true;
+      await client.query("SET LOCAL lock_timeout = '5s'");
+      await client.query("SET LOCAL statement_timeout = '0'");
+      await client.query("SET LOCAL idle_in_transaction_session_timeout = '600000'");
+
+      const db = await client.query(
+        'SELECT current_database() AS name, pg_is_in_recovery() AS replica'
+      );
+      assert(db.rows[0]?.name === 'corse_db', `database inatteso: ${db.rows[0]?.name}`);
+      assert(db.rows[0]?.replica === false, 'connessione su replica: serve il database di collaudo scrivibile');
+
+      const { rows: nodes } = await client.query(`
+        SELECT id, nome, ST_Y(posizione::geometry) AS lat, ST_X(posizione::geometry) AS lon
+        FROM public.nodi_territoriali
+        WHERE id = ANY($1::bigint[]) AND attivo = TRUE
+      `, [NODE_IDS]);
+      assert(nodes.length === NODE_IDS.length, 'nodi territoriali 8, 5, 7 non tutti attivi');
+
+      const byId = new Map(nodes.map(n => [Number(n.id), {
+        ...n, lat: Number(n.lat), lon: Number(n.lon)
+      }]));
+      const routeCache = new Map();
+
+      const road = async ids => {
+        const legs = [];
+        for (let i = 1; i < ids.length; i++) {
+          const a = Number(ids[i - 1]);
+          const b = Number(ids[i]);
+          const key = `${a}>${b}`;
+          if (!routeCache.has(key)) {
+            const r = await leg(byId.get(a), byId.get(b));
+            assert(r && Number(r.metres) > 0 && Number(r.seconds) > 0 &&
+              typeof r.polyline === 'string' && r.polyline.length > 0,
+              `routing reale mancante ${key}`);
+            routeCache.set(key, {
+              metres: r.metres, seconds: r.seconds,
+              polyline: r.polyline, roadCoincident: false
+            });
+          }
+          legs.push(routeCache.get(key));
+        }
+        return { verificataRouting: true, legs };
+      };
+
+      const first = await leg(byId.get(8), byId.get(5));
+      assert(first && Number(first.seconds) > 0, 'routing 8>5 non disponibile');
+
+      const departure = new Date(Date.now() + 14 * 86400000);
+      departure.setUTCHours(12, 0, 0, 0);
+      const cases = [];
+
+      for (const offsetMinutes of [0, 45, 90, 135]) {
+        const t = departure.getTime() + offsetMinutes * 60000;
+        cases.push(
+          { a: 8, b: 5, at: new Date(t), price: 7 },
+          { a: 5, b: 7, at: new Date(t + Math.round(first.seconds) * 1000), price: 9 },
+          { a: 8, b: 7, at: new Date(t), price: 14 }
+        );
+      }
+
+      console.log('DATABASE_TEST:', db.rows[0].name);
+      console.log('DATA_TEST_UTC:', departure.toISOString());
+      console.log('SCENARI:', LEVELS.join(', '), 'richieste; quattro ondate distinte');
+
+      for (const priceMode of PRICE_MODES) {
+      for (const count of LEVELS) {
+        const scenarioStart = performance.now();
+        await client.query('SAVEPOINT turentu_scenario');
+
+        try {
+          const insertedIds = [];
+          for (const c of cases.slice(0, count)) {
+            const a = byId.get(c.a);
+            const b = byId.get(c.b);
+            const { rows } = await client.query(`
+              INSERT INTO public.richieste_pop_bus
+              (cliente_id, origine, destinazione, origine_nodo_territoriale_id,
+               destinazione_nodo_territoriale_id, origine_address,
+               destinazione_address, start_datetime, posti_richiesti,
+               stato, classe, prezzo, payment_intent_id)
+              VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326),
+                      ST_SetSRID(ST_MakePoint($4,$5),4326),
+                      $6,$7,$8,$9,$10,1,'in_attesa','STANDARD',$11,$12)
+              RETURNING id
+            `, [
+              4, a.lon, a.lat, b.lon, b.lat, c.a, c.b,
+              a.nome, b.nome, c.at, c.price * priceMode.moltiplicatore,
+              `pi_test_shadow_${priceMode.nome}_${count}_${insertedIds.length + 1}`
+            ]);
+            insertedIds.push(Number(rows[0].id));
+          }
+          assert(insertedIds.length === count, 'inserimento sintetico incompleto');
+
+          const { rows: requests } = await client.query(`
+            SELECT * FROM public.richieste_pop_bus
+            WHERE id = ANY($1::integer[]) ORDER BY id
+          `, [insertedIds]);
+          assert(requests.length === count, 'lettura richieste sintetiche incompleta');
+          assert(requests.every(r => Number(r.cliente_id) === 4), 'cliente_id fixture non valido');
+
+          const pixelStart = performance.now();
+          const engine = createIncrementalCorridorEngine({
+            routeNodes: road, abilitaVariantiP1: true
+          });
+          for (const request of requests) await engine.processRequest(request);
+
+          const corridors = engine.listCorridors();
+          assert(corridors.length > 0, 'PIXEL non ha prodotto direttrici');
+
+          for (const corridor of corridors) {
+            await pubblicaOpportunitaPixel({
+              engine, direttriceId: corridor.id, bufferMinuti: 0, client
+            });
+          }
+
+          const all = await leggiOpportunitaPixel({ limit: 1000, client });
+          const synthetic = new Set(insertedIds);
+          const own = all.filter(o =>
+            o.richiesta_ids.some(id => synthetic.has(Number(id)))
+          );
+          const ids = [...new Set(own.map(o => Number(o.pixel_opportunita_id)))];
+
+          assert(ids.length > 0, 'nessuna opportunita PIXEL associata alla fixture');
+          assert(ids.length <= MAX_OPPORTUNITIES, `${ids.length} opportunita: limite ${MAX_OPPORTUNITIES}`);
+
+          const represented = new Set(own.flatMap(o => o.richiesta_ids.map(Number)));
+          assert(insertedIds.every(id => represented.has(id)),
+            'non tutte le richieste sintetiche sono associate a opportunita PIXEL');
+          assert(own.every(o => o.richiesta_ids.every(id => synthetic.has(Number(id)))),
+            'opportunita contaminata da richieste non sintetiche');
+
+          const pixelElapsedMs = performance.now() - pixelStart;
+          const popbusStart = performance.now();
+
+          // Stesso client e stessa transazione delle fixture.
+          // Il metodo E2E puo' scrivere nella transazione esterna.
+// E2E FISICO V2: stesso scenario PIXEL e stesse richieste.
+// SAVEPOINT dedicato: il writer fisico viene sempre annullato.
+await client.query('SAVEPOINT turentu_physical_e2e');
+
+try {
+  const physicalResult = await collaudaPixelFirstFisicoInTransazione({
+    client,
+    now: Date.now(),
+    opportunityIds: ids
+  });
+
+  console.log(
+    'SCENARIO_FISICO_V2_JSON:' +
+    JSON.stringify(physicalResult)
+  );
+
+} finally {
+  await client.query('ROLLBACK TO SAVEPOINT turentu_physical_e2e');
+  await client.query('RELEASE SAVEPOINT turentu_physical_e2e');
+
+  console.log('SAVEPOINT_FISICO_RIPRISTINATO');
+}
+          const result = await collaudaPixelFirstInTransazione({
+            client, now: Date.now(), opportunityIds: ids
+          });
+
+          const popbusElapsedMs = performance.now() - popbusStart;
+          const scenarioElapsedMs = performance.now() - scenarioStart;
+
+          assert(result?.modalita === 'E2E_ROLLBACK', 'modalita E2E inattesa');
+          assert(result.offerte === 0 || result.offerte === 1,
+            `numero offerte inatteso: ${result.offerte}`);
+          if (result.offerte === 1) {
+            assert(result.persistita === false, 'il risultato non dichiara persistita=false');
+          }
+
+          const record = {
+            scenarioEconomico: priceMode.nome,
+            moltiplicatorePrezzo: priceMode.moltiplicatore,
+            richiesteSintetiche: count,
+            richiestaIds: insertedIds,
+            direttriciPixel: corridors.length,
+            opportunitaPixel: ids.length,
+            opportunitaIds: ids,
+            tempoPixelMs: Math.round(pixelElapsedMs),
+            tempoPopbusMs: Math.round(popbusElapsedMs),
+            tempoScenarioMs: Math.round(scenarioElapsedMs),
+            offerte: result.offerte,
+            persistita: result.persistita ?? false,
+            motivo: result.motivo ?? null,
+            cicliValutati: result.cicliValutati ?? null,
+            coppiePotenziali: result.coppiePotenziali ?? null,
+            coppieConRouting: result.coppieConRouting ?? null,
+            saltateEconomia: result.saltateEconomia ?? null,
+            saltateAr: result.saltateAr ?? null,
+            risultatoPopbus: result
+          };
+
+          summary.push(record);
+          console.log('SCENARIO_INCREMENTALE_JSON:' + JSON.stringify(record));
+          console.log(`SCENARIO ${priceMode.nome} ${count}/12 OK: ${ids.length} opportunita PIXEL, offerte POPBUS=${result.offerte}; scenario da rollbackare`);
+
+        } finally {
+          await client.query('ROLLBACK TO SAVEPOINT turentu_scenario');
+          await client.query('RELEASE SAVEPOINT turentu_scenario');
+          console.log(`SAVEPOINT_RIPRISTINATO: ${priceMode.nome}, ${count} richieste`);
+        }
+      }
+      }
+
+      // Il controllo positivo deve almeno produrre un'offerta per 9 o 12
+      // richieste. Se non accade, il test FALLISCE (ma il rollback avviene).
+      // Questo non certifica il writer fisico V2 né la validità Stripe.
+      const positivi = summary.filter(r =>
+        r.scenarioEconomico === 'POSITIVO_X3' && r.richiesteSintetiche >= 9);
+      assert(positivi.some(r => r.offerte === 1),
+        'nessuna offerta positiva con prezzi x3: esaminare routing, vincoli e diagnostica economica');
+
+      console.log('RIEPILOGO_INCREMENTALE_JSON:' + JSON.stringify(summary));
+      console.log('TEST_INCREMENTALE_E2E_OK: scenari completati; rollback finale obbligatorio');
+
+    } catch (error) {
+      failed = true;
+      console.error('TEST_INCREMENTALE_E2E_FAIL:', error?.stack ?? error);
+
+    } finally {
+      if (client) {
+        try {
+          if (started) {
+            await client.query('ROLLBACK');
+            console.log('ROLLBACK ESEGUITO: nessuna scrittura confermata.');
+          }
+        } catch (error) {
+          failed = true;
+          console.error('ROLLBACK_FAIL:', error?.stack ?? error);
+        } finally {
+          client.release();
+        }
+      }
+      await pool.end();
+    }
+
+    if (failed) process.exitCode = 1;
+

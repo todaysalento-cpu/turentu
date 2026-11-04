@@ -1,55 +1,55 @@
 {
   "test": "PIXEL322_SHADOW",
-  "createdAt": "2026-11-01T22:05:23.439Z",
-  "attached": false,
+  "createdAt": "2026-11-04T09:40:10.014Z",
+  "attached": true,
   "items": [
     {
       "id": 562,
       "clienteId": 2,
       "amount": 700,
-      "requestId": "40e1d150-b2af-4025-b34f-bf16718c0aeb",
-      "paymentIntentId": "pi_3UX6sREVCTpFHY210FKyvO8d",
-      "status": "cancelled"
+      "requestId": "0d0856c5-56dc-4f32-89c3-cb962f6986d4",
+      "paymentIntentId": "pi_3UY0fsEVCTpFHY2118z1hN1P",
+      "status": "prepared"
     },
     {
       "id": 563,
       "clienteId": 3,
       "amount": 900,
-      "requestId": "dd780f43-fb0d-4cad-bc76-b72e9885a349",
-      "paymentIntentId": "pi_3UX6sSEVCTpFHY210ZwosrqG",
-      "status": "cancelled"
+      "requestId": "5cc147d0-82e5-4c94-a468-a736d76732d4",
+      "paymentIntentId": "pi_3UY0ftEVCTpFHY2117SMhg97",
+      "status": "prepared"
     },
     {
       "id": 564,
       "clienteId": 4,
       "amount": 1400,
-      "requestId": "699fd151-9b58-40f7-a09b-9a8d5a984692",
-      "paymentIntentId": "pi_3UX6sUEVCTpFHY210KqKTcZ0",
-      "status": "cancelled"
+      "requestId": "1b72be02-ccf1-42a1-ad37-ab50e1b781c5",
+      "paymentIntentId": "pi_3UY0fuEVCTpFHY211tVuTI3n",
+      "status": "prepared"
     },
     {
       "id": 565,
       "clienteId": 5,
       "amount": 700,
-      "requestId": "9dd5b6c9-68e0-4a54-acd2-1904f2b651da",
-      "paymentIntentId": "pi_3UX6sVEVCTpFHY211q73yh69",
-      "status": "cancelled"
+      "requestId": "e9017bac-2242-4ad7-aecd-2e313dcb0b9a",
+      "paymentIntentId": "pi_3UY0fvEVCTpFHY210uEE4c3V",
+      "status": "prepared"
     },
     {
       "id": 566,
       "clienteId": 6,
       "amount": 900,
-      "requestId": "fd075924-588a-4a1c-bac4-0c4f59adcb02",
-      "paymentIntentId": "pi_3UX6sWEVCTpFHY211Rpeazh2",
-      "status": "cancelled"
+      "requestId": "55383200-7b02-4c7a-9e2e-d2260212f49d",
+      "paymentIntentId": "pi_3UY0fxEVCTpFHY210Q1ttPGI",
+      "status": "prepared"
     },
     {
       "id": 567,
       "clienteId": 8,
       "amount": 1400,
-      "requestId": "72fb4c92-9c6a-471e-b3e8-219f49dd3389",
-      "paymentIntentId": "pi_3UX6sXEVCTpFHY210r9QOSWa",
-      "status": "cancelled"
+      "requestId": "451d3278-0aba-40c6-ae67-99c96395628d",
+      "paymentIntentId": "pi_3UY0fyEVCTpFHY2101eDyFhu",
+      "status": "prepared"
     }
   ]
 }

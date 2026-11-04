@@ -1,0 +1,118 @@
+{
+  "runId": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236",
+  "updatedAt": "2026-11-03T17:40:48.719Z",
+  "fixtures": [
+    {
+      "marker": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_COMPLETA",
+      "scenario": "COMPLETA",
+      "rideId": 1024,
+      "trattaId": "56",
+      "items": [
+        {
+          "label": "A",
+          "km": 100,
+          "start": 0,
+          "end": 100000,
+          "authorized": 6765,
+          "due": 3075,
+          "prenId": 1254,
+          "piId": "pi_3UXlh3EVCTpFHY211R0R561q",
+          "paymentId": 754,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_COMPLETA_create_A",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "B",
+          "km": 60,
+          "start": 20000,
+          "end": 80000,
+          "authorized": 2537,
+          "due": 1845,
+          "prenId": 1255,
+          "piId": "pi_3UXlh4EVCTpFHY211Tw0kIgo",
+          "paymentId": 755,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_COMPLETA_create_B",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "C",
+          "km": 60,
+          "start": 40000,
+          "end": 100000,
+          "authorized": 1845,
+          "due": 1845,
+          "prenId": 1256,
+          "piId": "pi_3UXlh6EVCTpFHY2102uGJOLJ",
+          "paymentId": 756,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_COMPLETA_create_C",
+          "stripeCreatePending": false
+        }
+      ],
+      "complete": true,
+      "userIds": [
+        440,
+        441,
+        442
+      ],
+      "assignmentId": 56,
+      "dbCommitted": true,
+      "cleaned": true
+    },
+    {
+      "marker": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_RICONCILIA",
+      "scenario": "RICONCILIA",
+      "rideId": 1025,
+      "trattaId": "57",
+      "items": [
+        {
+          "label": "A",
+          "km": 100,
+          "start": 0,
+          "end": 100000,
+          "authorized": 6765,
+          "due": 3075,
+          "prenId": 1257,
+          "piId": "pi_3UXlhJEVCTpFHY211ng3mxdT",
+          "paymentId": 757,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_RICONCILIA_create_A",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "B",
+          "km": 60,
+          "start": 20000,
+          "end": 80000,
+          "authorized": 2537,
+          "due": 1845,
+          "prenId": 1258,
+          "piId": "pi_3UXlhJEVCTpFHY210e0H9wqi",
+          "paymentId": 758,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_RICONCILIA_create_B",
+          "stripeCreatePending": false
+        },
+        {
+          "label": "C",
+          "km": 60,
+          "start": 40000,
+          "end": 100000,
+          "authorized": 1845,
+          "due": 1845,
+          "prenId": 1259,
+          "piId": "pi_3UXlhKEVCTpFHY211Tfkj2AF",
+          "paymentId": 759,
+          "stripeCreateKey": "TURENTU_NCC_STRIPE_TEST_1793727619493_18236_RICONCILIA_create_C",
+          "stripeCreatePending": false
+        }
+      ],
+      "complete": true,
+      "userIds": [
+        443,
+        444,
+        445
+      ],
+      "assignmentId": 57,
+      "dbCommitted": true,
+      "cleaned": true
+    }
+  ]
+}

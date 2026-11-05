@@ -735,11 +735,13 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
         lat_salita,
         lon_salita,
         lat_discesa,
-        lon_discesa
+        lon_discesa,
+        ar_group_id,
+        ar_tratta
       )
       VALUES (
         $1,$2,$3,$3,$4,$5,$6,
-        $7,$8,$9,$10,$11,$12,$13
+        $7,$8,$9,$10,$11,$12,$13,$14,$15
       )
       RETURNING id
       `,
@@ -756,7 +758,9 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
         start.lat,
         start.lon,
         end.lat,
-        end.lon
+        end.lon,
+        r.ar_group_id ?? null,
+        r.ar_tratta ?? null
       ]
     );
 

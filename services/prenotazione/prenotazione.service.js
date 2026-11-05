@@ -190,10 +190,11 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const {rows: inserted} = await client.query(`
       INSERT INTO prenotazioni (corsa_id,cliente_id,posti_richiesti,posti_prenotati,
         start_index_polyline,end_index_polyline,start_offset,end_offset,km_utente,
-        lat_salita,lon_salita,lat_discesa,lon_discesa,tratta_id)
-      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
+        lat_salita,lon_salita,lat_discesa,lon_discesa,tratta_id,ar_group_id,ar_tratta)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *
     `,[id,clienteId,posti,start,end,startOffset,endOffset,km,segmenti.latSalita ?? null,
-      segmenti.lonSalita ?? null,segmenti.latDiscesa ?? null,segmenti.lonDiscesa ?? null,trattaId]);
+      segmenti.lonSalita ?? null,segmenti.latDiscesa ?? null,segmenti.lonDiscesa ?? null,trattaId,
+      options.ar_group_id ?? null,options.ar_tratta ?? null]);
 
     // Solo NCC condivisa. 'riempimento' (POPBUS) e 'privata' restano invariati.
     if (current.tipo_corsa === 'condivisa') {

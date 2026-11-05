@@ -461,7 +461,13 @@ router.post('/:id/accetta', async (req, res) => {
       let nuovaPrenotazione = null;
       if (!prenotazioneEffettuata) {
           console.log(`🎟 [ACCETTA] Effettuazione prenotazione per corsa ID: ${corsa.id}, posti: ${pRow.posti_richiesti}`);
-          nuovaPrenotazione = await prenotaCorsa(corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client);
+          nuovaPrenotazione = await prenotaCorsa(
+             corsa, pRow.cliente_id, pRow.posti_richiesti, segmenti, client,
+             {
+               ar_group_id: pRow.ar_group_id ?? null,
+               ar_tratta: pRow.ar_tratta ?? null
+             }
+           );
       }
       const nuoveFermate = [
         {

@@ -494,7 +494,11 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             pending.cliente_id ?? pending.clienteId, 
             Number(pending.posti_richiesti ?? 1), 
             segmenti, 
-            client
+            client,
+            {
+                ar_group_id: pending.ar_group_id ?? null,
+                ar_tratta: pending.ar_tratta ?? null
+            }
         );
         
         if (trattaInizialeId) {

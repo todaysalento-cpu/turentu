@@ -560,4 +560,206 @@ router.post('/ar/preview', authMiddleware, async (req, res) => {
   }
 });
 
+
+// A/R NCC STEP 4: preparazione atomica dei due pending e due PI manuali.
+// Il checkout A/R non abilita accettazione o cattura individuale.
+router.post('/ar/payment-intents', authMiddleware, async (req, res) => {
+  const tratte = req.body?.tratte;
+  if (!Array.isArray(tratte) || tratte.length !== 2 ||
+      tratte[0]?.ar_tratta !== 'andata' || tratte[1]?.ar_tratta !== 'ritorno') {
+    return res.status(400).json({ code: 'AR_INVALID_LEGS', error: 'Servono andata e ritorno in ordine' });
+  }
+  if (req.body?.usaWallet) {
+    return res.status(409).json({ code: 'AR_WALLET_NOT_READY', error: 'Wallet A/R non abilitato' });
+  }
+
+  const groupId = uuidv4();
+  const expiresAt = new Date(Date.now() + 30 * 60000).toISOString();
+  const intents = [];
+  let client;
+  let transaction = false;
+  let committed = false;
+  try {
+    // Nessun lock DB durante il ricalcolo della ricerca.
+    const prepared = [];
+    for (const item of tratte) {
+      const selected = item?.slot;
+      if (!selected || typeof selected !== 'object' || item.type !== 'privata') {
+        throw Object.assign(new Error('Checkout A/R: in questa fase solo NCC privata'), { status: 409, code: 'AR_TYPE_NOT_READY' });
+      }
+      const o = puntoDesiderato(selected.origine, null, 'origine');
+      const d = puntoDesiderato(selected.destinazione, null, 'destinazione');
+      const count = Number(selected.posti_richiesti);
+      const when = selected.start_datetime;
+      if (!Number.isSafeInteger(count) || count <= 0 ||
+          !Number.isFinite(new Date(when).getTime()) || new Date(when).getTime() <= Date.now()) {
+        throw Object.assign(new Error('Data o posti non validi'), { status: 400 });
+      }
+      const fresh = await cercaSlotUltra({
+        coord: { lat: o.lat, lon: o.lon },
+        coordDest: { lat: d.lat, lon: d.lon },
+        posti_richiesti: count,
+        start_datetime: when
+      });
+      const quote = fresh.find(x => String(x.id) === String(selected.id));
+      if (!quote || isPopbusSlot(quote) || quote.tipo !== 'privata' ||
+          !String(quote.id).startsWith('priv_')) {
+        throw Object.assign(new Error('Opzione NCC privata non più disponibile'), { status: 409 });
+      }
+      const cents = Math.round(Number(quote.prezzo) * 100);
+      if (quote.prezzo == null || quote.prezzo === '' || !Number.isSafeInteger(cents) || cents < 50) {
+        throw Object.assign(new Error('Prezzo non quotato dal server'), { status: 409 });
+      }
+      const distanza = Number(quote.distanzaKm ??
+        (quote.distanza_metri != null ? Number(quote.distanza_metri) / 1000 : quote.distanza));
+      const durata = Number(quote.durata_minuti ?? quote.durataMinuti);
+      if (!Number.isFinite(distanza) || distanza <= 0 || !Number.isFinite(durata) || durata <= 0 ||
+          !Number.isSafeInteger(Number(quote.veicolo_id)) || Number(quote.veicolo_id) <= 0) {
+        throw Object.assign(new Error('Veicolo, distanza o durata non validi'), { status: 409 });
+      }
+      prepared.push({ item, quote, o, d, count, when, cents, distanza, durata });
+    }
+    if (new Date(prepared[1].when).getTime() <= new Date(prepared[0].when).getTime()) {
+      throw Object.assign(new Error('Il ritorno deve seguire l’andata'), { status: 400 });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transaction = true;
+    const owner = await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE', [req.user.id]);
+    if (owner.rowCount !== 1) throw Object.assign(new Error('Cliente non trovato'), { status: 404 });
+    await client.query(
+      `INSERT INTO public.ar_gruppi (id, cliente_id, stato, expires_at)
+       VALUES ($1, $2, 'preparazione', $3)`,
+      [groupId, req.user.id, expiresAt]
+    );
+
+    const rows = [];
+    for (const leg of prepared) {
+      const requestId = uuidv4();
+      const intent = await stripe.paymentIntents.create({
+        amount: leg.cents,
+        currency: 'eur',
+        capture_method: 'manual',
+        metadata: {
+          tipo: 'privata', clienteId: String(req.user.id), requestId,
+          ar_group_id: groupId, ar_tratta: leg.item.ar_tratta, ar_vincolata: 'true'
+        }
+      }, { idempotencyKey: `turentu-ar-${groupId}-${leg.item.ar_tratta}` });
+      intents.push(intent);
+      const startOffset = leg.quote.startOffset ?? leg.quote.start_offset ?? null;
+      const endOffset = leg.quote.endOffset ?? leg.quote.end_offset ?? null;
+      const startIndex = leg.quote.start_index_polyline ?? leg.quote.startIndexPolyline ?? 0;
+      const endIndex = leg.quote.end_index_polyline ?? leg.quote.endIndexPolyline ?? 100;
+      const origineAddress = leg.o.indirizzo || leg.quote.origine_address || leg.quote.origineAddress ||
+        `Posizione (${leg.o.lat.toFixed(4)}, ${leg.o.lon.toFixed(4)})`;
+      const destinazioneAddress = leg.d.indirizzo || leg.quote.destinazione_address || leg.quote.destinazioneAddress ||
+        `Destinazione (${leg.d.lat.toFixed(4)}, ${leg.d.lon.toFixed(4)})`;
+      const inserted = await client.query(
+        `INSERT INTO pending (
+           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo,
+           distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id,
+           request_id, origine_address, destinazione_address, corsa_id,
+           start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id,
+           ar_group_id, ar_tratta, ar_vincolata
+         ) VALUES (
+           $1,$2,$3,$4,'privata',$5,$6,($7::numeric * INTERVAL '1 minute'),$8,
+           ST_SetSRID(ST_MakePoint($9,$10),4326),
+           ST_SetSRID(ST_MakePoint($11,$12),4326),
+           'pending',$13,$14,$15,$16,NULL,$17,$18,$19,$20,NULL,$21,$22,TRUE
+         ) RETURNING id`,
+        [Number(leg.quote.veicolo_id), req.user.id, leg.when, leg.count,
+         leg.cents / 100, leg.distanza, leg.durata, expiresAt,
+         leg.o.lon, leg.o.lat, leg.d.lon, leg.d.lat, intent.id, requestId,
+         origineAddress, destinazioneAddress, startOffset, endOffset,
+         startIndex, endIndex, groupId, leg.item.ar_tratta]
+      );
+      rows.push({ ar_tratta: leg.item.ar_tratta, pending_id: inserted.rows[0].id,
+        requestId, prezzo: leg.cents / 100, clientSecret: intent.client_secret });
+    }
+    const { transitionArGroup } = await import('../services/booking/ar-coordinator.service.js');
+    await transitionArGroup(client, groupId, 'preparazione', 'in_autorizzazione', req.user.id);
+    await client.query('COMMIT');
+    committed = true;
+    transaction = false;
+    return res.json({ ar_group_id: groupId, stato: 'in_autorizzazione',
+      expires_at: expiresAt, tratte: rows,
+      confermata: false, cattura_abilitata: false });
+  } catch (err) {
+    if (transaction && client) {
+      try { await client.query('ROLLBACK'); } catch (e) { console.error('[AR ROLLBACK]', e); }
+    }
+    if (!committed) {
+      for (const intent of intents) {
+        try { await stripe.paymentIntents.cancel(intent.id); }
+        catch (e) { console.error('[AR STRIPE COMPENSATION]', intent.id, e.message); }
+      }
+    }
+    console.error('[AR PAYMENT-INTENTS]', groupId, err);
+    return res.status(err.status || 500).json({ code: err.code || 'AR_CHECKOUT_ERROR',
+      error: err.status ? err.message : 'Checkout A/R non riuscito' });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// Verifica esplicita: non modifica prenotazioni o cattura fondi.
+router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res) => {
+  const groupId = req.params.groupId;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
+    return res.status(400).json({ code: 'AR_INVALID_GROUP' });
+  }
+  let client;
+  let transaction = false;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN'); transaction = true;
+    const { getArGroupForUpdate, transitionArGroup } =
+      await import('../services/booking/ar-coordinator.service.js');
+    const group = await getArGroupForUpdate(client, groupId, req.user.id);
+    if (group.stato === 'autorizzato') {
+      await client.query('COMMIT'); transaction = false;
+      return res.json({ ar_group_id: groupId, stato: 'autorizzato', confermata: false });
+    }
+    if (group.stato !== 'in_autorizzazione' || new Date(group.expires_at).getTime() <= Date.now()) {
+      throw Object.assign(new Error('Gruppo A/R non autorizzabile o scaduto'), { status: 409 });
+    }
+    const result = await client.query(
+      `SELECT ar_tratta, payment_intent_id, prezzo FROM public.pending
+       WHERE ar_group_id=$1 AND cliente_id=$2 AND ar_vincolata=TRUE FOR UPDATE`,
+      [groupId, req.user.id]
+    );
+    const legs = result.rows;
+    if (legs.length !== 2 || legs[0].ar_tratta === legs[1].ar_tratta ||
+        !legs.some(x => x.ar_tratta === 'andata') || !legs.some(x => x.ar_tratta === 'ritorno')) {
+      throw Object.assign(new Error('Coppia A/R incompleta'), { status: 409 });
+    }
+    const statuses = [];
+    for (const leg of legs) {
+      const intent = await stripe.paymentIntents.retrieve(leg.payment_intent_id);
+      const cents = Math.round(Number(leg.prezzo) * 100);
+      const valid = intent.status === 'requires_capture' && intent.capture_method === 'manual' &&
+        intent.currency === 'eur' && intent.amount_capturable >= cents &&
+        intent.amount === cents && intent.metadata?.ar_group_id === groupId &&
+        intent.metadata?.ar_tratta === leg.ar_tratta &&
+        intent.metadata?.clienteId === String(req.user.id);
+      statuses.push({ ar_tratta: leg.ar_tratta, autorizzata: valid });
+    }
+    if (statuses.every(x => x.autorizzata)) {
+      await transitionArGroup(client, groupId, 'in_autorizzazione', 'autorizzato', req.user.id);
+    }
+    await client.query('COMMIT'); transaction = false;
+    return res.json({ ar_group_id: groupId,
+      stato: statuses.every(x => x.autorizzata) ? 'autorizzato' : 'in_autorizzazione',
+      tratte: statuses, confermata: false, cattura_abilitata: false });
+  } catch (err) {
+    if (transaction && client) {
+      try { await client.query('ROLLBACK'); } catch (e) { console.error('[AR VERIFY ROLLBACK]', e); }
+    }
+    console.error('[AR VERIFY]', groupId, err);
+    return res.status(err.status || 500).json({ code: 'AR_VERIFY_ERROR',
+      error: err.status ? err.message : 'Verifica autorizzazioni non riuscita' });
+  } finally { if (client) client.release(); }
+});
+
 export default router;

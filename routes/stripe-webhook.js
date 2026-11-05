@@ -291,6 +291,23 @@ async function handlePaymentSuccess({
   client,
   notifiche,
 }) {
+  // A/R vincolata: il webhook non puo' confermare una singola tratta,
+  // creare corse o riconciliare incassi senza il coordinatore A/R.
+  // Il 500 mantiene visibile l'anomalia e consente il retry Stripe.
+  const arLeg = await client.query(`
+    SELECT ar_group_id FROM public.pending
+    WHERE payment_intent_id = $1 AND ar_vincolata = TRUE
+    UNION ALL
+    SELECT ar_group_id FROM public.richieste_pop_bus
+    WHERE payment_intent_id = $1 AND ar_vincolata = TRUE
+    LIMIT 1
+  `, [intent.id]);
+  if (arLeg.rowCount > 0) {
+    const error = new Error(`Incasso A/R non gestibile dal webhook singolo: gruppo ${arLeg.rows[0].ar_group_id}`);
+    error.code = 'AR_WEBHOOK_CAPTURE_NOT_READY';
+    throw error;
+  }
+
   const aggiornato = await aggiornaStato(intent.id, 'pagato', client, intent);
   if (!aggiornato) return;
 

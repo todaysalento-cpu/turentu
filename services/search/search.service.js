@@ -1008,6 +1008,7 @@ export async function cercaSlotUltra(richiesta) {
             pixelContext = await getPixelTerritorialContext(
                 lat, lon, destLat, destLon
             );
+            console.log("[PIXEL SEARCH NODI]", JSON.stringify({origine:{lat,lon},destinazione:{lat:destLat,lon:destLon},...pixelContext}));
         } catch (err) {
             console.error('[PIXEL] Errore associazione nodi territoriali:', err);
         }

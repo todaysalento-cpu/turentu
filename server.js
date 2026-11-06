@@ -146,7 +146,7 @@ app.use('/api/wallet', walletRouter);
 app.use('/api/eventi', eventiRouter);
 
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
-app.get('/api/config/version', (req, res) => { res.json({ minVersion: "1.0.0" }); });
+app.get('/api/config/version', (req, res) => { const raw = Number(process.env.ANDROID_MIN_VERSION_CODE ?? 25); const minVersionCode = Number.isSafeInteger(raw) && raw >= 25 ? raw : 25; res.set('Cache-Control', 'no-store'); res.json({ minVersion: "1.0.0", android: { minVersionCode, storeUrl: 'https://play.google.com/store/apps/details?id=com.turentu.app' } }); });
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);

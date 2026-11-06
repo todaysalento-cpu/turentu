@@ -11,7 +11,7 @@ import appleSignin from 'apple-signin-auth';
 import { statoVerificaEmail, richiediVerificaEmail, confermaVerificaEmail } from '../services/conducenti/verifica-email.service.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
+import { JWT_SECRET } from '../config/security.js';
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 

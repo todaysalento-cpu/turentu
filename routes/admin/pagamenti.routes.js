@@ -1,6 +1,8 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
+import Stripe from 'stripe';
+import { reconcileAdminPayment } from '../../services/payments/admin-reconciliation.service.js';
 
 const router = express.Router();
 
@@ -11,6 +13,7 @@ router.get('/', authMiddleware, requireRole('Admin', 'admin'), async (req, res) 
     const { rows: pagamenti } = await pool.query(`
       SELECT 
         pr.corsa_id AS id,
+        p.id AS pagamento_id,
         c.created_at,
         COALESCE(u_cliente.nome, 'Cliente Ignoto') AS cliente,
         COALESCE(u_autista.nome, 'Autista Ignoto') AS autista,
@@ -50,24 +53,17 @@ router.post('/:id/:action', authMiddleware, requireRole('Admin', 'admin'), async
   const { id, action } = req.params;
   
   try {
-    const nuovoStato = action === 'rilascia' ? 'pagato' : 'rimborsato';
-    
-    // Per l'aggiornamento, siccome visualizziamo l'ID come corsa_id, 
-    // cerchiamo il pagamento associato a quella corsa tramite la tabella prenotazioni
-    const result = await pool.query(`
-      UPDATE pagamenti 
-      SET stato = $1, updated_at = NOW() 
-      WHERE prenotazione_id IN (SELECT id FROM prenotazioni WHERE corsa_id = $2)
-    `, [nuovoStato, id]);
-    
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Pagamento non trovato per questa corsa' });
-    }
-    
-    res.json({ success: true, message: `Azione ${action} eseguita correttamente` });
+    const stripe = process.env.STRIPE_SECRET_KEY
+      ? new Stripe(process.env.STRIPE_SECRET_KEY, { timeout: 10000, maxNetworkRetries: 1 })
+      : null;
+    const result = await reconcileAdminPayment({
+      pool, stripe, corsaId: id, paymentId: req.body?.pagamento_id, action,
+    });
+    res.json({ success: true, message: 'Esito Stripe verificato e riconciliato', ...result });
   } catch (err) {
     console.error('❌ Errore SQL dettagliato:', err.message);
-    res.status(500).json({ error: 'Errore durante l\'aggiornamento' });
+    const status = [400, 404, 409, 503].includes(err.status) ? err.status : 502;
+    res.status(status).json({ error: status === 502 ? 'Verifica pagamento non riuscita' : err.message });
   }
 });
 

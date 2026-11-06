@@ -18,12 +18,17 @@ export async function costruisciBootstrapPixel({
   maxRichieste = 100,
   maxDirettrici = 500,
   abilitaVariantiP1 = true,
-  bufferMinuti = 0
+  bufferMinuti = 0,
+  testRequestIds = null
 } = {}) {
   check(Number.isSafeInteger(maxRichieste) && maxRichieste >= 1 && maxRichieste <= 10000, 'maxRichieste non valido');
   check(Number.isSafeInteger(maxDirettrici) && maxDirettrici >= 1 && maxDirettrici <= 10000, 'maxDirettrici non valido');
   check(now instanceof Date && Number.isFinite(now.getTime()), 'now non valido');
   check(Number.isFinite(bufferMinuti) && bufferMinuti >= 0, 'bufferMinuti non valido');
+  if (testRequestIds !== null) {
+    check(client && process.env.POPBUS_PIXEL_FIRST_MODE === 'ROLLBACK_ONLY', 'filtro E2E consentito solo in ROLLBACK_ONLY con client esplicito');
+    check(Array.isArray(testRequestIds) && testRequestIds.length > 0 && testRequestIds.length <= maxRichieste && testRequestIds.every(id => Number.isSafeInteger(id) && id > 0) && new Set(testRequestIds).size === testRequestIds.length, 'testRequestIds non validi');
+  }
   const db = client ?? pool;
 
   const requestResult = await db.query(`
@@ -34,8 +39,9 @@ export async function costruisciBootstrapPixel({
       AND destinazione_nodo_territoriale_id IS NOT NULL
       AND origine_nodo_territoriale_id <> destinazione_nodo_territoriale_id
       AND posti_richiesti > 0
+      AND ($3::bigint[] IS NULL OR id = ANY($3::bigint[]))
     ORDER BY created_at NULLS LAST, id
-    LIMIT $2`, [now, maxRichieste + 1]);
+    LIMIT $2`, [now, maxRichieste + 1, testRequestIds]);
   check(requestResult.rows.length <= maxRichieste, 'troppe richieste: aumentare limite senza troncamento');
 
   const corridorResult = await db.query(`

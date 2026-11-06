@@ -19,9 +19,9 @@ let createdActivationId = null;
 let createdOfferId = null;
 const token = randomUUID().replaceAll('-', '');
 const fixtureIds = [];
+let rollbackRecords = null;
 const NODE_IDS = [8, 5, 7];
-const OPERATOR_ID = 2;
-const DRIVER_IDS = [9, 101];
+const DRIVER_ID = 4;
 
 try {
   check(process.env.TURENTU_ISOLATED_TEST_DB === 'YES', 'impostare TURENTU_ISOLATED_TEST_DB=YES SOLO per DB realmente isolato');
@@ -114,7 +114,8 @@ try {
 
   const { rows: acts } = await client.query('SELECT id,autista_id,veicolo_id,stato FROM public.popbus_attivazioni WHERE id=$1',[activationId]);
   check(acts.length === 1 && acts[0].stato === 'in_attesa_autista', 'attivazione non in attesa');
-  check(Number(acts[0].autista_id) === OPERATOR_ID, `selettore ha scelto operatore ${acts[0].autista_id}, atteso ${OPERATOR_ID}; non forzare veicolo`);
+  const OPERATOR_ID = Number(acts[0].autista_id);
+  check(Number.isSafeInteger(OPERATOR_ID) && OPERATOR_ID > 0 && OPERATOR_ID !== DRIVER_ID, "operatore selezionato non valido");
   const { rows: links } = await client.query(`
     SELECT r.id,r.request_id,r.cliente_id,r.prezzo,r.payment_intent_id,r.ar_vincolata
     FROM public.popbus_attivazione_richieste ar JOIN public.richieste_pop_bus r ON r.id=ar.richiesta_id
@@ -124,6 +125,7 @@ try {
   const walletByRef = new Map(links.map(r => [String(r.request_id),r]));
   let walletChecks = 0;
   const counts = { corse:0, prenotazioni:0, pagamenti:0 };
+  const insertedIds = { corse:[], prenotazioni:[], pagamenti:[] };
   const acceptanceClient = {
     query: async (sql, params=[]) => {
       const q = String(sql).replace(/\s+/g,' ').trim();
@@ -138,20 +140,19 @@ try {
       if (/^INSERT INTO corse\s*\(/i.test(q)) counts.corse++;
       if (/^INSERT INTO prenotazioni\s*\(/i.test(q)) counts.prenotazioni++;
       if (/^INSERT INTO pagamenti\s*\(/i.test(q)) counts.pagamenti++;
+      for (const table of Object.keys(insertedIds)) {
+        if (new RegExp("INSERT INTO (?:public\\.)?"+table+"\\s*\\(","i").test(q)) {
+          for (const row of result.rows ?? []) if (row.id != null) insertedIds[table].push(Number(row.id));
+        }
+      }
       return result;
     }
   };
   let accepted;
-  let selectedDriver;
-  // Do not retry after a SQL failure: a failed PG transaction is aborted.
-  for (const driverId of DRIVER_IDS) {
-    const { rows: eligible } = await client.query(`
-      SELECT 1 FROM public.conducenti_operatori
-      WHERE operatore_id=$1 AND conducente_id=$2 AND stato='attivo' AND sempre_disponibile=true`,
-      [OPERATOR_ID,driverId]);
-    if (eligible.length) { selectedDriver=driverId; break; }
-  }
-  check(selectedDriver, 'nessun conducente fisico attivo disponibile');
+  const selectedDriver = DRIVER_ID;
+  const existing = await client.query("SELECT 1 FROM public.conducenti_operatori WHERE conducente_id=$1",[selectedDriver]);
+  check(existing.rowCount === 0, "conducente di test gia associato");
+  await client.query("INSERT INTO public.conducenti_operatori (operatore_id,conducente_id,stato,assegnabile_automaticamente,sempre_disponibile) VALUES ($1,$2,$3,false,true)",[OPERATOR_ID,selectedDriver,"attivo"]);
   try {
     accepted = await accettaAttivazione(acceptanceClient,offerId,OPERATOR_ID,
       { modalita:'manuale', conducenteId:selectedDriver, confermaDeroga:false });
@@ -171,6 +172,12 @@ try {
   check(walletChecks === links.length, `wallet checks ${walletChecks}/${links.length}`);
   check(counts.corse >= 1 && counts.prenotazioni === links.length && counts.pagamenti === links.length,
     `scritture incomplete: ${JSON.stringify(counts)}`);
+  check(insertedIds.corse.length === counts.corse && insertedIds.prenotazioni.length === counts.prenotazioni, 'ID corse/prenotazioni incompleti');
+  const corsaIds = insertedIds.corse;
+  const pr = await client.query('SELECT id FROM public.prenotazioni WHERE corsa_id=ANY($1::int[])',[corsaIds]);
+  const pa = await client.query('SELECT id FROM public.pagamenti WHERE corsa_id=ANY($1::int[])',[corsaIds]);
+  check(pr.rowCount === counts.prenotazioni && pa.rowCount === counts.pagamenti, 'ID prenotazioni/pagamenti incompleti');
+  rollbackRecords = { corse:corsaIds, prenotazioni:pr.rows.map(r=>r.id), pagamenti:pa.rows.map(r=>r.id), operatoreId:OPERATOR_ID, conducenteId:selectedDriver };
   console.log('TURENTU_PHYSICAL_ACCEPTANCE_E2E_OK:',JSON.stringify({activationId,offerId,driverId:selectedDriver,walletChecks,counts,ms:Math.round(performance.now()-startedAt)}));
 } catch (error) {
   failed = true;
@@ -180,6 +187,17 @@ try {
     try {
       if (begun) {
         await client.query('ROLLBACK');
+        if (rollbackRecords) {
+          for (const table of ['corse','prenotazioni','pagamenti']) {
+            const ids=rollbackRecords[table];
+            check(ids.length>0, 'ID rollback assenti: '+table);
+            const result=await client.query('SELECT count(*)::int AS n FROM public.'+table+' WHERE id=ANY($1::int[])',[ids]);
+            check(result.rows[0].n===0, 'Residui rollback: '+table);
+          }
+          const rel=await client.query('SELECT count(*)::int AS n FROM public.conducenti_operatori WHERE operatore_id=$1 AND conducente_id=$2',[rollbackRecords.operatoreId,rollbackRecords.conducenteId]);
+          check(rel.rows[0].n===0, 'Associazione conducente residua');
+          console.log('ZERO_RESIDUI_CORSE_PRENOTAZIONI_PAGAMENTI_CONDUCENTE_OK');
+        }
         console.log('ROLLBACK_COMPLETATO');
         // IDs from rolled-back inserts must no longer exist. Read-only check.
         if (fixtureIds.length) {

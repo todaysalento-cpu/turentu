@@ -80,7 +80,7 @@ try {
 
   const pixel = await eseguiPixelInTransazione({
     client, now: new Date(), maxRichieste: 100, maxDirettrici: 500,
-    abilitaVariantiP1: true, bufferMinuti: 0
+    abilitaVariantiP1: true, bufferMinuti: 0, testRequestIds: inserted
   });
   assert.equal(pixel.committed, false);
   assert.equal(pixel.richiesteEsaminate, 6,

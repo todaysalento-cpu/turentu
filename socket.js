@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from './config/security.js';
 import { pool } from "./db/db.js";
 import { canAccessChat } from "./services/chat/chat-access.service.js";
 
@@ -37,7 +38,6 @@ export const sendNotification = async ({ userId, role, notification }) => {
 /* ================= SOCKET SETUP ================= */
 export const setupSocket = (ioServer) => {
   io = ioServer;
-  const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;

@@ -320,7 +320,7 @@ await expectFailure(
     'lettura disponibilita operativa mancante'
   );
   assert(
-    sql.some(s => /FROM popbus_attivazioni a/i.test(s) && /FROM corse c/i.test(s)),
+    sql.some(s => /FROM popbus_attivazioni a/i.test(s) && /FROM corse c/i.test(s) && /FROM ar_accettazioni aa/i.test(s) && /JOIN pending p/i.test(s)),
     'controllo conflitti operativi mancante'
   );
 

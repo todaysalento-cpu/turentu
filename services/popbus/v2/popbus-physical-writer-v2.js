@@ -274,6 +274,15 @@ export async function rivalidaCicloFisicoInTransazioneV2({
        AND c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
        AND c.start_datetime < $3
        AND (c.arrivo_datetime IS NULL OR c.arrivo_datetime > $2)
+      UNION ALL
+      SELECT 1 AS found
+      FROM ar_accettazioni aa
+      JOIN pending p ON p.id = aa.pending_id
+      WHERE aa.veicolo_id = $1
+        AND aa.stato = 'provvisoria'
+        AND aa.expires_at > NOW()
+        AND p.start_datetime < $3
+        AND (p.start_datetime + p.durata) > $2
      LIMIT 1`,
     [vehicleId, new Date(busyStart), new Date(busyEnd)]
   );

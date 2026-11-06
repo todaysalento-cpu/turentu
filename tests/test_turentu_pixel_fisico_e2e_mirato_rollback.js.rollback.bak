@@ -1,0 +1,197 @@
+// Turentu — PIXEL -> POPBUS physical V2 -> acceptance -> physical driver.
+// Experimental integration test. Run ONLY against a verified, isolated TEST database.
+// Does not test Stripe, ride start/end, or LIVE release. No COMMIT is issued.
+import { performance } from 'node:perf_hooks';
+import { randomUUID } from 'node:crypto';
+import { pool } from '../db/db.js';
+import { leg } from '../services/popbus/v2/planner.js';
+import { createIncrementalCorridorEngine } from '../services/pixel/incremental-corridor-engine.js';
+import { pubblicaOpportunitaPixel, leggiOpportunitaPixel } from '../services/pixel/pixel.persistence.service.js';
+import { collaudaPixelFirstFisicoInTransazione } from '../services/popbus/v2/pixel-first-multimission-service.js';
+import { accettaAttivazione } from '../services/popbus/v2/acceptance.js';
+
+const check = (ok, message) => { if (!ok) throw new Error(`TURENTU_E2E: ${message}`); };
+const startedAt = performance.now();
+let client;
+let begun = false;
+let failed = false;
+let createdActivationId = null;
+let createdOfferId = null;
+const token = randomUUID().replaceAll('-', '');
+const fixtureIds = [];
+const NODE_IDS = [8, 5, 7];
+const DRIVER_ID = 4;
+
+try {
+  check(process.env.TURENTU_ISOLATED_TEST_DB === 'YES', 'impostare TURENTU_ISOLATED_TEST_DB=YES SOLO per DB realmente isolato');
+  check(process.env.POPBUS_PIXEL_FIRST !== '1', 'worker PIXEL-first deve essere OFF');
+  check(process.env.POPBUS_PIXEL_FIRST_ENABLED !== 'true', 'scheduler PIXEL-first deve essere OFF');
+  check(process.env.POPBUS_PIXEL_FIRST_LIVE_APPROVED !== '1', 'LIVE_APPROVED deve essere OFF');
+  check(process.env.POPBUS_CONDUCENTI_ENABLED === 'true', 'abilitare modulo conducenti nel processo test');
+  check(process.env.POPBUS_MULTIMISSION_ACCEPTANCE_TEST === 'true', 'abilitare preflight multimissione SOLO nel processo test');
+
+  client = await pool.connect();
+  const identity = await client.query('SELECT current_database() AS name, pg_is_in_recovery() AS replica, inet_server_addr()::text AS host');
+  console.log('DB_TARGET:', JSON.stringify(identity.rows[0]));
+  check(identity.rows[0].replica === false, 'DB in sola lettura');
+  // A flag alone cannot establish isolation. Operator must verify the target shown above.
+  await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ WRITE');
+  begun = true;
+  await client.query("SET LOCAL lock_timeout = '5s'");
+  await client.query("SET LOCAL statement_timeout = '180s'");
+  await client.query("SET LOCAL idle_in_transaction_session_timeout = '240000'");
+
+  const { rows: nodes } = await client.query(`
+    SELECT id,nome,ST_Y(posizione::geometry) AS lat,ST_X(posizione::geometry) AS lon
+    FROM public.nodi_territoriali WHERE id=ANY($1::bigint[]) AND attivo=true`, [NODE_IDS]);
+  check(nodes.length === 3, 'nodi 8,5,7 non disponibili');
+  const byId = new Map(nodes.map(n => [Number(n.id), { ...n, lat: Number(n.lat), lon: Number(n.lon) }]));
+  const routeCache = new Map();
+  const road = async ids => {
+    const legs = [];
+    for (let i = 1; i < ids.length; i++) {
+      const a = Number(ids[i-1]); const b = Number(ids[i]);
+      const key = `${a}>${b}`;
+      if (!routeCache.has(key)) {
+        const r = await leg(byId.get(a), byId.get(b));
+        check(r && Number(r.metres) > 0 && Number(r.seconds) > 0 && r.polyline, `routing assente ${key}`);
+        routeCache.set(key, { metres: r.metres, seconds: r.seconds, polyline: r.polyline, roadCoincident: false });
+      }
+      legs.push(routeCache.get(key));
+    }
+    return { verificataRouting: true, legs };
+  };
+  const first = await leg(byId.get(8), byId.get(5));
+  check(first && Number(first.seconds) > 0, 'routing 8>5 assente');
+  const departure = new Date(Date.now() + 14 * 86400000);
+  departure.setUTCHours(12, 0, 0, 0);
+  const cases = [
+    { a: 8, b: 5, at: departure, price: 140 },
+    { a: 5, b: 7, at: new Date(departure.getTime() + Math.round(first.seconds) * 1000), price: 180 },
+    { a: 8, b: 7, at: departure, price: 280 }
+  ];
+  // Deliberately high synthetic prices: tests economics, not commercial fares.
+  for (let i=0; i<cases.length; i++) {
+    const c = cases[i]; const a = byId.get(c.a); const b = byId.get(c.b);
+    const { rows } = await client.query(`
+      INSERT INTO public.richieste_pop_bus
+      (cliente_id,origine,destinazione,origine_nodo_territoriale_id,
+       destinazione_nodo_territoriale_id,origine_address,destinazione_address,
+       start_datetime,posti_richiesti,stato,classe,prezzo,payment_intent_id)
+      VALUES (4,ST_SetSRID(ST_MakePoint($1,$2),4326),ST_SetSRID(ST_MakePoint($3,$4),4326),
+              $5,$6,$7,$8,$9,1,'in_attesa','STANDARD',$10,$11) RETURNING id`,
+      [a.lon,a.lat,b.lon,b.lat,c.a,c.b,a.nome,b.nome,c.at,c.price,`wallet_e2e_${token}_${i}`]);
+    fixtureIds.push(Number(rows[0].id));
+  }
+  const { rows: requests } = await client.query('SELECT * FROM public.richieste_pop_bus WHERE id=ANY($1::int[]) ORDER BY id',[fixtureIds]);
+  check(requests.length === 3 && requests.every(r => Number(r.cliente_id) === 4), 'fixture cliente non valida');
+  check(requests.every(r => !r.ar_vincolata), 'fixture A/R vincolata non supportata da accettazione singola');
+  const engine = createIncrementalCorridorEngine({ routeNodes: road, abilitaVariantiP1: true });
+  for (const r of requests) await engine.processRequest(r);
+  const corridors = engine.listCorridors();
+  check(corridors.length > 0, 'PIXEL non ha generato direttrici');
+  for (const corridor of corridors) await pubblicaOpportunitaPixel({ engine, direttriceId: corridor.id, bufferMinuti: 0, client });
+  const all = await leggiOpportunitaPixel({ limit: 1000, client });
+  const own = all.filter(o => o.richiesta_ids.some(id => fixtureIds.includes(Number(id))));
+  check(own.length > 0, 'PIXEL non ha prodotto opportunita fixture');
+  check(own.every(o => o.richiesta_ids.every(id => fixtureIds.includes(Number(id)))), 'opportunita contaminata da richieste esterne');
+  // One opportunity only; choose the one representing most fixture requests.
+  own.sort((a,b) => b.richiesta_ids.length-a.richiesta_ids.length);
+  const selected = own[0];
+  check(selected.richiesta_ids.length >= 2, 'nessuna opportunita con almeno due richieste');
+  console.log('PIXEL_FIXTURE:', JSON.stringify({ opportunityId: selected.pixel_opportunita_id, requests: selected.richiesta_ids, ms: Math.round(performance.now()-startedAt) }));
+
+  const physical = await collaudaPixelFirstFisicoInTransazione({ client, now: Date.now(), opportunityIds: [Number(selected.pixel_opportunita_id)] });
+  console.log('PHYSICAL_RESULT:', JSON.stringify(physical));
+  check(physical.fase === 'PERSISTENZA_SIMULATA' && physical.testPersistenza?.ok === true,
+    `nessun ciclo fisico persistito: fase=${physical.fase}, motivo=${physical.motivo ?? 'n/d'}`);
+  const activationId = Number(physical.testPersistenza.attivazioneIdSimulata);
+  const offerId = Number(physical.testPersistenza.offertaIdSimulata);
+  createdActivationId = activationId;
+  createdOfferId = offerId;
+  check(Number.isSafeInteger(activationId) && activationId > 0 && Number.isSafeInteger(offerId) && offerId > 0, 'ID persistenza assenti');
+
+  const { rows: acts } = await client.query('SELECT id,autista_id,veicolo_id,stato FROM public.popbus_attivazioni WHERE id=$1',[activationId]);
+  check(acts.length === 1 && acts[0].stato === 'in_attesa_autista', 'attivazione non in attesa');
+  const OPERATOR_ID = Number(acts[0].autista_id);
+  check(Number.isSafeInteger(OPERATOR_ID) && OPERATOR_ID > 0 && OPERATOR_ID !== DRIVER_ID, "operatore selezionato non valido");
+  const { rows: links } = await client.query(`
+    SELECT r.id,r.request_id,r.cliente_id,r.prezzo,r.payment_intent_id,r.ar_vincolata
+    FROM public.popbus_attivazione_richieste ar JOIN public.richieste_pop_bus r ON r.id=ar.richiesta_id
+    WHERE ar.attivazione_id=$1 AND ar.attiva=true`, [activationId]);
+  check(links.length > 0 && links.every(r => fixtureIds.includes(Number(r.id))), 'richieste attivazione non isolate');
+  check(links.every(r => String(r.payment_intent_id).startsWith('wallet_e2e_') && !r.ar_vincolata), 'wallet o A/R non validi');
+  const walletByRef = new Map(links.map(r => [String(r.request_id),r]));
+  let walletChecks = 0;
+  const counts = { corse:0, prenotazioni:0, pagamenti:0 };
+  const acceptanceClient = {
+    query: async (sql, params=[]) => {
+      const q = String(sql).replace(/\s+/g,' ').trim();
+      if (/^SELECT COALESCE\(SUM\(importo\), 0\) AS totale FROM transazioni_wallet WHERE utente_id = \$1 AND riferimento_id::text = \$2$/i.test(q)) {
+        const r = walletByRef.get(String(params[1]));
+        check(r && Number(r.cliente_id) === Number(params[0]), 'wallet identity mismatch');
+        walletChecks++;
+        return { rows:[{ totale:String(-Number(r.prezzo)) }], rowCount:1 };
+      }
+      if (/transazioni_wallet/i.test(q)) throw new Error('wallet query inattesa: '+q);
+      const result = await client.query(sql,params);
+      if (/^INSERT INTO corse\s*\(/i.test(q)) counts.corse++;
+      if (/^INSERT INTO prenotazioni\s*\(/i.test(q)) counts.prenotazioni++;
+      if (/^INSERT INTO pagamenti\s*\(/i.test(q)) counts.pagamenti++;
+      return result;
+    }
+  };
+  let accepted;
+  const selectedDriver = DRIVER_ID;
+  const existing = await client.query("SELECT 1 FROM public.conducenti_operatori WHERE conducente_id=$1",[selectedDriver]);
+  check(existing.rowCount === 0, "conducente di test gia associato");
+  await client.query("INSERT INTO public.conducenti_operatori (operatore_id,conducente_id,stato,assegnabile_automaticamente,sempre_disponibile) VALUES ($1,$2,$3,false,true)",[OPERATOR_ID,selectedDriver,"attivo"]);
+  try {
+    accepted = await accettaAttivazione(acceptanceClient,offerId,OPERATOR_ID,
+      { modalita:'manuale', conducenteId:selectedDriver, confermaDeroga:false });
+  } catch (error) {
+    throw new Error(`ACCETTAZIONE_FISICA_FALLITA: ${error.message}`,{cause:error});
+  }
+  check(accepted, 'accettazione senza risultato');
+  const { rows: assignments } = await client.query(`
+    SELECT id,conducente_id,operatore_id,veicolo_id,stato
+    FROM public.assegnazioni_conducenti WHERE attivazione_id=$1 AND stato='assegnata'`,[activationId]);
+  check(assignments.length === 1 && Number(assignments[0].conducente_id) === selectedDriver &&
+    Number(assignments[0].operatore_id) === OPERATOR_ID && Number(assignments[0].veicolo_id) === Number(acts[0].veicolo_id),
+    'assegnazione conducente fisico non valida');
+  const { rows: states } = await client.query('SELECT stato FROM public.popbus_attivazioni WHERE id=$1',[activationId]);
+  const { rows: offers } = await client.query('SELECT stato FROM public.offerte_autisti WHERE id=$1',[offerId]);
+  check(states[0]?.stato === 'confermata' && offers[0]?.stato === 'accettata', 'stati attivazione/offerta non confermati');
+  check(walletChecks === links.length, `wallet checks ${walletChecks}/${links.length}`);
+  check(counts.corse >= 1 && counts.prenotazioni === links.length && counts.pagamenti === links.length,
+    `scritture incomplete: ${JSON.stringify(counts)}`);
+  console.log('TURENTU_PHYSICAL_ACCEPTANCE_E2E_OK:',JSON.stringify({activationId,offerId,driverId:selectedDriver,walletChecks,counts,ms:Math.round(performance.now()-startedAt)}));
+} catch (error) {
+  failed = true;
+  console.error('TURENTU_PHYSICAL_ACCEPTANCE_E2E_FAIL:',error?.stack ?? error);
+} finally {
+  if (client) {
+    try {
+      if (begun) {
+        await client.query('ROLLBACK');
+        console.log('ROLLBACK_COMPLETATO');
+        // IDs from rolled-back inserts must no longer exist. Read-only check.
+        if (fixtureIds.length) {
+          const r = await client.query('SELECT count(*)::int AS n FROM public.richieste_pop_bus WHERE id=ANY($1::int[])',[fixtureIds]);
+          check(r.rows[0].n === 0, 'fixture residue dopo rollback');
+          console.log('ZERO_RESIDUI_RICHIESTE_OK');
+          if (createdActivationId !== null && createdOfferId !== null) {
+            const a = await client.query('SELECT count(*)::int AS n FROM public.popbus_attivazioni WHERE id=$1',[createdActivationId]);
+            const o = await client.query('SELECT count(*)::int AS n FROM public.offerte_autisti WHERE id=$1',[createdOfferId]);
+            const d = await client.query('SELECT count(*)::int AS n FROM public.assegnazioni_conducenti WHERE attivazione_id=$1',[createdActivationId]);
+            check(a.rows[0].n===0 && o.rows[0].n===0 && d.rows[0].n===0, 'attivazione, offerta o assegnazione residue');
+            console.log('ZERO_RESIDUI_ATTIVAZIONE_OFFERTA_ASSEGNAZIONE_OK');
+          }
+        }
+      }
+    } catch (error) { failed=true; console.error('ROLLBACK_O_VERIFICA_FAIL:',error?.stack ?? error); }
+    finally { client.release(); }
+  }
+  await pool.end();
+}
+if (failed) process.exitCode=1;

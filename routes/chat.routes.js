@@ -9,7 +9,7 @@ import streamifier from "streamifier";
 import { notifyUser } from "../services/notifications/notification.service.js";
 
 const chatRouter = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "segreto-di-test";
+import { JWT_SECRET } from '../config/security.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
 

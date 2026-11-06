@@ -762,4 +762,44 @@ router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res
   } finally { if (client) client.release(); }
 });
 
+// Diagnostica NCC A/R: NON persiste accettazioni e NON conferma corse.
+// Non utilizzare questa rotta come accettazione operativa in produzione.
+router.post('/ar/:groupId/accept', authMiddleware, async (req, res) => {
+  const groupId = req.params.groupId;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
+    return res.status(400).json({ code: 'AR_INVALID_GROUP' });
+  }
+  const operatoreId = Number(req.user?.id);
+  if (!Number.isSafeInteger(operatoreId) || operatoreId <= 0) {
+    return res.status(403).json({ code: 'AR_OPERATOR_UNAUTHORIZED' });
+  }
+  try {
+    const { coordinaAccettazioneProvvisoriaNccAR } =
+      await import('../services/booking/ar-ncc-acceptance-coordinator.service.js');
+    const risultato = await coordinaAccettazioneProvvisoriaNccAR({
+      arGroupId: groupId,
+      operatoreId,
+      rollbackOnly: true
+    });
+    return res.json({
+      ...risultato,
+      diagnostica: true,
+      rollbackOnly: true,
+      statoPersistito: false,
+      confermata: false,
+      catturaStripeAbilitata: false
+    });
+  } catch (err) {
+    console.error('[AR NCC ACCEPT DIAGNOSTIC]', groupId, err);
+    return res.status(409).json({
+      code: 'AR_NCC_ACCEPT_DIAGNOSTIC_FAILED',
+      diagnostica: true,
+      rollbackOnly: true,
+      statoPersistito: false,
+      confermata: false,
+      catturaStripeAbilitata: false
+    });
+  }
+});
+
 export default router;

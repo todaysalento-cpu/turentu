@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'segreto-di-test';
+import { JWT_SECRET } from '../config/security.js';
 
 // ===================== AUTH =====================
 export const authMiddleware = (req, res, next) => {

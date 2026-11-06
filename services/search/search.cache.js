@@ -4,6 +4,23 @@ import polyline from '@mapbox/polyline';
 import { redisClient } from '../../redis.js';
 
 const SYNC_TTL_MS = 60000;
+let syncPromise = null;
+let mutationVersion = 0;
+
+function changed(store = CacheStore) {
+    if (store === CacheStore) mutationVersion++;
+}
+
+async function inBatches(items, operation) {
+    const values = [...items];
+    for (let offset = 0; offset < values.length; offset += 8) {
+        // Attendere l'intero blocco anche in caso di errore: nessuna scrittura
+        // abbandonata puo sovrapporsi al successivo tentativo di caricamento.
+        const results = await Promise.allSettled(values.slice(offset, offset + 8).map(operation));
+        const failed = results.find(result => result.status === 'rejected');
+        if (failed) throw failed.reason;
+    }
+}
 
 export const CacheStore = {
     veicoliCache: new Map(),
@@ -19,7 +36,7 @@ export const CacheStore = {
 };
 
 // --- GESTIONE DISPONIBILITÀ ---
-export const upsertDisponibilita = (d) => {
+export const upsertDisponibilita = (d, store = CacheStore) => {
     if (!CacheStore) return;
     const normalized = {
         ...d,
@@ -31,8 +48,12 @@ export const upsertDisponibilita = (d) => {
         inattivita: typeof d.inattivita === 'string' ? JSON.parse(d.inattivita) : (d.inattivita || [])
     };
     
-    CacheStore.disponibilitaCache.set(Number(d.id), normalized);
-    CacheStore.veicoloToDisponibilita.set(Number(d.veicolo_id), normalized);
+    changed(store);
+    store.disponibilitaCache.set(Number(d.id), normalized);
+    const current = store.veicoloToDisponibilita.get(normalized.veicolo_id);
+    if (!current || Number(current.id) <= Number(d.id)) {
+        store.veicoloToDisponibilita.set(normalized.veicolo_id, normalized);
+    }
     
     console.log(`📦 [CACHE DISPONIBILITÀ] Salvato/Aggiornato -> Veicolo ID: ${normalized.veicolo_id} (Disponibilità ID: ${d.id}), Slot attivo: ${normalized.is_slot}`);
 };
@@ -41,26 +62,34 @@ export const removeDisponibilita = async (disponibilitaId) => {
     const id = Number(disponibilitaId);
     const d = CacheStore.disponibilitaCache.get(id);
     if (d) {
+        changed();
+        CacheStore.disponibilitaCache.delete(id);
+        const remaining = [...CacheStore.disponibilitaCache.values()]
+            .filter(x => x.veicolo_id === d.veicolo_id)
+            .sort((a, b) => Number(b.id) - Number(a.id))[0];
+        if (remaining) CacheStore.veicoloToDisponibilita.set(d.veicolo_id, remaining);
+        else CacheStore.veicoloToDisponibilita.delete(d.veicolo_id);
         const lat = d.lat_live !== null && d.lat_live !== undefined ? d.lat_live : d.lat_base;
         const lon = d.lon_live !== null && d.lon_live !== undefined ? d.lon_live : d.lon_base;
 
-        if (lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
+        if (!remaining && redisClient && lat !== null && lat !== undefined && lon !== null && lon !== undefined) {
             const hash = ngeohash.encode(Number(lat), Number(lon), 5);
             await redisClient.sRem(`slot:in_area:${hash}`, d.veicolo_id.toString());
         }
-        CacheStore.veicoloToDisponibilita.delete(Number(d.veicolo_id));
-        CacheStore.disponibilitaCache.delete(id);
+        if (!remaining) await syncGeoIndex('slot', d.veicolo_id, []);
         console.log(`🗑 [CACHE DISPONIBILITÀ] Rimossa disponibilità ID: ${id} per Veicolo ID: ${d.veicolo_id}`);
     }
 };
 
 // --- GESTIONE ENTITÀ ---
-export const upsertVeicolo = (v) => {
+export const upsertVeicolo = (v, store = CacheStore) => {
     if (!CacheStore || !CacheStore.veicoliCache) return;
-    CacheStore.veicoliCache.set(Number(v.id), v);
+    changed(store);
+    store.veicoliCache.set(Number(v.id), v);
 };
 
 export const removeVeicolo = async (veicoloId) => {
+    changed();
     CacheStore.veicoliCache.delete(Number(veicoloId));
 };
 
@@ -69,7 +98,8 @@ export const upsertPrenotazione = async (prenotazione) => {
     CacheStore.prenotazioniCache.set(Number(prenotazione.id), prenotazione);
 };
 
-export const upsertCorsa = async (c, indicizzare = false) => {
+export const upsertCorsa = async (c, indicizzare = false, store = CacheStore) => {
+    changed(store);
     c.partenza_prevista = c.start_datetime;
     c.arrivo_previsto = c.arrivo_datetime;
 
@@ -100,13 +130,14 @@ export const upsertCorsa = async (c, indicizzare = false) => {
         }
     }
     
-    CacheStore.corseCache.set(Number(c.id), c);
+    store.corseCache.set(Number(c.id), c);
     if (indicizzare && c.decodedCoords && c.decodedCoords.length > 0) {
         await aggiornaIndiciRedis(c.id, c.decodedCoords);
     }
 };
 
 export const removeCorsa = async (corsaId) => {
+    changed();
     const id = Number(corsaId);
     CacheStore.corseCache.delete(id);
     const errors = [];
@@ -117,7 +148,8 @@ export const removeCorsa = async (corsaId) => {
     if (errors.length) throw new AggregateError(errors, 'REDIS_INDEX_CLEANUP_FAILED');
 };
 
-export async function upsertTratta(t, indicizzare = false) {
+export async function upsertTratta(t, indicizzare = false, store = CacheStore) {
+    changed(store);
     const id = Number(t.id), corsaId = Number(t.corsa_id);
     if (!Number.isSafeInteger(id) || !Number.isSafeInteger(corsaId)) throw new Error('ID tratta/corsa non valido');
     if (!['andata', 'ritorno'].includes(t.direzione)) throw new Error('Direzione non valida');
@@ -128,17 +160,18 @@ export async function upsertTratta(t, indicizzare = false) {
     } catch (err) {
         console.warn(`[CACHE TRATTE] Polyline non valida ${id}: ${err.message}`);
     }
-    const old = CacheStore.tratteCache.get(id);
-    if (old && Number(old.corsa_id) !== corsaId) CacheStore.tratteByCorsa.get(Number(old.corsa_id))?.delete(id);
+    const old = store.tratteCache.get(id);
+    if (old && Number(old.corsa_id) !== corsaId) store.tratteByCorsa.get(Number(old.corsa_id))?.delete(id);
     const normalized = { ...t, id, corsa_id: corsaId, decodedCoords };
-    CacheStore.tratteCache.set(id, normalized);
-    if (!CacheStore.tratteByCorsa.has(corsaId)) CacheStore.tratteByCorsa.set(corsaId, new Set());
-    CacheStore.tratteByCorsa.get(corsaId).add(id);
+    store.tratteCache.set(id, normalized);
+    if (!store.tratteByCorsa.has(corsaId)) store.tratteByCorsa.set(corsaId, new Set());
+    store.tratteByCorsa.get(corsaId).add(id);
     if (indicizzare) await syncGeoIndex('tratta', id, decodedCoords);
     return normalized;
 }
 
 export async function removeTratta(trattaId) {
+    changed();
     const id = Number(trattaId);
     const t = CacheStore.tratteCache.get(id);
     CacheStore.tratteCache.delete(id);
@@ -151,11 +184,27 @@ export async function removeTratta(trattaId) {
 };
 
 // --- SYNC ENGINE ---
-export async function loadCachesUltra(force = false) {
+export function loadCachesUltra(force = false) {
+    if (syncPromise) return syncPromise;
     if (!force && (Date.now() - CacheStore.lastSync < SYNC_TTL_MS)) return;
-    
+    syncPromise = refreshCachesUltra().catch(error => {
+        if (error.message !== 'CACHE_CHANGED_DURING_SYNC') throw error;
+        return refreshCachesUltra();
+    }).finally(() => { syncPromise = null; });
+    return syncPromise;
+}
+
+async function refreshCachesUltra() {
+    const version = mutationVersion;
+    const next = Object.fromEntries(Object.entries(CacheStore)
+        .filter(([key, value]) => value instanceof Map && key !== 'prenotazioniCache')
+        .map(([key]) => [key, new Map()]));
     const client = await pool.connect();
+    let readTx = false;
+    let released = false;
     try {
+        await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        readTx = true;
         console.log(`⏳ [SYNC] Inizio caricamento cache...`);
         
         let dRes = await client.query(`
@@ -174,7 +223,6 @@ export async function loadCachesUltra(force = false) {
                 LIMIT 1
             ) pv ON true
             ORDER BY dv.id DESC
-            LIMIT 100
         `);
 
         console.log(`🔍 [SYNC DISPONIBILITÀ] Righe caricate senza filtro NOW(): ${dRes.rows.length}`);
@@ -201,33 +249,52 @@ export async function loadCachesUltra(force = false) {
             client.query(`SELECT t.* FROM public.corse_tratte t JOIN public.corse c ON c.id = t.corsa_id
                           WHERE c.tipo_corsa = 'condivisa' AND c.stato IN ('prenotabile','in_corso','da_attivare')`)
         ]);
+        await client.query('COMMIT');
+        readTx = false;
+        client.release();
+        released = true;
         
-        vRes.rows.forEach(v => upsertVeicolo(v));
+        vRes.rows.forEach(v => upsertVeicolo(v, next));
         
         dRes.rows.forEach(d => {
             console.log(`📋 [SYNC DEBUG] Processo disponibilità DB -> Veicolo ID: ${d.veicolo_id}, Start: ${d.start}, Fine: ${d.fine}`);
-            upsertDisponibilita({ ...d, disponibile: true });
-            aggiornaIndiciDisponibilita(d); 
+            upsertDisponibilita(d, next);
         });
 
-        await Promise.all(cRes.rows.map(c => upsertCorsa(c, true)));
-        await Promise.all(tratteRes.rows.map(t => upsertTratta(t, true)));
+        // Costruzione separata: i lettori non vedono snapshot parziali.
+        for (const c of cRes.rows) await upsertCorsa(c, false, next);
+        for (const t of tratteRes.rows) await upsertTratta(t, false, next);
+        dirRes.rows.forEach(dir => next.direttriciCache.set(dir.id, dir));
+        nodiRes.rows.forEach(nodo => next.nodiCache.set(String(nodo.id), nodo));
+
+        // Ogni operazione Redis viene attesa; nessuna rejection abbandonata.
+        await inBatches(next.veicoloToDisponibilita.values(), aggiornaIndiciDisponibilita);
+        for (const [id, d] of CacheStore.veicoloToDisponibilita) {
+            if (!next.veicoloToDisponibilita.has(id)) {
+                const lat = d.lat_live ?? d.lat_base, lon = d.lon_live ?? d.lon_base;
+                if (redisClient && lat != null && lon != null) {
+                    await redisClient.sRem(`slot:in_area:${ngeohash.encode(Number(lat), Number(lon), 5)}`, String(id));
+                }
+                await syncGeoIndex('slot', id, []);
+            }
+        }
+        await inBatches(next.corseCache.values(), c => syncGeoIndex('corsa', c.id, c.decodedCoords || []));
+        await inBatches(next.tratteCache.values(), t => syncGeoIndex('tratta', t.id, t.decodedCoords));
         const activeTratte = new Set(tratteRes.rows.map(t => Number(t.id)));
         for (const id of [...CacheStore.tratteCache.keys()]) {
-            if (!activeTratte.has(id)) await removeTratta(id);
+            if (!activeTratte.has(id)) await syncGeoIndex('tratta', id, []);
         }
         const activeCorse = new Set(cRes.rows.map(c => Number(c.id)));
         for (const id of [...CacheStore.corseCache.keys()]) {
-            if (!activeCorse.has(id)) await removeCorsa(id);
+            if (!activeCorse.has(id)) await syncGeoIndex('corsa', id, []);
         }
         
-        CacheStore.direttriciCache.clear();
-        dirRes.rows.forEach(dir => CacheStore.direttriciCache.set(dir.id, dir));
-        CacheStore.nodiCache.clear();
-        // Chiave canonica: ID del nodo territoriale, non ID della direttrice.
-        nodiRes.rows.forEach(nodo => {
-            CacheStore.nodiCache.set(String(nodo.id), nodo);
-        });
+        if (version !== mutationVersion) {
+            // Un CRUD ha aggiornato la cache durante gli await: non sovrascriverlo.
+            CacheStore.lastSync = 0;
+            throw new Error('CACHE_CHANGED_DURING_SYNC');
+        }
+        Object.assign(CacheStore, next);
 
         // Riconciliazione Redis globale sospesa fino al test di concorrenza.
         CacheStore.lastSync = Date.now();
@@ -236,7 +303,10 @@ export async function loadCachesUltra(force = false) {
         console.error("❌ [SYNC] Errore critico durante il caricamento delle cache:", err);
         throw err;
     } finally {
-        client.release();
+        if (!released) {
+            if (readTx) await client.query('ROLLBACK').catch(() => {});
+            client.release();
+        }
     }
 }
 
@@ -248,8 +318,7 @@ async function aggiornaIndiciDisponibilita(d) {
         console.warn(`⚠️ [REDIS INDEX] Impossibile indicizzare il veicolo ${d.veicolo_id}: coordinate mancanti (lat: ${lat}, lon: ${lon})`);
         return;
     }
-    const hash = ngeohash.encode(Number(lat), Number(lon), 5);
-    await redisClient.sAdd(`slot:in_area:${hash}`, d.veicolo_id.toString());
+    await syncGeoIndex('slot', d.veicolo_id, [[Number(lat), Number(lon)]]);
 }
 
 // Indici separati: corsa:in_area:* (legacy) e tratta:in_area:* (NCC).

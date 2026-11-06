@@ -77,6 +77,21 @@ router.post('/:id/accetta', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // Lettura non bloccante: identifica il veicolo prima di acquisire lock.
+    const preliminare = await client.query(
+      'SELECT veicolo_id FROM pending WHERE id = $1', [id]
+    );
+    if (!preliminare.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Pending non trovato' });
+    }
+    const veicoloIdPreliminare = Number(preliminare.rows[0].veicolo_id);
+    if (!Number.isSafeInteger(veicoloIdPreliminare) || veicoloIdPreliminare <= 0) {
+      throw new Error('Veicolo pending non valido');
+    }
+    // Ordine comune: veicolo prima del pending; il lock resta fino al COMMIT/ROLLBACK.
+    await bloccaVeicoloPerAssegnazione(client, veicoloIdPreliminare);
+
     const pendingRes = await client.query(`
         SELECT *, 
           CASE 
@@ -100,6 +115,11 @@ router.post('/:id/accetta', async (req, res) => {
     }
 
     const p = pendingRes.rows[0];
+    // Il pending potrebbe essere stato riassegnato durante l'attesa del lock.
+    if (Number(p.veicolo_id) !== veicoloIdPreliminare) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Veicolo della richiesta cambiato: ripetere', code: 'PENDING_VEHICLE_CHANGED' });
+    }
     // A/R vincolato: non elaborare una sola tratta con il flusso NCC singolo.
     // La conferma coordinata richiede un orchestratore che verifichi entrambe
     // le tratte, le autorizzazioni Stripe e l'eventuale attivazione PopBus.
@@ -127,9 +147,6 @@ router.post('/:id/accetta', async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: 'Non disponibile (stato non valido)' });
     }
-
-    // STEP 4.37: serializza le assegnazioni sul singolo veicolo nella transazione.
-    await bloccaVeicoloPerAssegnazione(client, p.veicolo_id);
 
     const result = await client.query(
       `UPDATE pending SET stato = 'accettata' WHERE id = $1 

@@ -1,4 +1,5 @@
 import express from 'express';
+import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 // Route esistenti
 import dashboardRoutes from './dashboard.routes.js';
@@ -15,6 +16,7 @@ import pendingRoutes from './pending.routes.js';
 import liveRoutes from './live.routes.js';
 
 const router = express.Router();
+router.use(authMiddleware, requireRole('Admin', 'admin'));
 
 // --- Dashboard e Statistiche ---
 router.use('/dashboard', dashboardRoutes);

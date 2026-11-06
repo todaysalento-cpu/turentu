@@ -46,7 +46,8 @@ export async function eseguiPixelInTransazione({
   maxRichieste = 100,
   maxDirettrici = 500,
   abilitaVariantiP1 = true,
-  bufferMinuti = 0
+  bufferMinuti = 0,
+  testRequestIds = null
 } = {}) {
   check(
     client && typeof client.query === 'function',
@@ -56,10 +57,12 @@ export async function eseguiPixelInTransazione({
   // Serializza gli snapshot PIXEL anche fra processi Node.
   // Il lock viene rilasciato automaticamente al termine
   // della transazione posseduta dal chiamante.
+  if (testRequestIds === null) {
   await client.query(
     'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
     [PIXEL_OPERATIONAL_LOCK]
   );
+  }
 
   const { engine, riepilogo } = await costruisciBootstrapPixel({
     client,
@@ -67,7 +70,8 @@ export async function eseguiPixelInTransazione({
     maxRichieste,
     maxDirettrici,
     abilitaVariantiP1,
-    bufferMinuti
+    bufferMinuti,
+    testRequestIds
   });
 
   check(
@@ -77,7 +81,12 @@ export async function eseguiPixelInTransazione({
 
   const pubblicazioni = [];
 
-  for (const corridor of engine.listCorridors()) {
+  const corridoiDaPubblicare = engine.listCorridors().filter(c =>
+    testRequestIds === null ||
+    c.richiestaIds.some(id => testRequestIds.includes(id))
+  );
+
+  for (const corridor of corridoiDaPubblicare) {
     const published = await pubblicaOpportunitaPixel({
       engine,
       direttriceId: corridor.id,

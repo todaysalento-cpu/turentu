@@ -153,6 +153,22 @@ function normalizeOpportunities(instances, bufferMinuti) {
   return result;
 }
 
+async function inserisciRichiesteOpportunita(client, opportunityId, requestIds) {
+  const batchSize = 500;
+  for (let offset=0; offset<requestIds.length; offset+=batchSize) {
+    await client.query(
+      `INSERT INTO public.pixel_opportunita_richieste(
+         opportunita_id, richiesta_id
+       )
+       SELECT $1::bigint, v.richiesta_id
+       FROM unnest($2::bigint[]) WITH ORDINALITY AS v(richiesta_id, ordine)
+       ORDER BY v.ordine
+       ON CONFLICT DO NOTHING`,
+      [opportunityId, requestIds.slice(offset,offset+batchSize)]
+    );
+  }
+}
+
 // Pubblica uno snapshot coerente di UNA direttrice;
 // idempotente e serializzato per sequenza.
 // Non consuma consumeOpportunityChanges():
@@ -441,17 +457,7 @@ export async function pubblicaOpportunitaPixel({
 
       // Non si eliminano candidature:
       // le attivazioni storiche possono dipenderne.
-      for (const requestId of o.ids) {
-        await client.query(
-          `INSERT INTO public.pixel_opportunita_richieste(
-             opportunita_id,
-             richiesta_id
-           )
-           VALUES($1, $2)
-           ON CONFLICT DO NOTHING`,
-          [opportunityId, requestId]
-        );
-      }
+      await inserisciRichiesteOpportunita(client, opportunityId, o.ids);
     }
 
     for (const old of previous.rows) {

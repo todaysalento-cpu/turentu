@@ -29,8 +29,12 @@ function makeCacheKey(o, d) {
 // =========================
 // DIRECTIONS API (ROBUSTA)
 // =========================
-export async function getRouteGeometry(origine, destinazione) {
-  if (!GOOGLE_MAPS_API_KEY) throw new Error("API Key mancante");
+export async function getRouteGeometry(origine, destinazione, {
+  timeoutMs = 12000, fetchImpl = fetch, apiKey = GOOGLE_MAPS_API_KEY
+} = {}) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000 || typeof fetchImpl !== 'function')
+    throw new Error('Configurazione routing non valida');
+  if (!apiKey) throw new Error("API Key mancante");
 
   const o = normalizeCoord(origine);
   const d = normalizeCoord(destinazione);
@@ -41,15 +45,18 @@ export async function getRouteGeometry(origine, destinazione) {
     `?origin=${o.lat},${o.lon}` +
     `&destination=${d.lat},${d.lon}` +
     `&overview=full` + 
-    `&key=${GOOGLE_MAPS_API_KEY}`;
+    `&key=${apiKey}`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url);
+    const res = await fetchImpl(url, { signal: controller.signal });
+    if (!res.ok) throw Object.assign(new Error('Routing HTTP non disponibile'), { code: 'ROUTING_HTTP_ERROR' });
     const data = await res.json();
 
     // Gestione rigorosa: status != OK indica un problema (es: ZERO_RESULTS, REQUEST_DENIED, OVER_QUERY_LIMIT)
     if (data.status !== "OK") {
-      throw new Error(`Google API Status: ${data.status} - ${data.error_message || "Nessun dettaglio"}`);
+      throw Object.assign(new Error('Google API Status: ' + data.status), { code: 'ROUTING_PROVIDER_ERROR' });
     }
 
     if (!data.routes || data.routes.length === 0) {
@@ -73,8 +80,13 @@ export async function getRouteGeometry(origine, destinazione) {
       durata: route.legs[0].duration.value
     };
   } catch (e) {
-    console.error("💥 Errore critico getRouteGeometry:", e.message);
-    throw e; // Rilancia l'errore per fermare lo script/chiamata
+    // Fetch errors may contain the URL (and API key): expose only a safe error.
+    const timeout = controller.signal.aborted;
+    const error = new Error(timeout ? 'Timeout routing stradale' : 'Routing stradale non disponibile');
+    error.code = timeout ? 'ROUTING_TIMEOUT' : (e.code || 'ROUTING_PROVIDER_ERROR');
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

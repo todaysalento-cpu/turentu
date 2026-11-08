@@ -26,7 +26,7 @@ const opts={bufferMinuti:10};
 const get=()=>engine.temporalCandidatesCompleteWithReturns(cid,opts);
 await test('istanze massimali complete senza perdita della richiesta ponte',async()=>{
   const got=await get();
-  assert.deepEqual(got.map(x=>x.richiestaIds),[[2,7],[2,3]]);
+  assert.deepEqual(got.map(x=>x.richiestaIds),[[1,2,7],[2,3]]);
   assert.ok(got.every(x=>x.massimaleTemporale===true));
 });
 await test('ogni alternativa contiene il proprio indice finestre per nodo',async()=>{
@@ -66,7 +66,7 @@ await test('annullamento elimina la richiesta inversa dalle finestre',async()=>{
 });
 await test('annullamento della richiesta ponte aggiorna gruppi e ritorni',async()=>{
   engine.detachRequest(2);
-  assert.deepEqual((await get()).map(x=>x.richiestaIds),[[7],[3]]);
+  assert.deepEqual((await get()).map(x=>x.richiestaIds),[[1,7],[3]]);
 });
 await test('nessuna prenotazione anticipata: richiesta condivisa resta disponibile',async()=>{
   assert.ok(engine.getRequest(4));

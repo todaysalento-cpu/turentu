@@ -2,6 +2,8 @@
 // Preparazione candidati per pixel-multimission-shadow.js.
 // Non effettua scritture DB, non certifica LIVE, non sostituisce il lock transazionale.
 import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
+import { generaAlternativeFisichePixelShadow } from './popbus-pixel-stop-bridge.service.js';
+import { creaRicercaFermateSnapshot } from './popbus-stop-snapshot.service.js';
 
 const fail = message => { throw new Error(`POPBUS_PHYSICAL_MULTI: ${message}`); };
 const pos = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
@@ -77,13 +79,14 @@ function convertiAlternativa({originale, alternativa, veicolo, richiesteById}) {
 }
 
 export async function preparaCandidatiFisiciMultimissione({
-  client, snapshot, maxTentativi=250, routing, bridge
+  client, snapshot, maxTentativi=250, routing, bridge, riusaFermate=false
 }={}) {
   if (!client || typeof client.query !== 'function' ||
       !Array.isArray(snapshot?.missioni) || !Array.isArray(snapshot?.contexts) ||
       !Array.isArray(snapshot?.vehicles)) fail('snapshot o client non valido');
   if (!Number.isSafeInteger(maxTentativi) || maxTentativi < 1)
     fail('budget non valido');
+  if (typeof riusaFermate !== 'boolean') fail('riusaFermate non booleano');
   const richiesteById = new Map();
   for (const ctx of snapshot.contexts) for (const r of ctx.requests ?? []) {
     const old = richiesteById.get(Number(r.id));
@@ -180,6 +183,19 @@ departureShadow: {
   }
   if (missioniBilanciate.length !== snapshot.missioni.length)
     fail('ordinamento missioni incompleto');
+  let bridgeEffettivo = bridge;
+  const calcoliPrevisti = disabilitaCacheFisica ? combinazioniElegibili : chiaviFisicheNecessarie;
+  if (riusaFermate && !bridge && !diagnosticaLimitata && Math.min(calcoliPrevisti,limiteEffettivo)>2) {
+    const idsFermate = [...new Set(missioniBilanciate
+      .filter(m=>veicoliValutabili.some(v=>!(Number(m.peak)>Number(v.posti_totali))))
+      .flatMap(m=>Array.isArray(m.evaluation?.requests)?m.evaluation.requests.map(r=>Number(r.id)):[])
+      .filter(pos))];
+    const ricerca = creaRicercaFermateSnapshot({client,richiestaIds:idsFermate});
+    diagnostica.fermateSnapshot = ricerca.diagnostica;
+    bridgeEffettivo = args=>generaAlternativeFisichePixelShadow({
+      ...args,servizi:{...args.servizi,cercaFermateCandidate:ricerca.cerca}
+    });
+  }
   for (const [indiceMissione, m] of missioniBilanciate.entries()) {
     for (const v of veicoliValutabili) {
       if (Number(m.peak) > Number(v.posti_totali)) continue;
@@ -232,7 +248,7 @@ departureShadow: {
           client, missionePixel:m, richieste,
           postiTotali:Number(v.posti_totali),
           ...(routing ? {routing} : {}),
-          ...(bridge ? {bridge} : {})
+          ...(bridgeEffettivo ? {bridge:bridgeEffettivo} : {})
         });
         diagnostica.tempoCalcoliFisiciMs += Number(process.hrtime.bigint() - started) / 1e6;
         diagnostica.calcoliFisici++;

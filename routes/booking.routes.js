@@ -8,6 +8,8 @@ import { upsertPrenotazione } from '../services/search/search.cache.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.validation.service.js'; 
 
+import { resolveConfirmationDeadline } from '../services/popbus/v2/confirmation-deadline.js';
+
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2022-11-15' });
 const sanitizedRequestedType = type => (type === 'condivisa' || type === 'riempimento') ? type : 'privata';
@@ -111,6 +113,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     // La quotazione fresca prevale su tutti i campi operativi forniti dal client.
     // Nessun ID di fermata o nodo territoriale viene accettato dal client.
     const slot = { ...selected, ...quotation, start_datetime: when, posti_richiesti: count };
+    const popbusDeadline = isPopbusSlot(slot) ? resolveConfirmationDeadline(slot.start_datetime, req.body.scadenza_conferma_ore ?? 24) : null;
     // Non permettere che il tipo dichiarato dal client cambi il tipo della quotazione.
     if (isPopbusSlot(slot) !== isPopbusSlot(quotation)) {
       return res.status(409).json({ error: 'Tipo di opzione cambiato: ripetere la ricerca' });
@@ -221,13 +224,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
           start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id,
-           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id
+           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
         ) RETURNING *`,
         [
           clienteId,
@@ -246,7 +249,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           pixelValidated.origine_nodo_territoriale_id,
           pixelValidated.destinazione_nodo_territoriale_id,
           null, // fermata salita assegnata successivamente da POPBUS V2
-          null  // fermata discesa assegnata successivamente da POPBUS V2
+          null, // fermata discesa assegnata successivamente da POPBUS V2
+          popbusDeadline.hours,
+          popbusDeadline.deadline
         ]
       );
 

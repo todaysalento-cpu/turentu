@@ -231,7 +231,11 @@ export async function accettaOffertaPopbusAR({
     throw e;
   }
   if (risultato.stato !== 'confermato' || !Array.isArray(risultato.corse) ||
-      risultato.corse.length < 2) {
+      risultato.corse.length < 1 ||
+      risultato.corse.some(item => !idPositivo(item?.attivazioneId) || !idPositivo(item?.corsa?.id)) ||
+      new Set(risultato.corse.map(item => Number(item.attivazioneId))).size !== risultato.corse.length ||
+      new Set(risultato.corse.map(item => Number(item.corsa.id))).size !== risultato.corse.length ||
+      !risultato.corse.some(item => Number(item.attivazioneId) === aid)) {
     throw errore('Finalizzazione A/R incompleta', 'POPBUS_AR_FINALIZATION_INCOMPLETE');
   }
   return {

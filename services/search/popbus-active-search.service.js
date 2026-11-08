@@ -10,6 +10,7 @@
  */
 import polyline from '@mapbox/polyline';
 import * as turf from '@turf/turf';
+import { proiettaMissioniConfermate } from './popbus-active-plan-projection.service.js';
 
 const DEFAULTS = Object.freeze({
   maxCandidates: 100,
@@ -138,21 +139,26 @@ export function valutaPopbusAttivata(corsa, prenotazioni, richiesta, options = {
       corsa.attivazione_stato !== 'confermata') return null;
   const cap = numeric(corsa.posti_totali);
   if (!Number.isInteger(cap) || cap < r.posti) return null;
-  let line;
-  try { line = lineFromPolyline(corsa.percorso_polyline); } catch { return null; }
-  if (!line) return null;
-  let start, end;
-  try {
-    start = snap(line, r.lat, r.lon);
-    end = snap(line, r.destLat, r.destLon);
-  } catch { return null; }
-  if (![start.offset, end.offset, start.distanceKm, end.distanceKm].every(Number.isFinite) ||
-      start.distanceKm > cfg.maxDistanceKm || end.distanceKm > cfg.maxDistanceKm ||
-      end.offset <= start.offset + 1) return null;
-  const peak = piccoOccupazione(prenotazioni, start.offset, end.offset);
-  if (peak === null || peak + r.posti > cap) return null;
-  const boardingTime = estimateBoardingTime(corsa, line, start.offset);
-  if (!Number.isFinite(boardingTime) ||
+  let start, end, boardingTime, checkedBookings = prenotazioni, missionOrder;
+  const rawPlan = corsa.piano_attivazione;
+  let plan;
+  try { plan = typeof rawPlan === 'string' ? JSON.parse(rawPlan) : rawPlan; } catch { return null; }
+  if (plan?.schemaVersion === 2 || plan?.tipoItinerario === 'FERMATE_FISICHE') {
+    const projection = proiettaMissioniConfermate(corsa, prenotazioni, r, cfg);
+    if (!projection) return null;
+    ({ start, end, boardingTime, bookings: checkedBookings, missionOrder } = projection);
+  } else {
+    let line;
+    try { line = lineFromPolyline(corsa.percorso_polyline); } catch { return null; }
+    if (!line) return null;
+    try { start = snap(line, r.lat, r.lon); end = snap(line, r.destLat, r.destLon); } catch { return null; }
+    if (![start.offset, end.offset, start.distanceKm, end.distanceKm].every(Number.isFinite) ||
+        start.distanceKm > cfg.maxDistanceKm || end.distanceKm > cfg.maxDistanceKm ||
+        end.offset <= start.offset + 1) return null;
+    boardingTime = estimateBoardingTime(corsa, line, start.offset);
+  }
+  const peak = piccoOccupazione(checkedBookings, start.offset, end.offset);
+  if (peak === null || peak + r.posti > cap || !Number.isFinite(boardingTime) ||
       Math.abs(boardingTime - r.when) > cfg.toleranceMinutes * 60000) return null;
   // Expose snap indexes only as geometric hints. Booking needs validated
   // indices/offsets and independent transaction-time revalidation.
@@ -171,7 +177,8 @@ export function valutaPopbusAttivata(corsa, prenotazioni, richiesta, options = {
     start_offset: start.offset,
     end_offset: end.offset,
     start_index_polyline: Math.trunc(start.index),
-    end_index_polyline: Math.trunc(end.index) + 1,
+    end_index_polyline: end.endIndex ?? Math.trunc(end.index) + 1,
+    ...(missionOrder != null ? { missione_ordine: missionOrder } : {}),
     km_utente: (end.offset - start.offset) / 1000,
     partenza_effettiva: new Date(boardingTime).toISOString(),
     origine_snap_km: start.distanceKm,
@@ -195,7 +202,7 @@ export async function cercaPopbusAttivate({ pool, richiesta, options = {} }) {
     SELECT c.id, c.veicolo_id, c.start_datetime, c.arrivo_datetime,
            c.tipo_corsa, c.stato, c.posti_totali, c.percorso_polyline,
            c.fermate_pianificate, a.id AS attivazione_id,
-           a.stato AS attivazione_stato
+           a.stato AS attivazione_stato, a.piano AS piano_attivazione
     FROM corse c
     JOIN popbus_attivazioni a ON a.corsa_id = c.id
     WHERE a.stato = 'confermata'
@@ -211,7 +218,7 @@ export async function cercaPopbusAttivate({ pool, richiesta, options = {} }) {
   if (!candidates.length) return [];
   const ids = candidates.map(c => c.id);
   const { rows: bookings } = await pool.query(`
-    SELECT corsa_id, start_offset, end_offset, posti_richiesti
+    SELECT corsa_id, start_offset, end_offset, posti_richiesti, start_index_polyline, end_index_polyline
     FROM prenotazioni WHERE corsa_id = ANY($1::int[])
   `, [ids]);
   const byRide = new Map(ids.map(id => [Number(id), []]));

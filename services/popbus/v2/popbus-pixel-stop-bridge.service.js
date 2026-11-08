@@ -105,5 +105,6 @@ export async function generaAlternativeFisichePixelShadow({
       valutazione:valutazione.diagnostica ?? null,
       scartiValutazione:valutazione.scartate ?? [],
       ricercaEsaustiva:assegnazioni.diagnostica?.ricercaEsaustiva === true &&
-        valutazione.diagnostica?.valutazioneCompleta === true}};
+        valutazione.diagnostica?.valutazioneCompleta === true &&
+        valutazione.diagnostica?.sequenziamentoEsaustivo === true}};
 }

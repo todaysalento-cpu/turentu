@@ -184,7 +184,7 @@ await negative('contratto V2 dichiarato incompleto', f => { delete f.plan.schema
 await negative('contratto V2 dichiarato incompleto (tipo assente)', f => { delete f.plan.tipoItinerario; }, 'contratto V2 incompleto');
 await negative('richiesta globale duplicata', f => { f.plan.evaluation.requests.push({ ...f.plan.evaluation.requests[0] }); }, 'mapping globale non valido');
 await negative('richiesta locale duplicata tra missioni', f => { f.missions[1].piano.requests[0].id = 900001; }, 'associazione o indici');
-await negative('opportunita non candidata', f => { f.opportunities[0].stato = 'chiusa'; }, 'opportunita o direttrice non attiva');
+await negative('opportunita non candidata', f => { f.opportunities[0].stato = 'chiusa'; }, 'stato opportunita PIXEL non valido');
 await negative('attivazione associata a legacy', (f, act) => { act.direttrice_id = 1; }, 'direttrice legacy');
 
 console.log(`\nRISULTATO: ${passed} PASS, ${failed} FAIL. Mock PostgreSQL; DB writes: 0; LIVE: NO.`);

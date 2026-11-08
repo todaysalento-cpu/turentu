@@ -3,11 +3,26 @@ import cron from 'node-cron';
 import { processaProposteDinamicheV2 } from '../services/popbus/v2/worker.js';
 import { processaPixelOperativo } from '../services/pixel/pixel-operational.service.js';
 
-let schedulerAvviato = false;
-let cicloInEsecuzione = false;
+import { createPixelFirstScheduler } from './pixel-first-scheduler.js';
+
+const scheduler = createPixelFirstScheduler({
+  schedule: (...args) => cron.schedule(...args),
+  run: async () => {
+    const result = await eseguiCicloPixelFirstControllato();
+    // Do not log candidate passengers, coordinates or complete mission payloads.
+    console.log('[PIXEL FIRST WORKER] RISULTATO:', JSON.stringify({
+      mode: result.mode, osservazioneFisica: result.osservazioneFisica,
+      persistita: result.popbus?.persistita === true,
+      offerte: result.popbus?.offerte ?? 0
+    }));
+  }
+});
+export const getPixelFirstWorkerStatus = () => scheduler.status();
+export const stopPixelFirstWorker = options => scheduler.stop(options);
 
 export async function eseguiCicloPixelFirstControllato() {
   const mode = process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY';
+  validaOsservazioneFisica(mode);
   if (!['ROLLBACK_ONLY', 'LIVE'].includes(mode)) throw new Error('Modalita POPBUS non valida');
   const pipeline = process.env.PIXEL_FIRST_PIPELINE_ENABLED === '1';
   let pixel = null;
@@ -29,11 +44,12 @@ export async function eseguiCicloPixelFirstControllato() {
   // delle nuove opportunita PIXEL. Nessun commit di prova e consentito.
   const popbus = await processaProposteDinamicheV2();
   return {pipelineAbilitata:pipeline, mode, pixel, popbus,
+    osservazioneFisica: process.env.POPBUS_PIXEL_PHYSICAL_OBSERVATION === '1',
     collaudoIntegratoNuoveOpportunita: false};
 }
 
 export function startPixelFirstWorker() {
-  if (schedulerAvviato) {
+  if (scheduler.status().scheduled) {
     console.warn('[PIXEL FIRST WORKER] Scheduler gia avviato.');
     return;
   }
@@ -55,21 +71,14 @@ export function startPixelFirstWorker() {
        process.env.PIXEL_OPERATIONAL_LIVE_APPROVED !== '1'))
     throw new Error('[PIXEL FIRST WORKER] Pipeline PIXEL LIVE non autorizzata.');
 
-  schedulerAvviato = true;
-  console.log(`[PIXEL FIRST WORKER] Scheduler avviato. Modalita=${mode}. Pipeline=${process.env.PIXEL_FIRST_PIPELINE_ENABLED === '1'}.`);
-  cron.schedule('* * * * *', async () => {
-    if (cicloInEsecuzione) {
-      console.warn('[PIXEL FIRST WORKER] Ciclo precedente in corso; salto esecuzione.');
-      return;
-    }
-    cicloInEsecuzione = true;
-    try {
-      const result = await eseguiCicloPixelFirstControllato();
-      console.log('[PIXEL FIRST WORKER] RISULTATO:', JSON.stringify(result));
-    } catch (error) {
-      console.error('[PIXEL FIRST WORKER] ERRORE:', error?.stack || error);
-    } finally {
-      cicloInEsecuzione = false;
-    }
-  }, { noOverlap: true });
+  validaOsservazioneFisica(mode);
+  const status = scheduler.start();
+  console.log(`[PIXEL FIRST WORKER] Scheduler avviato. Modalita=${mode}.`);
+  return status;
+}
+
+function validaOsservazioneFisica(mode) {
+  const flag=process.env.POPBUS_PIXEL_PHYSICAL_OBSERVATION ?? '0';
+  if(!['0','1'].includes(flag)) throw new Error('PIXEL_PHYSICAL_OBSERVATION_INVALID');
+  if(flag==='1' && mode!=='ROLLBACK_ONLY') throw new Error('PIXEL_PHYSICAL_OBSERVATION_REQUIRES_ROLLBACK');
 }

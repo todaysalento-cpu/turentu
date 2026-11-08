@@ -1,4 +1,5 @@
 import express from 'express';
+import pixelWorkerRoutes from './pixel-worker.routes.js';
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
 // Route esistenti
@@ -33,5 +34,6 @@ router.use('/pending', pendingRoutes);
 router.use('/pagamenti', pagamentiRoutes);
 router.use('/impostazioni', impostazioniRoutes);
 router.use('/notifications', adminNotificationsRoutes);
+router.use('/pixel-worker', pixelWorkerRoutes);
 
 export default router;

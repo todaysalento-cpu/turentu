@@ -318,6 +318,12 @@ scartate.push({ indice: i, sequenzaIndice: j, fase: 'QUALITA',
       b.combinazione.scorePreliminare
   );
 
+  // Complete exploration alone is insufficient when the returned road
+  // sequences were capped, or any provider response was unavailable/invalid.
+  const sequenziamentoCompleto = diag => diag?.ricercaEsaustiva === true &&
+    diag.outputLimitato !== true && (diag.routingEccezioni ?? 0) === 0 &&
+    (diag.routingRisposteNonValide ?? 0) === 0;
+
   return {
     ok: true,
     stato: 'VALUTAZIONE_PRELIMINARE',
@@ -334,8 +340,9 @@ scartate.push({ indice: i, sequenzaIndice: j, fase: 'QUALITA',
       valutazioneCompleta:
         combinazioni.length <= maxValutazioni,
       sequenziamentoEsaustivo: combinazioni.length <= maxValutazioni &&
-        !scartate.some(s => s.fase === 'SEQUENZIAMENTO' && s.motivo === 'RICERCA_INCOMPLETA') &&
-        valide.every(v => v.sequenziamento.ricercaEsaustiva === true)
+        !scartate.some(s => ['ERRORE', 'ERRORE_SEQUENZA'].includes(s.fase) ||
+          (s.fase === 'SEQUENZIAMENTO' && !sequenziamentoCompleto(s.diagnosticaSequenziamento))) &&
+        valide.every(v => sequenziamentoCompleto(v.sequenziamento))
     },
     attivabile: false
   };

@@ -70,21 +70,21 @@ async function identificaOfferta(offertaId) {
 // in cui l'orchestratore restituisce soltanto corsa_id della tratta richiesta.
 async function corseConfermateAR(attivazioneId) {
   const { rows } = await pool.query(`
-    SELECT DISTINCT a.id AS attivazione_id, a.corsa_id
+    SELECT DISTINCT a.id AS attivazione_id, a.corsa_id, a.stato
     FROM popbus_attivazione_richieste par_root
     JOIN richieste_pop_bus r_root ON r_root.id = par_root.richiesta_id
     JOIN richieste_pop_bus r_peer
       ON r_peer.ar_group_id = r_root.ar_group_id
       AND r_peer.ar_vincolata IS TRUE
-    JOIN popbus_attivazione_richieste par_peer
+    LEFT JOIN popbus_attivazione_richieste par_peer
       ON par_peer.richiesta_id = r_peer.id AND par_peer.attiva = TRUE
-    JOIN popbus_attivazioni a ON a.id = par_peer.attivazione_id
+    LEFT JOIN popbus_attivazioni a ON a.id = par_peer.attivazione_id
     WHERE par_root.attivazione_id = $1 AND par_root.attiva = TRUE
       AND r_root.ar_vincolata IS TRUE
-      AND a.stato = 'confermata' AND a.corsa_id IS NOT NULL
     ORDER BY a.id
   `, [attivazioneId]);
-  if (rows.length !== 2 || rows.some(r => !idPositivo(r.corsa_id))) {
+  if (!rows.length || rows.some(r => !idPositivo(r.attivazione_id) ||
+      r.stato !== 'confermata' || !idPositivo(r.corsa_id))) {
     const error = new Error('Corse A/R confermate non coerenti');
     error.status = 409;
     throw error;

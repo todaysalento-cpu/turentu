@@ -302,28 +302,47 @@ export function valutaRichieste(plan, requests, seeds, options = {}) {
 
 export function generaFormazioniAlternative(plan, requests, seeds, options = {}) {
   const limit = Math.min(Math.max(1, Number(options.maxFormazioni) || 100), MAX_SUBSETS);
-  const opts = { ...options };
-  const base = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'seeds_only' });
-  if (!base) return [];
-  const eligible = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'greedy' });
-  const seedSet = new Set(seeds.map(Number));
-  const ids = (eligible?.requests || []).map(r => r.id).filter(id => !seedSet.has(id));
+  const maxChecks = options.maxValutazioniFormazioni ?? 50000;
+  if (!Number.isSafeInteger(maxChecks) || maxChecks < 1 || maxChecks > 1000000)
+    throw new Error('maxValutazioniFormazioni non valido');
+  const required = uniqueIds([...(seeds || []), ...(options.includeIds || [])]);
+  const requiredSet = new Set(required);
+  const excluded = new Set((options.excludeIds || []).map(Number));
+  // Inspect every request, including ones omitted by the greedy formation.
+  const ids = uniqueIds(requests.filter(r => validId(r.id)).map(requestId))
+    .filter(id => !requiredSet.has(id) && !excluded.has(id)).sort((a,b) => a-b);
   const alternatives = new Map();
-  function record(extraIds) {
-    const evaluation = valutaRichieste(plan, requests, seeds, { ...opts, mode: 'seeds_only', includeIds: extraIds });
-    if (!evaluation) return;
-    const k = evaluation.requests.map(r => r.id).sort((a, b) => a - b).join(',');
-    if (!alternatives.has(k)) alternatives.set(k, evaluation);
+  let checks = 0;
+  function inspect(extraIds) {
+    if (++checks > maxChecks)
+      throw new Error('Limite valutazioni formazioni: nessun risultato parziale');
+    const opts = {...options, mode:'seeds_only', includeIds:[...required,...extraIds]};
+    // Only temporal, geometry and capacity failures prune supersets. Quality
+    // is checked for each output, but never used to justify pruning.
+    const necessary = valutaRichieste(plan, requests, seeds, {...opts, qualityEnabled:false});
+    if (!necessary) return false;
+    const evaluation = options.qualityEnabled === false ? necessary
+      : valutaRichieste(plan, requests, seeds, opts);
+    if (evaluation) {
+      const key = evaluation.requests.map(r=>r.id).sort((a,b)=>a-b).join(',');
+      if (!alternatives.has(key)) {
+        if (alternatives.size >= limit)
+          throw new Error('Limite formazioni raggiunto: nessun risultato parziale');
+        alternatives.set(key,evaluation);
+      }
+    }
+    return true;
   }
-  record([]);
-  for (const id of ids) {
-    if (alternatives.size >= limit) break;
-    record([id]);
-  }
-  for (let i = 1; i <= ids.length && alternatives.size < limit; i++) record(ids.slice(0, i));
-  if (eligible && alternatives.size < limit) {
-    const k = eligible.requests.map(r => r.id).sort((a, b) => a - b).join(',');
-    if (!alternatives.has(k)) alternatives.set(k, eligible);
+  // A missing mandatory seed, impossible time window or excess capacity
+  // cannot be repaired by adding requests.
+  if (!inspect([])) return [];
+  const stack = [{next:0,ids:[]}];
+  while (stack.length) {
+    const frame = stack.at(-1);
+    if (frame.next >= ids.length) { stack.pop(); continue; }
+    const index = frame.next++;
+    const selected = [...frame.ids,ids[index]];
+    if (inspect(selected)) stack.push({next:index+1,ids:selected});
   }
   return [...alternatives.values()];
 }

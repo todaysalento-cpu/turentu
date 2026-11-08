@@ -103,7 +103,7 @@ export function generaFormazioniArSafe({
       esclusiIds: sortedIds([...excluded]), seedOriginali: sortedIds(seeds),
       seedValutati: [...seedVariants.values()], fallback: ordinaryIds.length > 0,
       formazioni: alternatives.size,
-      nota: 'Nessuna enumerazione esaustiva garantita; vincolo A/R globale obbligatorio'
+      nota: 'Enumerazione completa per i seed valutati entro budget; vincolo A/R globale obbligatorio'
     }
   };
 }

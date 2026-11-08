@@ -898,6 +898,14 @@ let cicliAttivi = 0;
 let numeroCiclo = 0;
 
 export async function processaProposteDinamicheV2() {
+  const observationFlag=process.env.POPBUS_PIXEL_PHYSICAL_OBSERVATION ?? '0';
+  if(!['0','1'].includes(observationFlag)) throw new Error('PIXEL_PHYSICAL_OBSERVATION_INVALID');
+  const physicalObservation=observationFlag==='1';
+  if(physicalObservation && (!POPBUS_PIXEL_FIRST || POPBUS_PIXEL_AR_WORKER_SHADOW ||
+      POPBUS_PIXEL_FEASIBILITY_READONLY ||
+      (process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY')!=='ROLLBACK_ONLY'))
+    throw new Error('PIXEL_PHYSICAL_OBSERVATION_REQUIRES_PIXEL_FIRST_ROLLBACK');
+
   // Shadow isolato PRIMA di qualsiasi pulizia/scadenza/scrittura legacy.
   if (POPBUS_PIXEL_AR_WORKER_SHADOW) {
     if (POPBUS_PIXEL_FIRST || POPBUS_PIXEL_FEASIBILITY_READONLY)
@@ -926,7 +934,8 @@ export async function processaProposteDinamicheV2() {
   // Protezione prima di qualsiasi transazione, cleanup o scrittura legacy.
   if (POPBUS_PIXEL_FIRST) {
     const result = await processaPixelFirstMultimissione({
-      pool, mode: process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY'
+      pool, mode: process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY',
+      physicalShadow: physicalObservation, physicalCycleShadow: physicalObservation
     });
     // Il socket non deve precedere il commit; nessun socket in ROLLBACK_ONLY.
     if (result?.persistita === true) {

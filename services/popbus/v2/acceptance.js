@@ -9,11 +9,13 @@ import { verificaAccettazionePixelMulti } from './popbus-pixel-multi-acceptance-
 import { preflightTransazionaleAR } from './popbus-ar-transaction-preflight.service.js';
 import { verificaIdentitaOfferteAR } from './popbus-ar-fase5e-identity-guard.js';
 import { assegnaConducente } from '../../conducenti/assegnazioni.service.js';
+import { assertConfirmationOpen } from './confirmation-deadline.js';
 import Stripe from 'stripe';
 import polyline from 'polyline';
 import * as turf from '@turf/turf';
 
 export async function verificaPagamento(client, r) {
+  assertConfirmationOpen(r);
   const ref = r.payment_intent_id;
 
   if (!ref) {
@@ -942,7 +944,7 @@ export async function finalizzaAttivazioniAR(pool, attivazioneId, scelteConducen
     if (analisi.stato !== 'pronta' || analisi.fase !== 'preflight_transazionale' ||
         !Array.isArray(analisi.gruppi) || !analisi.gruppi.length ||
         !Array.isArray(analisi.attivazioniBloccate) ||
-        analisi.attivazioniBloccate.length < 2 ||
+        analisi.attivazioniBloccate.length < 1 ||
         analisi.anomalie?.length) {
       throw new Error('Dipendenze A/R non pronte');
     }

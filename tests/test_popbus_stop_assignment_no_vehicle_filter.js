@@ -49,8 +49,12 @@ test('coordinate non valide rifiutate', () => {
   assert.throws(() => generate([{...stop(14, []), lat: 999}], [stop(15, [])]), /fermata candidata non valida/);
 });
 
-test('tipoVeicolo resta richiesto dal contratto pubblico', () => {
-  assert.throws(() => generaAssegnazioniFermate({evaluation, candidati: []}), /tipoVeicolo non valido/);
+test('tipoVeicolo opzionale non esclude fermate con tipi vuoti', () => {
+  const r = generaAssegnazioniFermate({evaluation, candidati: [{
+    richiesta_id: 900001, salita: [stop(14, [])], discesa: [stop(15, [])]
+  }]});
+  assert.equal(r.ok, true);
+  assert.equal(r.combinazioni.length, 1);
 });
 
 console.log('RISULTATO: 6 PASS attesi. Nessuna query DB; nessuna attivazione LIVE.');

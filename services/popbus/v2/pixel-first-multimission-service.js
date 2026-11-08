@@ -2,6 +2,7 @@
 // PIXEL e' l'unico produttore di direttrici. Nessuna scrittura fuori da BEGIN.
 // ROLLBACK_ONLY (default) / LIVE (opt-in esplicito, NON collaudato su DB reale).
 import { leg } from './planner.js';
+import { leggiLimiteOpportunita } from './popbus-worker-limits.js';
 import { generaFormazioniAlternative, valutaRichieste, verificaQualitaRichieste } from './model.js';
 import { leggiContestiOpportunitaPixel } from './pixel-opportunity-adapter.js';
 import { leggiRegistroAr } from './pixel-ar-registry.js';
@@ -31,7 +32,7 @@ const positive = x => Number.isSafeInteger(Number(x)) && Number(x) > 0;
 const numeric = x => x !== null && x !== undefined && Number.isFinite(Number(x));
 const millis = x => new Date(x).getTime();
 const expectedMs = 30 * 60000;
-const limits = Object.freeze({ opportunita: 15, formazioni: 120, veicoli: 35, coppie: 1200, routing: 220 });
+const limits = Object.freeze({ opportunita: leggiLimiteOpportunita(), formazioni: 120, veicoli: 35, coppie: 1200, routing: 220 });
 // Ordinamento globale esatto di blocchi gia' ordinati. Nessun TOP-K.
 // Il limite coppie e' ora la dimensione del blocco, non il massimo totale.
 function confrontaCoppie(x,y) {
@@ -763,6 +764,8 @@ export async function processaPixelFirstMultimissione({
         fisiche = await preparaCandidatiFisiciMultimissione({
           client: reader,
           snapshot,
+          riusaFermate: mode === 'ROLLBACK_ONLY' &&
+            (process.env.POPBUS_SHADOW_STOP_CANDIDATES_CACHE ?? '1') === '1',
           maxTentativi: Number(mode === 'LIVE'
             ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600)
             : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
@@ -807,7 +810,7 @@ export async function processaPixelFirstMultimissione({
         // La query avviene dentro la stessa transazione REPEATABLE READ READ ONLY.
         // La rivalidazione transazionale finale continua a usare la query SQL originale.
         const usaIndiceImpegni =
-          mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_COMMITMENTS_CACHE === '1';
+          mode === 'ROLLBACK_ONLY' && (process.env.POPBUS_SHADOW_COMMITMENTS_CACHE ?? '1') === '1';
 
         const indiceImpegni = usaIndiceImpegni
           ? await caricaImpegniVeicoliShadow(
@@ -828,18 +831,31 @@ export async function processaPixelFirstMultimissione({
           altriCostiEuro:Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
           margineMinimoEuro:Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)
         };
+        // Cached checks resolve immediately: periodically let Node process I/O.
+        // No candidate or validation is skipped; the reader snapshot stays fixed.
+        let ultimoRilascioEventLoop = performance.now();
+        const cediEventLoopShadow = async()=>{
+          if (performance.now() - ultimoRilascioEventLoop < 8) return;
+          await new Promise(resolve=>setImmediate(resolve));
+          ultimoRilascioEventLoop = performance.now();
+        };
         selezioneFisica = await selezionaCicliFisiciShadow({
           contrattoRoutingFisicoV2: true,
           candidati:fisiche.candidati,
           vehicles:[...veicoliUnici.values()],
           now:nowMs,
           movement,
-          isAvailable:async(v,start,end)=>snapshot.vehicles.some(d=>
-            Number(d.id)===Number(v.id) && samePoint(d,v) &&
-            verificaTurnoVeicolo(d,start,end)),
-          hasConflicts:async(v,start,end)=>indiceImpegni
-            ? verificaConflittoInMemoria(indiceImpegni,v.id,start,end)
-            : conflicts(reader,v.id,start,end),
+          isAvailable:async(v,start,end)=>{
+            if (indiceImpegni) await cediEventLoopShadow();
+            return snapshot.vehicles.some(d=>
+              Number(d.id)===Number(v.id) && samePoint(d,v) &&
+              verificaTurnoVeicolo(d,start,end));
+          },
+          hasConflicts:async(v,start,end)=>{
+            if (!indiceImpegni) return conflicts(reader,v.id,start,end);
+            await cediEventLoopShadow();
+            return verificaConflittoInMemoria(indiceImpegni,v.id,start,end);
+          },
           validateSingle:async(a)=>{
             const ids=a.requests.map(r=>Number(r.id));
             return new Set(ids).size===ids.length && arComplete(ids,snapshot.registro);

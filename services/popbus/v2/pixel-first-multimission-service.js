@@ -672,9 +672,14 @@ export async function processaPixelFirstMultimissione({
   physicalTransactionTest = false,
   physicalPersistenceTest = false,
   physicalShadowBridge = null,
+  physicalShadowRouting = null,
   physicalOpportunityIds = null,
   historicalPhysicalShadow = false
 } = {}) {
+  if (physicalShadowRouting !== null && (typeof physicalShadowRouting !== 'function' ||
+      !physicalShadow || mode !== 'ROLLBACK_ONLY' || physicalTransactionTest ||
+      physicalPersistenceTest || rollbackTestHook !== null || historicalPhysicalShadow))
+    fail('routing osservazione consentito solo in SHADOW corrente senza writer');
   // Il filtro opportunita e' disponibile soltanto nel percorso fisico SHADOW.
   if (physicalCycleShadow !== false && physicalCycleShadow !== true) fail('physicalCycleShadow non booleano');
   if (physicalCycleShadow && (!physicalShadow || mode !== 'ROLLBACK_ONLY' || rollbackTestHook !== null))
@@ -732,6 +737,12 @@ export async function processaPixelFirstMultimissione({
         : null,
     historicalPhysicalShadow
     );
+    if (physicalShadowRouting && physicalOpportunityIds !== null) {
+      const found = new Set(snapshot.contexts.map(c=>Number(c.pixel_opportunita_id)));
+      if (found.size !== physicalOpportunityIds.length || physicalOpportunityIds.some(id=>!found.has(Number(id))) ||
+          snapshot.contexts.some(c=>c.window.end<=nowMs || c.requests.some(r=>r.conferma_entro!=null && new Date(r.conferma_entro).getTime()<=nowMs)))
+        fail('perimetro osservazione mancante o scaduto');
+    }
     // Diagnostica esclusivamente SHADOW: controlla la propagazione dell'engine_id PIXEL.
     // Non modifica snapshot, non interroga ulteriormente il DB e non abilita LIVE.
     if (physicalShadow) {
@@ -764,6 +775,7 @@ export async function processaPixelFirstMultimissione({
         fisiche = await preparaCandidatiFisiciMultimissione({
           client: reader,
           snapshot,
+          ...(physicalShadowRouting ? {routing:physicalShadowRouting} : {}),
           riusaFermate: mode === 'ROLLBACK_ONLY' &&
             (process.env.POPBUS_SHADOW_STOP_CANDIDATES_CACHE ?? '1') === '1',
           maxTentativi: Number(mode === 'LIVE'
@@ -844,7 +856,7 @@ export async function processaPixelFirstMultimissione({
           candidati:fisiche.candidati,
           vehicles:[...veicoliUnici.values()],
           now:nowMs,
-          movement,
+          movement: physicalShadowRouting ?? movement,
           isAvailable:async(v,start,end)=>{
             if (indiceImpegni) await cediEventLoopShadow();
             return snapshot.vehicles.some(d=>

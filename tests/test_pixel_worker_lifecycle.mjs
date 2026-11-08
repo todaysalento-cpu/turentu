@@ -44,7 +44,7 @@ await test('physical observation propagates only read-only selector options thro
 });
 await test('actual HTTP control: JWT/role checks, validation, draining response and API stays up',async()=>{
  const secret=randomBytes(32).toString('hex'),h=harness(async()=>{}),ctx=context();let stops=0,running=false;
- const mod=await load('routes/admin/pixel-worker.routes.js',ctx,{'express':{default:express},'jsonwebtoken':{default:jwt},'../../config/security.js':{JWT_SECRET:secret},'../../workers/popbus-pixel-first.worker.js':{getPixelFirstWorkerStatus:h.control.status,stopPixelFirstWorker:h.control.stop}});
+ const mod=await load('routes/admin/pixel-worker.routes.js',ctx,{'express':{default:express},'../../workers/pixel-observation-once.js':{startPixelObservationOnce:()=>{throw Error('Observation not requested');},getPixelObservationOnceStatus:()=>({state:'IDLE'})},'jsonwebtoken':{default:jwt},'../../config/security.js':{JWT_SECRET:secret},'../../workers/popbus-pixel-first.worker.js':{getPixelFirstWorkerStatus:h.control.status,stopPixelFirstWorker:h.control.stop}});
  const app=express();app.use(express.json());app.use('/worker',mod.createPixelWorkerControlRouter({status:()=>({scheduled:false,running}),stop:async()=>{stops++;}}));app.get('/health',(req,res)=>res.send('ok'));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const url='http://127.0.0.1:'+server.address().port;
  const admin=jwt.sign({id:1,role:'admin'},secret),user=jwt.sign({id:2,role:'cliente'},secret),expired=jwt.sign({id:1,role:'admin',exp:1},secret);

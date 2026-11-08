@@ -48,3 +48,21 @@ L'istanza Free può sospendersi per inattività. Continuità, account Render, al
 Eseguire dalla radice: node --experimental-vm-modules tests/test_pixel_worker_lifecycle.mjs
 
 Task node-cron reale, API HTTP locale, JWT effettivi e cicli asincroni controllati verificano stop, sovrapposizioni, drenaggio, timeout, errori, autorizzazioni e propagazione delle opzioni fisiche. Le dipendenze applicative sono controllate: zero connessioni DB e zero provider. Queste prove non sostituiscono il collaudo transazionale precedente o il bootstrap del server su Render.
+
+
+## Osservazione fisica singola, separata dal cron
+
+La nuova rotta POST /api/admin/pixel-worker/observe-once richiede le stesse protezioni Bearer/admin e una configurazione esplicita aggiuntiva:
+
+- POPBUS_PIXEL_OBSERVATION_ONCE_ALLOWED=1
+- POPBUS_PIXEL_OBSERVATION_IDS: uno o due ID distinti, separati da virgola, nel perimetro approvato.
+- POPBUS_PIXEL_OBSERVATION_ROUTING_LIMIT: intero 1–8, predefinito 8.
+- Worker ordinario e legacy disabilitati, modalità ROLLBACK_ONLY e tutti e tre i consensi LIVE a 0.
+
+Non pubblica nuove opportunità PIXEL e non abilita il cron. Usa esclusivamente il selettore fisico SHADOW corrente e la sua transazione READ ONLY, senza writer o test di persistenza. Il perimetro deve esistere integralmente e non avere finestre o scadenze trascorse. Una prova su uno o due ID non certifica il carico completo.
+
+Risponde subito 202; leggere GET /api/admin/pixel-worker/observation fino a COMPLETED, INCOMPLETE o FAILED. Nessun payload di candidati o errore interno viene restituito. Dopo il primo avvio non accetta altre esecuzioni nello stesso processo, neppure dopo un errore o un retry HTTP. Questa memoria non è distribuita e si azzera al riavvio; nessuna ripartenza automatica della prova, che richiede sempre POST amministratore. Dopo la prova revocare il flag ALLOWED secondo l'approvazione.
+
+Il budget è condiviso tra costruzione dei candidati e selezione dei cicli. Prenota al massimo otto tratte distinte; un errore consuma comunque la prenotazione. Cache e coincidenze possono ridurre le chiamate effettive al provider. Non avvia nuove tratte dopo 30 secondi, ma non annulla quelle in corso, il lavoro CPU o le query: non è un limite rigido della durata del processo. Il normale stop del cron non cancella questa osservazione separata. Se il budget viene raggiunto, l'esito non viene presentato come completo anche se livelli interni catturano l'errore.
+
+Prima di un nuovo deploy o esecuzione remota servono approvazione specifica, budget Maps, perimetro e una sessione amministratore legittima. Non creare identità o token firmati di comodo per aggirare il login. Nessun costo di hosting aggiuntivo è richiesto da questa modalità singola; i limiti dell'istanza Free restano validi per il futuro cron continuo.

@@ -138,29 +138,93 @@ async function history(client, id, action, req, details = null) {
 // GET /api/admin/procaccio/operatori
 router.get('/operatori', async (req, res) => {
   try {
-    const { ricerca = '', stato = '', provincia = '', pagina = '1', limite = '20' } = req.query;
-    if ([ricerca, stato, provincia].some(v => typeof v !== 'string')) throw bad('Filtri non validi');
+    const {
+      ricerca = '', stato = '', provincia = '', comune = '', telefono = '',
+      prossimo_contatto = '', flotta = '', min_mezzi = '',
+      min_contatti = '', max_contatti = '', pagina = '1', limite = '20'
+    } = req.query;
+    if ([ricerca, stato, provincia, comune, telefono, min_contatti, max_contatti, prossimo_contatto, flotta, min_mezzi].some(v => typeof v !== 'string')) throw bad('Filtri non validi');
+    if (!['', 'presente', 'assente'].includes(telefono)) throw bad('Filtro telefono non valido');
+    if ([min_contatti, max_contatti].some(v => v !== '' && (!/^\d+$/.test(v) || !Number.isSafeInteger(Number(v)))) ||
+        (max_contatti !== '' && Number(min_contatti) > Number(max_contatti))) throw bad('Intervallo contatti non valido');
+    if (!['', 'scaduto', 'oggi', 'prossimi_7_giorni', 'senza_data'].includes(prossimo_contatto)) throw bad('Filtro prossimo contatto non valido');
+    if (!['', 'auto', 'van', 'bus', 'non_censita'].includes(flotta)) throw bad('Filtro flotta non valido');
+    if (min_mezzi !== '' && (!parseId(min_mezzi) || flotta === 'non_censita')) throw bad('Numero minimo di mezzi non valido');
     const page = Number(pagina), pageSize = Number(limite);
     if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 || !Number.isSafeInteger((page - 1) * pageSize)) throw bad('Parametri di paginazione non validi');
     const params = [], filters = ['o.archiviato_il IS NULL'];
+    const contactCount = `(SELECT COUNT(*) FROM public.procaccio_attivita a
+                           WHERE a.operatore_id = o.id AND a.stato = 'completata')`;
     if (ricerca.trim()) {
       params.push(`%${ricerca.trim()}%`);
-      filters.push(`(o.ragione_sociale ILIKE $${params.length} OR o.telefono ILIKE $${params.length} OR o.email ILIKE $${params.length})`);
+      const pattern = '$' + params.length;
+      const terms = [`o.ragione_sociale ILIKE ${pattern}`, `o.telefono ILIKE ${pattern}`, `o.email ILIKE ${pattern}`];
+      const digits = ricerca.replace(/[^0-9]/g, '');
+      if (digits && /^\+?[0-9 ().-]+$/.test(ricerca.trim())) {
+        params.push(`%${digits}%`);
+        terms.push(`regexp_replace(o.telefono, '[^0-9]', '', 'g') LIKE $${params.length}`);
+      }
+      filters.push(`(${terms.join(' OR ')})`);
     }
     if (stato.trim()) { params.push(stato.trim()); filters.push(`o.stato = $${params.length}`); }
     if (provincia.trim()) { params.push(provincia.trim()); filters.push(`o.provincia = $${params.length}`); }
+    if (comune.trim()) {
+      params.push(comune.trim());
+      const nomeComune = value => `lower(translate(${value},
+        'ÀÁÂÄÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜàáâäèéêëìíîïòóôöùúûü’',
+        'AAAAEEEEIIIIOOOOUUUUaaaaeeeeiiiioooouuuu' || chr(39)))`;
+      filters.push(`strpos(${nomeComune('o.comune')}, ${nomeComune('$' + params.length)}) > 0`);
+    }
+    if (telefono) {
+      const phone = "NULLIF(regexp_replace(o.telefono, '[[:space:]]', '', 'g'), '')";
+      filters.push(telefono === 'presente' ? `${phone} IS NOT NULL` : `${phone} IS NULL`);
+    }
+    for (const [value, operator] of [[min_contatti, '>='], [max_contatti, '<=']]) {
+      if (value === '') continue;
+      params.push(Number(value));
+      filters.push(`${contactCount} ${operator} $${params.length}`);
+    }
+    if (prossimo_contatto) {
+      const giornoLocale = "(o.prossimo_contatto_il AT TIME ZONE 'Europe/Rome')::date";
+      const oggi = "(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')::date";
+      const scadenze = {
+        scaduto: `${giornoLocale} < ${oggi}`,
+        oggi: `${giornoLocale} = ${oggi}`,
+        prossimi_7_giorni: `${giornoLocale} BETWEEN ${oggi} + 1 AND ${oggi} + 7`,
+        senza_data: 'o.prossimo_contatto_il IS NULL'
+      };
+      filters.push(scadenze[prossimo_contatto]);
+    }
+    if (flotta === 'non_censita') {
+      filters.push(`NOT EXISTS (SELECT 1 FROM public.procaccio_flotte mezzi
+                                WHERE mezzi.operatore_id = o.id AND mezzi.quantita > 0)`);
+    } else if (flotta || min_mezzi) {
+      let tipo = '';
+      if (flotta) {
+        params.push(flotta);
+        tipo = `AND lower(btrim(mezzi.tipologia)) = $${params.length}`;
+      }
+      params.push(min_mezzi ? Number(min_mezzi) : 1);
+      filters.push(`(SELECT COALESCE(SUM(mezzi.quantita), 0) FROM public.procaccio_flotte mezzi
+                     WHERE mezzi.operatore_id = o.id ${tipo}) >= $${params.length}`);
+    }
     const where = `WHERE ${filters.join(' AND ')}`;
     const count = await pool.query(`SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori o ${where}`, params);
     const data = await pool.query(
       `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome,
-              COALESCE(f.totale_mezzi, 0)::int AS totale_mezzi
+              COALESCE(f.totale_mezzi, 0)::int AS totale_mezzi,
+              ${contactCount}::int AS totale_contatti
        FROM public.procaccio_operatori o
        LEFT JOIN public.procaccio_procacciatori p ON p.id = o.procacciatore_id
        LEFT JOIN (SELECT operatore_id, SUM(quantita) AS totale_mezzi FROM public.procaccio_flotte GROUP BY operatore_id) f ON f.operatore_id = o.id
        ${where} ORDER BY o.creato_il DESC, o.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize]
     );
-    return res.json({ operatori: data.rows, totale: count.rows[0].totale, pagina: page, limite: pageSize });
+    const totale = count.rows[0].totale;
+    const totaleRegistrati = filters.length === 1 ? totale : (await pool.query(
+      'SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori WHERE archiviato_il IS NULL'
+    )).rows[0].totale;
+    return res.json({ operatori: data.rows, totale, totale_registrati: totaleRegistrati, pagina: page, limite: pageSize });
   } catch (err) { return respondError(err, res); }
 });
 

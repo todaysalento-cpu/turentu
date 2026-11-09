@@ -1,4 +1,9 @@
 import express from 'express';
+import { pool } from '../../db/db.js';
+import { apiMetrics } from '../../middleware/app-monitoring.js';
+import { createPaymentSample } from '../../services/monitoring/payment-sample.js';
+import { getPixelFirstWorkerStatus } from '../../workers/popbus-pixel-first.worker.js';
+import { createMonitoringRouter } from './monitoring.routes.js';
 import pixelWorkerRoutes from './pixel-worker.routes.js';
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
 
@@ -19,6 +24,11 @@ import procaccioRoutes from './procaccio.routes.js';
 
 const router = express.Router();
 router.use(authMiddleware, requireRole('Admin', 'admin'));
+router.use('/monitoring', createMonitoringRouter({
+  workerStatus: getPixelFirstWorkerStatus,
+  readPayments: createPaymentSample(pool),
+  apiMetrics,
+}));
 
 // --- Dashboard e Statistiche ---
 router.use('/dashboard', dashboardRoutes);

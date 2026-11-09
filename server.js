@@ -31,6 +31,8 @@ import { onboardingFlow } from './core/registry/flows/onboarding.flow.js';
 // ======================= ROUTES =======================
 import flowsRouter from './routes/flows.routes.js';
 import adminRouter from './routes/admin/index.js';
+import { apiMetrics } from './middleware/app-monitoring.js';
+import { readAppVersionPolicy } from './services/monitoring/version-policy.js';
 import bookingRouter from './routes/booking.routes.js';
 import { bookingClienteRouter } from './routes/booking.cliente.routes.js';
 import { router as stripeWebhookRouter } from './routes/stripe-webhook.js';
@@ -84,6 +86,7 @@ const isAllowedOrigin = (origin, callback) => {
 
 app.use(cors({ origin: isAllowedOrigin, credentials: true }));
 app.use(cookieParser());
+if (apiMetrics) app.use(apiMetrics.observe);
 
 // ======================= STRIPE WEBHOOK =======================
 // Deve essere registrato prima di express.json(): Stripe richiede il body raw
@@ -146,7 +149,10 @@ app.use('/api/wallet', walletRouter);
 app.use('/api/eventi', eventiRouter);
 
 app.get('/', (_, res) => res.json({ status: 'OK', service: 'TURENTU API' }));
-app.get('/api/config/version', (req, res) => { const raw = Number(process.env.ANDROID_MIN_VERSION_CODE ?? 14); const minVersionCode = Number.isSafeInteger(raw) && raw >= 14 ? raw : 14; res.set('Cache-Control', 'no-store'); res.json({ minVersion: "1.0.0", android: { minVersionCode, storeUrl: 'https://play.google.com/store/apps/details?id=com.turentu.app' } }); });
+app.get('/api/config/version', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(readAppVersionPolicy());
+});
 
 // ======================= SERVER INIT =======================
 const server = http.createServer(app);

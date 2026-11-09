@@ -15,6 +15,7 @@ import veicoliRoutes from './veicoli.routes.js';
 import corseRoutes from './corse.routes.js';         
 import pendingRoutes from './pending.routes.js';     
 import liveRoutes from './live.routes.js';
+import procaccioRoutes from './procaccio.routes.js';
 
 const router = express.Router();
 router.use(authMiddleware, requireRole('Admin', 'admin'));
@@ -35,5 +36,8 @@ router.use('/pagamenti', pagamentiRoutes);
 router.use('/impostazioni', impostazioniRoutes);
 router.use('/notifications', adminNotificationsRoutes);
 router.use('/pixel-worker', pixelWorkerRoutes);
+
+// --- CRM Procaccio Navette ---
+router.use('/procaccio', procaccioRoutes);
 
 export default router;

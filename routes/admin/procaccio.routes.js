@@ -261,6 +261,145 @@ router.get('/operatori/:id/storico', async (req, res) => {
   } catch (err) { return respondError(err, res); }
 });
 
+// PUT /api/admin/procaccio/operatori/:id/flotta
+// Aggiornamento atomico delle quantità Auto / Bus / Van
+router.put('/operatori/:id/flotta', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'ID operatore non valido' });
+  }
+
+  try {
+    const body = req.body;
+    const tipi = ['Auto', 'Bus', 'Van'];
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw bad('Dati flotta non validi');
+    }
+
+    if (
+      Object.keys(body).length !== 3 ||
+      !tipi.every(tipo => Object.prototype.hasOwnProperty.call(body, tipo))
+    ) {
+      throw bad('Sono richieste le quantità Auto, Bus e Van');
+    }
+
+    for (const tipo of tipi) {
+      const quantita = body[tipo];
+      if (
+        !Number.isSafeInteger(quantita) ||
+        quantita < 0 ||
+        quantita > 9999
+      ) {
+        throw bad(`Quantità non valida per ${tipo}`);
+      }
+    }
+
+    const result = await withTransaction(async client => {
+      const operatore = await client.query(
+        `SELECT id
+         FROM public.procaccio_operatori
+         WHERE id = $1 AND archiviato_il IS NULL
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (!operatore.rowCount) return null;
+
+      const precedenti = await client.query(
+        `SELECT *
+         FROM public.procaccio_flotte
+         WHERE operatore_id = $1
+         FOR UPDATE`,
+        [id]
+      );
+
+      const sconosciute = precedenti.rows.filter(
+        item => !tipi.includes(item.tipologia)
+      );
+
+      if (sconosciute.length) {
+        throw bad(
+          'Sono presenti tipologie da riclassificare prima del salvataggio'
+        );
+      }
+
+      const modifiche = [];
+
+      for (const tipo of tipi) {
+        const quantita = body[tipo];
+        const precedente = precedenti.rows.find(
+          item => item.tipologia === tipo
+        );
+
+        if (precedente) {
+          if (precedente.quantita !== quantita) {
+            await client.query(
+              `UPDATE public.procaccio_flotte
+               SET quantita = $1, aggiornato_il = NOW()
+               WHERE id = $2 AND operatore_id = $3`,
+              [quantita, precedente.id, id]
+            );
+
+            modifiche.push({
+              tipologia: tipo,
+              precedente: precedente.quantita,
+              nuovo: quantita
+            });
+          }
+        } else if (quantita > 0) {
+          await client.query(
+            `INSERT INTO public.procaccio_flotte
+             (operatore_id, tipologia, quantita, note)
+             VALUES ($1, $2, $3, NULL)`,
+            [id, tipo, quantita]
+          );
+
+          modifiche.push({
+            tipologia: tipo,
+            precedente: 0,
+            nuovo: quantita
+          });
+        }
+      }
+
+      if (modifiche.length) {
+        await history(
+          client,
+          id,
+          'aggiornamento_flotta_contatori',
+          req,
+          { modifiche }
+        );
+      }
+
+      const finale = await client.query(
+        `SELECT *
+         FROM public.procaccio_flotte
+         WHERE operatore_id = $1
+         ORDER BY tipologia`,
+        [id]
+      );
+
+      return {
+        flotta: finale.rows,
+        modificato: modifiche.length > 0,
+        modifiche
+      };
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        error: 'Operatore non trovato o archiviato'
+      });
+    }
+
+    return res.json(result);
+  } catch (err) {
+    return respondError(err, res);
+  }
+});
+
 // POST /api/admin/procaccio/operatori/:id/flotte
 router.post('/operatori/:id/flotte', async (req, res) => {
   const id = parseId(req.params.id);

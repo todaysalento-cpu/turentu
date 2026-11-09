@@ -36,6 +36,27 @@ function validate(body, create = false) {
   return data;
 }
 
+const FLOTTA_FIELDS = ['tipologia', 'quantita', 'note'];
+function validateFlotta(body, create = false) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw bad('Dati flotta non validi');
+  const data = {};
+  for (const [field, value] of Object.entries(body)) {
+    if (!FLOTTA_FIELDS.includes(field)) throw bad(`Campo flotta non consentito: ${field}`);
+    if (field === 'quantita') {
+      if (!Number.isSafeInteger(value) || value < 0 || value > 2147483647) throw bad('Quantita non valida');
+      data.quantita = value;
+    } else if (field === 'tipologia') {
+      if (typeof value !== 'string' || !value.trim()) throw bad('Tipologia obbligatoria');
+      data.tipologia = value.trim();
+    } else {
+      if (value !== null && typeof value !== 'string') throw bad('Note non valide');
+      data.note = value === null ? null : (value.trim() || null);
+    }
+  }
+  if (create && !data.tipologia) throw bad('Tipologia obbligatoria');
+  return data;
+}
+
 function respondError(err, res) {
   if (err.status === 400) return res.status(400).json({ error: err.message });
   if (err.code === '23505') return res.status(409).json({ error: 'Dato duplicato o vincolo di unicità' });
@@ -191,6 +212,91 @@ router.get('/operatori/:id/storico', async (req, res) => {
     if (!operator.rowCount) return res.status(404).json({ error: 'Operatore non trovato' });
     const result = await pool.query('SELECT * FROM public.procaccio_storico WHERE operatore_id = $1 ORDER BY creato_il DESC, id DESC', [id]);
     return res.json({ storico: result.rows });
+  } catch (err) { return respondError(err, res); }
+});
+
+// POST /api/admin/procaccio/operatori/:id/flotte
+router.post('/operatori/:id/flotte', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: 'ID operatore non valido' });
+  try {
+    const data = validateFlotta(req.body, true);
+    const flotta = await withTransaction(async client => {
+      const operatore = await client.query(
+        'SELECT id FROM public.procaccio_operatori WHERE id = $1 AND archiviato_il IS NULL FOR UPDATE', [id]
+      );
+      if (!operatore.rowCount) return null;
+      const result = await client.query(
+        `INSERT INTO public.procaccio_flotte (operatore_id, tipologia, quantita, note)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [id, data.tipologia, data.quantita ?? 0, data.note ?? null]
+      );
+      await history(client, id, 'creazione_flotta', req, { flotta: result.rows[0] });
+      return result.rows[0];
+    });
+    if (!flotta) return res.status(404).json({ error: 'Operatore non trovato o archiviato' });
+    return res.status(201).json({ flotta });
+  } catch (err) { return respondError(err, res); }
+});
+
+// PATCH /api/admin/procaccio/operatori/:id/flotte/:flottaId
+router.patch('/operatori/:id/flotte/:flottaId', async (req, res) => {
+  const id = parseId(req.params.id), flottaId = parseId(req.params.flottaId);
+  if (!id || !flottaId) return res.status(400).json({ error: 'ID non valido' });
+  try {
+    const data = validateFlotta(req.body);
+    const fields = Object.keys(data);
+    if (!fields.length) throw bad('Nessun campo da aggiornare');
+    const result = await withTransaction(async client => {
+      const operatore = await client.query(
+        'SELECT id FROM public.procaccio_operatori WHERE id = $1 AND archiviato_il IS NULL FOR UPDATE', [id]
+      );
+      if (!operatore.rowCount) return null;
+      const previous = await client.query(
+        'SELECT * FROM public.procaccio_flotte WHERE id = $1 AND operatore_id = $2 FOR UPDATE',
+        [flottaId, id]
+      );
+      if (!previous.rowCount) return null;
+      const modifiche = {};
+      for (const field of fields) {
+        if (previous.rows[0][field] !== data[field]) {
+          modifiche[field] = { precedente: previous.rows[0][field], nuovo: data[field] };
+        }
+      }
+      if (!Object.keys(modifiche).length) return { flotta: previous.rows[0], modificato: false };
+      const updated = await client.query(
+        `UPDATE public.procaccio_flotte SET ${fields.map((field, i) => `${field} = $${i + 1}`).join(', ')},
+         aggiornato_il = NOW() WHERE id = $${fields.length + 1} AND operatore_id = $${fields.length + 2} RETURNING *`,
+        [...Object.values(data), flottaId, id]
+      );
+      await history(client, id, 'aggiornamento_flotta', req, { flotta_id: flottaId, modifiche });
+      return { flotta: updated.rows[0], modificato: true };
+    });
+    if (!result) return res.status(404).json({ error: 'Operatore o voce flotta non trovati, oppure operatore archiviato' });
+    return res.json(result);
+  } catch (err) { return respondError(err, res); }
+});
+
+// DELETE /api/admin/procaccio/operatori/:id/flotte/:flottaId
+router.delete('/operatori/:id/flotte/:flottaId', async (req, res) => {
+  const id = parseId(req.params.id), flottaId = parseId(req.params.flottaId);
+  if (!id || !flottaId) return res.status(400).json({ error: 'ID non valido' });
+  try {
+    const deleted = await withTransaction(async client => {
+      const operatore = await client.query(
+        'SELECT id FROM public.procaccio_operatori WHERE id = $1 AND archiviato_il IS NULL FOR UPDATE', [id]
+      );
+      if (!operatore.rowCount) return null;
+      const result = await client.query(
+        'DELETE FROM public.procaccio_flotte WHERE id = $1 AND operatore_id = $2 RETURNING *',
+        [flottaId, id]
+      );
+      if (!result.rowCount) return null;
+      await history(client, id, 'eliminazione_flotta', req, { flotta: result.rows[0] });
+      return result.rows[0];
+    });
+    if (!deleted) return res.status(404).json({ error: 'Operatore o voce flotta non trovati, oppure operatore archiviato' });
+    return res.json({ eliminata: true, flotta: deleted });
   } catch (err) { return respondError(err, res); }
 });
 

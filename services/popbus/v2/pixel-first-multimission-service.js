@@ -16,6 +16,7 @@ import { valutaEconomiaCiclo } from './cycle-pricing.js';
 import { fingerprintRichiesta } from './request-fingerprint.js';
 import polyline from 'polyline';
 import { verificaPagamento } from './acceptance.js';
+import { assertPixelRoutingBudget } from '../../../utils/pixel-routing-budget.js';
 import { assertCanaryCycle, validateCanaryScope } from './popbus-canary-scope.js';
 import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
 import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimission-candidates.js';
@@ -987,6 +988,7 @@ export async function processaPixelFirstMultimissione({
     return {...physicalResult, testTransazionale};
   }
   if (mode === 'LIVE') {
+    assertPixelRoutingBudget();
     if (!cicloFisicoLive) return {modalita:mode,offerte:0,persistita:false,motivo:'nessun ciclo fisico V2 attivabile'};
     if (canary) assertCanaryCycle(canary,cicloFisicoLive);
     const writerFisico = await pool.connect();

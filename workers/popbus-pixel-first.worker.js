@@ -4,6 +4,7 @@ import { processaProposteDinamicheV2 } from '../services/popbus/v2/worker.js';
 import { processaPixelOperativo } from '../services/pixel/pixel-operational.service.js';
 
 import { createPixelFirstScheduler } from './pixel-first-scheduler.js';
+import { readPixelLiveRoutingLimit, withPixelRoutingBudget } from '../utils/pixel-routing-budget.js';
 
 const scheduler = createPixelFirstScheduler({
   schedule: (...args) => cron.schedule(...args),
@@ -12,6 +13,7 @@ const scheduler = createPixelFirstScheduler({
     // Do not log candidate passengers, coordinates or complete mission payloads.
     console.log('[PIXEL FIRST WORKER] RISULTATO:', JSON.stringify({
       mode: result.mode, osservazioneFisica: result.osservazioneFisica,
+      routingRequests: result.routingRequests, routingLimit: result.routingLimit,
       persistita: result.popbus?.persistita === true,
       offerte: result.popbus?.offerte ?? 0
     }));
@@ -24,6 +26,12 @@ export async function eseguiCicloPixelFirstControllato() {
   const mode = process.env.POPBUS_PIXEL_FIRST_MODE || 'ROLLBACK_ONLY';
   validaOsservazioneFisica(mode);
   if (!['ROLLBACK_ONLY', 'LIVE'].includes(mode)) throw new Error('Modalita POPBUS non valida');
+  return mode === 'LIVE'
+    ? withPixelRoutingBudget(readPixelLiveRoutingLimit(), () => eseguiPipeline(mode))
+    : eseguiPipeline(mode);
+}
+
+async function eseguiPipeline(mode) {
   const pipeline = process.env.PIXEL_FIRST_PIPELINE_ENABLED === '1';
   let pixel = null;
   if (pipeline) {
@@ -72,6 +80,7 @@ export function startPixelFirstWorker() {
     throw new Error('[PIXEL FIRST WORKER] Pipeline PIXEL LIVE non autorizzata.');
 
   validaOsservazioneFisica(mode);
+  if (mode === 'LIVE') readPixelLiveRoutingLimit();
   const status = scheduler.start();
   console.log(`[PIXEL FIRST WORKER] Scheduler avviato. Modalita=${mode}.`);
   return status;

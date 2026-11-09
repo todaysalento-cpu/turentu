@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
+import {AsyncLocalStorage} from 'node:async_hooks';
 const root=process.cwd(),require=createRequire(path.join(root,'package.json'));
 const express=require('express'),jwt=require('jsonwebtoken'),cron=require('node-cron');
 const results=[];
@@ -26,9 +27,33 @@ await test('bounded stop reports running, blocks restart until drained, old call
 await test('simultaneous stop requests share the same drain operation',async()=>{const d=deferred();const h=harness(()=>d.promise);h.control.start();const cycle=h.callbacks[0]();await Promise.resolve();const a=h.control.stop(),b=h.control.stop();assert.equal(a,b);d.resolve();await cycle;await a;assert.equal(h.destroyed(),1);});
 await test('cycle failure releases guard and a later cycle succeeds',async()=>{let n=0;const h=harness(()=>{if(++n===1)throw Error('fixture');});h.control.start();await h.callbacks[0]();assert.equal(h.control.status().last.ok,false);await h.callbacks[0]();assert.equal(h.control.status().last.ok,true);await h.control.stop();assert.throws(()=>h.control.stop({waitMs:-1}),/INVALID/);});
 await test('real node-cron task is destroyed without closing a separate HTTP server',async()=>{let task;const c=scheduler.createPixelFirstScheduler({schedule:(expr,fn,opts)=>(task=cron.schedule(expr,()=>fn(),opts)),run:async()=>{}});const app=express();app.get('/health',(req,res)=>res.send('ok'));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));try{c.start();await c.stop();assert.equal(task.getStatus(),'destroyed');assert.equal(await(await fetch('http://127.0.0.1:'+server.address().port+'/health')).text(),'ok');}finally{await new Promise(r=>server.close(r));}});
-async function worker(env={},run=async()=>({offerte:0})){const ctx=context(env);let scheduled=0;const ns=await load('workers/popbus-pixel-first.worker.js',ctx,{'node-cron':{default:{schedule(){scheduled++;return {destroy:async()=>{}};}}},'../services/popbus/v2/worker.js':{processaProposteDinamicheV2:run},'../services/pixel/pixel-operational.service.js':{processaPixelOperativo:async()=>({committed:false})},'./pixel-first-scheduler.js':{createPixelFirstScheduler:scheduler.createPixelFirstScheduler}});return {ns,ctx,scheduled:()=>scheduled};}
+async function worker(env={},run=async()=>({offerte:0}),pixel=async()=>({committed:false})){const ctx=context(env);const budget=await load('utils/pixel-routing-budget.js',ctx,{'node:async_hooks':{AsyncLocalStorage}});let scheduled=0;const ns=await load('workers/popbus-pixel-first.worker.js',ctx,{'node-cron':{default:{schedule(){scheduled++;return {destroy:async()=>{}};}}},'../services/popbus/v2/worker.js':{processaProposteDinamicheV2:()=>run(budget)},'../services/pixel/pixel-operational.service.js':{processaPixelOperativo:()=>pixel(budget)},'../utils/pixel-routing-budget.js':{readPixelLiveRoutingLimit:budget.readPixelLiveRoutingLimit,withPixelRoutingBudget:budget.withPixelRoutingBudget},'./pixel-first-scheduler.js':{createPixelFirstScheduler:scheduler.createPixelFirstScheduler}});return {ns,ctx,scheduled:()=>scheduled};}
 await test('physical observation is rejected with LIVE before PIXEL/POPBUS work',async()=>{let runs=0;const h=await worker({POPBUS_PIXEL_FIRST_MODE:'LIVE',POPBUS_PIXEL_PHYSICAL_OBSERVATION:'1',POPBUS_PIXEL_FIRST_LIVE_APPROVED:'1',POPBUS_MULTIMISSION_ACCEPTANCE_TEST:'true',POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO:'10'},()=>runs++);assert.throws(()=>h.ns.startPixelFirstWorker(),/REQUIRES_ROLLBACK/);await assert.rejects(h.ns.eseguiCicloPixelFirstControllato(),/REQUIRES_ROLLBACK/);assert.equal(runs,0);assert.equal(h.scheduled(),0);});
 await test('LIVE authorization remains required; invalid observation flag fails closed',async()=>{const live=await worker({POPBUS_PIXEL_FIRST_MODE:'LIVE'});assert.throws(()=>live.ns.startPixelFirstWorker(),/LIVE non autorizzato/);const invalid=await worker({POPBUS_PIXEL_PHYSICAL_OBSERVATION:'true'});assert.throws(()=>invalid.ns.startPixelFirstWorker(),/OBSERVATION_INVALID/);});
+const liveEnv={POPBUS_PIXEL_FIRST_MODE:'LIVE',PIXEL_FIRST_PIPELINE_ENABLED:'1',POPBUS_PIXEL_FIRST_LIVE_APPROVED:'1',
+ PIXEL_FIRST_PIPELINE_LIVE_APPROVED:'1',PIXEL_OPERATIONAL_LIVE_APPROVED:'1',
+ POPBUS_MULTIMISSION_ACCEPTANCE_TEST:'true',POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO:'10'};
+await test('LIVE requires an explicit valid shared routing limit before scheduling',async()=>{
+ for(const limit of [undefined,'0','501','2.5','1e2']){
+  const h=await worker({...liveEnv,POPBUS_PIXEL_LIVE_ROUTING_LIMIT:limit});
+  assert.throws(()=>h.ns.startPixelFirstWorker(),/POPBUS_PIXEL_LIVE_ROUTING_LIMIT/);
+  assert.equal(h.scheduled(),0);
+ }
+});
+await test('LIVE shares one routing budget across PIXEL and POPBUS and resets on the next tick',async()=>{
+ const use=budget=>budget.reservePixelRoutingRequest();
+ const h=await worker({...liveEnv,POPBUS_PIXEL_LIVE_ROUTING_LIMIT:'2'},async budget=>{
+  use(budget);return {offerte:0};
+ },async budget=>{use(budget);return {committed:true};});
+ for(let i=0;i<2;i++){
+  const result=await h.ns.eseguiCicloPixelFirstControllato();
+  assert.equal(result.routingRequests,2);assert.equal(result.routingLimit,2);
+ }
+ const exhausted=await worker({...liveEnv,POPBUS_PIXEL_LIVE_ROUTING_LIMIT:'1'},async budget=>{
+  try{use(budget);}catch{}return {offerte:0};
+ },async budget=>{use(budget);return {committed:true};});
+ await assert.rejects(exhausted.ns.eseguiCicloPixelFirstControllato(),/PIXEL_LIVE_ROUTING_BUDGET_EXHAUSTED/);
+});
 await test('physical observation propagates only read-only selector options through actual V2 worker',async()=>{
  const ctx=context({POPBUS_PIXEL_PHYSICAL_OBSERVATION:'1'}),source=read('services/popbus/v2/worker.js');let received=null;
  const dependencies={};
@@ -44,7 +69,7 @@ await test('physical observation propagates only read-only selector options thro
 });
 await test('actual HTTP control: JWT/role checks, validation, draining response and API stays up',async()=>{
  const secret=randomBytes(32).toString('hex'),h=harness(async()=>{}),ctx=context();let stops=0,running=false;
- const mod=await load('routes/admin/pixel-worker.routes.js',ctx,{'express':{default:express},'../../workers/pixel-observation-once.js':{startPixelObservationOnce:()=>{throw Error('Observation not requested');},getPixelObservationOnceStatus:()=>({state:'IDLE'})},'jsonwebtoken':{default:jwt},'../../config/security.js':{JWT_SECRET:secret},'../../workers/popbus-pixel-first.worker.js':{getPixelFirstWorkerStatus:h.control.status,stopPixelFirstWorker:h.control.stop}});
+ const mod=await load('routes/admin/pixel-worker.routes.js',ctx,{'express':{default:express},'../../workers/pixel-canary-once.js':{startPixelCanaryOnce:()=>{throw Error('Canary not requested');},getPixelCanaryStatus:()=>({state:'IDLE'})},'../../workers/pixel-observation-once.js':{startPixelObservationOnce:()=>{throw Error('Observation not requested');},getPixelObservationOnceStatus:()=>({state:'IDLE'})},'jsonwebtoken':{default:jwt},'../../config/security.js':{JWT_SECRET:secret},'../../workers/popbus-pixel-first.worker.js':{getPixelFirstWorkerStatus:h.control.status,stopPixelFirstWorker:h.control.stop}});
  const app=express();app.use(express.json());app.use('/worker',mod.createPixelWorkerControlRouter({status:()=>({scheduled:false,running}),stop:async()=>{stops++;}}));app.get('/health',(req,res)=>res.send('ok'));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const url='http://127.0.0.1:'+server.address().port;
  const admin=jwt.sign({id:1,role:'admin'},secret),user=jwt.sign({id:2,role:'cliente'},secret),expired=jwt.sign({id:1,role:'admin',exp:1},secret);

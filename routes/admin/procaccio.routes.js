@@ -57,6 +57,52 @@ function validateFlotta(body, create = false) {
   return data;
 }
 
+const CONTATTO_FIELDS = [
+  'nome', 'cognome', 'ruolo', 'telefono',
+  'email', 'principale', 'note'
+];
+
+function validateContatto(body, create = false) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw bad('Dati contatto non validi');
+  }
+
+  const data = {};
+
+  for (const [field, value] of Object.entries(body)) {
+    if (!CONTATTO_FIELDS.includes(field)) {
+      throw bad(`Campo contatto non consentito: ${field}`);
+    }
+
+    if (field === 'principale') {
+      if (typeof value !== 'boolean') {
+        throw bad('Valore principale non valido');
+      }
+      data.principale = value;
+      continue;
+    }
+
+    if (value !== null && typeof value !== 'string') {
+      throw bad(`Valore non valido per ${field}`);
+    }
+
+    if (field === 'nome') {
+      if (typeof value !== 'string' || !value.trim()) {
+        throw bad('Nome referente obbligatorio');
+      }
+      data.nome = value.trim();
+    } else {
+      data[field] = value === null ? null : (value.trim() || null);
+    }
+  }
+
+  if (create && !data.nome) {
+    throw bad('Nome referente obbligatorio');
+  }
+
+  return data;
+}
+
 function respondError(err, res) {
   if (err.status === 400) return res.status(400).json({ error: err.message });
   if (err.code === '23505') return res.status(409).json({ error: 'Dato duplicato o vincolo di unicità' });
@@ -298,6 +344,271 @@ router.delete('/operatori/:id/flotte/:flottaId', async (req, res) => {
     if (!deleted) return res.status(404).json({ error: 'Operatore o voce flotta non trovati, oppure operatore archiviato' });
     return res.json({ eliminata: true, flotta: deleted });
   } catch (err) { return respondError(err, res); }
+});
+
+ // POST /api/admin/procaccio/operatori/:id/contatti
+router.post('/operatori/:id/contatti', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) {
+    return res.status(400).json({
+      error: 'ID operatore non valido'
+    });
+  }
+
+  try {
+    const data = validateContatto(req.body, true);
+
+    const result = await withTransaction(async client => {
+      const operatore = await client.query(
+        `SELECT id FROM public.procaccio_operatori
+         WHERE id = $1 AND archiviato_il IS NULL
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (!operatore.rowCount) return null;
+
+      let precedentePrincipale = null;
+
+      if (data.principale === true) {
+        const precedente = await client.query(
+          `UPDATE public.procaccio_contatti
+           SET principale = FALSE
+           WHERE operatore_id = $1 AND principale = TRUE
+           RETURNING id`,
+          [id]
+        );
+        precedentePrincipale = precedente.rows[0]?.id ?? null;
+      }
+
+      const inserted = await client.query(
+        `INSERT INTO public.procaccio_contatti
+         (operatore_id, nome, cognome, ruolo,
+          telefono, email, principale, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING *`,
+        [
+          id,
+          data.nome,
+          data.cognome ?? null,
+          data.ruolo ?? null,
+          data.telefono ?? null,
+          data.email ?? null,
+          data.principale ?? false,
+          data.note ?? null
+        ]
+      );
+
+      const contatto = inserted.rows[0];
+
+      await history(
+        client,
+        id,
+        'creazione_contatto',
+        req,
+       {
+  contatto,
+  precedente_principale_id: precedentePrincipale,
+  sostituzione_principale: precedentePrincipale !== null
+    ? {
+        contatto_id: precedentePrincipale,
+        principale_precedente: true,
+        principale_nuovo: false
+      }
+    : null
+}
+      );
+
+      return contatto;
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        error: 'Operatore non trovato o archiviato'
+      });
+    }
+
+    return res.status(201).json({ contatto: result });
+
+  } catch (err) {
+    return respondError(err, res);
+  }
+});
+
+ // PATCH /api/admin/procaccio/operatori/:id/contatti/:contattoId
+router.patch('/operatori/:id/contatti/:contattoId', async (req, res) => {
+  const id = parseId(req.params.id);
+  const contattoId = parseId(req.params.contattoId);
+
+  if (!id || !contattoId) {
+    return res.status(400).json({ error: 'ID non valido' });
+  }
+
+  try {
+    const data = validateContatto(req.body);
+    const fields = Object.keys(data);
+
+    if (!fields.length) {
+      throw bad('Nessun campo da aggiornare');
+    }
+
+    const result = await withTransaction(async client => {
+      const operatore = await client.query(
+        `SELECT id FROM public.procaccio_operatori
+         WHERE id = $1 AND archiviato_il IS NULL
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (!operatore.rowCount) return null;
+
+      const previous = await client.query(
+        `SELECT * FROM public.procaccio_contatti
+         WHERE id = $1 AND operatore_id = $2
+         FOR UPDATE`,
+        [contattoId, id]
+      );
+
+      if (!previous.rowCount) return null;
+
+      const precedente = previous.rows[0];
+      const modifiche = {};
+
+      for (const field of fields) {
+        if (precedente[field] !== data[field]) {
+          modifiche[field] = {
+            precedente: precedente[field],
+            nuovo: data[field]
+          };
+        }
+      }
+
+      if (!Object.keys(modifiche).length) {
+        return {
+          contatto: precedente,
+          modificato: false
+        };
+      }
+
+      let precedentePrincipale = null;
+
+      if (data.principale === true && !precedente.principale) {
+        const oldPrincipal = await client.query(
+          `UPDATE public.procaccio_contatti
+           SET principale = FALSE
+           WHERE operatore_id = $1
+             AND principale = TRUE
+             AND id <> $2
+           RETURNING id`,
+          [id, contattoId]
+        );
+
+        precedentePrincipale = oldPrincipal.rows[0]?.id ?? null;
+      if (precedentePrincipale !== null) {
+  modifiche.referente_principale_precedente = {
+    contatto_id: precedentePrincipale,
+    principale_precedente: true,
+    principale_nuovo: false
+  };
+}}
+
+
+      const updated = await client.query(
+        `UPDATE public.procaccio_contatti
+         SET ${fields.map((field, i) =>
+           `${field} = $${i + 1}`
+         ).join(', ')}
+         WHERE id = $${fields.length + 1}
+           AND operatore_id = $${fields.length + 2}
+         RETURNING *`,
+        [...Object.values(data), contattoId, id]
+      );
+
+      await history(
+        client,
+        id,
+        'aggiornamento_contatto',
+        req,
+        {
+          contatto_id: contattoId,
+          modifiche,
+          precedente_principale_id: precedentePrincipale
+        }
+      );
+
+      return {
+        contatto: updated.rows[0],
+        modificato: true
+      };
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        error: 'Operatore o referente non trovato, oppure operatore archiviato'
+      });
+    }
+
+    return res.json(result);
+
+  } catch (err) {
+    return respondError(err, res);
+  }
+});
+
+ // DELETE /api/admin/procaccio/operatori/:id/contatti/:contattoId
+router.delete('/operatori/:id/contatti/:contattoId', async (req, res) => {
+  const id = parseId(req.params.id);
+  const contattoId = parseId(req.params.contattoId);
+
+  if (!id || !contattoId) {
+    return res.status(400).json({ error: 'ID non valido' });
+  }
+
+  try {
+    const deleted = await withTransaction(async client => {
+      const operatore = await client.query(
+        `SELECT id FROM public.procaccio_operatori
+         WHERE id = $1 AND archiviato_il IS NULL
+         FOR UPDATE`,
+        [id]
+      );
+
+      if (!operatore.rowCount) return null;
+
+      const result = await client.query(
+        `DELETE FROM public.procaccio_contatti
+         WHERE id = $1 AND operatore_id = $2
+         RETURNING *`,
+        [contattoId, id]
+      );
+
+      if (!result.rowCount) return null;
+
+      await history(
+        client,
+        id,
+        'eliminazione_contatto',
+        req,
+        { contatto: result.rows[0] }
+      );
+
+      return result.rows[0];
+    });
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: 'Operatore o referente non trovato, oppure operatore archiviato'
+      });
+    }
+
+    return res.json({
+      eliminato: true,
+      contatto: deleted
+    });
+
+  } catch (err) {
+    return respondError(err, res);
+  }
 });
 
 export default router;

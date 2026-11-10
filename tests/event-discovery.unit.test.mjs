@@ -30,6 +30,30 @@ test('JSON API e HTML con JSON-LD, coordinate ed evidenze', async () => {
   assert.equal(html.data.lat, 40.35);
 });
 
+test('Andiamo in Puglia scorre lo storico e importa date e attribuzione senza inventare orari', async () => {
+  const feed = { ...source, kind: 'json', url: 'https://andiamoinpuglia.it/dati/eventi.json' };
+  const old = { title: 'Evento concluso', start_date: '2025-11-10', status: 'programmato' };
+  const event = { slug: 'mostra-lecce', title: 'Mostra a Lecce', start_date: '2026-11-09', end_date: '2026-11-12',
+    venue_name: 'Museo', comune_name: 'Lecce', provincia: 'lecce', street: 'Via Roma', lat: 40.35, lng: 18.17,
+    url: '/eventi/mostra-lecce/', source_urls: ['https://comune.example.org/mostra'], status: 'programmato' };
+  const json = JSON.stringify({ license: 'CC BY 4.0', events: [...Array(501).fill(old), event] });
+  const [candidate, extra] = await extract(json, feed, 90, now);
+  assert.equal(extra, undefined);
+  assert.equal(candidate.data.start, '2026-11-09');
+  assert.equal(candidate.data.end, '2026-11-12');
+  assert.equal(candidate.data.venue, 'Museo');
+  assert.equal(candidate.data.city, 'Lecce');
+  assert.equal(candidate.data.lat, 40.35);
+  assert.deepEqual(candidate.evidence.attribution, {
+    publisher: 'andiamoinpuglia.it', license: 'CC BY 4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    recordUrl: 'https://andiamoinpuglia.it/eventi/mostra-lecce/', primaryUrl: 'https://comune.example.org/mostra',
+  });
+  await assert.rejects(extract(JSON.stringify({ events: [event] }), feed, 90, now), /Licenza/);
+  const [generic] = await parse(JSON.stringify({ events: [event] }), 'json');
+  assert.equal(generic.data.start, null);
+  assert.equal(generic.evidence.attribution, undefined);
+});
+
 test('RSS: pubDate è la data di pubblicazione, non l’inizio', async () => {
   const [event] = await parse(`<?xml version="1.0"?><rss version="2.0" xmlns:event="https://example.org/">
     <channel><title>Eventi</title><item><guid>uno</guid><title>Evento</title>

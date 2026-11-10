@@ -65,6 +65,13 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
         return { body: '{"web":{"results":[{"url":"https://official.example.org/concerto"}]}}' };
       }
       if (url.endsWith('robots.txt')) return { body: 'User-agent: *' };
+      if (url === 'https://andiamoinpuglia.it/dati/eventi.json') {
+        return { status: 200, headers: {}, body: JSON.stringify({ license: 'CC BY 4.0', events: [{
+          slug: 'mostra-test', title: 'Mostra di prova', category: 'mostre', start_date: '2026-11-28',
+          comune_name: 'Lecce', venue_name: 'Museo', url: '/eventi/mostra-test/',
+          source_urls: ['https://official.example.org/mostra-test'], status: 'programmato',
+        }] }) };
+      }
       if (networkError) throw Object.assign(new Error('HTTP 503'), { status: 503 });
       if (pending) await pending;
       if (cache) {
@@ -201,4 +208,21 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
   assert.equal((await pool.query('SELECT * FROM eventi')).rowCount, 2);
   const autoHistory = await api(`/candidates/${queued.id}/history`);
   assert.equal(autoHistory.filter((row) => row.action === 'publish' && row.details.automatic).length, 1);
+
+  const region = await api('/sources', { method: 'POST', body: {
+    url: 'https://andiamoinpuglia.it/dati/eventi.json', kind: 'json', state: 'attiva', terms: 'CC BY 4.0',
+  } });
+  assert.equal((await api(`/sources/${region.id}/sync`, { method: 'POST' })).count, 1);
+  assert.equal((await api(`/sources/${region.id}/sync`, { method: 'POST' })).count, 0);
+  const candidateFromFeed = (await api('/candidates?state=pending')).find((row) => row.data.title === 'Mostra di prova');
+  assert.equal(candidateFromFeed.data.start, '2026-11-28');
+  assert.equal(candidateFromFeed.evidence.attribution.publisher, 'andiamoinpuglia.it');
+  const regionalPath = '/candidates/' + candidateFromFeed.id;
+  await api(regionalPath + '/review', { method: 'POST',
+    body: { action: 'approve', version: candidateFromFeed.observed_at, data: { start: '2026-11-28T18:30:00+01:00' } } });
+  const regionalEvent = await api(regionalPath + '/publish', { method: 'POST', body: { version: candidateFromFeed.observed_at } });
+  const { rows: [regionalRow] } = await pool.query('SELECT descrizione FROM eventi WHERE id=$1', [regionalEvent.eventId]);
+  assert.match(regionalRow.descrizione, /Dati adattati per Turentu da andiamoinpuglia\.it/);
+  assert.match(regionalRow.descrizione, /CC BY 4\.0/);
+  assert.match(regionalRow.descrizione, /https:\/\/official\.example\.org\/mostra-test/);
 });

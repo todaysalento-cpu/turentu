@@ -2,6 +2,7 @@ import { Resolver } from 'node:dns/promises';
 import { request } from 'node:https';
 import { isIP } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
+import { isAndiamoPugliaFeed } from './andiamo-puglia.js';
 
 export function publicUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) throw new Error('URL non valido');
@@ -25,6 +26,7 @@ function globalIPv4(address) {
 }
 
 async function once(url, headers, signal) {
+  const byteLimit = isAndiamoPugliaFeed(url) ? 4_000_000 : 2_000_000;
   const resolver = new Resolver({ timeout: 2000, tries: 2 });
   const addresses = (await resolver.resolve4(url.hostname)).map((address) => ({ address, family: 4 }));
   if (!addresses.length || addresses.some(({ address }) => !globalIPv4(address))) {
@@ -40,7 +42,7 @@ async function once(url, headers, signal) {
       let bytes = 0;
       res.on('data', (chunk) => {
         bytes += chunk.length;
-        if (bytes > 2_000_000) req.destroy(new Error('Risposta troppo grande'));
+        if (bytes > byteLimit) req.destroy(new Error('Risposta troppo grande'));
         else chunks.push(chunk);
       });
       res.on('error', reject);

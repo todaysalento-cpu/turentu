@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { extract, fingerprint, keyText, normalize } from './extract.js';
 import { publicUrl, readRemote, readSource } from './network.js';
 import { geocode } from './geocode.js';
+import { isAndiamoPugliaFeed } from './andiamo-puglia.js';
 
 const tables = 'public.event_discovery_';
 export const enabled = (name = '') => process.env['EVENT_DISCOVERY_ENABLED'] === 'true' &&
@@ -187,7 +188,8 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
     return run('sync', sourceId, actor, async (client) => {
       const { rows: [source] } = await client.query(`SELECT * FROM ${tables}sources WHERE id=$1`, [sourceId]);
       if (source?.state !== 'attiva') fail('Fonte non attiva', 409);
-      if (!source.last_full_sync || Date.now() - source.last_full_sync.getTime() > 86400000) source.etag = null;
+      if (!source.last_full_sync || Date.now() - source.last_full_sync.getTime() > 86400000 ||
+          (isAndiamoPugliaFeed(source.url) && source.last_count === 0)) source.etag = null;
       const response = await readSource(source, read);
       const config = await settings(client);
       const candidates = response.status === 304 ? [] : await extract(response.body, source, config.days, now());
@@ -233,7 +235,9 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
       for (const item of candidates) {
         const { rows: [previous] } = await client.query(`SELECT * FROM ${tables}candidates WHERE source_id=$1 AND external_key=$2 FOR UPDATE`, [sourceId, item.key]);
         if (previous && fingerprint(previous.data) === item.fingerprint &&
-            Object.entries(item.data).every(([key, value]) => previous.data[key] === value)) continue;
+            Object.entries(item.data).every(([key, value]) => previous.data[key] === value) &&
+            (!item.evidence.attribution || (previous.evidence.attribution?.recordUrl === item.evidence.attribution.recordUrl &&
+              previous.evidence.attribution?.primaryUrl === item.evidence.attribution.primaryUrl))) continue;
         if (previous) {
           const dependency = previous.event_id ? await client.query(`
             SELECT EXISTS (SELECT 1 FROM public.corse WHERE evento_id=$1)
@@ -307,10 +311,16 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
         const probable = nearby.rows.filter((row) => keyText(row.titolo) === keyText(event.title) &&
           (!row.citta || !event.city || keyText(row.citta) === keyText(event.city)));
         if (probable.length && input.distinct !== true) fail('Possibile duplicato. ID evento: ' + probable.map((row) => row.id).join(', '), 409);
+        const credit = candidate.evidence.attribution;
+        const description = credit ? [
+          event.description,
+          `Dati adattati per Turentu da ${credit.publisher} · ${credit.recordUrl} · Licenza ${credit.license} (${credit.licenseUrl})`,
+          credit.primaryUrl && 'Fonte primaria: ' + credit.primaryUrl,
+        ].filter(Boolean).join('\n\n') : event.description;
         const inserted = await client.query(`INSERT INTO public.eventi
           (titolo,categoria,descrizione,data_inizio,data_fine,luogo_nome,indirizzo,citta,lat,lng,creato_da,stato)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'approvato') RETURNING id`,
-        [event.title, event.category, event.description, event.start, event.end, event.venue, event.address, event.city, event.lat, event.lng, actor]);
+        [event.title, event.category, description, event.start, event.end, event.venue, event.address, event.city, event.lat, event.lng, actor]);
         eventId = inserted.rows[0].id;
       }
       await client.query(`UPDATE ${tables}candidates SET state='published',event_id=$2,published_data=$3,auto_publish=false WHERE id=$1`, [id, eventId, event]);

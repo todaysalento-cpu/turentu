@@ -23,6 +23,9 @@ const NAV_ITEMS = {
   admin: [
     { label: 'Dashboard', href: '/admin/dashboard' },
     { label: 'Gestione', href: '/admin/gestione' },
+    ...(process.env.NEXT_PUBLIC_EVENT_DISCOVERY === 'true'
+      ? [{ label: 'Eventi → Event Discovery', href: '/admin/eventi/discovery' }]
+      : []),
     { label: 'Pagamenti', href: '/admin/pagamenti' },
     { label: 'Report', href: '/admin/report' },
     { label: 'Impostazioni', href: '/admin/impostazioni' },

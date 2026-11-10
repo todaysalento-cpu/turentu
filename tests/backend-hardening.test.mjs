@@ -53,8 +53,14 @@ test('router admin: blocca anonimi e clienti prima di qualsiasi endpoint', async
   });
   const dependencies = {
     express: { default: express }, '../../middleware/auth.js': auth,
+    '../../db/db.js': { pool: {} },
+    '../../middleware/app-monitoring.js': { apiMetrics: {} },
+    '../../services/monitoring/payment-sample.js': { createPaymentSample: () => async () => [] },
+    '../../workers/popbus-pixel-first.worker.js': { getPixelFirstWorkerStatus: () => ({}) },
+    './monitoring.routes.js': { createMonitoringRouter: () => express.Router() },
   };
-  for (const name of ['dashboard', 'pagamenti', 'gestione', 'report', 'impostazioni', 'notifications', 'veicoli', 'corse', 'pending', 'live']) {
+  for (const name of ['dashboard', 'pagamenti', 'gestione', 'report', 'impostazioni', 'notifications', 'veicoli', 'corse', 'pending', 'live',
+    'pixel-worker', 'procaccio', 'event-discovery']) {
     dependencies[`./${name}.routes.js`] = { default: express.Router() };
   }
   const { default: router } = await isolated('routes/admin/index.js', dependencies);

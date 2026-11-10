@@ -1,4 +1,5 @@
 import { verificaPagamento } from './acceptance.js';
+import { assertCanaryCycle, validateCanaryScope } from './popbus-canary-scope.js';
 import { preparaPianoCicloFisicoV2 } from './popbus-physical-cycle-plan-v2.js';
 import { preparaCicloPixelPerPersistenza } from './popbus-p0-c8-adapter.js';
 import { registraMissioniAttivazione } from './popbus-cycle-persistence.js';
@@ -542,11 +543,24 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
  * Il chiamante possiede BEGIN/ROLLBACK. NON effettua COMMIT.
  * Non abilita LIVE e non deve essere esposta a endpoint pubblici.
  */
-export async function persistiCicloFisicoLiveInTransazioneV2({client,ciclo,now=Date.now(),costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro}={}) {
+export async function persistiCicloFisicoLiveInTransazioneV2({client,ciclo,now=Date.now(),costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro,canaryScope=null}={}) {
   if (!client || !client.query) fail('client transazionale mancante');
   const nowMs = new Date(now).getTime();
   if (!Number.isFinite(nowMs)) fail('now non valido');
+  const scope = canaryScope === null ? null : validateCanaryScope(canaryScope);
+  if (scope) assertCanaryCycle(scope, ciclo);
   const pre = await rivalidaCicloFisicoInTransazioneV2({client,ciclo,costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro});
+  if (scope) {
+    // Rivalidazione mantiene il lock condiviso e la riga veicolo bloccata fino al commit.
+    assertCanaryCycle(scope, ciclo, pre.autistaId);
+    const { rows } = await client.query(
+      'SELECT 1 FROM popbus_attivazione_missioni WHERE pixel_opportunita_id = $1 LIMIT 1',
+      [scope.opportunityId]
+    );
+    if (rows.length) throw new Error('POPBUS_CANARY_ALREADY_PERSISTED');
+    if (pre.richiesteBloccate.some(request => !request.payment_intent_id?.startsWith('wallet_')))
+      throw new Error('POPBUS_CANARY_WALLET_REQUIRED');
+  }
   for (const r of pre.richiesteBloccate) await verificaPagamento(client,r);
   const result = await persistiCicloFisicoInTransazioneV2({client,ciclo,pre,nowMs});
   return {ok:true,percorso:'POPBUS_PHYSICAL_V2_LIVE',...result};

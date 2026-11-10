@@ -1,10 +1,11 @@
 import express from 'express';
 import {startPixelObservationOnce,getPixelObservationOnceStatus} from '../../workers/pixel-observation-once.js';
+import {startPixelCanaryOnce,getPixelCanaryStatus} from '../../workers/pixel-canary-once.js';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../config/security.js';
 import {getPixelFirstWorkerStatus,stopPixelFirstWorker} from '../../workers/popbus-pixel-first.worker.js';
 
-export function createPixelWorkerControlRouter({status=getPixelFirstWorkerStatus,stop=stopPixelFirstWorker,observe=startPixelObservationOnce,observationStatus=getPixelObservationOnceStatus}={}) {
+export function createPixelWorkerControlRouter({status=getPixelFirstWorkerStatus,stop=stopPixelFirstWorker,observe=startPixelObservationOnce,observationStatus=getPixelObservationOnceStatus,canary=startPixelCanaryOnce,canaryStatus=getPixelCanaryStatus}={}) {
   const router=express.Router();
   // Explicit Bearer authentication also prevents a cookie-only cross-site stop.
   router.use((req,res,next)=>{
@@ -28,6 +29,14 @@ export function createPixelWorkerControlRouter({status=getPixelFirstWorkerStatus
   router.get('/observation',(req,res)=>{res.set('Cache-Control','no-store');res.json(observationStatus());});
   router.post('/observe-once',(req,res,next)=>{
     try {res.set('Cache-Control','no-store');res.status(202).json(observe());}
+    catch(error){if(error.status===409)return res.status(409).json({error:error.code});next(error);}
+  });
+  router.get('/canary',(req,res)=>{res.set('Cache-Control','no-store');res.json(canaryStatus());});
+  router.post('/canary-once',(req,res,next)=>{
+    res.set('Cache-Control','no-store');
+    if (req.body != null && (typeof req.body !== 'object' || Object.keys(req.body).length !== 0))
+      return res.status(400).json({error:'PIXEL_CANARY_BODY_NOT_ALLOWED'});
+    try {res.status(202).json(canary());}
     catch(error){if(error.status===409)return res.status(409).json({error:error.code});next(error);}
   });
   return router;

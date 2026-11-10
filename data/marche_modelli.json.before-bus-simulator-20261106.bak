@@ -1,0 +1,11192 @@
+[
+  {
+    "id": "ac",
+    "nome": "AC",
+    "modelli": [
+      {
+        "nome": "2-Litre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "427",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "428",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ace",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aceca",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aceca-Bristol",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cobra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Greyhound",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "acura",
+    "nome": "Acura",
+    "modelli": [
+      {
+        "nome": "CL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CL-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CSX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ILX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ILX Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Integra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Legend",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MDX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NSX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RDX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RLX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RSX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TLX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TSX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vigor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZDX",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "allard",
+    "nome": "Allard",
+    "modelli": [
+      {
+        "nome": "GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J2R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J2X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Palm Beach",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Safari",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "alpina",
+    "nome": "Alpina",
+    "modelli": [
+      {
+        "nome": "2002",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B 10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B 12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "D3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "amc",
+    "nome": "AMC",
+    "modelli": [
+      {
+        "nome": "Ambassador",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AMX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AMX III",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gremlin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hornet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Javelin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Matador",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pacer",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "ariel",
+    "nome": "Ariel",
+    "modelli": [
+      {
+        "nome": "Atom",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "aston_martin",
+    "nome": "Aston Martin",
+    "modelli": [
+      {
+        "nome": "15",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2-Litre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AM Vantage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Atom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cygnet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DB9",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DBR2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DBS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lagonda",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "One-77",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Project Vantage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rapide",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V12 Vantage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8 Saloon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8 Vantage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8 Volante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8 Zagato",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vanquish",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vantage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Virage",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "audi",
+    "nome": "Audi",
+    "modelli": [
+      {
+        "nome": "100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "80",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A3 e-tron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AL2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Allroad",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Asso",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avantissimo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fox",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LeMans",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nuvolari Quattro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pikes Peak Quattro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quattro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R8R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rosemeyer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS 5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS 7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SQ5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Steppenwolf",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super 90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "UR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Variant",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "austin",
+    "nome": "Austin",
+    "modelli": [
+      {
+        "nome": "10 HP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "16",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3-Litre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 110",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 125",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 135",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 35",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 55",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 95",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 99",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A135",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Allegro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ambassador",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maestro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maxi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Clubman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Cooper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Metro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Sky",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montego",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Princess",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "austin-healey",
+    "nome": "Austin-Healey",
+    "modelli": [
+      {
+        "nome": "100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3000 Mk II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3000 Mk III",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sports Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sprite",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tickford",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "avanti",
+    "nome": "Avanti",
+    "modelli": [
+      {
+        "nome": "Avanti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sport Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Studebaker",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "bentley",
+    "nome": "Bentley",
+    "modelli": [
+      {
+        "nome": "Arnage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Azure",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brooklands",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental Flying Spur",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental GTC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental Supersports",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental T",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Exp Speed 8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Flying Spur",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hunaudieres",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Java",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark VI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mulsane",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mulsanne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R Type Continental",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "State Limousine",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Turbo",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "berkeley",
+    "nome": "Berkeley",
+    "modelli": [
+      {
+        "nome": "B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B 95",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Foursome",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sports",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Twosome",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "bitter",
+    "nome": "Bitter",
+    "modelli": [
+      {
+        "nome": "CD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Diplomat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type III",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "bizzarrini",
+    "nome": "Bizzarrini",
+    "modelli": [
+      {
+        "nome": "A3C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "BZ-2001",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Manta",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "bmw",
+    "nome": "BMW",
+    "modelli": [
+      {
+        "nome": "1 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "116",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "118",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "120",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "123",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "125",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "128",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "130",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "135",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1502",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1602",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2.8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2002",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2004",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3 Series Gran Turismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3.3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "315",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "316",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "317",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "318",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "320",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3200 CS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "323",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "324",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "325",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "328",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "330",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "332",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "333",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "335",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4 Series Gran Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5 Series Gran Turismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5.8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "501",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "502",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "503",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "507",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "518",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "520",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "523",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "524",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "525",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "528",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "529",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "530",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "535",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "538",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "540",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "545",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "550",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6 series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6 Series Gran Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "628",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "630",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "633",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "635",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "640",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "645",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "650",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "7 Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "700",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "725",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "728",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "729",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "730",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "732",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "735",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "740",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "745",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "748",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "760",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "840",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "845",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "854",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "856",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ActiveHybrid 3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ActiveHybrid 5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ActiveHybrid 7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alpina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ALPINA B6 Gran Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ALPINA B7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Breyton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Compact",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dinan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Formula FB02",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Formula One",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FW 27",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Isetta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Just 4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Karmann Asso di Quadri",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "L7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LMR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M28i",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M6 Gran Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini ACV 30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MM Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pickster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Touring",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Turbo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Veritas Rennsportwagen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X Activity",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X5 M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X6 M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z18",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z22",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z9",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z9 Gran Turismo Convertible",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "bugatti",
+    "nome": "Bugatti",
+    "modelli": [
+      {
+        "nome": "251",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chiron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 110",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 112",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 118",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 18-3 Chiron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 18-4 Veyron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EB 218",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ID 90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type 101",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type 68",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type 73",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Veyron",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "buick",
+    "nome": "Buick",
+    "modelli": [
+      {
+        "nome": "40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Blackhawk",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Centieme",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Centurion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Century",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cielo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Electra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Enclave",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Encore",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Estate",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Invicta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LaCrosse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LeSabre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lucerne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Park Avenue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rainier",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Reatta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Regal",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rendezvous",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Riviera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadmaster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Signia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Skyhawk",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Skylark",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terraza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Verano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wildcat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XP2000",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "cadillac",
+    "nome": "Cadillac",
+    "modelli": [
+      {
+        "nome": "60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "61",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "62",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6239D",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Allante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ATS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ATS Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aurora",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Biarritz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "BLS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brougham",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Calais",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Catera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cimarron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS-V Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CTS-V Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DeVille",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eldorado",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ELR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Escalade",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Escalade ESV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fleetwood",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Imaj",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Le Mans",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LMP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Park Avenue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Seville",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sixty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Solitaire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SRX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "STS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "STS-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V Sixteen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vizon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XLR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XTS ",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "caterham",
+    "nome": "Caterham",
+    "modelli": [
+      {
+        "nome": "1700",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "21",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Beaulieu",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C21",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Seven",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super 7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Superlight R",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "checker",
+    "nome": "Checker",
+    "modelli": [
+      {
+        "nome": "Aerobus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Town",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "chevrolet",
+    "nome": "Chevrolet",
+    "modelli": [
+      {
+        "nome": "2103",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Adventure",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aerovette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "APV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Astro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Astrovette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avalanche",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aveo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bel Air",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Beretta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Biscayne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Blazer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Camaro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caprice",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Captiva",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cavalier",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Celebrity",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Celta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chevelle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chevette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cheyenne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Citation",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Citation II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "City Express",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cobalt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Colorado",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Comodoro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corsica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corvair",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corvette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corvette Stingray",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cruze",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DeLuxe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DeVille",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "El Camino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Epica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Equinox",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Evanda",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Express",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Express Cargo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Blazer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Half-Ton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HHR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Impala",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Intimidator",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Journey",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K-20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kalos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kodiak",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lacetti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lumina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Malibu",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Matiz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Metro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Monte Carlo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Monza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nomad",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nova",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nubira",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Optra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Orlando",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pickup",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prizm",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Relsamo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rezzo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S-10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sabia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silverado",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silverado 1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silverado 2500HD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silverado 3500HD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spark",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spark EV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sprint",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SSR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Suburban",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tahoe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tandem 2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tracker",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trailblazer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trans Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Traverse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trax",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Triax",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Uplander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vega",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Venture",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vivant",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Volt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XP 882",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XP 897 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XP 898",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "chrysler",
+    "nome": "Chrysler",
+    "modelli": [
+      {
+        "nome": "160",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1609",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1610",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "200 CONVERTIBLE",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Airflite",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aspen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Atlantic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avenger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aviat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CCV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Centura",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Charger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chronos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cirrus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concorde",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Conquest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cordoba",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crossfire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dart",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Daytona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Delta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dodge 3700",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dodge Phoenix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ES",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ESX 3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Executive",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Expresso",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Voyager",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Howler",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Imperial",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Java",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Le Baron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LHS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Limousine",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Millenium",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Neon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "New Yorker",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Newport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pacifica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Panel Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Phaeton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PT Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PT Dream Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sebring",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Thunderbolt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Town & Country",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Town and Country",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Valiant",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Viper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Voyager",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Windsor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ypsilon",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "daewoo",
+    "nome": "Daewoo",
+    "modelli": [
+      {
+        "nome": "Arcadia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brougham",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chairman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Espero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Evanda",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Joyster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kalos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Korando",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lacetti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lanos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Leganza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maepsy-Na",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magnus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Matiz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Musiro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Musson",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nexia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "No 1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nubira",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prince",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rexton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rezzo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tacuma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tocsa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vada",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "daimler",
+    "nome": "Daimler",
+    "modelli": [
+      {
+        "nome": "4.2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Conquest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DE 27",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DE 36",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "One-O-Four",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super Eight",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "datsun",
+    "nome": "Datsun",
+    "modelli": [
+      {
+        "nome": "1000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "100A Cherry",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "240Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "260Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "280",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "280Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laurel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Violet",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "de_tomaso",
+    "nome": "De Tomaso",
+    "modelli": [
+      {
+        "nome": "Bigua",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Deauville",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Guara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Longchamp",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mangusta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pantera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vallelunga",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "dodge",
+    "nome": "Dodge",
+    "modelli": [
+      {
+        "nome": "600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aspen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avenger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caliber",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caravan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Challenger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Charger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Charger RT Concept",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Colt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Conquest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Copperhead",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coronet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Custom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dakota",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dart",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Daytona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Durango",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dynasty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Caravan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hemi Super 8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Intrepid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Journey",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kahuna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lancer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M80",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magnum",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maxx Cab",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mirada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Monaco",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Neon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nitro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Omni",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Polara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Power Box",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prowler",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ram",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Razor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shadow",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sidewinder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spirit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sprinter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SRT Viper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stealth",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stratus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T-Rex 6x6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Venom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Viper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "WC 51",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "eagle",
+    "nome": "Eagle",
+    "modelli": [
+      {
+        "nome": "Summit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Talon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vision",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "ferrari",
+    "nome": "Ferrari",
+    "modelli": [
+      {
+        "nome": "125",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "125 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "125S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "126",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "156",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "158",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "159S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "166",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "195",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "196",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "206",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "208",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "212",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "225",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "246",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 GTE",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 GTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 LM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 Mille Miglia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250 Testarossa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "255 S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "256 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "275",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "288 GTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "306",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "308",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "312",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "328 GTB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "328 GTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "330",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "330GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 America",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 Mexico",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 MM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 Spider",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "342 America",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "348",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "348 TS Targa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "355 Spider",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "355 TS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "360",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 BB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 California",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GT4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GTB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GTC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GTC 4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "365 GTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "375 America",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "375 Indy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "375 Mille Miglia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "400 Superamerica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "410 Superamerica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "412 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "412 MI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "412 T2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "456",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "456M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "458",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "458 Italia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500 F2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500 Mondial",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500 Superfast",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500 Testarossa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 BB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 BBi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 BBi Turbo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "512 TR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "550",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "553 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "553 F2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "575 Superamerica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "575M Maranello",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "599",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "599 GTB Fiorano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "612",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "612 Scaglietti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "625 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "735",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "801 F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C62",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "California",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "D 50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Enzo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F 2005",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 156",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 86",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 88",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 89",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 93",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F310",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F333",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F355",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F399",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F430",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F512 M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F55",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F550",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FF",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FF HELE",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "KS 360 Modena",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maranello",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mondial",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mythos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pinin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rossa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Superamerica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Testarossa",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "fiat",
+    "nome": "Fiat",
+    "modelli": [
+      {
+        "nome": "1100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "124",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "125",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "126",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "127",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "128",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "130",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "131",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "132",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "133",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1900",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500e",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500L",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "8V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Abarth",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Albea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Argenta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Armadillo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Barchetta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Berline",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brava",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bravo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cabriolet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Campagnola",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cinquecento",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Croma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Doblo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ducato",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Duna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ecobasic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ecobasis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ESV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fiorino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Freemont",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Break",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grande Punto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Idea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Legram",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Linea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marea Weekend",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mirafiori",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Multipla",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "OT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Palio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Palio II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Panda",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Punto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Regata",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ritmo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Scudo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedici",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Seicento",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Siena",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stilo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Strada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tempra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ulysse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Uno",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vivace",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X1-9",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "fisker",
+    "nome": "Fisker",
+    "modelli": [
+      {
+        "nome": "Karma",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "ford",
+    "nome": "Ford",
+    "modelli": [
+      {
+        "nome": "021 C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "12 M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "17",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "17M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "24.7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "427",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "49",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aerostar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Anglia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Artic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aspire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bantam",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bronco",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bronco II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C 100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-MAX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-Max Energi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-Max Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Capri",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Consul",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Contour",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corsair",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cortina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cougar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Courier",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crestline",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crown Victoria",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Custom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Desert Excursion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-150",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "e-Ka",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-Series",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-Series Van",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-Series Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Econoline",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Econovan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ecosport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Edge",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Equator",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Escape",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Escort",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Excursion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Expedition",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Explorer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Extreme EX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-150",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-250 Super Duty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-350 Super Duty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-450",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-450 Super Duty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-650",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fairlane",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Falcon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Festiva",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fiesta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Five Hundred",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Flex",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Focus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Focus ST",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FPV BF GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Freestar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Freestyle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fusion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fusion Energi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fusion Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Galaxie",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Galaxy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gran Torino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Granada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT 40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT 500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT 70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Husky",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ikon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Indigo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ka",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kuga",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Libre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Limited",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lotus Cortina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LTD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lynx",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maverick",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Megastar II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Meteor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Model U",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Monarch",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mondeo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mustang",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "O21 C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Orion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pilot",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Popular",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prefect",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Probe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Puma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ranchero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ranger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Royale",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RS 200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S-Max",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Saetta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Scorpio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shelby GR-1 Concept",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shelby GT 500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shelby GT500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sierra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Skyliner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ST 460",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Station Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Synergy 2010",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Taunus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Taurus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Taurus X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TE-50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Telstar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tempo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Territory",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Think",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Think Neighbor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Thunderbird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TL-50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tonka",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Torino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tracer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Transit Connect",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Transit Van",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Transit Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Triton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TS-50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Urban Explorer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vedette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Versailles",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Windstar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XR 8 Xplod",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Zephyr",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Zodiac",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "gmc",
+    "nome": "GMC",
+    "modelli": [
+      {
+        "nome": "Acadia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Autonomy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Canyon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Envoy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EV1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Firebird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jimmy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Safari",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Savana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sierra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sierra 1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sierra 2500HD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sierra 3500HD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonoma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Suburban",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terra 4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terracross",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terradyne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terrain",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Typhoon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Yukon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Yukon XL",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "honda",
+    "nome": "Honda",
+    "modelli": [
+      {
+        "nome": "1300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "145",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Accord",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Accord Crosstour",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Accord Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Accord Plug-In Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Acty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Argento Viva",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avancier",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ballade",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Capa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "City",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Civic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Civic Del Sol",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concerto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CR-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CR-Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crosstour",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CRX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Element",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FCX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FR-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fuya Jo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HP-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HR-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Insight",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Inspire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Integra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J-VX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jazz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lagreat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Legend",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Life",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Logo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mobilio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Model X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "N III",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NSX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Odyssey",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Passport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pilot",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prelude",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quintet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ridgeline",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S-MX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Saber",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shuttle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SSM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Step Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stream",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "That",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Today",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Torneo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vamos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "hudson",
+    "nome": "Hudson",
+    "modelli": [
+      {
+        "nome": "Commodore",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hornet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Italia Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Metropolitan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super Jet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super Wasp",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "hummer",
+    "nome": "Hummer",
+    "modelli": [
+      {
+        "nome": "H1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "H2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "H3",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "hyundai",
+    "nome": "Hyundai",
+    "modelli": [
+      {
+        "nome": "Accent",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Atos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Azera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Clix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dynasty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elantra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elantra GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Entourage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Equus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Euro 1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Excel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Galloper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Genesis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Genesis Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Getz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grandeur",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "H1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "H100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HCD-7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HCD-III",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HED-5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HED-6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "i10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "i20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "i30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "i40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ix20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ix35",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lantra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marcia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Matrix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Neos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Panel Van",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pony",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Portico",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Santa Fe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Santa Fe Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Satellite",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Scoupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonata",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonata Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stellar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terracan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tiburon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trajet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tucson",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Veloster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Veracruz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XG",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XG 300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XG 350",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "infiniti",
+    "nome": "Infiniti",
+    "modelli": [
+      {
+        "nome": "EX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G25",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G35",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G37",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I35",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IPL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "J30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "JX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q45",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q60 Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q60 Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX56",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "QX80",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "isuzu",
+    "nome": "Isuzu",
+    "modelli": [
+      {
+        "nome": "117",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3.1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Amigo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ascender",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Axiom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bellel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bellett",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "D-MAX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Florian",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Frontera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gemini",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hombre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I-280",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I-290",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I-350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Impulse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kai",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "KB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Minx",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "New Bellel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Piazza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rodeo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stylus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trooper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "VehiCross",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "VX-02",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "VX4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wizard",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZXS",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "italdesign",
+    "nome": "Italdesign",
+    "modelli": [
+      {
+        "nome": "Aspid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Buron",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Columbus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Formula 4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Legram",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Machimoto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Medusa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nazca",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tapiro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Twenty Twenty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Visconti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Volta",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "jaguar",
+    "nome": "Jaguar",
+    "modelli": [
+      {
+        "nome": "220",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "240",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3.8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "420G",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concept Eight",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kensington",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark IV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK 10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK IV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK IX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK VII",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK VIII",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R-D6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S-Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sovereign",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type E",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type-C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vanden Plas",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X-300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X-Type",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XF",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJ-13",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJ220",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJ6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJ8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJR-11",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJR-15",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XJS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XK8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XKA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XKR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XS",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "jeep",
+    "nome": "Jeep",
+    "modelli": [
+      {
+        "nome": "Cherokee",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ2A",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ3A",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CJ7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Commander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Compass",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dakar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Cherokee",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Cherokee SRT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Wagoneer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Icon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jeepster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Liberty",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Patriot",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Renegade",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Station Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Varsity",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Willys",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Willys 2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wrangler",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "kia",
+    "nome": "Kia",
+    "modelli": [
+      {
+        "nome": "Amanti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avella",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Borrego",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brisa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cadenza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Capital",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carens",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carnival",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cee'd",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cerato",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Clarus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Forte",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Joice",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K2700",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K900",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "KCV-4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magentis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Opirus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Optima",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Optima Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Picanto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Potentia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pregio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pride Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pro-ceed",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Retona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rondo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sephia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sephia II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shuma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shuma II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sorento",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Soul",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Soul EV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spectra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spectra5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sportage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Towner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Venga",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Visto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Xedos",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "koenigsegg",
+    "nome": "Koenigsegg",
+    "modelli": [
+      {
+        "nome": "Agera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CC8S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CCR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CCX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CCXR",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "lamborghini",
+    "nome": "Lamborghini",
+    "modelli": [
+      {
+        "nome": "350 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aventador",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bravo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cala",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concept S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Countach",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Diablo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Espada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Flying Star",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gallardo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Huracan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Islero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jalpa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jarama",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LM002",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marco Polo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marzal",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Miura",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Murcielago",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P140",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Portofino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Project P140",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Urraco",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "land_rover",
+    "nome": "Land Rover",
+    "modelli": [
+      {
+        "nome": "109",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "88",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A 109",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ALL-NEW Range Rover",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Defender",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Discovery",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Discovery 3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Freelander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "I",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LR2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LR3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LR4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Range Rover",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Range Rover Evoque",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Range Rover Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Serie I",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Serie II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Serie III",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "lexus",
+    "nome": "Lexus",
+    "modelli": [
+      {
+        "nome": "CT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CT 200h",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Daytona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ES",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ES 300h",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ES 350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FLV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GS 350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GS 450h",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GX 460",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS 250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS 250 C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS 350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS 350 C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "IS F",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LF-C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LFA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LS 460",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LS 600h L",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LX 570",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Minority Report",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NX 200t",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NX 300h",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RC 350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RC F",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX 350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX 450h",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SC",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "lincoln",
+    "nome": "Lincoln",
+    "modelli": [
+      {
+        "nome": "Aviator",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Blackwood",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Capri",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Continental",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark 7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark LT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark VI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark VII",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark VIII",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK 9",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MKC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MKS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MKT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MKX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MKZ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Navigator",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Premiere",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sentinel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Town Car",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Zephyr",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "lotec",
+    "nome": "Lotec",
+    "modelli": [
+      {
+        "nome": "C 1000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sirius",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Testa de Oro",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "lotus",
+    "nome": "Lotus",
+    "modelli": [
+      {
+        "nome": "11",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "16",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "25",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "33",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "340 R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "49",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "72",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "79",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carlton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eclat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elise",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Elite",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Emme",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Esprit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Etna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Europa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Evora",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Excel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Exige",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Extreme",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT 1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Seven",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XI Le Mans",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "marcos",
+    "nome": "Marcos",
+    "modelli": [
+      {
+        "nome": "1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2 Litres",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Le Mans 500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mantara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mantis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mantula",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Marcos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TS500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TSO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ugly Duckling",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "maserati",
+    "nome": "Maserati",
+    "modelli": [
+      {
+        "nome": "124",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "150S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "151",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "228",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3200 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "350S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "420",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "420M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "430",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "450",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4CL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4CLT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5000 GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "8CL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "8CLT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A6G",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A6GCM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A6GCS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Auge",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Barchetta Straale",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bi Turbo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Boomerang",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bora",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ghibli",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gran Turismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gran Turismo 3500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GranSport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GranTurismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GranTurismo Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT 3500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Indy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Khamsin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kubang",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kyalami",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MC12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Merak",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mexico",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mistral",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quattroporte",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Royale",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shamal",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Simun",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spider 3500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spyder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipo 60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipo 61",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipo 64",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tipo 65",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V8 GranSport",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "maybach",
+    "nome": "Maybach",
+    "modelli": [
+      {
+        "nome": "57",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "62",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Landaulet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SW",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mazda",
+    "nome": "Mazda",
+    "modelli": [
+      {
+        "nome": "1000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "110 S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "121",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "323",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "616",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "626",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "787",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "818",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "929",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Activehicle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Atenza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AZ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AZ-1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B2300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B2500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B3000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B4000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brown Collection Verisa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "BT-50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carol",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cosmo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CU-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CX-05",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CX-09",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CX-5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CX-7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CX-9",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Demio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Drifter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DrifterX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Etude",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eunos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Familia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kusabi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lantis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laputa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Levante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Luce",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marathon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MAZDA2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MAZDA3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mazda5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MAZDA6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MazdaSpeed3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MazdaSpeed6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Midge",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Millenia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montrose",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MPV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MS-6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MS-8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MS-9",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MX-3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MX-5 Miata",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MX-6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MX-Flexa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Persona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Premacy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Protege",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R 360",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R-100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rustler",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX 4 Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX Evolv",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-01",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RX-Evolv",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sentia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SPEED3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spiano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sport Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SW-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tribute",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Washu",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Xedos 9",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mcc",
+    "nome": "MCC",
+    "modelli": [
+      {
+        "nome": "Crossblade",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ForFour",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ForTwo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silverpulse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Smart",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Smart & Pulse City Coupe",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mclaren",
+    "nome": "McLaren",
+    "modelli": [
+      {
+        "nome": "650S Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "650S Spider",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 GTR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1 LM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M14",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M19",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M1C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M21",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M23",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M8E",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MP4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MP4-12C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P1",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mercedes-benz",
+    "nome": "Mercedes-Benz",
+    "modelli": [
+      {
+        "nome": "170 V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "170S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "180",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "190",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "219",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "220",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "230",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "230.4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "240",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "250",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "260",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "280",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300D",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "320",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "350",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "380",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "420",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "450",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "560",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "770",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bionic Car Concept",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C 111",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C 112",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CL-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLA-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLK GTR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLK LM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CLS-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CW",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E420",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F300 Life Jet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GL-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GLA-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GLK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GLK-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MCC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ML",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ponton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SE",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SL-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLK-Class",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLR McLaren",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLS AMG GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SLS AMG GT Final Edition",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Smart",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sprinter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Studie",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Swatch",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T V-12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vaneo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Version Longue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Viano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vision",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vito",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W 110",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W 111",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W 123 Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W 136",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W 196",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mercury",
+    "nome": "Mercury",
+    "modelli": [
+      {
+        "nome": "Antser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brougham",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Capri",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Comet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cougar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cyclone",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "El Gato",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Marquis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LN7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lynx",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Marauder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mariner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MC4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Milan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montclair",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montego",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Monterey",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mountaineer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mystique",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Park Lane",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sable",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tracer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Villager",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mg",
+    "nome": "MG",
+    "modelli": [
+      {
+        "nome": "1100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EX-E",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magnett",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MGA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MGB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MGC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Midget",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rover",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RV8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TF",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X80",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XPower",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "YB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ZT-T",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mini",
+    "nome": "Mini",
+    "modelli": [
+      {
+        "nome": "Clubman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper Clubman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper Countryman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper Paceman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cooper Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Countryman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK I",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK III",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK IV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK VI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MK VII",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "One",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "mitsubishi",
+    "nome": "Mitsubishi",
+    "modelli": [
+      {
+        "nome": "3000GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "A10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ASX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carisma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Celeste",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Challenger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Colt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Debonair",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Delica Space Gear",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Diamante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dingo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eclipse",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "eK",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Endeavor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Field Guard",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Galant",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gaus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grandis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HSR-V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "i-MiEV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jeep",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "L 200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lancer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lancer Evolution",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lancer Sportback",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Minica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mirage",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mum 500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Nessie",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Outlander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Outlander Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pajero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Proudia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Raider",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RPM 7000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RVR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sapporo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shogun",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Shogun Pinin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sigma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Space Liner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Space Runner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Space Star",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Space Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SSS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SST",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SSU",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Starion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SUP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SUW",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Valley",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Verada",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "moretti",
+    "nome": "Moretti",
+    "modelli": [
+      {
+        "nome": "1100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "127",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750S Berlina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Golden",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "La Cita",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Panoramica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spider Turismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SS",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "morgan",
+    "nome": "Morgan",
+    "modelli": [
+      {
+        "nome": "4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4 Plus 2100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4 Seater",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "44",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aero 8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aeromax",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F Super",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Plus 4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Plus 4 Plus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Plus 8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "nissan",
+    "nome": "Nissan",
+    "modelli": [
+      {
+        "nome": "100 NX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "110",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "200 SX Silvia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "211",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "240 C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "260 ZX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "270 R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "300 ZX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "350Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "370Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "400 R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AA-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Almera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alpha",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Altima",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Armada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avenir",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AXY",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AZ-1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bluebird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C 52",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cedric",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cefiro",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chappo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cherry",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cima",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Commercial",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CQ-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crew",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cube",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DS-2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "E20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "El Grand",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fairlady",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Frontier",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fusion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gloria",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Livina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT-R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hardbody",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HyperMini",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ideo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Interstar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Juke",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lafesta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laurel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Leaf",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Leopard",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Livina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Maxima",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Micra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mid4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MM",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Moco",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Murano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Murano CrossCabriolet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Navara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Note",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NP300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "NV200",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pathfinder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Patrol",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pickup",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pintara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pixo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Platina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prairie",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Presea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "President",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Primera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pulsar",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Qashqai",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R 390 GT1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R 391",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rasheen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rogue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Santana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sentra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Serena",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silvia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Skyline",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sports",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stagea",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stanza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sunny",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SUT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terrano",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Terrano II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tiida",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Titan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trailrunner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vanette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Versa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Versa Note",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Violet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X-Trail",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Xterra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XVL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Z",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Zaroot",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "noble",
+    "nome": "Noble",
+    "modelli": [
+      {
+        "nome": "M10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "M14",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "oldsmobile",
+    "nome": "Oldsmobile",
+    "modelli": [
+      {
+        "nome": "442",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "442 Indy Pace Car",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "66",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "88",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "98",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Achieva",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aerotech",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Anthem",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aurora",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bravada",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Custom Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cutlass",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Delta 88",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eighty-Eight",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Incas",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Intrigue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jetfire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LSS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ninety-Eight",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "O4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Omega",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Profile",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Recon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silhouette",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Starfire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Toronado",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trofeo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vista Cruiser",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "packard",
+    "nome": "Packard",
+    "modelli": [
+      {
+        "nome": "12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carribean",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Patrician",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "pagani",
+    "nome": "Pagani",
+    "modelli": [
+      {
+        "nome": "Huayra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Zonda",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "panoz",
+    "nome": "Panoz",
+    "modelli": [
+      {
+        "nome": "AIV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Esperante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Q9",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "plymouth",
+    "nome": "Plymouth",
+    "modelli": [
+      {
+        "nome": "Acclaim",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Barracuda",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Belvedere",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Breeze",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cambridge",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caravelle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Colt",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fury",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gran Fury",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Horizon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Laser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Neon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pronto Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pronto Spyder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prowler",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Reliant",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Road Runner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sundance",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Superbird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trail Duster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Turismo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Valiant",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "VIP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Volare",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Voyager",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "pontiac",
+    "nome": "Pontiac",
+    "modelli": [
+      {
+        "nome": "1000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "6000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aztek",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Banshee",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bonneville",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Catalina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fiero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Firebird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Firehawk",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GPX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Am",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Prix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Safari",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grande Parisienne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTO",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lemans",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Montana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Phoenix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Piranha",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rageous",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Salsa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Solstice",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Star Chief",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stinger",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sunbird",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sunfire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SV 6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tempest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Torrent",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trans Am",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Trans Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ventura",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ventura II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vibe",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "porsche",
+    "nome": "Porsche",
+    "modelli": [
+      {
+        "nome": "1300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "3400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "356",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "550 A",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "718",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "804",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "904",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "906",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "907",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "908",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "910",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "911",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "912",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "914",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "917",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "918 Spyder",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "924",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "928",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "930",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "935",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "936",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "944",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "959",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "962",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "964",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "965",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "968",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "993",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "996",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Boxster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Boxter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carrera GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cayenne",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cayman",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Karisma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kremer 935 K3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Macan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mega Cabriolet Biturbo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pan Americana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Panamera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RGT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tapiro",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "rolls-royce",
+    "nome": "Rolls-Royce",
+    "modelli": [
+      {
+        "nome": "100",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Camargue",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corniche",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ghost",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ghost Series II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Park Ward",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Phantom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Phantom Drophead Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Cloud",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Cloud II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Dawn",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Seraph",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Shadow",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Spirit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Spirit II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Spur",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Wraith",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wraith",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "saab",
+    "nome": "Saab",
+    "modelli": [
+      {
+        "nome": "3-Sep",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "5-Sep",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "750",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "9-2x",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "9-4X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "9-7X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "9-X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "900",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "9000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "900i",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "92",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "92B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "93",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "94",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "95",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "96",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "99",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonett",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonett II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sonett III",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "saleen",
+    "nome": "Saleen",
+    "modelli": [
+      {
+        "nome": "S7",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "saturn",
+    "nome": "Saturn",
+    "modelli": [
+      {
+        "nome": "Astra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aura",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Curve",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ION",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "L",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LW",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Outlook",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Relay",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sky",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sports Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vue",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "scion",
+    "nome": "Scion",
+    "modelli": [
+      {
+        "nome": "FR-S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FR-S Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "iQ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T2B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "tC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "xA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "xB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "xD",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "smart",
+    "nome": "Smart",
+    "modelli": [
+      {
+        "nome": "Brabus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cabrio Passion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ForFour",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ForTwo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ultimate 112",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "spyker",
+    "nome": "Spyker",
+    "modelli": [
+      {
+        "nome": "C8",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "ssc",
+    "nome": "SSC",
+    "modelli": [
+      {
+        "nome": "Aero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tuatara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ultimate Aero",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "studebaker",
+    "nome": "Studebaker",
+    "modelli": [
+      {
+        "nome": "Avanti",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Champion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Commander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "President State",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Silver Hawk",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sky Hawk",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "subaru",
+    "nome": "Subaru",
+    "modelli": [
+      {
+        "nome": "1.8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1400",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "360",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alfa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "B9 Tribeca",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Baja",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "BRZ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coupe",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "DL",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FF-1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Forester",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "G3X",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HM-01",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Impreza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Impreza WRX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Justy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K 111",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Legacy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Leone",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mini Jumbo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Outback",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Outback Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pleo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R-2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "R2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rex",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "STX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SVX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Traviq",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tribeca",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vivio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "WRX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "WX 01",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XV Crosstrek",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "suzuki",
+    "nome": "Suzuki",
+    "modelli": [
+      {
+        "nome": "Aerio",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Alto",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Baleno",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cappuccino",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cervo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Covie",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Equator",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Escudo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Esteem",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "EV Sport",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Forenza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fronte",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Grand Vitara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GSX R4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ignis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jimny",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kizashi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lapin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Liana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Light",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LJ 20",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LJ 50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Reno",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Samurai",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SC 100 GX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sea Forenza Wagon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sidekick",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SJ 410",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SJ 413",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Splash",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Swift",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SX4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Twin",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Verona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vitara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wagon R+",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XL6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XL7",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "tesla",
+    "nome": "Tesla",
+    "modelli": [
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "toyota",
+    "nome": "Toyota",
+    "modelli": [
+      {
+        "nome": "1000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "105",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2000GT",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "4Runner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Allion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Altezza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aristo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ateva",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Auris",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avalon",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avalon Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avanza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Avensis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aygo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bandeirante",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "BB",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Blizzard",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Brevis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caldina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Camry",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Camry Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Carina",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caserta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Celica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Celsior",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Century",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Chaser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Coaster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Condor",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Conquest",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corolla",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corona",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corsa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cressida",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cresta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Crown",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dyna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Echo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "ES 3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "F-1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FCHV 5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FJ Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fortuner",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "FXS",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT1",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hi-Ace",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Highlander",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Highlander Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hilux",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "HMV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ipsum",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "iQ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Land Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lexcen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lite Ace",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mark II",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Master RR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Matrix",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mega Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Model F",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MR-S",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MR2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "MRJ",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Opa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Paseo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Picnic",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pod",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Previa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prius",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prius C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prius Plug-in",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Prius V",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Progress NC 300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Publica",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quantum",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Ractis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RAV4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RAV4 EV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Retro Cruiser",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RSC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RunX",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SA",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sequoia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sera",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sienna",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Soarer",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Solara",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sparky",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sport 800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sprinter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stallion",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Starlet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Super",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Supra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tacoma",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tazz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tercel",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tundra",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Venture",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Venza",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Verossa",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vitz",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Will",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Windom",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XYR",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Yaris",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "triumph",
+    "nome": "Triumph",
+    "modelli": [
+      {
+        "nome": "10 Break",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1300",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2.5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "2000",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Acclaim",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dolomite",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dove GTR4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GT6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Herald",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Mayflower",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Renown",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Roadster",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Spitfire",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Stag",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Toledo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR3",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR4",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR6",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR7",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "TR8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vitesse",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "vector",
+    "nome": "Vector",
+    "modelli": [
+      {
+        "nome": "M12",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "RD 180",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Wiegert",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "volkswagen",
+    "nome": "Volkswagen",
+    "modelli": [
+      {
+        "nome": "1 Litre",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1302",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1303",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1500",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "181",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "411",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "AAC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Beetle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Beetle Convertible",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Bora",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Cabriolet",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caddy",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Caravelle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "CC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Citi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Commercial",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concept C",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Concept T",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Corrado",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Derby",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "e-Golf",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Eurovan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fox",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Fusca",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GLI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Gol",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Golf",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Golf GTI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Golf R",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Golf SportWagen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTD",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "GTI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hac",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Iltis",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jetta",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jetta GLI",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jetta Hybrid",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jetta SportWagen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "K 70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Karmann-Ghia",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Kombi",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "LT 35 HR Panel Van",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Lupo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Magellan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Microbus",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Multivan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "New Beetle",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Parati",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Passat",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Phaeton",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Pickup",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Polo",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Quantum",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rabbit",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Routan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Santana",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Schwimmwagen",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Scirocco",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sedan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sharan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SP",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SP2",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "T5",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Tiguan",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Touareg",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Touran",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Transporter",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Type 3 Squareback",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "up",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Vento",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "W12",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "volvo",
+    "nome": "Volvo",
+    "modelli": [
+      {
+        "nome": "120",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "122",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "140",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "144",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "145",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "164",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "220",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "240",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "242",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "244",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "245",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "260",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "264",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "265",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "343",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "360",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "440",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "460",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "480",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "66",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "740",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "760",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "780",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "850",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "940",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "960",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C30",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "C70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Duett",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Hatric",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P 1800",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P 1900",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "P 210 Duett",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PV",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PV 544 1.8",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PV 60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "PV 801-10",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S80",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "S90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "SCC",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V40",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V50",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V60 Cross Country",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "V90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "X670",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XC60",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XC70",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "XC90",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "YCC",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "wartburg",
+    "nome": "Wartburg",
+    "modelli": [
+      {
+        "nome": "1.3 l Tourist",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "311",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "312",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "353",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Sports Convertible",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "willys-overland",
+    "nome": "Willys-Overland",
+    "modelli": [
+      {
+        "nome": "Aero",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Aero-Willys 2600",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Dauphine",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Interlagos",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Jeep",
+        "tipo": "Altro"
+      },
+      {
+        "nome": "Rural",
+        "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "zenvo",
+    "nome": "Zenvo",
+    "modelli": [
+      {
+        "nome": "ST1",
+        "tipo": "Altro"
+      }
+    ]
+  }
+]

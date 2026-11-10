@@ -14,6 +14,12 @@ veicoloRouter.use(authMiddleware);
 /* =======================================================
    HELPERS
 ======================================================= */
+const validateCapacity = (body) => {
+    const category = String(body.tipo ?? '').trim().toLowerCase();
+    const max = category === 'bus' ? 150 : category === 'minibus' ? 35 : 9;
+    const seats = Number(body.posti_totali ?? 1);
+    if (!Number.isInteger(seats) || seats < 1 || seats > max) throw new Error('Numero di posti non compatibile con il tipo di veicolo.');
+};
 const normalizeInput = (b = {}) => ({
     marca: b.marca?.trim() || null,
     modello: b.modello?.trim() || null,
@@ -105,6 +111,7 @@ veicoloRouter.get('/', async (req, res) => {
 // CREATE Veicolo
 veicoloRouter.post('/', async (req, res) => {
     try {
+        validateCapacity(req.body);
         const d = normalizeInput(req.body);
         const query = `
             INSERT INTO veicolo (driver_id, marca, modello, posti_totali, raggio_km, targa, servizi, tipo, anno, coord, localita, image_url, numero_licenza_ncc, comune_licenza)
@@ -132,6 +139,7 @@ veicoloRouter.post('/', async (req, res) => {
 // UPDATE Veicolo
 veicoloRouter.put('/:id', async (req, res) => {
     try {
+        validateCapacity(req.body);
         const d = normalizeInput(req.body);
         
         console.log("🛠️ [Backend UPDATE] Dati normalizzati ricevuti:", { lat: d.lat, lon: d.lon, localita: d.localita });

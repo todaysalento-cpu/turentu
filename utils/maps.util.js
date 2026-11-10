@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { reservePixelRoutingRequest } from './pixel-routing-budget.js';
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -40,6 +41,8 @@ export async function getRouteGeometry(origine, destinazione, {
   const d = normalizeCoord(destinazione);
 
   if (!o || !d) throw new Error("Coordinate non valide");
+
+  reservePixelRoutingRequest();
 
   const url = `https://maps.googleapis.com/maps/api/directions/json` +
     `?origin=${o.lat},${o.lon}` +

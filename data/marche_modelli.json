@@ -5230,6 +5230,32 @@
     ]
   },
   {
+    "id": "irizar",
+    "nome": "Irizar",
+    "modelli": [
+      {
+        "nome": "i3",
+        "tipo": "bus"
+      },
+      {
+        "nome": "i4",
+        "tipo": "bus"
+      },
+      {
+        "nome": "i6",
+        "tipo": "bus"
+      },
+      {
+        "nome": "i6S",
+        "tipo": "bus"
+      },
+      {
+        "nome": "i8",
+        "tipo": "bus"
+      }
+    ]
+  },
+  {
     "id": "isuzu",
     "nome": "Isuzu",
     "modelli": [
@@ -5410,6 +5436,44 @@
       {
         "nome": "Volta",
         "tipo": "Altro"
+      }
+    ]
+  },
+  {
+    "id": "iveco-bus",
+    "nome": "IVECO BUS",
+    "modelli": [
+      {
+        "nome": "Crossway",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Crossway LE",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Daily Minibus",
+        "tipo": "minibus"
+      },
+      {
+        "nome": "E-Way",
+        "tipo": "bus"
+      },
+      {
+        "nome": "E-Way H2",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Evadys",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Streetway",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Urbanway",
+        "tipo": "bus"
       }
     ]
   },
@@ -6462,6 +6526,32 @@
     ]
   },
   {
+    "id": "man",
+    "nome": "MAN",
+    "modelli": [
+      {
+        "nome": "Lion's City",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Lion's Coach",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Lion's Intercity",
+        "tipo": "bus"
+      },
+      {
+        "nome": "Lion's Intercity LE",
+        "tipo": "bus"
+      },
+      {
+        "nome": "TGE Minibus",
+        "tipo": "minibus"
+      }
+    ]
+  },
+  {
     "id": "marcos",
     "nome": "Marcos",
     "modelli": [
@@ -7438,6 +7528,14 @@
         "tipo": "Altro"
       },
       {
+        "nome": "eCitaro",
+        "tipo": "bus"
+      },
+      {
+        "nome": "eIntouro",
+        "tipo": "bus"
+      },
+      {
         "nome": "F200",
         "tipo": "Altro"
       },
@@ -7472,6 +7570,10 @@
       {
         "nome": "GLK-Class",
         "tipo": "Altro"
+      },
+      {
+        "nome": "Intouro",
+        "tipo": "bus"
       },
       {
         "nome": "M",
@@ -7568,6 +7670,10 @@
       {
         "nome": "T V-12",
         "tipo": "Altro"
+      },
+      {
+        "nome": "Tourismo",
+        "tipo": "bus"
       },
       {
         "nome": "V",
@@ -9608,6 +9714,36 @@
     ]
   },
   {
+    "id": "setra",
+    "nome": "Setra",
+    "modelli": [
+      {
+        "nome": "S 511 HD",
+        "tipo": "bus"
+      },
+      {
+        "nome": "S 515 HD",
+        "tipo": "bus"
+      },
+      {
+        "nome": "S 516 HD",
+        "tipo": "bus"
+      },
+      {
+        "nome": "S 516 HD/2",
+        "tipo": "bus"
+      },
+      {
+        "nome": "S 517 HD",
+        "tipo": "bus"
+      },
+      {
+        "nome": "S 519 HD",
+        "tipo": "bus"
+      }
+    ]
+  },
+  {
     "id": "smart",
     "nome": "Smart",
     "modelli": [
@@ -11008,6 +11144,14 @@
       {
         "nome": "960",
         "tipo": "Altro"
+      },
+      {
+        "nome": "9700",
+        "tipo": "bus"
+      },
+      {
+        "nome": "9900",
+        "tipo": "bus"
       },
       {
         "nome": "C30",

@@ -6,6 +6,7 @@ import { pool } from '../db/db.js';
 import { v4 as uuidv4 } from 'uuid';
 import { upsertPrenotazione } from '../services/search/search.cache.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
+import { driverRequestCopy, clientRequestCreatedCopy } from '../services/notifications/ride-notification-copy.js';
 import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.validation.service.js'; 
 
 import { resolveConfirmationDeadline } from '../services/popbus/v2/confirmation-deadline.js';
@@ -418,7 +419,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         console.log(`📢 [NOTIFY_DRIVER:${requestId}] Invio notifica all'autista ID: ${driverId}`);
         await notifyUser(Number(driverId), {
           type: 'NEW_REQUEST',
-          message: `Hai ricevuto una nuova richiesta di prenotazione!`,
+          ...driverRequestCopy(savedRow, { popbus: isPopBus }),
           role: 'driver',
           data: { requestId, rowId: savedRow.id, type: sanitizedType, start_datetime: slot.start_datetime }
         });
@@ -435,7 +436,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`📢 [NOTIFY_CLIENT:${requestId}] Invio notifica di conferma al cliente ID: ${clienteId}`);
       await notifyUser(Number(clienteId), {
         type: 'REQUEST_CREATED',
-        message: `La tua richiesta è stata inviata correttamente`,
+        ...clientRequestCreatedCopy(savedRow, { popbus: isPopBus, paidWithWallet: pagatoConWallet }),
         role: 'cliente',
         data: { requestId, rowId: savedRow.id, type: sanitizedType, start_datetime: slot.start_datetime }
       });

@@ -9,6 +9,7 @@ import { assegnaConducente } from '../services/conducenti/assegnazioni.service.j
 import { upsertCorsa, upsertTratta } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
+import { clientRideAcceptedCopy } from '../services/notifications/ride-notification-copy.js';
 import {
   bloccaVeicoloPerAssegnazione,
   verificaTrasferimentiVeicolo
@@ -537,6 +538,7 @@ router.post('/:id/accetta', async (req, res) => {
         prenotazioneId = prenotazioneRes.rows[0]?.id;
       }
 
+      let prezzoConfermato = pRow.prezzo;
       // MODELLO A: controlli di coerenza economica prima di registrare il pagamento.
       // La prenotazione (anche se creata internamente da createCorsaFromPending)
       // deve aver già congelato il totale e ricalcolato tutte le quote.
@@ -593,6 +595,7 @@ router.post('/:id/accetta', async (req, res) => {
           error.code = 'NCC_MODEL_A_PAYMENT_INVALID';
           throw error;
         }
+        prezzoConfermato = dati.prezzo_totale;
         const pi = await stripe.paymentIntents.retrieve(String(pRow.payment_intent_id));
         if (pi.status !== 'requires_capture' || Number(pi.amount_capturable) < quotaCent ||
             Number(pi.amount) !== preventivoCent) {
@@ -646,7 +649,7 @@ router.post('/:id/accetta', async (req, res) => {
         [corsa.id, pRow.cliente_id, driverId]
       );
 
-      notificheDaInviare.push({ p: pRow, corsa, driverId, driverNome });
+      notificheDaInviare.push({ p: pRow, corsa, driverId, driverNome, prezzoConfermato });
     }
 
     await client.query('COMMIT');committed=true;
@@ -658,7 +661,7 @@ router.post('/:id/accetta', async (req, res) => {
     
     const io = getIO();
     for (const data of notificheDaInviare) {
-      const { p, corsa, driverId, driverNome } = data;
+      const { p, corsa, driverId, driverNome, prezzoConfermato } = data;
       upsertCorsa(corsa);CacheManager.corsa.update(corsa);
       const corsaCompleta = { ...corsa, corsa_id: corsa.id, veicolo_id: p.veicolo_id, pending_id: p.id, origine: { lat: p.origine_lat, lon: p.origine_lon }, destinazione: { lat: p.destinazione_lat, lon: p.destinazione_lon } };
       
@@ -668,7 +671,7 @@ router.post('/:id/accetta', async (req, res) => {
       
       await notifyUser(p.cliente_id, { 
         type: 'pending', 
-        message: `Il tuo viaggio è stato accettato da ${driverNome}`,
+        ...clientRideAcceptedCopy(p, { driverName: driverNome, rideId: corsa.id, confirmedPrice: prezzoConfermato }),
         role: 'cliente',
         data: { corsaId: corsa.id }
       });

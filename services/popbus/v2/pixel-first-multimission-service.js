@@ -16,6 +16,8 @@ import { valutaEconomiaCiclo } from './cycle-pricing.js';
 import { fingerprintRichiesta } from './request-fingerprint.js';
 import polyline from 'polyline';
 import { verificaPagamento } from './acceptance.js';
+import { assertPixelRoutingBudget } from '../../../utils/pixel-routing-budget.js';
+import { assertCanaryCycle, validateCanaryScope } from './popbus-canary-scope.js';
 import { preparaAlternativeFisicheFormazione } from './popbus-pixel-physical-candidates.service.js';
 import { preparaCandidatiFisiciMultimissione } from './popbus-physical-multimission-candidates.js';
 import { selezionaCicliFisiciShadow } from './popbus-physical-cycle-selector.js';
@@ -135,7 +137,7 @@ async function conflicts(client, vehicleId, start, end) {
 `, [vehicleId,new Date(start),new Date(end)]);
   return rows.length > 0;
 }
-async function candidates(client, now, opportunityIds = null, historicalPhysicalShadow = false) {
+async function candidates(client, now, opportunityIds = null, historicalPhysicalShadow = false, canary = null) {
   const contexts = await leggiContestiOpportunitaPixel({
     client,
     limit: limits.opportunita + 1,
@@ -161,7 +163,8 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
     JOIN LATERAL(SELECT MIN(euro_km) AS euro_km FROM tariffe
       WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0) t ON t.euro_km IS NOT NULL
     WHERE v.driver_id IS NOT NULL AND v.posti_totali>0
-      AND COALESCE(dv.coord,v.coord) IS NOT NULL ORDER BY v.id`);
+      AND COALESCE(dv.coord,v.coord) IS NOT NULL${canary ? ' AND v.id=$1 AND v.driver_id=$2' : ''} ORDER BY v.id`,
+    canary ? [canary.vehicleId, canary.operatorId] : []);
   // Una configurazione del turno per ogni veicolo resta una scelta diversa
   // per l'ottimizzazione: capienza/margine sono ricalcolati in transazione.
   if (vehicles.length > limits.veicoli) fail('limite veicoli raggiunto: niente troncamento');
@@ -674,8 +677,17 @@ export async function processaPixelFirstMultimissione({
   physicalShadowBridge = null,
   physicalShadowRouting = null,
   physicalOpportunityIds = null,
-  historicalPhysicalShadow = false
+  historicalPhysicalShadow = false,
+  canaryScope = null
 } = {}) {
+  const canary = canaryScope === null ? null : validateCanaryScope(canaryScope);
+  if (canary && (mode !== 'LIVE' || process.env.POPBUS_PIXEL_CANARY_APPROVED !== '1' ||
+      process.env.POPBUS_PIXEL_FIRST_ENABLED !== 'false' || process.env.POPBUS_WORKER_ENABLED !== 'false' ||
+      process.env.PIXEL_FIRST_PIPELINE_ENABLED !== '0' || process.env.POPBUS_PIXEL_FIRST_MODE !== 'ROLLBACK_ONLY' ||
+      process.env.POPBUS_PIXEL_OBSERVATION_ONCE_ALLOWED !== '0' ||
+      ['POPBUS_PIXEL_FIRST_LIVE_APPROVED','PIXEL_FIRST_PIPELINE_LIVE_APPROVED','PIXEL_OPERATIONAL_LIVE_APPROVED']
+        .some(key => process.env[key] !== '0')))
+    fail('canary non autorizzato o worker automatico attivo');
   if (physicalShadowRouting !== null && (typeof physicalShadowRouting !== 'function' ||
       !physicalShadow || mode !== 'ROLLBACK_ONLY' || physicalTransactionTest ||
       physicalPersistenceTest || rollbackTestHook !== null || historicalPhysicalShadow))
@@ -713,7 +725,7 @@ export async function processaPixelFirstMultimissione({
   if (!pool?.connect) fail('pool mancante');
   if (!['ROLLBACK_ONLY','LIVE'].includes(mode)) fail('modalita invalida');
   // Non confondere LIVE con un collaudo autorizzato: il flag e' opt-in esplicito.
-  if (mode==='LIVE' && (process.env.POPBUS_PIXEL_FIRST_LIVE_APPROVED!=='1' ||
+  if (mode==='LIVE' && ((!canary && process.env.POPBUS_PIXEL_FIRST_LIVE_APPROVED!=='1') ||
       process.env.POPBUS_MULTIMISSION_ACCEPTANCE_TEST!=='true' ||
       process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO==null))
     fail('LIVE bloccato: richiede approvazione e acceptance multimissione');
@@ -723,23 +735,49 @@ export async function processaPixelFirstMultimissione({
     fail('configurazione costi non valida');
   const nowMs=Number(now);
   if (!Number.isFinite(nowMs)) fail('timestamp invalido');
-  if (mode==='LIVE') await pulisciScadenzeLive(pool);
+  if (mode==='LIVE' && !canary) await pulisciScadenzeLive(pool);
+  let canaryRoutingBlocked = false;
+  const canaryRoutes = new Map();
+  const canaryDeadline = canary ? performance.now() + 30000 : null;
+  const routing = canary ? async (from,to) => {
+    const key = JSON.stringify([from.lat,from.lon,to.lat,to.lon]);
+    if (canaryRoutes.has(key)) return canaryRoutes.get(key);
+    if (canaryRoutes.size >= 8 || performance.now() >= canaryDeadline) {
+      canaryRoutingBlocked = true;
+      fail('canary budget routing esaurito');
+    }
+    const pending = movement(from,to).catch(error => {
+      canaryRoutingBlocked = true;
+      throw error;
+    });
+    canaryRoutes.set(key,pending);
+    return pending;
+  } : physicalShadowRouting;
   const reader=await pool.connect();
   let readTx=false, snapshot, chosen, cyclesCount=0, physicalResult=null, cicloFisicoLive=null;
   try {
     await reader.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
     readTx=true;
+    if (canary) {
+      const { rows } = await reader.query(
+        'SELECT 1 FROM popbus_attivazione_missioni WHERE pixel_opportunita_id = $1 LIMIT 1',
+        [canary.opportunityId]
+      );
+      if (rows.length) fail('opportunita canary gia utilizzata');
+    }
     snapshot = await candidates(
       reader,
       nowMs,
-      physicalShadow && physicalOpportunityIds !== null
+      canary ? [canary.opportunityId] : physicalShadow && physicalOpportunityIds !== null
         ? physicalOpportunityIds.map(Number)
         : null,
-    historicalPhysicalShadow
+      historicalPhysicalShadow,
+      canary
     );
-    if (physicalShadowRouting && physicalOpportunityIds !== null) {
+    const scopedIds = canary ? [canary.opportunityId] : physicalOpportunityIds;
+    if (routing && scopedIds !== null) {
       const found = new Set(snapshot.contexts.map(c=>Number(c.pixel_opportunita_id)));
-      if (found.size !== physicalOpportunityIds.length || physicalOpportunityIds.some(id=>!found.has(Number(id))) ||
+      if (found.size !== scopedIds.length || scopedIds.some(id=>!found.has(Number(id))) ||
           snapshot.contexts.some(c=>c.window.end<=nowMs || c.requests.some(r=>r.conferma_entro!=null && new Date(r.conferma_entro).getTime()<=nowMs)))
         fail('perimetro osservazione mancante o scaduto');
     }
@@ -775,7 +813,7 @@ export async function processaPixelFirstMultimissione({
         fisiche = await preparaCandidatiFisiciMultimissione({
           client: reader,
           snapshot,
-          ...(physicalShadowRouting ? {routing:physicalShadowRouting} : {}),
+          ...(routing ? {routing} : {}),
           riusaFermate: mode === 'ROLLBACK_ONLY' &&
             (process.env.POPBUS_SHADOW_STOP_CANDIDATES_CACHE ?? '1') === '1',
           maxTentativi: Number(mode === 'LIVE'
@@ -856,7 +894,7 @@ export async function processaPixelFirstMultimissione({
           candidati:fisiche.candidati,
           vehicles:[...veicoliUnici.values()],
           now:nowMs,
-          movement: physicalShadowRouting ?? movement,
+          movement: routing ?? movement,
           isAvailable:async(v,start,end)=>{
             if (indiceImpegni) await cediEventLoopShadow();
             return snapshot.vehicles.some(d=>
@@ -878,7 +916,11 @@ export async function processaPixelFirstMultimissione({
           },
           ...costi
         });
-        if (mode === 'LIVE') cicloFisicoLive = selezioneFisica.migliorCiclo;
+        if (mode === 'LIVE') {
+          if (canary && (canaryRoutingBlocked || selezioneFisica.diagnostica?.completo !== true))
+            fail('selezione canary incompleta');
+          cicloFisicoLive = selezioneFisica.migliorCiclo;
+        }
       }
       physicalResult = {
         modalita:mode,
@@ -946,16 +988,19 @@ export async function processaPixelFirstMultimissione({
     return {...physicalResult, testTransazionale};
   }
   if (mode === 'LIVE') {
+    assertPixelRoutingBudget();
     if (!cicloFisicoLive) return {modalita:mode,offerte:0,persistita:false,motivo:'nessun ciclo fisico V2 attivabile'};
+    if (canary) assertCanaryCycle(canary,cicloFisicoLive);
     const writerFisico = await pool.connect();
     let txFisica = false;
     try {
-      await writerFisico.query('BEGIN');
+      await writerFisico.query(canary ? 'BEGIN ISOLATION LEVEL READ COMMITTED' : 'BEGIN');
       txFisica = true;
        await writerFisico.query("SET LOCAL lock_timeout = '5s'");
        await writerFisico.query("SET LOCAL statement_timeout = '90s'");
       const result = await persistiCicloFisicoLiveInTransazioneV2({
         client:writerFisico, ciclo:cicloFisicoLive, now:Date.now(),
+        canaryScope:canary,
         costoAttesaOraEuro:Number(process.env.POPBUS_PIXEL_COSTO_ATTESA_ORA_EURO ?? 0),
         altriCostiEuro:Number(process.env.POPBUS_PIXEL_ALTRI_COSTI_EURO ?? 0),
         margineMinimoEuro:Number(process.env.POPBUS_PIXEL_MARGINE_MINIMO_EURO ?? 0)

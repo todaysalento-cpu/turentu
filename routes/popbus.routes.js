@@ -7,12 +7,30 @@ import { upsertCorsa } from '../services/search/search.cache.js';
 import { accettaAttivazione } from '../services/popbus/v2/acceptance.js';
 import { accettaOffertaPopbusAR } from '../services/popbus/v2/popbus-ar-orchestrator.service.js';
 
+import { notifyUser } from '../services/notifications/notification.service.js';
+import { clientRideAcceptedCopy } from '../services/notifications/ride-notification-copy.js';
+
 const router = express.Router();
 router.use(authMiddleware);
 
 function idPositivo(value) {
   const n = Number(value);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+async function notificaClientiPopbus(corsa) {
+  try {
+    const { rows } = await pool.query('SELECT * FROM richieste_pop_bus WHERE corsa_id=$1 AND stato=$2', [corsa.id, 'convertita']);
+    for (const request of rows) {
+      try {
+        await notifyUser(request.cliente_id, {
+          type: 'pending', role: 'cliente',
+          ...clientRideAcceptedCopy({ ...request, tipo_corsa: 'popbus' }, { rideId: corsa.id }),
+          data: { corsaId: corsa.id },
+        });
+      } catch (error) { console.error('[POPBUS CLIENT NOTIFICATION]', error.message); }
+    }
+  } catch (error) { console.error('[POPBUS CLIENT NOTIFICATIONS]', error.message); }
 }
 
 function pubblicaCorsa(corsa, operatoreId) {
@@ -130,7 +148,7 @@ router.post('/:offerta_id/accetta', async (req, res) => {
       // degli oggetti completi. Il retry non deve generare eventi duplicati.
       if (!risultato.giaConfermato && Array.isArray(risultato.corse)) {
         for (const item of risultato.corse) {
-          if (item?.corsa && idPositivo(item.corsa.id)) pubblicaCorsa(item.corsa, operatoreId);
+          if (item?.corsa && idPositivo(item.corsa.id)) { pubblicaCorsa(item.corsa, operatoreId); await notificaClientiPopbus(item.corsa); }
         }
       }
       return res.json({
@@ -151,7 +169,7 @@ router.post('/:offerta_id/accetta', async (req, res) => {
       const corsa = await accettaAttivazione(client, offertaId, operatoreId, req.body?.conducente ?? null);
       await client.query('COMMIT');
       tx = false;
-      if (!corsa.giaAccettata) pubblicaCorsa(corsa, operatoreId);
+      if (!corsa.giaAccettata) { pubblicaCorsa(corsa, operatoreId); await notificaClientiPopbus(corsa); }
       return res.json({ ok: true, corsa_id: corsa.id });
     } catch (e) {
       if (tx) {

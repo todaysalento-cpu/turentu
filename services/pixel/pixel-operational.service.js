@@ -11,6 +11,7 @@
 // Non esegue BEGIN, COMMIT, ROLLBACK o release().
 
 import { pool } from '../../db/db.js';
+import { assertPixelRoutingBudget } from '../../utils/pixel-routing-budget.js';
 import { costruisciBootstrapPixel } from './pixel.orchestrator.service.js';
 import { pubblicaOpportunitaPixel } from './pixel.persistence.service.js';
 
@@ -73,6 +74,7 @@ export async function eseguiPixelInTransazione({
     bufferMinuti,
     testRequestIds
   });
+  assertPixelRoutingBudget();
 
   check(
     engine.mutationQueueState().pending === 0,
@@ -175,6 +177,7 @@ export async function processaPixelOperativo({
       };
     }
 
+    assertPixelRoutingBudget();
     await client.query('COMMIT');
     transactionOpen = false;
 

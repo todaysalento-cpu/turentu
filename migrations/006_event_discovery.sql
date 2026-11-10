@@ -1,4 +1,5 @@
 BEGIN;
+SET LOCAL lock_timeout = '5s';
 
 CREATE TABLE public.event_discovery_settings (
   id boolean PRIMARY KEY DEFAULT true CHECK (id),

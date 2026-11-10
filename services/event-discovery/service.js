@@ -56,6 +56,11 @@ export function mobility(data, config) {
   return 'ordinaria';
 }
 
+function checkCatalogLengths(event) {
+  if ([...(event.category ?? '')].length > 50) fail('La categoria può contenere al massimo 50 caratteri');
+  if ([...(event.city ?? '')].length > 100) fail('Il comune può contenere al massimo 100 caratteri');
+}
+
 export async function transaction(client, action) {
   await client.query('BEGIN');
   try {
@@ -261,6 +266,7 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
       if (candidate.state !== 'pending' || input.version !== candidate.observed_at.toISOString()) fail('Il candidato è cambiato', 409);
       const data = input.action === 'approve' ? normalize({ ...candidate.data, ...input.data }, { timezone: 'Europe/Rome' }) : null;
       if (data) data.status = candidate.data.status;
+      if (data) checkCatalogLengths(data);
       const state = data ? 'approved' : 'rejected';
       const automatic = Boolean(data && !candidate.event_id && data.status === 'scheduled' && canWrite('publish', actor) &&
         input.autoPublish === true && automaticPublisher());
@@ -291,6 +297,7 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
       if (eventId) {
         if (!(await client.query('SELECT id FROM public.eventi WHERE id=$1 FOR KEY SHARE', [eventId])).rowCount) fail('Evento esistente non trovato', 404);
       } else {
+        checkCatalogLengths(event);
         if (!event.title || !event.category || !event.venue || !event.start?.includes('T') ||
             Date.parse(event.start) <= now().getTime() || (event.end && (!event.end.includes('T') || event.end < event.start))) {
           fail('Titolo, categoria, luogo e data futura con orario sono obbligatori. Verifica anche la data di fine');
@@ -301,8 +308,8 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
           (!row.citta || !event.city || keyText(row.citta) === keyText(event.city)));
         if (probable.length && input.distinct !== true) fail('Possibile duplicato. ID evento: ' + probable.map((row) => row.id).join(', '), 409);
         const inserted = await client.query(`INSERT INTO public.eventi
-          (titolo,categoria,descrizione,data_inizio,data_fine,luogo_nome,indirizzo,citta,lat,lng,creato_da)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+          (titolo,categoria,descrizione,data_inizio,data_fine,luogo_nome,indirizzo,citta,lat,lng,creato_da,stato)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'approvato') RETURNING id`,
         [event.title, event.category, event.description, event.start, event.end, event.venue, event.address, event.city, event.lat, event.lng, actor]);
         eventId = inserted.rows[0].id;
       }

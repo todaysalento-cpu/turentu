@@ -1,9 +1,12 @@
 BEGIN READ ONLY;
 
+SELECT current_database() AS database_name,
+       has_schema_privilege('public', 'CREATE') AS can_create_in_public;
+
 SELECT table_name, column_name, data_type, udt_name, is_nullable, column_default, character_maximum_length
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name IN ('eventi', 'corse', 'richieste_pop_bus', 'nodi_territoriali', 'pixel_fermate', 'pixel_direttrici')
+  AND table_name IN ('eventi', 'corse', 'richieste_pop_bus', 'nodi_territoriali', 'pixel_fermate', 'pixel_direttrici', 'eventi_fermate_pixel')
 ORDER BY table_name, ordinal_position;
 
 SELECT conrelid::regclass AS relation, conname, pg_get_constraintdef(oid) AS definition
@@ -18,5 +21,9 @@ WHERE schemaname = 'public'
 ORDER BY tablename, indexname;
 
 SELECT extname, extversion FROM pg_extension WHERE extname = 'postgis';
+
+SELECT tablename FROM pg_tables
+WHERE schemaname = 'public' AND starts_with(tablename, 'event_discovery_')
+ORDER BY tablename;
 
 ROLLBACK;

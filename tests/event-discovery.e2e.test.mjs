@@ -28,10 +28,13 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
     'Il database di test deve essere vuoto');
   await pool.query(`
     CREATE EXTENSION postgis;
-    CREATE TABLE eventi (id serial PRIMARY KEY, titolo varchar NOT NULL, categoria varchar NOT NULL,
-      descrizione text, data_inizio timestamptz NOT NULL, data_fine timestamptz, luogo_nome varchar NOT NULL,
-      indirizzo text, citta varchar, lat double precision, lng double precision, creato_da integer,
-      created_at timestamptz DEFAULT now(), immagine_url text, stato varchar DEFAULT 'in_attesa');
+    CREATE TABLE utente (id integer PRIMARY KEY);
+    INSERT INTO utente VALUES (7);
+    CREATE TABLE eventi (id serial PRIMARY KEY, titolo varchar(255) NOT NULL, categoria varchar(50) NOT NULL,
+      descrizione text, data_inizio timestamptz NOT NULL, data_fine timestamptz, luogo_nome varchar(255) NOT NULL,
+      indirizzo text, citta varchar(100), lat double precision, lng double precision, creato_da integer REFERENCES utente ON DELETE SET NULL,
+      created_at timestamptz DEFAULT now(), immagine_url text,
+      stato varchar(30) DEFAULT 'in_attesa' CHECK (stato IN ('in_attesa','approvato','rifiutato')));
     CREATE TABLE corse (id serial PRIMARY KEY, evento_id int REFERENCES eventi ON DELETE SET NULL);
     CREATE TABLE richieste_pop_bus (id serial PRIMARY KEY, evento_id int REFERENCES eventi ON DELETE RESTRICT);
     CREATE TABLE nodi_territoriali (id bigint PRIMARY KEY, nome varchar, posizione geography(Point,4326), attivo boolean);
@@ -132,6 +135,10 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
   assert.equal(candidate.evidence.lat.method, 'nominatim');
   const base = '/candidates/' + candidate.id;
   await api(base + '/publish', { method: 'POST', status: 409 });
+  for (const [field, length] of [['category', 51], ['city', 101]]) {
+    await api(base + '/review', { method: 'POST', status: 400,
+      body: { action: 'approve', version: candidate.observed_at, data: { [field]: 'a'.repeat(length) } } });
+  }
   await api(base + '/review', { method: 'POST', body: { action: 'approve', version: candidate.observed_at } });
   process.env.EVENT_DISCOVERY_SHADOW = 'true';
   await api(base + '/publish', { method: 'POST', body: { version: candidate.observed_at }, status: 409 });
@@ -140,7 +147,8 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
     api(base + '/publish', { method: 'POST', body: { version: candidate.observed_at } })));
   assert.equal(published[0].eventId, published[1].eventId);
   const eventId = published[0].eventId;
-  assert.equal((await pool.query('SELECT * FROM eventi')).rowCount, 1);
+  const publishedRows = await pool.query('SELECT stato, creato_da FROM eventi');
+  assert.deepEqual(publishedRows.rows, [{ stato: 'approvato', creato_da: 7 }]);
   const suggestions = await api(`/events/${eventId}/territory`);
   assert.deepEqual(suggestions.suggestions[0].stops.map(String), ['2']);
   await api(`/events/${eventId}/territory`, { method: 'PUT', body: { nodeId: '1', stopId: '2' } });

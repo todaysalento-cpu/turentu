@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { andiamoPugliaCredit, andiamoPugliaEvent, isAndiamoPugliaFeed } from './andiamo-puglia.js';
+import { pugliaOpenDataCredit, pugliaOpenDataEvent, pugliaOpenDataUrl } from './puglia-open-data.js';
 
 export const hash = (value) => createHash('sha256').update(value).digest('hex');
 export const keyText = (value) => (value || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
@@ -199,12 +200,14 @@ async function rss(body) {
 export async function extract(body, source, days, now = new Date()) {
   let items;
   const andiamo = source.kind === 'json' && isAndiamoPugliaFeed(source.url);
+  const puglia = source.kind === 'json' && source.url === pugliaOpenDataUrl;
   if (source.kind === 'ics') items = calendar(body, now, days);
   else if (source.kind === 'rss') items = await rss(body);
   else if (source.kind === 'json') {
     const parsed = JSON.parse(body);
     if (andiamo && parsed?.license !== 'CC BY 4.0') throw new Error('Licenza Andiamo in Puglia non riconosciuta');
-    items = Array.isArray(parsed) ? parsed : parsed.events;
+    if (puglia && parsed?.success !== true) throw new Error('Risposta del catalogo Regione Puglia non valida');
+    items = puglia ? parsed.result?.records : Array.isArray(parsed) ? parsed : parsed?.events;
     if (!Array.isArray(items)) throw new Error('Atteso un array JSON di eventi');
   } else {
     items = [];
@@ -220,21 +223,22 @@ export async function extract(body, source, days, now = new Date()) {
   const candidates = [];
   for (const raw of andiamo ? items : items.slice(0, 500)) {
     if (!raw || typeof raw !== 'object') continue;
-    const item = andiamo ? andiamoPugliaEvent(raw) : raw;
+    const item = andiamo ? andiamoPugliaEvent(raw) : puglia ? pugliaOpenDataEvent(raw) : raw;
     const data = normalize(item, { ...source, timezone: item.tz || source.timezone });
     const rawId = item.id ?? item['@id'];
     const id = plain(typeof rawId === 'number' && Number.isSafeInteger(rawId) ? String(rawId) : rawId, 1024);
     const start = data.start?.length === 10 ? Date.parse(data.start + 'T23:59:59Z') : Date.parse(data.start);
     const actionable = data.status !== 'scheduled';
-    if (andiamo && (!data.title || !data.start)) continue;
+    if ((andiamo || puglia) && (!data.title || !data.start)) continue;
     if ((!data.title || !data.start) && !id && !data.url) continue;
-    const lastDay = andiamo && data.end?.length === 10 ? data.end : data.start;
+    const lastDay = (andiamo || puglia) && data.end?.length === 10 ? data.end : data.start;
     if (!actionable && data.start && (data.start.length === 10 ? lastDay < startDay : (Date.parse(data.end) || start) < now.getTime())) continue;
     if (!actionable && start > end + (data.start?.length === 10 ? 86400000 : 0)) continue;
     const confidence = (source.reliability + (data.start && data.venue ? 80 : 30)) / 2;
     const evidence = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== null).map(([field, value]) =>
       [field, { url: source.url, value, method: source.kind, confidence: Math.floor(confidence) }]));
     if (andiamo) evidence.attribution = andiamoPugliaCredit(data.url || source.url, eventUrl(item.primaryUrl, source.url));
+    if (puglia) evidence.attribution = pugliaOpenDataCredit(eventUrl(item.primaryUrl, source.url));
     if (item.recurring) evidence.recurrence = { method: 'ics', value: 'Serie da verificare' };
     const canonicalKey = ['jsonld', 'html'].includes(source.kind) && items.length === 1 && data.url === eventUrl(source.url)
       ? data.url : data.url + ':' + (data.start || '');

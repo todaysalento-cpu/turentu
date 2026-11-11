@@ -2,10 +2,34 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { extract, timestamp } from '../services/event-discovery/extract.js';
 import { publicUrl, readRemote, readSource } from '../services/event-discovery/network.js';
+import { pugliaOpenDataRequest, pugliaOpenDataUrl } from '../services/event-discovery/puglia-open-data.js';
 
 const now = new Date('2026-11-10T11:00:00Z');
 const source = { url: 'https://eventi.example.org/calendar', timezone: 'Europe/Rome', reliability: 80 };
 const parse = (body, kind) => extract(body, { ...source, kind }, 90, now);
+
+test('Open Data Puglia seleziona la finestra e normalizza solo gli orari puntuali', async () => {
+  const request = new URL(pugliaOpenDataRequest(now, 14, 'Europe/Rome'));
+  assert.equal(request.origin, 'https://dati.puglia.it');
+  assert.match(request.searchParams.get('sql'), /data_inizio >= '2026-11-10'/);
+  assert.match(request.searchParams.get('sql'), /data_inizio <= '2026-11-24'/);
+  const single = { nm_evento_it: 'Concerto', tipologia: 'Musica', data_inizio: '2026-11-16',
+    data_fine: '2026-11-16', orario_apertura: '21:00', comune: 'Lecce', provincia: 'Lecce',
+    indirizzo: 'Piazza Municipio', id_periodo: '123', sito: 'https://comune.example.org/concerto' };
+  const body = { success: true, result: { records: [
+    single, { ...single, id_periodo: '124', data_fine: '2026-11-18', cadenza: 'Giornaliera' },
+  ] } };
+  const regional = { ...source, url: pugliaOpenDataUrl, kind: 'json' };
+  const [event, recurring] = await extract(JSON.stringify(body), regional, 14, now);
+  assert.equal(event.data.start, '2026-11-16T20:00:00.000Z');
+  assert.equal(event.data.end, null);
+  assert.equal(event.data.venue, 'Piazza Municipio');
+  assert.equal(event.evidence.attribution.publisher, 'ARET – Pugliapromozione');
+  assert.equal(event.evidence.attribution.primaryUrl, single.sito);
+  assert.equal(recurring.data.start, '2026-11-16');
+  assert.equal(recurring.data.end, '2026-11-18');
+  await assert.rejects(extract('{"success":false}', regional, 14, now), /catalogo Regione Puglia/);
+});
 
 test('date locali, fusi, ora inesistente e ambigua', () => {
   assert.equal(timestamp('2026-11-15T21:00', 'Europe/Rome'), '2026-11-15T20:00:00.000Z');

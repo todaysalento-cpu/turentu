@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { test } from 'node:test';
+import { pugliaOpenDataUrl } from '../services/event-discovery/puglia-open-data.js';
 
 test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process.env.EVENT_DISCOVERY_TEST_DATABASE_URL }, async (t) => {
   const testUrl = new URL(process.env.EVENT_DISCOVERY_TEST_DATABASE_URL);
@@ -65,6 +66,14 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
         return { body: '{"web":{"results":[{"url":"https://official.example.org/concerto"}]}}' };
       }
       if (url.endsWith('robots.txt')) return { body: 'User-agent: *' };
+      if (url.startsWith('https://dati.puglia.it/ckan/api/3/action/datastore_search_sql?')) {
+        assert.match(new URL(url).searchParams.get('sql'), /'2026-11-10'/);
+        assert.equal(headers['If-None-Match'], undefined);
+        return { status: 200, headers: {}, body: JSON.stringify({ success: true, result: { records: [{
+          id_periodo: '1234', nm_evento_it: 'Teatro di prova', tipologia: 'Teatro', data_inizio: '2026-11-29',
+          orario_apertura: '20:30', comune: 'Lecce', nome_location: 'Teatro', provincia: 'Lecce',
+        }] } }) };
+      }
       if (url === 'https://andiamoinpuglia.it/dati/eventi.json') {
         return { status: 200, headers: {}, body: JSON.stringify({ license: 'CC BY 4.0', events: [{
           slug: 'mostra-test', title: 'Mostra di prova', category: 'mostre', start_date: '2026-11-28',
@@ -225,4 +234,17 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
   assert.match(regionalRow.descrizione, /Dati adattati per Turentu da andiamoinpuglia\.it/);
   assert.match(regionalRow.descrizione, /CC BY 4\.0/);
   assert.match(regionalRow.descrizione, /https:\/\/official\.example\.org\/mostra-test/);
+
+  const apiSource = await api('/sources', { method: 'POST', body: {
+    url: pugliaOpenDataUrl, kind: 'json', state: 'attiva', terms: 'CC BY 4.0',
+  } });
+  assert.equal((await api(`/sources/${apiSource.id}/sync`, { method: 'POST' })).count, 1);
+  const fromApi = (await api('/candidates?state=pending')).find((row) => row.data.title === 'Teatro di prova');
+  assert.equal(fromApi.data.start, '2026-11-29T19:30:00.000Z');
+  assert.equal(fromApi.evidence.attribution.publisher, 'ARET – Pugliapromozione');
+  assert.equal((await api('/')).flags.searchStatus, 'ready');
+  delete process.env.EVENT_DISCOVERY_BRAVE_KEY;
+  assert.equal((await api('/')).flags.searchStatus, 'missing_key');
+  const noKey = await api('/discover', { method: 'POST', body: {}, status: 503 });
+  assert.equal(noKey.error, 'Chiave Brave Search non configurata');
 });

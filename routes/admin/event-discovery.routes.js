@@ -1,6 +1,6 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
-import { audit, automaticPublisher, canWrite, createDiscovery, enabled, fail, filters, mobility, number, transaction } from '../../services/event-discovery/service.js';
+import { audit, automaticPublisher, canWrite, createDiscovery, enabled, fail, filters, mobility, number, transaction, webSearchStatus } from '../../services/event-discovery/service.js';
 import { publicUrl } from '../../services/event-discovery/network.js';
 
 const table = 'public.event_discovery_';
@@ -82,8 +82,9 @@ export function createEventDiscoveryRouter(database = pool, service = createDisc
       (SELECT count(DISTINCT event_id)::int FROM ${table}candidates) AS published,
       (SELECT count(*)::int FROM (SELECT fingerprint FROM ${table}candidates GROUP BY fingerprint HAVING count(*)>1) groups) AS duplicates,
       (SELECT count(*)::int FROM ${table}runs WHERE state='error') AS errors`);
+    const searchStatus = webSearchStatus();
     return { metrics, permissions: capabilities(req.user), flags: {
-      search: enabled('SEARCH'), monitor: enabled('MONITOR'), social: enabled('SOCIAL'), shadow: enabled('SHADOW'),
+      search: searchStatus === 'ready', searchStatus, monitor: enabled('MONITOR'), social: enabled('SOCIAL'), shadow: enabled('SHADOW'),
       autoPublish: Boolean(automaticPublisher()),
     } };
   });

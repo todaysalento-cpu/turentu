@@ -3,10 +3,16 @@ import { extract, fingerprint, keyText, normalize } from './extract.js';
 import { publicUrl, readRemote, readSource } from './network.js';
 import { geocode } from './geocode.js';
 import { isAndiamoPugliaFeed } from './andiamo-puglia.js';
+import { pugliaOpenDataRequest, pugliaOpenDataUrl } from './puglia-open-data.js';
 
 const tables = 'public.event_discovery_';
 export const enabled = (name = '') => process.env['EVENT_DISCOVERY_ENABLED'] === 'true' &&
   (!name || process.env['EVENT_DISCOVERY_' + name] === 'true');
+
+export function webSearchStatus() {
+  if (!enabled('SEARCH')) return 'disabled';
+  return process.env.EVENT_DISCOVERY_BRAVE_KEY?.trim() ? 'ready' : 'missing_key';
+}
 
 export function canWrite(action, actor) {
   return (process.env['EVENT_DISCOVERY_' + action.toUpperCase() + '_USERS'] || '')
@@ -143,7 +149,10 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
   }
 
   async function discover(input, actor) {
-    if (!enabled('SEARCH') || !process.env.EVENT_DISCOVERY_BRAVE_KEY) fail('Provider di ricerca non configurato', 503);
+    const status = webSearchStatus();
+    if (status === 'disabled') fail('Ricerca web disattivata', 503);
+    if (status === 'missing_key') fail('Chiave Brave Search non configurata', 503);
+    const apiKey = process.env.EVENT_DISCOVERY_BRAVE_KEY.trim();
     if (actor === null && !enabled('BRAVE_STORAGE_AUTHORIZED')) fail('Ricerca pianificata priva di autorizzazione alla conservazione', 503);
     return run('search', null, actor, async (client) => {
       const config = filters(input, await settings(client));
@@ -158,7 +167,11 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
       for (let i = 0; i < requested; i++) {
         const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
         endpoint.search = new URLSearchParams({ q: jobs[(offset + i) % jobs.length], country: 'IT', search_lang: 'it', count: '10' });
-        const { body } = await read(endpoint.href, { Accept: 'application/json', 'X-Subscription-Token': process.env.EVENT_DISCOVERY_BRAVE_KEY });
+        const { body } = await read(endpoint.href, { Accept: 'application/json', 'X-Subscription-Token': apiKey }).catch((error) => {
+          if (error.status === 401 || error.status === 403) fail('Brave Search ha rifiutato le credenziali o il piano API', 502);
+          if (error.status === 429) fail('Limite Brave Search raggiunto. Riprova più tardi', 429);
+          throw error;
+        });
         for (const hit of JSON.parse(body).web?.results || []) {
           try {
             const url = publicUrl(hit.url);
@@ -188,11 +201,18 @@ export function createDiscovery(pool, { read = readRemote, now = () => new Date(
     return run('sync', sourceId, actor, async (client) => {
       const { rows: [source] } = await client.query(`SELECT * FROM ${tables}sources WHERE id=$1`, [sourceId]);
       if (source?.state !== 'attiva') fail('Fonte non attiva', 409);
+      if ((isAndiamoPugliaFeed(source.url) || source.url === pugliaOpenDataUrl) && source.kind !== 'json') {
+        fail('Questo feed richiede il formato JSON. Sospendi la fonte e modifica il formato', 400);
+      }
       if (!source.last_full_sync || Date.now() - source.last_full_sync.getTime() > 86400000 ||
           (isAndiamoPugliaFeed(source.url) && source.last_count === 0)) source.etag = null;
-      const response = await readSource(source, read);
       const config = await settings(client);
-      const candidates = response.status === 304 ? [] : await extract(response.body, source, config.days, now());
+      const currentTime = now();
+      const upstream = source.url === pugliaOpenDataUrl
+        ? { ...source, url: pugliaOpenDataRequest(currentTime, config.days, source.timezone), etag: null }
+        : source;
+      const response = await readSource(upstream, read);
+      const candidates = response.status === 304 ? [] : await extract(response.body, source, config.days, currentTime);
       const missing = candidates.filter(({ data }) => (data.lat == null || data.lng == null) &&
         data.address && data.city && data.status === 'scheduled');
       if (missing.length) {

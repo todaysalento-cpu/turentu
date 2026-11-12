@@ -11,7 +11,12 @@ router.get('/', async (req, res) => {
       WITH
       clienti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'cliente'),
       autisti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'autista'),
-      veicoli AS (SELECT COUNT(*) AS totale FROM veicolo),
+      veicoli AS (
+        SELECT COUNT(*) AS totale
+        FROM veicolo v
+        LEFT JOIN utente u ON v.driver_id = u.id
+        WHERE u.eliminato_il IS NULL
+      ),
       veicoli_disponibili AS (
         SELECT COUNT(*) AS totale
         FROM veicolo v

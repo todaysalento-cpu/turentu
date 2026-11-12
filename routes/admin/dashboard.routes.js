@@ -8,8 +8,8 @@ router.get('/', async (req, res) => {
     // ===================== KPI principali =====================
     const query = `
       WITH
-      clienti AS (SELECT COUNT(*) AS totale FROM utente WHERE LOWER(TRIM(tipo)) = 'cliente'),
-      autisti AS (SELECT COUNT(*) AS totale FROM utente WHERE LOWER(TRIM(tipo)) = 'autista'),
+      clienti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'cliente'),
+      autisti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'autista'),
       veicoli AS (SELECT COUNT(*) AS totale FROM veicolo),
       veicoli_disponibili AS (
         SELECT COUNT(*) AS totale
@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
         LEFT JOIN veicolo v ON v.driver_id = u.id
         LEFT JOIN disponibilita_veicolo dv ON dv.veicolo_id = v.id
         LEFT JOIN posizione_veicolo pv ON pv.veicolo_id = v.id AND pv.tipo = 'CORRENTE'
-        WHERE LOWER(TRIM(u.tipo)) = 'autista'
+        WHERE u.eliminato_il IS NULL AND LOWER(TRIM(u.tipo)) = 'autista'
       `)
     ]);
 

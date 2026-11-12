@@ -55,7 +55,7 @@ router.get('/utenti/contatori', adminRead(async (_req, res) => {
       count(*) FILTER (WHERE u.created_at BETWEEN b.sette_giorni AND now())::int AS ultimi_sette,
       count(*) FILTER (WHERE u.created_at BETWEEN b.settimana AND now())::int AS settimana,
       count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'autista' AND NOT ${complete})::int AS incompleti
-    FROM utente u CROSS JOIN bounds b LEFT JOIN fleet f ON f.driver_id = u.id
+    FROM utente u CROSS JOIN bounds b LEFT JOIN fleet f ON f.driver_id = u.id WHERE u.eliminato_il IS NULL
   `);
   res.json(result);
 }));
@@ -77,7 +77,7 @@ router.get('/utenti', adminRead(async (req, res) => {
       SELECT ${accountFields}
         ${driver ? `, coalesce(f.veicoli, 0) AS veicoli, ${complete} AS completa` : ''}
       FROM utente u ${driver ? 'LEFT JOIN fleet f ON f.driver_id = u.id' : ''}
-      WHERE lower(btrim(u.tipo)) = $1
+      WHERE u.eliminato_il IS NULL AND lower(btrim(u.tipo)) = $1
         AND ($2 = '' OR strpos(lower(u.nome), lower($2)) > 0
           OR strpos(lower(u.email), lower($2)) > 0 OR strpos(u.phone, $2) > 0
           OR u.id::text = $2
@@ -108,7 +108,7 @@ router.get('/utenti/:id', adminRead(async (req, res) => {
 
   const { rows: [utente] } = await pool.query(`
     SELECT ${accountFields}, (SELECT count(*)::int FROM prenotazioni WHERE cliente_id = u.id) AS prenotazioni
-    FROM utente u WHERE u.id = $1 AND lower(btrim(u.tipo)) IN ('cliente', 'autista')
+    FROM utente u WHERE u.eliminato_il IS NULL AND u.id = $1 AND lower(btrim(u.tipo)) IN ('cliente', 'autista')
   `, [id]);
   if (!utente) return res.status(404).json({ error: 'Utente non trovato' });
   if (utente.tipo.trim().toLowerCase() === 'cliente') return res.json({ utente });

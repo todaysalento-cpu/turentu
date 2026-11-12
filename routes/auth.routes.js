@@ -122,7 +122,7 @@ router.post('/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ message: 'Email e password richieste' });
 
   try {
-    const result = await pool.query('SELECT id, email, password, tipo, nome, modalita_operativa FROM utente WHERE email=$1', [email]);
+    const result = await pool.query('SELECT id, email, password, tipo, nome, modalita_operativa FROM utente WHERE eliminato_il IS NULL AND email=$1', [email]);
     const user = result.rows[0];
     if (!user) return res.status(401).json({ message: 'Utente non trovato' });
 
@@ -166,7 +166,7 @@ router.post('/register', async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const exists = await client.query('SELECT id FROM utente WHERE email=$1', [email]);
+    const exists = await client.query('SELECT id FROM utente WHERE eliminato_il IS NULL AND email=$1', [email]);
     if (exists.rows.length) return res.status(409).json({ message: 'Email già registrata' });
 
     const hashed = await bcrypt.hash(password, 10);
@@ -202,7 +202,7 @@ router.post('/google', async (req, res) => {
     const nome = payload.name;
     console.log(`🔍 [POST /google] Verifica Google riuscita per email: ${email}`);
 
-    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE email=$1', [email]);
+    let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE eliminato_il IS NULL AND email=$1', [email]);
     let user;
 
     if (userRes.rows.length) {
@@ -258,7 +258,7 @@ router.post('/apple', async (req, res) => {
     // Gestione sicura del parametro email con cast esplicito ::text per evitare l'errore sul tipo in PG
     const lookupEmail = email || null;
     let userRes = await client.query(
-      'SELECT id, tipo, email, nome, apple_id FROM utente WHERE apple_id = $1 OR ($2::text IS NOT NULL AND email = $2::text)', 
+      'SELECT id, tipo, email, nome, apple_id FROM utente WHERE eliminato_il IS NULL AND (apple_id = $1 OR ($2::text IS NOT NULL AND email = $2::text))',
       [appleId, lookupEmail]
     );
     let user;

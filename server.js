@@ -1,3 +1,4 @@
+import { startAccountRemovals } from './services/auth/account-removals.service.js';
 // --- DEBUG FATALE: Intercetta crash all'avvio su Render ---
 process.on('uncaughtException', (err) => {
   console.error('--- CRASH FATALE (uncaughtException) ---');
@@ -178,6 +179,7 @@ const startServer = async () => {
 
     io.adapter(createAdapter(pubClient, subClient));
     setupSocket(io);
+    startAccountRemovals();
 
     flowRegistry.register(onboardingFlow);
     

@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
         email, 
         tipo AS ruolo, 
         created_at AS data_creazione 
-      FROM utente 
+      FROM utente WHERE eliminato_il IS NULL
       ORDER BY created_at DESC
     `);
 

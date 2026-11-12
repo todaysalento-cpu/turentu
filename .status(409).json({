@@ -1,0 +1,115 @@
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m25[m[36m:[m  const [1;31mquote[m = items.map((p) => {
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m30[m[36m:[m  const assegnati = [1;31mquote[m.reduce((sum, p) => sum + p.quotaCentesimi, 0);
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m32[m[36m:[m  if (!Number.isSafeInteger(restanti) || restanti < 0 || restanti > [1;31mquote[m.length) {
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m36[m[36m:[m  const ordinati = [...[1;31mquote[m].sort((a, b) => b.frazione - a.frazione || a.id - b.id);
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m38[m[36m:[m  return [1;31mquote[m.sort((a, b) => a.id - b.id).map(({ frazione, ...p }) => p);
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m41[m[36m:[m/** Confronta le nuove [1;31mquote[m con quelle precedenti e con i tetti autorizzati.
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m46[m[36m:[mexport function verificaIngressoCondivisa({ [1;31mquote[mPrecedenti, [1;31mquote[mNuove, massimaliCentesimi }) {
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m47[m[36m:[m  const precedenti = new Map([1;31mquote[mPrecedenti.map(p => [p.id, p.quotaCentesimi]));
+[35m7ffe60d9:modello_a/ripartizioneCondivisa.util.js[m[36m:[m[32m50[m[36m:[m  for (const p of [1;31mquote[mNuove) {
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m59[m[36m:[m    // Mantiene i riferimenti PIXEL del client separati dai dati della [1;31mquotazione[m.
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m67[m[36m:[m    // Non permettere che il tipo dichiarato dal client cambi il tipo della [1;31mquotazione[m.
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m71[m[36m:[m    // Distinzione basata SOLO sulla [1;31mquotazione[m fresca, non sul tipo manipolabile dal client.
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m87[m[36m:[m       throw Object.assign(new Error('Tipo corsa non coerente con la [1;31mquotazione[m condivisa'), { status: 409 });
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m208[m[36m:[m      // Unita' canoniche: distanza in km, durata in minuti. Dati dalla [1;31mquotazione[m server.
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m230[m[36m:[m      // Identità della tratta ricavata dalla [1;31mquotazione[m fresca, mai dal payload client.
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m273[m[36m:[m        // Una [1;31mquotazione[m priva di stato_temporale non deve essere interpretata
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m279[m[36m:[m        const statoTemporale[1;31mQuotazione[m = quotation.stato_temporale;
+[35m7ffe60d9:routes/booking.routes.backup.js[m[36m:[m[32m280[m[36m:[m        if (statoTemporale[1;31mQuotazione[m != null && statoTemporale[1;31mQuotazione[m !== statoTemporaleDB) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m17[m[36m:[m// Punti desiderati: non sostituiscono mai le coordinate usate per il ricalcolo della [1;31mquotazione[m.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m86[m[36m:[m      return res.status(409).json({ error: 'Prezzo/opzione cambiati o [1;31mquotazione[m assente: ripetere la ricerca' });
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m113[m[36m:[m    // La [1;31mquotazione[m fresca prevale su tutti i campi operativi forniti dal client.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m117[m[36m:[m    // Non permettere che il tipo dichiarato dal client cambi il tipo della [1;31mquotazione[m.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m121[m[36m:[m    // Distinzione basata SOLO sulla [1;31mquotazione[m fresca, non sul tipo manipolabile dal client.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m137[m[36m:[m       throw Object.assign(new Error('Tipo corsa non coerente con la [1;31mquotazione[m condivisa'), { status: 409 });
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m267[m[36m:[m      // Unita' canoniche: distanza in km, durata in minuti. Dati dalla [1;31mquotazione[m server.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m289[m[36m:[m      // Identità della tratta ricavata dalla [1;31mquotazione[m fresca, mai dal payload client.
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m332[m[36m:[m        // Una [1;31mquotazione[m priva di stato_temporale non deve essere interpretata
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m338[m[36m:[m        const statoTemporale[1;31mQuotazione[m = quotation.stato_temporale;
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m339[m[36m:[m        if (statoTemporale[1;31mQuotazione[m != null && statoTemporale[1;31mQuotazione[m !== statoTemporaleDB) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m507[m[36m:[m      const [1;31mquote[m = fresh.find(x =>
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m512[m[36m:[m      if (![1;31mquote[m || [1;31mquote[m.prezzo == null || [1;31mquote[m.prezzo === '' ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m513[m[36m:[m          !Number.isFinite(Number([1;31mquote[m.prezzo)) || Math.round(Number([1;31mquote[m.prezzo) * 100) < 50) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m514[m[36m:[m        return res.status(409).json({ code: 'AR_[1;31mQUOTE[m_CHANGED', error: `[1;31mQuotazione[m ${item.ar_tratta} non disponibile: ripetere la ricerca` });
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m516[m[36m:[m      const isPop = isPopbusSlot([1;31mquote[m);
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m517[m[36m:[m      const activePop = isPop && ([1;31mquote[m.tipo_corsa === 'riempimento' ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m518[m[36m:[m        [1;31mquote[m.attivazione_stato === 'confermata' ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m519[m[36m:[m        ([1;31mquote[m.corsa_id != null && !String([1;31mquote[m.id).startsWith('virtual_pop_')));
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m520[m[36m:[m      if (activePop || (isPop && [1;31mquote[m.is_pool && !String([1;31mquote[m.id).startsWith('virtual_pop_'))) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m523[m[36m:[m      if (isPop && String(selected.id).startsWith('virtual_pop_') !== String([1;31mquote[m.id).startsWith('virtual_pop_')) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m530[m[36m:[m        return res.status(409).json({ code: 'AR_TYPE_CHANGED', error: `Tipo ${item.ar_tratta} non coerente con la [1;31mquotazione[m` });
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m533[m[36m:[m          !([1;31mquote[m.tipo === 'condivisa' && [1;31mquote[m.modello_a === true)) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m538[m[36m:[m      if (!isPop && item.type === 'privata' && [1;31mquote[m.tipo !== 'privata') {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m544[m[36m:[m        id: String([1;31mquote[m.id),
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m545[m[36m:[m        tratta_id: [1;31mquote[m.tratta_id ?? null,
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m546[m[36m:[m        prezzo: Number((Math.round(Number([1;31mquote[m.prezzo) * 100) / 100).toFixed(2)),
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m609[m[36m:[m      const [1;31mquote[m = fresh.find(x => String(x.id) === String(selected.id));
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m610[m[36m:[m      if (![1;31mquote[m || isPopbusSlot([1;31mquote[m) || [1;31mquote[m.tipo !== 'privata' ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m611[m[36m:[m          !String([1;31mquote[m.id).startsWith('priv_')) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m614[m[36m:[m      const cents = Math.round(Number([1;31mquote[m.prezzo) * 100);
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m615[m[36m:[m      if ([1;31mquote[m.prezzo == null || [1;31mquote[m.prezzo === '' || !Number.isSafeInteger(cents) || cents < 50) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m618[m[36m:[m      const distanza = Number([1;31mquote[m.distanzaKm ??
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m619[m[36m:[m        ([1;31mquote[m.distanza_metri != null ? Number([1;31mquote[m.distanza_metri) / 1000 : [1;31mquote[m.distanza));
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m620[m[36m:[m      const durata = Number([1;31mquote[m.durata_minuti ?? [1;31mquote[m.durataMinuti);
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m622[m[36m:[m          !Number.isSafeInteger(Number([1;31mquote[m.veicolo_id)) || Number([1;31mquote[m.veicolo_id) <= 0) {
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m625[m[36m:[m      prepared.push({ item, [1;31mquote[m, o, d, count, when, cents, distanza, durata });
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m655[m[36m:[m      const startOffset = leg.[1;31mquote[m.startOffset ?? leg.[1;31mquote[m.start_offset ?? null;
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m656[m[36m:[m      const endOffset = leg.[1;31mquote[m.endOffset ?? leg.[1;31mquote[m.end_offset ?? null;
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m657[m[36m:[m      const startIndex = leg.[1;31mquote[m.start_index_polyline ?? leg.[1;31mquote[m.startIndexPolyline ?? 0;
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m658[m[36m:[m      const endIndex = leg.[1;31mquote[m.end_index_polyline ?? leg.[1;31mquote[m.endIndexPolyline ?? 100;
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m659[m[36m:[m      const origineAddress = leg.o.indirizzo || leg.[1;31mquote[m.origine_address || leg.[1;31mquote[m.origineAddress ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m661[m[36m:[m      const destinazioneAddress = leg.d.indirizzo || leg.[1;31mquote[m.destinazione_address || leg.[1;31mquote[m.destinazioneAddress ||
+[35m7ffe60d9:routes/booking.routes.js[m[36m:[m[32m676[m[36m:[m        [Number(leg.[1;31mquote[m.veicolo_id), req.user.id, leg.when, leg.count,
+[35m7ffe60d9:routes/pending.routes.js[m[36m:[m[32m542[m[36m:[m      // deve aver già congelato il totale e ricalcolato tutte le [1;31mquote[m.
+[35m7ffe60d9:routes/pending.routes.js[m[36m:[m[32m549[m[36m:[m        const { rows: [1;31mquote[mRows } = await client.query(`
+[35m7ffe60d9:routes/pending.routes.js[m[36m:[m[32m554[m[36m:[m        const dati = [1;31mquote[mRows[0];
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m299[m[36m:[m      // la somma delle [1;31mquote[m deve coincidere con il prezzo fisso, al centesimo.
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m301[m[36m:[m        const [1;31mquote[mRes = await client.query(
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m308[m[36m:[m        const [1;31mquote[mCentesimi = [1;31mquote[mRes.rows.map(row => {
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m313[m[36m:[m        const totale[1;31mQuote[m = [1;31mquote[mCentesimi.reduce((sum, value) => sum + value, 0);
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m316[m[36m:[m        if (![1;31mquote[mCentesimi.length ||
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m317[m[36m:[m            [1;31mquote[mCentesimi.some(value => !Number.isSafeInteger(value) || value <= 0) ||
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m319[m[36m:[m            totale[1;31mQuote[m !== prezzoFissoCentesimi) {
+[35m7ffe60d9:services/corsa/corse.service.js[m[36m:[m[32m322[m[36m:[m            `([1;31mquote[m=${totale[1;31mQuote[m}, prezzo_fisso=${prezzoFissoCentesimi} centesimi)`
+[35m7ffe60d9:services/pixel/pixel-stop-validation.service.js[m[36m:[m[32m65[m[36m:[m    const [1;31mquote[mdOrigin = integerId(quotation.origine_nodo_territoriale_id);
+[35m7ffe60d9:services/pixel/pixel-stop-validation.service.js[m[36m:[m[32m66[m[36m:[m    const [1;31mquote[mdDestination = integerId(quotation.destinazione_nodo_territoriale_id);
+[35m7ffe60d9:services/pixel/pixel-stop-validation.service.js[m[36m:[m[32m67[m[36m:[m    if (![1;31mquote[mdOrigin || ![1;31mquote[mdDestination ||
+[35m7ffe60d9:services/pixel/pixel-stop-validation.service.js[m[36m:[m[32m68[m[36m:[m        [1;31mquote[mdOrigin !== originNode || [1;31mquote[mdDestination !== destNode ||
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v561.service.js[m[36m:[m[32m73[m[36m:[m // Fase categorie: [1;31mquote[m distribuite tra centri gia' esplorati; non incrementano la copertura.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v561.service.js[m[36m:[m[32m110[m[36m:[m  [1;31mquote[m_richieste:quotas,[1;31mquote[m_rispettate:Object.fromEntries(validCategories.map(k=>[k,categories[k]>=Math.min(quotas[k],anchors.length,maxGoogleCalls)])),
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v561.service.js[m[36m:[m[32m115[m[36m:[m  avvertenza:'[1;31mQuote[m sperimentali, non derivate dalla domanda. Copertura geometrica, non fermate effettive. Nessuna chiamata Google.'};
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v562.service.js[m[36m:[m[32m2[m[36m:[m// PIXEL V5.6.2: confronto controllato e [1;31mquote[m adattive sperimentali.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v562.service.js[m[36m:[m[32m12[m[36m:[m// Le [1;31mquote[m sono un'ipotesi di test, NON una stima delle infrastrutture esistenti.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v562.service.js[m[36m:[m[32m86[m[36m:[m      avvertenza: '[1;31mQuote[m basate solo sul numero di centri, NON sulla presenza di stazioni o domanda. Copertura geometrica, NON fermate reali.',
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m2[m[36m:[m// PIXEL V5.6.3: benchmark [1;31mquote[m strategiche, senza Google e senza scritture.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m42[m[36m:[m    // La prima esecuzione senza [1;31mquote[m misura il massimo geografico per questo budget.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m52[m[36m:[m    // La limitazione per 1 centro cambia solo nel caso maxGoogleCalls=0; in quel caso le [1;31mquote[m sono zero.
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m54[m[36m:[m      throw new Error('[1;31mQuote[m non coerenti: verificare il budget');
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m63[m[36m:[m      categorie: categories, [1;31mquote[m: allocation.quotas,
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m77[m[36m:[m    ...r, differenza_vs_senza_[1;31mquote[m_pp: baseline ? round(r.copertura_pct - baseline.copertura_pct) : null,
+[35m7ffe60d9:services/pixel/pixel-territorial-discovery-plan-v563.service.js[m[36m:[m[32m81[m[36m:[m    avvertenza: '[1;31mQuote[m sperimentali non basate su infrastrutture reali. I tempi comprendono il ricalcolo V5.5.2 per scenario. Nessuna ottimizzazione SQL introdotta in questa versione.' };
+[35m7ffe60d9:services/pixel/pixel.validation.service.js[m[36m:[m[32m45[m[36m:[m    throw pixelError('PIXEL: [1;31mquotazione[m POPBUS autorevole mancante', 409);
+[35m7ffe60d9:services/popbus/v2/confirmed-booking.service.js[m[36m:[m[32m2[m[36m:[m// INTEGRAZIONE NON ANCORA ATTIVA: chiamare solo con [1;31mquotazione[m ricalcolata sul server.
+[35m7ffe60d9:services/search/search.service.js[m[36m:[m[32m50[m[36m:[m    // la ri[1;31mquotazione[m nel booking veda gli stessi ID persistenti.
+[35m7ffe60d9:tests/test_corse_conducenti_end.js[m[36m:[m[32m91[m[36m:[m          log.push('[1;31mQUOTE[m');
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m27[m[36m:[m  const [1;31mquote[m = items.map((p) => {
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m32[m[36m:[m  const assegnati = [1;31mquote[m.reduce((sum, p) => sum + p.quotaCentesimi, 0);
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m34[m[36m:[m  if (!Number.isSafeInteger(restanti) || restanti < 0 || restanti > [1;31mquote[m.length) {
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m38[m[36m:[m  const ordinati = [...[1;31mquote[m].sort((a, b) => b.frazione - a.frazione || a.id - b.id);
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m40[m[36m:[m  return [1;31mquote[m.sort((a, b) => a.id - b.id).map(({ frazione, ...p }) => p);
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m43[m[36m:[m/** Confronta le nuove [1;31mquote[m con quelle precedenti e con i tetti autorizzati.
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m48[m[36m:[mfunction verificaIngressoCondivisa({ [1;31mquote[mPrecedenti, [1;31mquote[mNuove, massimaliCentesimi }) {
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m49[m[36m:[m  const precedenti = new Map([1;31mquote[mPrecedenti.map(p => [p.id, p.quotaCentesimi]));
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m52[m[36m:[m  for (const p of [1;31mquote[mNuove) {
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m84[m[36m:[mconst stampa = (titolo, [1;31mquote[m) => {
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m86[m[36m:[m  console.table([1;31mquote[m.map(q => ({ prenotazione: q.id, km: q.km_utente, posti: q.posti_richiesti, peso: q.peso, prezzo: euro(q.quotaCentesimi) })));
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m87[m[36m:[m  console.log('Totale [1;31mquote[m:', euro([1;31mquote[m.reduce((s, q) => s + q.quotaCentesimi, 0)));
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m102[m[36m:[mfor (const [1;31mquote[m of [prima, seconda, terza]) verifica([1;31mquote[m.reduce((s,q)=>s+q.quotaCentesimi,0) === costoCentesimi, 'Somma [1;31mquote[m diversa dal costo fisso');
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m105[m[36m:[mconst check2 = verificaIngressoCondivisa({[1;31mquote[mPrecedenti:prima,[1;31mquote[mNuove:seconda,massimaliCentesimi:maxSecondo});
+[35m7ffe60d9:tests/test_modello_a.js[m[36m:[m[32m106[m[36m:[mconst check3 = verificaIngressoCondivisa({[1;31mquote[mPrecedenti:seconda,[1;31mquote[mNuove:terza,massimaliCentesimi:maxTerzo});
+[35m7ffe60d9:tests/test_pixel_territorial_discovery_v562.js[m[36m:[m[32m10[m[36m:[m  if (qBari.geographicBudget < 36 || qLecce.geographicBudget !== 48) throw new Error('[1;31mQuote[m adattive incoerenti');
+[35m7ffe60d9:tests/test_pixel_territorial_discovery_v562.js[m[36m:[m[32m26[m[36m:[m      [1;31mquote[m_coerenti: Object.entries(a.quotas).every(([k,v]) => a.categorie[k] <= v),
+[35m7ffe60d9:tests/test_pixel_territorial_discovery_v563.js[m[36m:[m[32m17[m[36m:[m      differenza_pp: s.differenza_vs_senza_[1;31mquote[m_pp,
+[35m7ffe60d9:tests/test_popbus_v2_cicli.js[m[36m:[m[32m6[m[36m:[m// Google Maps può consumare [1;31mquote[m fatturabili.
+[35m7ffe60d9:tests/test_popbus_v2_database.js[m[36m:[m[32m7[m[36m:[m// Il routing opzionale chiama un servizio mappe esterno: potrebbe consumare [1;31mquote[m.
+[35m7ffe60d9:tests/test_popbus_v2_temporale_routing.js[m[36m:[m[32m76[m[36m:[m  console.error('Nessuna conclusione sulla compatibilita: verificare configurazione/[1;31mquote[m del servizio mappe.');

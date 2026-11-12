@@ -1,0 +1,146 @@
+import express from 'express';
+import { pool } from '../../db/db.js';
+
+const router = express.Router();
+const accountFields = 'u.id, u.nome, u.email, u.phone, u.tipo, u.created_at, u.modalita_operativa, u.email_verificata_il';
+const vehicleChecks = `
+  EXISTS (
+    SELECT 1 FROM tariffe t WHERE t.veicolo_id = v.id AND t.tipo = 'standard'
+      AND t.euro_km >= 0 AND t.prezzo_passeggero >= 0
+  ) AS tariffa_standard,
+  EXISTS (
+    SELECT 1 FROM disponibilita_veicolo d WHERE d.veicolo_id = v.id AND (d.start AT TIME ZONE 'Europe/Rome')::time <> (d.fine AT TIME ZONE 'Europe/Rome')::time
+  ) AS disponibilita_configurata
+`;
+const configuration = `
+  vehicle_configuration AS (
+    SELECT v.id, v.driver_id, ${vehicleChecks} FROM veicolo v
+  ),
+  fleet AS (
+    SELECT driver_id, count(*)::int AS veicoli,
+      bool_and(tariffa_standard AND disponibilita_configurata) AS veicoli_completi
+    FROM vehicle_configuration GROUP BY driver_id
+  )
+`;
+const complete = `(coalesce(u.modalita_operativa IN ('singolo', 'flotta'), false)
+  AND EXISTS (SELECT 1 FROM autista_profilo ap WHERE ap.utente_id = u.id)
+  AND coalesce(f.veicoli_completi, false))`;
+
+function adminRead(handler) {
+  return async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      await handler(req, res);
+    } catch (error) {
+      console.error('Lettura gestione utenti:', error.code || error.name);
+      res.status(500).json({ error: 'Impossibile caricare la gestione utenti' });
+    }
+  };
+}
+
+router.get('/utenti/contatori', adminRead(async (_req, res) => {
+  const { rows: [result] } = await pool.query(`
+    WITH ${configuration}, local_clock AS (
+      SELECT now() AT TIME ZONE 'Europe/Rome' AS local_now
+    ), bounds AS (
+      SELECT date_trunc('day', local_now) AT TIME ZONE 'Europe/Rome' AS oggi,
+        (date_trunc('day', local_now) - interval '6 days') AT TIME ZONE 'Europe/Rome' AS sette_giorni,
+        date_trunc('week', local_now) AT TIME ZONE 'Europe/Rome' AS settimana
+      FROM local_clock
+    )
+    SELECT count(*)::int AS totale,
+      count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'cliente')::int AS clienti,
+      count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'autista')::int AS operatori,
+      count(*) FILTER (WHERE u.created_at BETWEEN b.oggi AND now())::int AS oggi,
+      count(*) FILTER (WHERE u.created_at BETWEEN b.sette_giorni AND now())::int AS ultimi_sette,
+      count(*) FILTER (WHERE u.created_at BETWEEN b.settimana AND now())::int AS settimana,
+      count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'autista' AND NOT ${complete})::int AS incompleti
+    FROM utente u CROSS JOIN bounds b LEFT JOIN fleet f ON f.driver_id = u.id
+  `);
+  res.json(result);
+}));
+
+router.get('/utenti', adminRead(async (req, res) => {
+  const { ruolo, q = '', modalita = '', configurazione = '' } = req.query;
+  const page = Number(req.query.page ?? 1);
+  const limit = 25;
+  if (!['cliente', 'autista'].includes(ruolo) || typeof q !== 'string' || q.length > 100 ||
+      !['', 'singolo', 'flotta', 'non_definita'].includes(modalita) ||
+      !['', 'completa', 'incompleta'].includes(configurazione) ||
+      !Number.isSafeInteger(page) || page < 1 || page > 1000000) {
+    return res.status(400).json({ error: 'Parametri di ricerca non validi' });
+  }
+
+  const driver = ruolo === 'autista';
+  const { rows } = await pool.query(`
+    ${driver ? `WITH ${configuration}, candidates AS (` : 'WITH candidates AS ('}
+      SELECT ${accountFields}
+        ${driver ? `, coalesce(f.veicoli, 0) AS veicoli, ${complete} AS completa` : ''}
+      FROM utente u ${driver ? 'LEFT JOIN fleet f ON f.driver_id = u.id' : ''}
+      WHERE lower(btrim(u.tipo)) = $1
+        AND ($2 = '' OR strpos(lower(u.nome), lower($2)) > 0
+          OR strpos(lower(u.email), lower($2)) > 0 OR strpos(u.phone, $2) > 0
+          OR u.id::text = $2
+          ${driver ? `OR EXISTS (
+            SELECT 1 FROM autista_profilo p WHERE p.utente_id = u.id
+              AND (strpos(lower(concat_ws(' ', p.nome, p.cognome)), lower($2)) > 0
+                OR strpos(p.telefono, $2) > 0)
+          )` : ''})
+    ), page AS (
+      SELECT * FROM candidates
+      ${driver ? `WHERE ($5 = '' OR coalesce(modalita_operativa, 'non_definita') = $5)
+        AND ($6 = '' OR completa = ($6 = 'completa'))` : ''}
+      ORDER BY created_at DESC NULLS LAST, id DESC LIMIT $3 OFFSET $4
+    )
+    SELECT page.* ${driver ? '' : `, (
+      SELECT count(*)::int FROM prenotazioni p WHERE p.cliente_id = page.id
+    ) AS prenotazioni`}
+    FROM page ORDER BY created_at DESC NULLS LAST, id DESC
+  `, [ruolo, q.trim(), limit + 1, (page - 1) * limit, ...(driver ? [modalita, configurazione] : [])]);
+  res.json({ items: rows.slice(0, limit), page, hasMore: rows.length > limit });
+}));
+
+router.get('/utenti/:id', adminRead(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!/^\d+$/.test(req.params.id) || !Number.isInteger(id) || id < 1 || id > 2147483647) {
+    return res.status(400).json({ error: 'ID utente non valido' });
+  }
+
+  const { rows: [utente] } = await pool.query(`
+    SELECT ${accountFields}, (SELECT count(*)::int FROM prenotazioni WHERE cliente_id = u.id) AS prenotazioni
+    FROM utente u WHERE u.id = $1 AND lower(btrim(u.tipo)) IN ('cliente', 'autista')
+  `, [id]);
+  if (!utente) return res.status(404).json({ error: 'Utente non trovato' });
+  if (utente.tipo.trim().toLowerCase() === 'cliente') return res.json({ utente });
+
+  const [profilo, veicoli, documenti, conducenti] = await Promise.all([
+    pool.query(`
+      SELECT nome, cognome, telefono
+      FROM autista_profilo WHERE utente_id = $1 ORDER BY id DESC LIMIT 1
+    `, [id]),
+    pool.query(`
+      SELECT v.id, v.marca, v.modello, v.targa, v.stato, v.stato_verifica, ${vehicleChecks},
+        coalesce((SELECT jsonb_agg(jsonb_build_object('tipo', t.tipo, 'euro_km', t.euro_km,
+          'prezzo_passeggero', t.prezzo_passeggero, 'ora_inizio', t.ora_inizio, 'ora_fine', t.ora_fine)
+          ORDER BY t.tipo, t.id) FROM tariffe t WHERE t.veicolo_id = v.id), '[]') AS tariffe,
+        coalesce((SELECT jsonb_agg(jsonb_build_object('id', d.id, 'start', to_char(d.start AT TIME ZONE 'Europe/Rome', 'HH24:MI'), 'fine', to_char(d.fine AT TIME ZONE 'Europe/Rome', 'HH24:MI'),
+          'giorni_esclusi', d.giorni_esclusi, 'inattivita', d.inattivita,
+          'ora_locale', to_char(now() AT TIME ZONE 'Europe/Rome', 'HH24:MI'), 'giorno_locale', extract(dow from now() AT TIME ZONE 'Europe/Rome'), 'istante', now()) ORDER BY d.start, d.id)
+          FROM disponibilita_veicolo d WHERE d.veicolo_id = v.id), '[]') AS disponibilita
+      FROM veicolo v WHERE v.driver_id = $1 ORDER BY v.id
+    `, [id]),
+    pool.query(`
+      SELECT id, tipo, veicolo_id, stato, created_at, coalesce(btrim(url) <> '', false) AS caricato
+      FROM documenti_autista WHERE autista_id = $1 ORDER BY created_at DESC NULLS LAST, id DESC
+    `, [id]),
+    pool.query(`
+      SELECT co.id, u.nome, co.stato, co.conducente_id FROM conducenti_operatori co
+      JOIN utente u ON u.id = co.conducente_id WHERE co.operatore_id = $1
+      ORDER BY u.nome, co.id
+    `, [id])
+  ]);
+  res.json({ utente, profilo: profilo.rows[0] ?? null, veicoli: veicoli.rows,
+    documenti: documenti.rows, conducenti: conducenti.rows });
+}));
+
+export default router;

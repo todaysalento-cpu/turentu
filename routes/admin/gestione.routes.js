@@ -1,8 +1,10 @@
 // routes/admin/gestione.routes.js
 import express from 'express';
+import utentiRoutes from './utenti.routes.js';
 import { pool } from '../../db/db.js';
 
 const router = express.Router();
+router.use(utentiRoutes);
 
 // GET /admin/gestione
 router.get('/', async (req, res) => {

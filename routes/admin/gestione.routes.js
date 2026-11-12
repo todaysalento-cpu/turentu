@@ -1,10 +1,11 @@
 // routes/admin/gestione.routes.js
 import express from 'express';
 import utentiRoutes from './utenti.routes.js';
+import eliminazioneRoutes from './utenti-eliminazione.routes.js';
 import { pool } from '../../db/db.js';
 
 const router = express.Router();
-router.use(utentiRoutes);
+router.use(utentiRoutes, eliminazioneRoutes);
 
 // GET /admin/gestione
 router.get('/', async (req, res) => {

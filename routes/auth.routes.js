@@ -1,3 +1,4 @@
+import { accountExists } from '../middleware/account-exists.js';
 // ======================= routes/auth.routes.js =======================
 import express from 'express';
 import jwt from 'jsonwebtoken';
@@ -27,7 +28,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ===================== MIDDLEWARE AUTH =====================
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
 
@@ -37,7 +38,11 @@ const authenticate = (req, res, next) => {
   }
 
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!(await accountExists(payload.id))) {
+      return res.status(401).json({ message: 'Account non disponibile' });
+    }
+    req.user = payload;
     next();
   } catch (err) {
     console.error('❌ [AUTH MIDDLEWARE] Errore verifica JWT:', err.message);
@@ -55,19 +60,10 @@ const cookieOptions = {
 };
 
 // ===================== /me =====================
-router.get('/me', (req, res) => {
+router.get('/me', authenticate, (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
-
-  if (!token) return res.status(401).json({ message: 'Non autenticato' });
-
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    res.json({ ...payload, token });
-  } catch (err) {
-    console.error('❌ [GET /me] Token non valido:', err.message);
-    return res.status(401).json({ message: 'Token non valido' });
-  }
+  res.json({ ...req.user, token });
 });
 
 // ===================== ELIMINAZIONE ACCOUNT =====================
@@ -314,20 +310,8 @@ router.post('/apple', async (req, res) => {
 });
 
 // ===================== SAVE PUSH TOKEN =====================
-router.post('/me/push-token', (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.cookies?.token;
-
-  if (!token) return res.status(401).json({ message: 'Non autenticato' });
-
-  let user;
-  try {
-    user = jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    console.error('❌ [POST /me/push-token] Token non valido:', err.message);
-    return res.status(401).json({ message: 'Token non valido' });
-  }
-
+router.post('/me/push-token', authenticate, (req, res) => {
+  const user = req.user;
   const { push_token, device_type } = req.body;
   if (!push_token) return res.status(400).json({ message: 'push_token richiesto' });
 

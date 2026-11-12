@@ -1,3 +1,4 @@
+import { accountExists } from '../middleware/account-exists.js';
 // ======================= routes/chat.routes.js =======================
 import express from "express";
 import { requireChatAccess } from "../services/chat/chat-auth.middleware.js";
@@ -19,7 +20,7 @@ const log = (label, data = {}) => {
 };
 
 /* ================= AUTH ================= */
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(" ")[1] || req.cookies?.token;
     if (!token) {
@@ -28,6 +29,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (!(await accountExists(decoded.id))) return res.status(401).json({ message: 'Account non disponibile' });
     decoded.role = decoded.role?.toLowerCase();
 
     req.user = decoded;

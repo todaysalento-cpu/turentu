@@ -1,9 +1,14 @@
+import { accountExists } from './middleware/account-exists.js';
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from './config/security.js';
 import { pool } from "./db/db.js";
 import { canAccessChat } from "./services/chat/chat-access.service.js";
 
 let io;
+
+export function disconnectAccountSockets(id, role) {
+  io?.in(`${role}_${id}`).disconnectSockets(true);
+}
 
 export const getIO = () => {
   if (!io) throw new Error("Socket.io non inizializzato!");
@@ -39,12 +44,13 @@ export const sendNotification = async ({ userId, role, notification }) => {
 export const setupSocket = (ioServer) => {
   io = ioServer;
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("NO_TOKEN"));
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
+      if (!(await accountExists(decoded.id))) return next(new Error('ACCOUNT_UNAVAILABLE'));
       
       // Normalizzazione ruoli e ID
       let rawRole = String(decoded.role || decoded.tipo || "cliente").toLowerCase();

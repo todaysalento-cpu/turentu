@@ -1,9 +1,10 @@
+import { accountExists } from './account-exists.js';
 import jwt from 'jsonwebtoken';
 
 import { JWT_SECRET } from '../config/security.js';
 
 // ===================== AUTH =====================
-export const authMiddleware = (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   let token = req.cookies?.token;
 
   // 🔹 fallback Authorization header (utile per mobile / test / socket fallback)
@@ -18,6 +19,9 @@ export const authMiddleware = (req, res, next) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
 
+    if (!(await accountExists(payload.id))) {
+      return res.status(401).json({ error: 'Account non disponibile' });
+    }
     req.user = payload; // { id, role, email, nome }
     next();
   } catch (err) {

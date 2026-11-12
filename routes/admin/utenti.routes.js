@@ -108,11 +108,13 @@ router.get('/utenti', adminRead(async (req, res) => {
               AND (strpos(lower(concat_ws(' ', p.nome, p.cognome)), lower($2)) > 0
                 OR strpos(p.telefono, $2) > 0)
           )` : ''})
-    ), filtered AS (
+    ), matching AS (
       SELECT * FROM candidates
-      ${driver ? `WHERE ($5 = '' OR coalesce(modalita_operativa, 'non_definita') = $5)
-        AND ($6 = '' OR completa = ($6 = 'completa'))` :
+      ${driver ? "WHERE ($5 = '' OR coalesce(modalita_operativa, 'non_definita') = $5)" :
         "WHERE ($5 = '' OR (email_verificata_il IS NOT NULL) = ($5 = 'verificata'))"}
+    ), filtered AS (
+      SELECT * FROM matching
+      ${driver ? "WHERE ($6 = '' OR completa = ($6 = 'completa'))" : ''}
     ), stats AS (
       SELECT count(*)::int AS totale,
         count(*) FILTER (WHERE created_at BETWEEN b.oggi AND now())::int AS oggi,
@@ -133,10 +135,18 @@ router.get('/utenti', adminRead(async (req, res) => {
       FROM page
     )
     SELECT to_jsonb(stats) AS riepilogo,
+      ${driver ? `(SELECT jsonb_build_object(
+        'tutte', count(*)::int,
+        'completa', count(*) FILTER (WHERE completa)::int,
+        'incompleta', count(*) FILTER (WHERE NOT completa)::int
+      ) FROM matching)` : 'NULL::jsonb'} AS configurazioni,
       coalesce((SELECT jsonb_agg(to_jsonb(r) ORDER BY ${order}) FROM results r), '[]'::jsonb) AS items
     FROM stats
   `, [ruolo, q.trim(), limit + 1, (page - 1) * limit, ...(driver ? [modalita, configurazione] : [verifica_email])]);
-  res.json({ items: result.items.slice(0, limit), page, hasMore: result.items.length > limit, riepilogo: result.riepilogo });
+  res.json({
+    items: result.items.slice(0, limit), page, hasMore: result.items.length > limit, riepilogo: result.riepilogo,
+    ...(driver ? { configurazioni: result.configurazioni } : {}),
+  });
 }));
 
 router.get('/utenti/:id/documenti/:documentId', adminRead(async (req, res) => {

@@ -15,11 +15,13 @@ router.get('/', authMiddleware, async (req,res)=>{
         n.type,
         n.message,
         n.created_at,
-        false AS seen
+        CASE WHEN n.type = 'ncc_dati_completi' THEN n.seen ELSE false END AS seen
       FROM notifications n
+      WHERE n.type IS DISTINCT FROM 'ncc_dati_mancanti'
+        AND (n.type IS DISTINCT FROM 'ncc_dati_completi' OR n.user_id = $1)
       ORDER BY n.created_at DESC
       LIMIT 20
-    `)
+    `, [req.user.id])
 
     const formatted = notifications.rows.map(n => ({
       ...n,
@@ -39,7 +41,11 @@ router.get('/', authMiddleware, async (req,res)=>{
 router.post('/mark-seen', authMiddleware, async (req,res)=>{
   try{
     const { id } = req.body
-    await pool.query(`UPDATE notifications SET seen = true WHERE id = $1`, [id])
+    await pool.query(`
+      UPDATE notifications SET seen = true WHERE id = $1
+        AND type IS DISTINCT FROM 'ncc_dati_mancanti'
+        AND (type IS DISTINCT FROM 'ncc_dati_completi' OR user_id = $2)
+    `, [id, req.user.id])
     res.json({ success: true })
   }catch(err){
     console.error('❌ Mark notification seen error:', err)

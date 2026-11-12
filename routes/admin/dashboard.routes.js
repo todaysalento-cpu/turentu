@@ -9,8 +9,21 @@ router.get('/', async (req, res) => {
     // ===================== KPI principali =====================
     const query = `
       WITH
-      clienti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'cliente'),
-      autisti AS (SELECT COUNT(*) AS totale FROM utente WHERE eliminato_il IS NULL AND LOWER(TRIM(tipo)) = 'autista'),
+      inizio_oggi AS (
+        SELECT date_trunc('day', now() AT TIME ZONE 'Europe/Rome') AT TIME ZONE 'Europe/Rome' AS inizio
+      ),
+      contatori_utenti AS (
+        SELECT
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'cliente') AS clienti,
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'autista') AS autisti,
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'cliente'
+            AND created_at BETWEEN inizio AND now()) AS nuovi_clienti_oggi,
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'autista'
+            AND created_at BETWEEN inizio AND now()) AS nuovi_autisti_oggi,
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'autista' AND modalita_operativa = 'flotta') AS flotte_ncc,
+          count(*) FILTER (WHERE lower(btrim(tipo)) = 'autista' AND modalita_operativa = 'singolo') AS operatori_singoli
+        FROM utente CROSS JOIN inizio_oggi WHERE eliminato_il IS NULL
+      ),
       veicoli AS (
         SELECT COUNT(*) AS totale
         FROM veicolo v
@@ -36,11 +49,12 @@ router.get('/', async (req, res) => {
           OR ABS(importo - COALESCE(commissione,0) - COALESCE(guadagno_autista,0)) > 0.009
         )
       )
-      SELECT (SELECT totale FROM clienti) AS clienti, (SELECT totale FROM autisti) AS autisti, (SELECT totale FROM veicoli) AS veicoli, 
+      SELECT contatori_utenti.*, (SELECT totale FROM veicoli) AS veicoli,
              (SELECT totale FROM veicoli_disponibili) AS veicoli_disponibili, (SELECT totale FROM corse_totali) AS corse_totali, 
              (SELECT totale FROM corse_oggi) AS corse_oggi, (SELECT totale FROM fatturato) AS fatturato, (SELECT totale FROM guadagno) AS guadagno,
              (SELECT totale FROM commissioni) AS commissioni_turentu,
              (SELECT totale FROM pagamenti_non_contabilizzati) AS pagamenti_non_contabilizzati
+      FROM contatori_utenti
     `;
 
     // ===================== Parallel fetch =====================
@@ -117,6 +131,10 @@ router.get('/', async (req, res) => {
     res.json({
       clienti: Number(data.clienti),
       autisti: Number(data.autisti),
+      nuovi_clienti_oggi: Number(data.nuovi_clienti_oggi),
+      nuovi_autisti_oggi: Number(data.nuovi_autisti_oggi),
+      flotte_ncc: Number(data.flotte_ncc),
+      operatori_singoli: Number(data.operatori_singoli),
       veicoli: Number(data.veicoli),
       veicoli_disponibili: Number(data.veicoli_disponibili),
       corse_totali: corseTotali,

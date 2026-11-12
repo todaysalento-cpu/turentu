@@ -1,97 +1,46 @@
 import { pool } from '../../db/db.js';
 import { sendPush } from './push.service.js';
-import { getIO } from '../../socket.js';
+import { sendNotification } from '../../socket.js';
 
-// Helper per ottenere la data attuale formattata nel fuso orario di Roma (Italia)
+// Mantenuto per le notifiche esistenti che usano il timestamp applicativo.
 const getRomeISOString = () => {
   const d = new Date();
   return new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Rome' })).toISOString();
 };
 
-/**
- * Servizio centralizzato per notifiche (FCM)
- */
-export const notifyUser = async (
-  userId,
-  { type, title = 'Nuova Notifica', message, role, data = {} }
-) => {
+export async function deliverNotification(notification, { role, title = 'Nuova Notifica', data = {} }) {
+  const { id, user_id: userId, type, message } = notification;
   try {
-    // =========================
-    // 1. SAVE NOTIFICATION DB
-    // =========================
-    const romeTime = getRomeISOString();
-
-    const result = await pool.query(
-      `INSERT INTO notifications(user_id, type, message, seen, created_at)  
-       VALUES ($1, $2, $3, false, $4) RETURNING *`,
-      [userId, type, message, romeTime]
-    );
-
-    const notification = result.rows[0];
-    console.log("📝 [NOTIFY] Saved notification:", notification.id);
-
-    // =========================
-    // 2. SOCKET REALTIME
-    // =========================
-    try {
-      const io = getIO();
-      const room = `${role === 'driver' ? 'autista' : role}_${userId}`;
-
-      io.to(room).emit("new_notification", {
-        ...notification,
-        sentAt: Date.now(),
-      });
-
-      console.log(`🚀 [SOCKET] Sent to room: ${room}`);
-    } catch (e) {
-      console.warn("⚠️ [SOCKET ERROR]", e.message);
-    }
-
-    // =========================
-    // 3. GET PUSH TOKEN
-    // =========================
-    // CORRETTO: nome colonna da 'fcm_token' a 'push_token'
-    const tokenRes = await pool.query(
-      `SELECT push_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1`,
-      [userId]
-    );
-
-    if (tokenRes.rows.length === 0) {
-      console.log(`ℹ️ [FCM] No token for user ${userId}`);
-      return notification;
-    }
-
-    // CORRETTO: accesso alla proprietà corretta
-    const fcmToken = tokenRes.rows[0].push_token;
-    console.log("📨 [FCM] Sending to token:", fcmToken ? "Presente" : "Vuoto");
-
-    if (!fcmToken) return notification;
-
-    // =========================
-    // 4. SEND PUSH VIA FCM
-    // =========================
-    try {
-      const pushResult = await sendPush(
-        fcmToken,
-        title,
-        message,
-        {
-          ...data,
-          notificationId: notification.id.toString(),
-          type,
-        }
-      );
-
-      console.log("📤 [FCM RESULT]:", pushResult?.success ? "Success" : "Failed");
-    } catch (pushErr) {
-      console.error("❌ [FCM SEND ERROR]", pushErr.message);
-      // Non blocchiamo la notifica se fallisce solo il push
-    }
-
-    return notification;
-
-  } catch (err) {
-    console.error('❌ [NOTIFY_SERVICE] Critical error:', err);
-    throw err;
+    await sendNotification({ userId, role, notification });
+  } catch (error) {
+    console.warn('Consegna notifica socket:', error.message);
   }
-};
+
+  const { rows: [recipient] } = await pool.query(
+    'SELECT push_token FROM utente_push_tokens WHERE user_id = $1 LIMIT 1',
+    [userId],
+  );
+  if (!recipient?.push_token) return;
+
+  try {
+    await sendPush(recipient.push_token, title, message, {
+      ...data, notificationId: String(id), type,
+    });
+  } catch (error) {
+    console.error('Consegna notifica push:', error.message);
+  }
+}
+
+export async function notifyUser(userId, { type, title, message, role, data }) {
+  try {
+    const { rows: [notification] } = await pool.query(`
+      INSERT INTO notifications (user_id, type, message, seen, created_at)
+      VALUES ($1, $2, $3, false, $4) RETURNING *
+    `, [userId, type, message, getRomeISOString()]);
+    await deliverNotification(notification, { role, title, data });
+    return notification;
+  } catch (error) {
+    console.error('Salvataggio o consegna notifica:', error.message);
+    throw error;
+  }
+}

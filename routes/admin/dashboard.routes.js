@@ -25,9 +25,11 @@ router.get('/', async (req, res) => {
         FROM utente CROSS JOIN inizio_oggi WHERE eliminato_il IS NULL
       ),
       veicoli AS (
-        SELECT COUNT(*) AS totale
+        SELECT count(*) AS totale,
+          count(*) FILTER (WHERE v.created_at BETWEEN inizio AND now()) AS nuovi_oggi
         FROM veicolo v
         LEFT JOIN utente u ON v.driver_id = u.id
+        CROSS JOIN inizio_oggi
         WHERE u.eliminato_il IS NULL
       ),
       veicoli_disponibili AS (
@@ -50,6 +52,7 @@ router.get('/', async (req, res) => {
         )
       )
       SELECT contatori_utenti.*, (SELECT totale FROM veicoli) AS veicoli,
+             (SELECT nuovi_oggi FROM veicoli) AS nuovi_veicoli_oggi,
              (SELECT totale FROM veicoli_disponibili) AS veicoli_disponibili, (SELECT totale FROM corse_totali) AS corse_totali, 
              (SELECT totale FROM corse_oggi) AS corse_oggi, (SELECT totale FROM fatturato) AS fatturato, (SELECT totale FROM guadagno) AS guadagno,
              (SELECT totale FROM commissioni) AS commissioni_turentu,
@@ -136,6 +139,7 @@ router.get('/', async (req, res) => {
       flotte_ncc: Number(data.flotte_ncc),
       operatori_singoli: Number(data.operatori_singoli),
       veicoli: Number(data.veicoli),
+      nuovi_veicoli_oggi: Number(data.nuovi_veicoli_oggi),
       veicoli_disponibili: Number(data.veicoli_disponibili),
       corse_totali: corseTotali,
       corse_oggi: Number(data.corse_oggi),

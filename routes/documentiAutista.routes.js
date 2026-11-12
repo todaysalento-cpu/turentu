@@ -78,7 +78,7 @@ router.post(
               `INSERT INTO documenti_autista (autista_id, tipo, url, stato)
                VALUES ($1, $2, $3, 'pending')
                ON CONFLICT (autista_id, tipo)
-               DO UPDATE SET url = EXCLUDED.url, stato = 'pending', note_admin = NULL`,
+               DO UPDATE SET url = EXCLUDED.url, stato = 'pending', note_admin = NULL, created_at = NOW()`,
               [utente_id, tipoDb, url]
             );
           }

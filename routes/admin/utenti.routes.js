@@ -25,6 +25,16 @@ const configuration = `
 const complete = `(coalesce(u.modalita_operativa IN ('singolo', 'flotta'), false)
   AND EXISTS (SELECT 1 FROM autista_profilo ap WHERE ap.utente_id = u.id)
   AND coalesce(f.veicoli_completi, false))`;
+const operatorUpdatedAt = user => `greatest(
+  (SELECT max(coalesce(p.updated_at, p.created_at))::timestamptz
+    FROM autista_profilo p WHERE p.utente_id = ${user}.id),
+  (SELECT max(v.created_at)::timestamptz FROM veicolo v WHERE v.driver_id = ${user}.id),
+  (SELECT max(coalesce(t.updated_at, t.created_at))::timestamptz
+    FROM tariffe t JOIN veicolo v ON v.id = t.veicolo_id WHERE v.driver_id = ${user}.id),
+  (SELECT max(d.created_at)::timestamptz FROM documenti_autista d WHERE d.autista_id = ${user}.id),
+  (SELECT max(c.aggiornato_il) FROM conducenti_operatori c WHERE c.operatore_id = ${user}.id)
+)`;
+const validId = value => /^\d+$/.test(value) && Number(value) > 0 && Number(value) <= 2147483647;
 
 function adminRead(handler) {
   return async (req, res) => {
@@ -92,7 +102,7 @@ router.get('/utenti', adminRead(async (req, res) => {
         AND ($6 = '' OR completa = ($6 = 'completa'))` : ''}
       ORDER BY created_at DESC NULLS LAST, id DESC LIMIT $3 OFFSET $4
     )
-    SELECT page.* ${driver ? '' : `, (
+    SELECT page.* ${driver ? ', ' + operatorUpdatedAt('page') + ' AS ultimo_aggiornamento' : `, (
       SELECT count(*)::int FROM prenotazioni p WHERE p.cliente_id = page.id
     ) AS prenotazioni`}
     FROM page ORDER BY created_at DESC NULLS LAST, id DESC
@@ -100,14 +110,48 @@ router.get('/utenti', adminRead(async (req, res) => {
   res.json({ items: rows.slice(0, limit), page, hasMore: rows.length > limit });
 }));
 
+router.get('/utenti/:id/documenti/:documentId', adminRead(async (req, res) => {
+  const { id, documentId } = req.params;
+  if (![id, documentId].every(validId)) return res.status(400).json({ error: 'ID non valido' });
+
+  const { rowCount } = await pool.query(`
+    SELECT 1 FROM utente WHERE id = $1 AND eliminato_il IS NULL AND lower(btrim(tipo)) = 'admin'
+  `, [req.user.id]);
+  if (!rowCount) return res.status(403).json({ error: 'Permesso amministrativo non valido' });
+
+  const { rows: [document] } = await pool.query(`
+    SELECT d.url FROM documenti_autista d
+    JOIN utente u ON u.id = d.autista_id
+    WHERE d.id = $1 AND u.id = $2 AND u.eliminato_il IS NULL AND lower(btrim(u.tipo)) = 'autista'
+      AND (d.veicolo_id IS NULL OR EXISTS (
+        SELECT 1 FROM veicolo v WHERE v.id = d.veicolo_id AND v.driver_id = u.id
+      ))
+  `, [Number(documentId), Number(id)]);
+  if (!document?.url?.trim()) return res.status(404).json({ error: 'Documento non trovato' });
+
+  let url;
+  try {
+    url = new URL(document.url);
+  } catch {
+    return res.status(422).json({ error: 'Indirizzo del documento non valido' });
+  }
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloud || url.protocol !== 'https:' || url.host !== 'res.cloudinary.com' ||
+      url.username || url.password || !url.pathname.startsWith('/' + cloud + '/')) {
+    return res.status(422).json({ error: 'Archivio del documento non riconosciuto' });
+  }
+  res.json({ url: url.href, immagine: /\.(avif|gif|jpe?g|png|webp)$/i.test(url.pathname) });
+}));
+
 router.get('/utenti/:id', adminRead(async (req, res) => {
   const id = Number(req.params.id);
-  if (!/^\d+$/.test(req.params.id) || !Number.isInteger(id) || id < 1 || id > 2147483647) {
+  if (!validId(req.params.id)) {
     return res.status(400).json({ error: 'ID utente non valido' });
   }
 
   const { rows: [utente] } = await pool.query(`
-    SELECT ${accountFields}, (SELECT count(*)::int FROM prenotazioni WHERE cliente_id = u.id) AS prenotazioni
+    SELECT ${accountFields}, (SELECT count(*)::int FROM prenotazioni WHERE cliente_id = u.id) AS prenotazioni,
+      CASE WHEN lower(btrim(u.tipo)) = 'autista' THEN ${operatorUpdatedAt('u')} END AS ultimo_aggiornamento
     FROM utente u WHERE u.eliminato_il IS NULL AND u.id = $1 AND lower(btrim(u.tipo)) IN ('cliente', 'autista')
   `, [id]);
   if (!utente) return res.status(404).json({ error: 'Utente non trovato' });

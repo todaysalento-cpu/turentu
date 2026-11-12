@@ -77,7 +77,7 @@ router.post('/', authMiddleware, async (req, res) => {
           );
           
           if (docCheck.rowCount > 0) {
-            await pool.query('UPDATE documenti_autista SET url = $1, stato = $2 WHERE id = $3', [url, 'pending', docCheck.rows[0].id]);
+            await pool.query('UPDATE documenti_autista SET url = $1, stato = $2, created_at = NOW() WHERE id = $3', [url, 'pending', docCheck.rows[0].id]);
           } else {
             await pool.query(
               'INSERT INTO documenti_autista (autista_id, tipo, url, stato) VALUES ($1, $2, $3, $4)', 

@@ -1,17 +1,11 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
+import { vehicleChecks, vehicleOverview, vehicleOverviewJoins } from './vehicle-overview.js';
+import { cloudinary } from '../../services/cloudinary.js';
+import { parseCloudinaryUrl } from '../../services/auth/account-removals.service.js';
 
 const router = express.Router();
 const accountFields = 'u.id, u.nome, u.email, u.phone, u.tipo, u.created_at, u.modalita_operativa, u.email_verificata_il';
-const vehicleChecks = `
-  EXISTS (
-    SELECT 1 FROM tariffe t WHERE t.veicolo_id = v.id AND t.tipo = 'standard'
-      AND t.euro_km >= 0 AND t.prezzo_passeggero >= 0
-  ) AS tariffa_standard,
-  EXISTS (
-    SELECT 1 FROM disponibilita_veicolo d WHERE d.veicolo_id = v.id AND (d.start AT TIME ZONE 'Europe/Rome')::time <> (d.fine AT TIME ZONE 'Europe/Rome')::time
-  ) AS disponibilita_configurata
-`;
 const configuration = `
   vehicle_configuration AS (
     SELECT v.id, v.driver_id, ${vehicleChecks} FROM veicolo v
@@ -46,6 +40,13 @@ function adminRead(handler) {
       res.status(500).json({ error: 'Impossibile caricare la gestione utenti' });
     }
   };
+}
+
+async function isCurrentAdmin(id) {
+  const { rowCount } = await pool.query(`
+    SELECT 1 FROM utente WHERE id = $1 AND eliminato_il IS NULL AND lower(btrim(tipo)) = 'admin'
+  `, [id]);
+  return rowCount > 0;
 }
 
 router.get('/utenti/contatori', adminRead(async (_req, res) => {
@@ -114,10 +115,7 @@ router.get('/utenti/:id/documenti/:documentId', adminRead(async (req, res) => {
   const { id, documentId } = req.params;
   if (![id, documentId].every(validId)) return res.status(400).json({ error: 'ID non valido' });
 
-  const { rowCount } = await pool.query(`
-    SELECT 1 FROM utente WHERE id = $1 AND eliminato_il IS NULL AND lower(btrim(tipo)) = 'admin'
-  `, [req.user.id]);
-  if (!rowCount) return res.status(403).json({ error: 'Permesso amministrativo non valido' });
+  if (!await isCurrentAdmin(req.user.id)) return res.status(403).json({ error: 'Permesso amministrativo non valido' });
 
   const { rows: [document] } = await pool.query(`
     SELECT d.url FROM documenti_autista d
@@ -140,7 +138,38 @@ router.get('/utenti/:id/documenti/:documentId', adminRead(async (req, res) => {
       url.username || url.password || !url.pathname.startsWith('/' + cloud + '/')) {
     return res.status(422).json({ error: 'Archivio del documento non riconosciuto' });
   }
-  res.json({ url: url.href, immagine: /\.(avif|gif|jpe?g|png|webp)$/i.test(url.pathname) });
+  if (/\.(gif|jpe?g|png|webp)$/i.test(url.pathname)) {
+    return res.json({ url: url.href, immagine: true, anteprime: [url.href] });
+  }
+
+  const resource = parseCloudinaryUrl(url.href, cloud);
+  if (resource?.resourceType !== 'image') {
+    return res.status(422).json({ error: 'Formato del documento non supportato per l’anteprima' });
+  }
+
+  const pdf = /\.pdf$/i.test(url.pathname);
+  let pages = 1;
+  let complete = !pdf;
+  if (pdf) {
+    try {
+      const metadata = await cloudinary.api.resource(resource.publicId, {
+        resource_type: 'image', type: 'upload', pages: true, timeout: 8000,
+      });
+      if (Number.isSafeInteger(metadata.pages) && metadata.pages > 0) {
+        pages = metadata.pages;
+        complete = true;
+      }
+    } catch (error) {
+      console.warn('Conteggio pagine documento non disponibile:', error.http_code || error.name);
+    }
+  }
+  const version = url.pathname.match(/\/v(\d+)\//)?.[1];
+  const previews = Array.from({ length: pages }, (_, index) => cloudinary.url(resource.publicId, {
+    secure: true, sign_url: Boolean(process.env.CLOUDINARY_API_SECRET), version,
+    resource_type: 'image', format: 'jpg', width: 1800, crop: 'limit',
+    ...(pdf ? { page: index + 1 } : {}),
+  }));
+  res.json({ url: previews[0], immagine: true, anteprime: previews, pagine_complete: complete });
 }));
 
 router.get('/utenti/:id', adminRead(async (req, res) => {
@@ -157,21 +186,18 @@ router.get('/utenti/:id', adminRead(async (req, res) => {
   if (!utente) return res.status(404).json({ error: 'Utente non trovato' });
   if (utente.tipo.trim().toLowerCase() === 'cliente') return res.json({ utente });
 
+  if (!await isCurrentAdmin(req.user.id)) {
+    return res.status(403).json({ error: 'Permesso amministrativo non valido' });
+  }
   const [profilo, veicoli, documenti, conducenti] = await Promise.all([
     pool.query(`
-      SELECT nome, cognome, telefono
+      SELECT nome, cognome, telefono, iban, nome_banca, nome_titolare_conto
       FROM autista_profilo WHERE utente_id = $1 ORDER BY id DESC LIMIT 1
     `, [id]),
     pool.query(`
-      SELECT v.id, v.marca, v.modello, v.targa, v.stato, v.stato_verifica, ${vehicleChecks},
-        coalesce((SELECT jsonb_agg(jsonb_build_object('tipo', t.tipo, 'euro_km', t.euro_km,
-          'prezzo_passeggero', t.prezzo_passeggero, 'ora_inizio', t.ora_inizio, 'ora_fine', t.ora_fine)
-          ORDER BY t.tipo, t.id) FROM tariffe t WHERE t.veicolo_id = v.id), '[]') AS tariffe,
-        coalesce((SELECT jsonb_agg(jsonb_build_object('id', d.id, 'start', to_char(d.start AT TIME ZONE 'Europe/Rome', 'HH24:MI'), 'fine', to_char(d.fine AT TIME ZONE 'Europe/Rome', 'HH24:MI'),
-          'giorni_esclusi', d.giorni_esclusi, 'inattivita', d.inattivita,
-          'ora_locale', to_char(now() AT TIME ZONE 'Europe/Rome', 'HH24:MI'), 'giorno_locale', extract(dow from now() AT TIME ZONE 'Europe/Rome'), 'istante', now()) ORDER BY d.start, d.id)
-          FROM disponibilita_veicolo d WHERE d.veicolo_id = v.id), '[]') AS disponibilita
-      FROM veicolo v WHERE v.driver_id = $1 ORDER BY v.id
+      SELECT v.id, v.marca, v.modello, v.targa, v.stato, v.stato_verifica, v.localita,
+        ${vehicleChecks}, ${vehicleOverview}
+      FROM veicolo v ${vehicleOverviewJoins} WHERE v.driver_id = $1 ORDER BY v.id
     `, [id]),
     pool.query(`
       SELECT id, tipo, veicolo_id, stato, created_at, coalesce(btrim(url) <> '', false) AS caricato

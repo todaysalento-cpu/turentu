@@ -1,5 +1,6 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
+import { vehicleCoordinates } from './vehicle-overview.js';
 
 const router = express.Router();
 
@@ -43,7 +44,8 @@ router.get('/', async (req, res) => {
       crescitaRes,
       topAutistiRes,
       corseLiveRes,
-      autistiLiveRes
+      autistiLiveRes,
+      partenzeRes
     ] = await Promise.all([
       pool.query(query),
       pool.query(`
@@ -93,6 +95,13 @@ router.get('/', async (req, res) => {
         LEFT JOIN disponibilita_veicolo dv ON dv.veicolo_id = v.id
         LEFT JOIN posizione_veicolo pv ON pv.veicolo_id = v.id AND pv.tipo = 'CORRENTE'
         WHERE u.eliminato_il IS NULL AND LOWER(TRIM(u.tipo)) = 'autista'
+      `),
+      pool.query(`
+        SELECT v.id, v.marca, v.modello, v.targa, v.localita, u.nome AS nome_autista,
+          ${vehicleCoordinates}
+        FROM veicolo v JOIN utente u ON u.id = v.driver_id
+        WHERE v.coord IS NOT NULL AND u.eliminato_il IS NULL AND lower(btrim(u.tipo)) = 'autista'
+        ORDER BY v.id
       `)
     ]);
 
@@ -117,6 +126,7 @@ router.get('/', async (req, res) => {
       guadagno_medio_autista: autistiTotali > 0 ? parseFloat((Number(data.guadagno)/autistiTotali).toFixed(2)) : 0,
       crescita: crescitaRes.rows.map(r => ({ giorno: r.giorno, ricavi: Number(r.ricavi) })),
       top_autisti: topAutistiRes.rows.map(a => ({ operatore_id: a.operatore_id, nome: a.nome, corse: Number(a.corse), guadagno: Number(a.guadagno) })),
+      veicoli_partenza: partenzeRes.rows,
       corse: corseLiveRes.rows.map(r => ({
         id: r.id,
         cliente: r.cliente,

@@ -1,18 +1,23 @@
 import express from 'express';
 import { pool } from '../../db/db.js';
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
+import { vehicleChecks, vehicleOverview, vehicleOverviewJoins } from './vehicle-overview.js';
 
 const router = express.Router();
 
 // GET: Lista veicoli
 // Ho aggiunto un log di debug interno per vedere cosa arriva dal token
 router.get('/', authMiddleware, requireRole('admin', 'Admin'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   try {
     const result = await pool.query(`
-      SELECT v.*, u.nome AS nome_autista, u.email AS email_autista 
+      SELECT v.*, u.nome AS nome_autista, u.email AS email_autista, u.modalita_operativa,
+        ${vehicleChecks}, ${vehicleOverview}
       FROM veicolo v
       LEFT JOIN utente u ON v.driver_id = u.id
-      ORDER BY v.created_at DESC
+      ${vehicleOverviewJoins}
+      WHERE u.eliminato_il IS NULL
+      ORDER BY v.created_at DESC NULLS LAST, v.id DESC
     `);
     res.json(result.rows);
   } catch (err) {

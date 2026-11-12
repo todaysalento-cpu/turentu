@@ -29,6 +29,21 @@ const operatorUpdatedAt = user => `greatest(
   (SELECT max(c.aggiornato_il) FROM conducenti_operatori c WHERE c.operatore_id = ${user}.id)
 )`;
 const validId = value => /^\d+$/.test(value) && Number(value) > 0 && Number(value) <= 2147483647;
+const listOrder = {
+  recenti: 'created_at DESC NULLS LAST, id DESC',
+  meno_recenti: 'created_at ASC NULLS LAST, id ASC',
+  nome_asc: 'lower(nome) ASC NULLS LAST, id ASC',
+  nome_desc: 'lower(nome) DESC NULLS LAST, id ASC',
+};
+const signupBounds = `
+  local_clock AS (SELECT now() AT TIME ZONE 'Europe/Rome' AS local_now),
+  bounds AS (
+    SELECT date_trunc('day', local_now) AT TIME ZONE 'Europe/Rome' AS oggi,
+      (date_trunc('day', local_now) - interval '6 days') AT TIME ZONE 'Europe/Rome' AS sette_giorni,
+      date_trunc('week', local_now) AT TIME ZONE 'Europe/Rome' AS settimana
+    FROM local_clock
+  )
+`;
 
 function adminRead(handler) {
   return async (req, res) => {
@@ -51,14 +66,7 @@ async function isCurrentAdmin(id) {
 
 router.get('/utenti/contatori', adminRead(async (_req, res) => {
   const { rows: [result] } = await pool.query(`
-    WITH ${configuration}, local_clock AS (
-      SELECT now() AT TIME ZONE 'Europe/Rome' AS local_now
-    ), bounds AS (
-      SELECT date_trunc('day', local_now) AT TIME ZONE 'Europe/Rome' AS oggi,
-        (date_trunc('day', local_now) - interval '6 days') AT TIME ZONE 'Europe/Rome' AS sette_giorni,
-        date_trunc('week', local_now) AT TIME ZONE 'Europe/Rome' AS settimana
-      FROM local_clock
-    )
+    WITH ${configuration}, ${signupBounds}
     SELECT count(*)::int AS totale,
       count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'cliente')::int AS clienti,
       count(*) FILTER (WHERE lower(btrim(u.tipo)) = 'autista')::int AS operatori,
@@ -72,19 +80,22 @@ router.get('/utenti/contatori', adminRead(async (_req, res) => {
 }));
 
 router.get('/utenti', adminRead(async (req, res) => {
-  const { ruolo, q = '', modalita = '', configurazione = '' } = req.query;
+  const { ruolo, q = '', modalita = '', configurazione = '', verifica_email = '', ordine = 'recenti' } = req.query;
   const page = Number(req.query.page ?? 1);
   const limit = 25;
   if (!['cliente', 'autista'].includes(ruolo) || typeof q !== 'string' || q.length > 100 ||
       !['', 'singolo', 'flotta', 'non_definita'].includes(modalita) ||
       !['', 'completa', 'incompleta'].includes(configurazione) ||
+      !['', 'verificata', 'non_verificata'].includes(verifica_email) ||
+      typeof ordine !== 'string' || !Object.hasOwn(listOrder, ordine) ||
       !Number.isSafeInteger(page) || page < 1 || page > 1000000) {
     return res.status(400).json({ error: 'Parametri di ricerca non validi' });
   }
 
   const driver = ruolo === 'autista';
-  const { rows } = await pool.query(`
-    ${driver ? `WITH ${configuration}, candidates AS (` : 'WITH candidates AS ('}
+  const order = listOrder[ordine];
+  const { rows: [result] } = await pool.query(`
+    WITH ${signupBounds}, ${driver ? configuration + ',' : ''} candidates AS (
       SELECT ${accountFields}
         ${driver ? `, coalesce(f.veicoli, 0) AS veicoli, ${complete} AS completa` : ''}
       FROM utente u ${driver ? 'LEFT JOIN fleet f ON f.driver_id = u.id' : ''}
@@ -97,18 +108,35 @@ router.get('/utenti', adminRead(async (req, res) => {
               AND (strpos(lower(concat_ws(' ', p.nome, p.cognome)), lower($2)) > 0
                 OR strpos(p.telefono, $2) > 0)
           )` : ''})
-    ), page AS (
+    ), filtered AS (
       SELECT * FROM candidates
       ${driver ? `WHERE ($5 = '' OR coalesce(modalita_operativa, 'non_definita') = $5)
-        AND ($6 = '' OR completa = ($6 = 'completa'))` : ''}
-      ORDER BY created_at DESC NULLS LAST, id DESC LIMIT $3 OFFSET $4
+        AND ($6 = '' OR completa = ($6 = 'completa'))` :
+        "WHERE ($5 = '' OR (email_verificata_il IS NOT NULL) = ($5 = 'verificata'))"}
+    ), stats AS (
+      SELECT count(*)::int AS totale,
+        count(*) FILTER (WHERE created_at BETWEEN b.oggi AND now())::int AS oggi,
+        count(*) FILTER (WHERE created_at BETWEEN b.sette_giorni AND now())::int AS ultimi_sette,
+        count(*) FILTER (WHERE created_at BETWEEN b.settimana AND now())::int AS settimana,
+        ${driver ? `count(*) FILTER (WHERE modalita_operativa = 'flotta')::int AS flotte,
+          count(*) FILTER (WHERE modalita_operativa = 'singolo')::int AS singoli,
+          count(*) FILTER (WHERE NOT completa)::int AS incompleti` :
+          `count(*) FILTER (WHERE email_verificata_il IS NOT NULL)::int AS email_verificate,
+          count(*) FILTER (WHERE email_verificata_il IS NULL)::int AS email_non_verificate`}
+      FROM filtered CROSS JOIN bounds b
+    ), page AS (
+      SELECT * FROM filtered ORDER BY ${order} LIMIT $3 OFFSET $4
+    ), results AS (
+      SELECT page.* ${driver ? ', ' + operatorUpdatedAt('page') + ' AS ultimo_aggiornamento' : `, (
+        SELECT count(*)::int FROM prenotazioni p WHERE p.cliente_id = page.id
+      ) AS prenotazioni`}
+      FROM page
     )
-    SELECT page.* ${driver ? ', ' + operatorUpdatedAt('page') + ' AS ultimo_aggiornamento' : `, (
-      SELECT count(*)::int FROM prenotazioni p WHERE p.cliente_id = page.id
-    ) AS prenotazioni`}
-    FROM page ORDER BY created_at DESC NULLS LAST, id DESC
-  `, [ruolo, q.trim(), limit + 1, (page - 1) * limit, ...(driver ? [modalita, configurazione] : [])]);
-  res.json({ items: rows.slice(0, limit), page, hasMore: rows.length > limit });
+    SELECT to_jsonb(stats) AS riepilogo,
+      coalesce((SELECT jsonb_agg(to_jsonb(r) ORDER BY ${order}) FROM results r), '[]'::jsonb) AS items
+    FROM stats
+  `, [ruolo, q.trim(), limit + 1, (page - 1) * limit, ...(driver ? [modalita, configurazione] : [verifica_email])]);
+  res.json({ items: result.items.slice(0, limit), page, hasMore: result.items.length > limit, riepilogo: result.riepilogo });
 }));
 
 router.get('/utenti/:id/documenti/:documentId', adminRead(async (req, res) => {

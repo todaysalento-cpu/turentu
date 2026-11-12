@@ -2,11 +2,10 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db/db.js';
-import { sendPasswordResetCode } from '../services/auth/gmail.service.js';
+import { isGmailConfigured, sendPasswordResetCode } from '../services/auth/gmail.service.js';
 
 const router = Router();
 const GENERIC = { message: 'Se l’indirizzo è registrato, riceverai un codice di recupero.' };
-const CODE_TTL_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
 const EMAIL_LIMIT = 3;
 const IP_LIMIT = 10;
@@ -50,6 +49,10 @@ router.post('/forgot-password', async (req, res) => {
   let client;
   try {
     secret();
+    if (!isGmailConfigured()) {
+      console.error('[PASSWORD RESET] Configurazione Gmail incompleta');
+      return res.status(503).json({ message: 'Invio del codice temporaneamente non disponibile' });
+    }
     client = await pool.connect();
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const ipKey = `ip:${digest(ip).slice(0, 60)}`;
@@ -57,13 +60,17 @@ router.post('/forgot-password', async (req, res) => {
     // Atomic, database-backed limits shared across Render instances.
     const ipAllowed = await checkLimit(client, ipKey, IP_LIMIT);
     const emailAllowed = await checkLimit(client, emailKey, EMAIL_LIMIT);
-    if (!ipAllowed || !emailAllowed) return res.status(200).json(GENERIC);
+    if (!ipAllowed || !emailAllowed) {
+      console.warn('[PASSWORD RESET] Limite richieste raggiunto:', ipAllowed ? 'email' : 'ip');
+      return res.status(429).json({ message: 'Troppi tentativi. Riprova più tardi, entro un’ora il limite si azzera.' });
+    }
 
     const user = await client.query('SELECT id, email FROM utente WHERE LOWER(email) = $1 LIMIT 1', [email]);
     if (!user.rows.length) return res.status(200).json(GENERIC);
 
     const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
     const codeHash = digest(`${user.rows[0].id}:${code}`);
+    await client.query('BEGIN');
     await client.query(`
       INSERT INTO password_reset_codes (user_id, code_hash, expires_at, attempts, created_at)
       VALUES ($1, $2, NOW() + INTERVAL '10 minutes', 0, NOW())
@@ -77,12 +84,19 @@ router.post('/forgot-password', async (req, res) => {
     try {
       await sendPasswordResetCode(user.rows[0].email, code);
     } catch (error) {
-      console.error('[PASSWORD RESET] Invio Gmail fallito:', error.response?.status || error.code || 'send_failed');
-      // Remove only the code associated with this send attempt.
-      await client.query('DELETE FROM password_reset_codes WHERE user_id = $1 AND code_hash = $2', [user.rows[0].id, codeHash]);
+      const providerError = error.response?.data?.error;
+      console.error('[PASSWORD RESET] Invio Gmail fallito:', {
+        status: error.response?.status,
+        code: typeof providerError === 'string' ? providerError : providerError?.status || error.code,
+      });
+      // A failed resend must preserve any previously delivered code.
+      await client.query('ROLLBACK');
+      return res.status(200).json(GENERIC);
     }
+    await client.query('COMMIT');
     return res.status(200).json(GENERIC);
   } catch (error) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('[PASSWORD RESET] Richiesta fallita:', error.message);
     return res.status(503).json({ message: 'Servizio temporaneamente non disponibile' });
   } finally {

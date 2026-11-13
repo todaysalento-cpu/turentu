@@ -141,18 +141,19 @@ async function history(client, id, action, req, details = null) {
 router.get('/operatori', async (req, res) => {
   try {
     const {
-      ricerca = '', stato = '', provincia = '', comune = '', telefono = '',
+      ricerca = '', stato = '', provincia = '', comune = '', telefono = '', piattaforma_app = '',
       prossimo_contatto = '', flotta = '', min_mezzi = '',
       min_contatti = '', max_contatti = '', ordine = 'recenti', pagina = '1', limite = '20'
     } = req.query;
     if ([ricerca, stato, provincia, comune, telefono, min_contatti, max_contatti, prossimo_contatto, flotta, min_mezzi].some(v => typeof v !== 'string')) throw bad('Filtri non validi');
+    if (!['', 'ios', 'android'].includes(piattaforma_app)) throw bad('Filtro dispositivo non valido');
     if (!['', 'presente', 'assente'].includes(telefono)) throw bad('Filtro telefono non valido');
     if ([min_contatti, max_contatti].some(v => v !== '' && (!/^\d+$/.test(v) || !Number.isSafeInteger(Number(v)))) ||
         (max_contatti !== '' && Number(min_contatti) > Number(max_contatti))) throw bad('Intervallo contatti non valido');
-    if (!['', 'scaduto', 'oggi', 'prossimi_7_giorni', 'senza_data'].includes(prossimo_contatto)) throw bad('Filtro prossimo contatto non valido');
+    if (!['', 'scaduto', 'oggi', 'prossimi_7_giorni', 'senza_data', 'in_programma'].includes(prossimo_contatto)) throw bad('Filtro prossimo contatto non valido');
     if (!['', 'auto', 'van', 'bus', 'non_censita'].includes(flotta)) throw bad('Filtro flotta non valido');
     if (min_mezzi !== '' && (!parseId(min_mezzi) || flotta === 'non_censita')) throw bad('Numero minimo di mezzi non valido');
-    const orders = { recenti: 'o.creato_il DESC', nome: 'lower(o.ragione_sociale) ASC', ultimo: 'ultimo_contatto_il DESC NULLS LAST', prossimo: 'o.prossimo_contatto_il ASC NULLS LAST' };
+    const orders = { recenti: 'o.creato_il DESC', nome: 'lower(o.ragione_sociale) ASC', ultimo: 'ultimo_contatto_il DESC NULLS LAST', prossimo: 'prossimo_contatto_effettivo_il ASC NULLS LAST' };
     if (!Object.hasOwn(orders, ordine) || typeof ordine !== 'string') throw bad('Ordinamento non valido');
     const page = Number(pagina), pageSize = Number(limite);
     if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 || !Number.isSafeInteger((page - 1) * pageSize)) throw bad('Parametri di paginazione non validi');
@@ -178,6 +179,10 @@ router.get('/operatori', async (req, res) => {
         'AAAAEEEEIIIIOOOOUUUUaaaaeeeeiiiioooouuuu' || chr(39)))`;
       filters.push(`strpos(${nomeComune('o.comune')}, ${nomeComune('$' + params.length)}) > 0`);
     }
+    if (piattaforma_app) {
+      params.push(piattaforma_app);
+      filters.push('o.piattaforma_app = $' + params.length);
+    }
     if (telefono) {
       const phone = "NULLIF(regexp_replace(o.telefono, '[[:space:]]', '', 'g'), '')";
       filters.push(telefono === 'presente' ? `${phone} IS NOT NULL` : `${phone} IS NULL`);
@@ -187,7 +192,12 @@ router.get('/operatori', async (req, res) => {
       params.push(Number(value));
       filters.push(`${contactCount} ${operator} $${params.length}`);
     }
-    if (prossimo_contatto) {
+    const nextContact = `((o.prossimo_contatto_il AT TIME ZONE 'Europe/Rome')::date >=
+      (now() AT TIME ZONE 'Europe/Rome')::date OR EXISTS (
+        SELECT 1 FROM public.procaccio_attivita a WHERE a.operatore_id = o.id
+          AND a.tipo = 'appuntamento' AND a.stato = 'programmata' AND a.programmata_il >= now()
+      ))`;
+    if (prossimo_contatto && prossimo_contatto !== 'in_programma') {
       const giornoLocale = "(o.prossimo_contatto_il AT TIME ZONE 'Europe/Rome')::date";
       const oggi = "(CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')::date";
       const scadenze = {
@@ -215,17 +225,23 @@ router.get('/operatori', async (req, res) => {
       SELECT count(*)::int AS totale,
         count(*) FILTER (WHERE o.stato = 'da_contattare')::int AS da_contattare,
         count(*) FILTER (WHERE o.stato = 'in_trattativa')::int AS in_trattativa,
-        count(*) FILTER (WHERE o.stato = 'aderito')::int AS aderito
+        count(*) FILTER (WHERE o.stato = 'aderito')::int AS aderito,
+        count(*) FILTER (WHERE ${nextContact})::int AS prossimo_contatto
       FROM public.procaccio_operatori o WHERE ${filters.join(' AND ')}
     `, params);
+    if (prossimo_contatto === 'in_programma') filters.push(nextContact);
     if (stato.trim()) { params.push(stato.trim()); filters.push('o.stato = ' + String.fromCharCode(36) + params.length); }
     const where = `WHERE ${filters.join(' AND ')}`;
-    const count = stato.trim() ? await pool.query(`SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori o ${where}`, params) : counters;
+    const count = stato.trim() || prossimo_contatto === 'in_programma' ? await pool.query(`SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori o ${where}`, params) : counters;
     const data = await pool.query(
       `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome,
               COALESCE(f.totale_mezzi, 0)::int AS totale_mezzi,
               ${contactCount}::int AS totale_contatti,
-              (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il
+              (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il,
+         LEAST(CASE WHEN (o.prossimo_contatto_il AT TIME ZONE 'Europe/Rome')::date >= (now() AT TIME ZONE 'Europe/Rome')::date THEN o.prossimo_contatto_il END,
+           (SELECT min(a.programmata_il) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id
+            AND a.tipo = 'appuntamento' AND a.stato = 'programmata' AND a.programmata_il >= now())
+         ) AS prossimo_contatto_effettivo_il
        FROM public.procaccio_operatori o
        LEFT JOIN public.procaccio_procacciatori p ON p.id = o.procacciatore_id
        LEFT JOIN (SELECT operatore_id, SUM(quantita) AS totale_mezzi FROM public.procaccio_flotte GROUP BY operatore_id) f ON f.operatore_id = o.id
@@ -275,7 +291,36 @@ router.post('/operatori/:id/telefonate', async (req, res) => {
         attivita_id: call.id, esito, stato_precedente: operator.stato,
         stato_nuovo: aggiorna_stato ? outcome[1] : operator.stato,
       });
-      return call;
+      return { attivita: call, stato_operatore: aggiorna_stato ? outcome[1] : operator.stato };
+    });
+    if (!activity) return res.status(404).json({ error: 'Operatore non trovato o archiviato' });
+    return res.status(201).json(activity);
+  } catch (err) { return respondError(err, res); }
+});
+
+router.post('/operatori/:id/appuntamenti', async (req, res) => {
+  const id = parseId(req.params.id);
+  const { programmata_il, luogo, note = '' } = req.body ?? {};
+  const date = typeof programmata_il === 'string' ? new Date(programmata_il) : null;
+  if (!id || !date || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now() ||
+      typeof luogo !== 'string' || !luogo.trim() || luogo.length > 250 ||
+      typeof note !== 'string' || note.length > 1000) {
+    return res.status(400).json({ error: 'Inserisci una data futura e il luogo dell’appuntamento.' });
+  }
+  try {
+    const activity = await withTransaction(async client => {
+      const { rows: [operator] } = await client.query(
+        'SELECT procacciatore_id FROM public.procaccio_operatori WHERE id = $1 AND archiviato_il IS NULL FOR UPDATE', [id]
+      );
+      if (!operator) return null;
+      const { rows: [appointment] } = await client.query(`
+        INSERT INTO public.procaccio_attivita
+          (operatore_id, procacciatore_id, tipo, stato, titolo, descrizione, programmata_il)
+        VALUES ($1, $2, 'appuntamento', 'programmata', $3, $4, $5)
+        RETURNING *
+      `, [id, operator.procacciatore_id, 'Appuntamento fisico · ' + luogo.trim(), note.trim() || null, date]);
+      await history(client, id, 'programmazione_appuntamento', req, { attivita_id: appointment.id });
+      return appointment;
     });
     if (!activity) return res.status(404).json({ error: 'Operatore non trovato o archiviato' });
     return res.status(201).json({ attivita: activity });
@@ -305,7 +350,11 @@ router.get('/operatori/:id', async (req, res) => {
   try {
     const operator = await pool.query(
       `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome,
-         (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il
+         (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il,
+         LEAST(CASE WHEN (o.prossimo_contatto_il AT TIME ZONE 'Europe/Rome')::date >= (now() AT TIME ZONE 'Europe/Rome')::date THEN o.prossimo_contatto_il END,
+           (SELECT min(a.programmata_il) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id
+            AND a.tipo = 'appuntamento' AND a.stato = 'programmata' AND a.programmata_il >= now())
+         ) AS prossimo_contatto_effettivo_il
        FROM public.procaccio_operatori o LEFT JOIN public.procaccio_procacciatori p ON p.id = o.procacciatore_id
        WHERE o.id = $1 AND o.archiviato_il IS NULL`, [id]
     );

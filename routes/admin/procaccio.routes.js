@@ -2,7 +2,7 @@ import express from 'express';
 import { pool } from '../../db/db.js';
 
 const router = express.Router();
-const FIELDS = ['ragione_sociale','partita_iva','comune','provincia','regione','indirizzo','telefono','email','sito_web','stato','fonte','procacciatore_id','prossimo_contatto_il','note'];
+const FIELDS = ['ragione_sociale','partita_iva','comune','provincia','regione','indirizzo','telefono','email','sito_web','stato','fonte','procacciatore_id','prossimo_contatto_il','note','piattaforma_app','fascia_contatto'];
 const STATES = new Set(['da_contattare','contattato','interessato','in_trattativa','aderito','non_interessato','non_raggiungibile']);
 const parseId = (value) => {
   if (!/^[1-9]\d*$/.test(String(value))) return null;
@@ -31,6 +31,8 @@ function validate(body, create = false) {
   if (create && !data.ragione_sociale) throw bad('Ragione sociale obbligatoria');
   if ('ragione_sociale' in data && !data.ragione_sociale) throw bad('Ragione sociale obbligatoria');
   if ('stato' in data && (!data.stato || !STATES.has(data.stato))) throw bad('Stato commerciale non valido');
+  if (data.fascia_contatto && !['mattina', 'pomeriggio'].includes(data.fascia_contatto)) throw bad('Fascia di contatto non valida');
+  if (data.piattaforma_app && !['android', 'ios'].includes(data.piattaforma_app)) throw bad('Piattaforma app non valida');
   if (data.partita_iva && !/^\d{11}$/.test(data.partita_iva)) throw bad('Partita IVA non valida');
   if (data.prossimo_contatto_il && Number.isNaN(Date.parse(data.prossimo_contatto_il))) throw bad('Data prossimo contatto non valida');
   return data;
@@ -141,7 +143,7 @@ router.get('/operatori', async (req, res) => {
     const {
       ricerca = '', stato = '', provincia = '', comune = '', telefono = '',
       prossimo_contatto = '', flotta = '', min_mezzi = '',
-      min_contatti = '', max_contatti = '', pagina = '1', limite = '20'
+      min_contatti = '', max_contatti = '', ordine = 'recenti', pagina = '1', limite = '20'
     } = req.query;
     if ([ricerca, stato, provincia, comune, telefono, min_contatti, max_contatti, prossimo_contatto, flotta, min_mezzi].some(v => typeof v !== 'string')) throw bad('Filtri non validi');
     if (!['', 'presente', 'assente'].includes(telefono)) throw bad('Filtro telefono non valido');
@@ -150,6 +152,8 @@ router.get('/operatori', async (req, res) => {
     if (!['', 'scaduto', 'oggi', 'prossimi_7_giorni', 'senza_data'].includes(prossimo_contatto)) throw bad('Filtro prossimo contatto non valido');
     if (!['', 'auto', 'van', 'bus', 'non_censita'].includes(flotta)) throw bad('Filtro flotta non valido');
     if (min_mezzi !== '' && (!parseId(min_mezzi) || flotta === 'non_censita')) throw bad('Numero minimo di mezzi non valido');
+    const orders = { recenti: 'o.creato_il DESC', nome: 'lower(o.ragione_sociale) ASC', ultimo: 'ultimo_contatto_il DESC NULLS LAST', prossimo: 'o.prossimo_contatto_il ASC NULLS LAST' };
+    if (!Object.hasOwn(orders, ordine) || typeof ordine !== 'string') throw bad('Ordinamento non valido');
     const page = Number(pagina), pageSize = Number(limite);
     if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 || !Number.isSafeInteger((page - 1) * pageSize)) throw bad('Parametri di paginazione non validi');
     const params = [], filters = ['o.archiviato_il IS NULL'];
@@ -166,7 +170,6 @@ router.get('/operatori', async (req, res) => {
       }
       filters.push(`(${terms.join(' OR ')})`);
     }
-    if (stato.trim()) { params.push(stato.trim()); filters.push(`o.stato = $${params.length}`); }
     if (provincia.trim()) { params.push(provincia.trim()); filters.push(`o.provincia = $${params.length}`); }
     if (comune.trim()) {
       params.push(comune.trim());
@@ -208,23 +211,74 @@ router.get('/operatori', async (req, res) => {
       filters.push(`(SELECT COALESCE(SUM(mezzi.quantita), 0) FROM public.procaccio_flotte mezzi
                      WHERE mezzi.operatore_id = o.id ${tipo}) >= $${params.length}`);
     }
+    const counters = await pool.query(`
+      SELECT count(*)::int AS totale,
+        count(*) FILTER (WHERE o.stato = 'da_contattare')::int AS da_contattare,
+        count(*) FILTER (WHERE o.stato = 'in_trattativa')::int AS in_trattativa,
+        count(*) FILTER (WHERE o.stato = 'aderito')::int AS aderito
+      FROM public.procaccio_operatori o WHERE ${filters.join(' AND ')}
+    `, params);
+    if (stato.trim()) { params.push(stato.trim()); filters.push('o.stato = ' + String.fromCharCode(36) + params.length); }
     const where = `WHERE ${filters.join(' AND ')}`;
-    const count = await pool.query(`SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori o ${where}`, params);
+    const count = stato.trim() ? await pool.query(`SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori o ${where}`, params) : counters;
     const data = await pool.query(
       `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome,
               COALESCE(f.totale_mezzi, 0)::int AS totale_mezzi,
-              ${contactCount}::int AS totale_contatti
+              ${contactCount}::int AS totale_contatti,
+              (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il
        FROM public.procaccio_operatori o
        LEFT JOIN public.procaccio_procacciatori p ON p.id = o.procacciatore_id
        LEFT JOIN (SELECT operatore_id, SUM(quantita) AS totale_mezzi FROM public.procaccio_flotte GROUP BY operatore_id) f ON f.operatore_id = o.id
-       ${where} ORDER BY o.creato_il DESC, o.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+       ${where} ORDER BY ${orders[ordine]}, o.id DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, pageSize, (page - 1) * pageSize]
     );
     const totale = count.rows[0].totale;
     const totaleRegistrati = filters.length === 1 ? totale : (await pool.query(
       'SELECT COUNT(*)::int AS totale FROM public.procaccio_operatori WHERE archiviato_il IS NULL'
     )).rows[0].totale;
-    return res.json({ operatori: data.rows, totale, totale_registrati: totaleRegistrati, pagina: page, limite: pageSize });
+    return res.json({ operatori: data.rows, totale, totale_registrati: totaleRegistrati, contatori_stato: counters.rows[0], pagina: page, limite: pageSize });
+  } catch (err) { return respondError(err, res); }
+});
+
+
+const callOutcomes = new Map([
+  ['risposto', ['Ha risposto', 'contattato']],
+  ['interessato', ['Interessato', 'interessato']],
+  ['richiamare', ['Da richiamare', 'contattato']],
+  ['nessuna_risposta', ['Nessuna risposta', 'non_raggiungibile']],
+  ['non_interessato', ['Non interessato', 'non_interessato']],
+]);
+
+router.post('/operatori/:id/telefonate', async (req, res) => {
+  const id = parseId(req.params.id);
+  const { esito, note = '', aggiorna_stato = false } = req.body ?? {};
+  const outcome = callOutcomes.get(esito);
+  if (!id || !outcome || typeof note !== 'string' || note.length > 1000 || typeof aggiorna_stato !== 'boolean') {
+    return res.status(400).json({ error: 'Dati telefonata non validi' });
+  }
+  try {
+    const activity = await withTransaction(async client => {
+      const { rows: [operator] } = await client.query(
+        'SELECT stato, procacciatore_id FROM public.procaccio_operatori WHERE id = $1 AND archiviato_il IS NULL FOR UPDATE', [id]
+      );
+      if (!operator) return null;
+      const { rows: [call] } = await client.query(`
+        INSERT INTO public.procaccio_attivita
+          (operatore_id, procacciatore_id, tipo, stato, titolo, descrizione, completata_il, esito)
+        VALUES ($1, $2, 'telefonata', 'completata', 'Telefonata', $3, now(), $4)
+        RETURNING *
+      `, [id, operator.procacciatore_id, note.trim() || null, outcome[0]]);
+      if (aggiorna_stato && operator.stato !== outcome[1]) {
+        await client.query('UPDATE public.procaccio_operatori SET stato = $2, aggiornato_il = now() WHERE id = $1', [id, outcome[1]]);
+      }
+      await history(client, id, 'registrazione_telefonata', req, {
+        attivita_id: call.id, esito, stato_precedente: operator.stato,
+        stato_nuovo: aggiorna_stato ? outcome[1] : operator.stato,
+      });
+      return call;
+    });
+    if (!activity) return res.status(404).json({ error: 'Operatore non trovato o archiviato' });
+    return res.status(201).json({ attivita: activity });
   } catch (err) { return respondError(err, res); }
 });
 
@@ -250,7 +304,8 @@ router.get('/operatori/:id', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'ID operatore non valido' });
   try {
     const operator = await pool.query(
-      `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome
+      `SELECT o.*, p.nome AS procacciatore_nome, p.cognome AS procacciatore_cognome,
+         (SELECT max(coalesce(a.completata_il, a.creato_il)) FROM public.procaccio_attivita a WHERE a.operatore_id = o.id AND a.stato = 'completata') AS ultimo_contatto_il
        FROM public.procaccio_operatori o LEFT JOIN public.procaccio_procacciatori p ON p.id = o.procacciatore_id
        WHERE o.id = $1 AND o.archiviato_il IS NULL`, [id]
     );

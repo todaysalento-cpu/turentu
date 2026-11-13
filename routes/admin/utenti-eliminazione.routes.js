@@ -36,42 +36,56 @@ async function isAdmin(db, id, lock = false) {
 
 async function activeCommitments(db, id) {
   const { rows } = await db.query(`
-    SELECT 'corse_attive' AS relation WHERE EXISTS (
-      SELECT 1 FROM corse c JOIN veicolo v ON v.id = c.veicolo_id
+    WITH commitments AS (
+      SELECT 'corse_attive' AS relation, 'corsa' AS tipo, c.id::text AS id,
+        c.stato::text AS stato, c.start_datetime::timestamptz AS data
+      FROM corse c JOIN veicolo v ON v.id = c.veicolo_id
       WHERE (c.stato = 'in_corso' OR (
         c.stato IN ('prenotabile', 'accettata', 'da_attivare') AND coalesce(c.fine_ciclo_operativo, c.arrivo_datetime,
           c.start_datetime + c.durata, c.start_datetime) >= now()
       )) AND (v.driver_id = $1 OR EXISTS (
         SELECT 1 FROM prenotazioni p WHERE p.corsa_id = c.id AND p.cliente_id = $1
       ))
-    )
-    UNION ALL
-    SELECT 'richieste_attive' WHERE EXISTS (
-      SELECT 1 FROM pending p JOIN veicolo v ON v.id = p.veicolo_id
+      UNION ALL
+      SELECT 'richieste_attive', 'richiesta', p.id::text, p.stato::text, p.expires_at::timestamptz
+      FROM pending p JOIN veicolo v ON v.id = p.veicolo_id
       WHERE p.stato = 'pending' AND p.expires_at > now()
         AND (p.cliente_id = $1 OR v.driver_id = $1)
-    )
-    UNION ALL
-    SELECT 'popbus_attivo' WHERE EXISTS (
-      SELECT 1 FROM popbus_riserve r JOIN corse c ON c.id = r.corsa_id
+      UNION ALL
+      SELECT 'popbus_attivo', 'riserva_popbus', r.id::text, r.stato::text, r.expires_at::timestamptz
+      FROM popbus_riserve r JOIN corse c ON c.id = r.corsa_id
       JOIN veicolo v ON v.id = c.veicolo_id
       WHERE r.stato = 'riservata' AND r.expires_at > now()
         AND (r.cliente_id = $1 OR v.driver_id = $1)
-    ) OR EXISTS (
-      SELECT 1 FROM popbus_attivazioni a WHERE a.autista_id = $1
-        AND a.stato IN ('in_attesa_autista', 'confermata') AND a.arrivo >= now()
-    ) OR EXISTS (
-      SELECT 1 FROM richieste_pop_bus r WHERE r.cliente_id = $1
-        AND r.stato IN ('in_attesa', 'in_lavorazione') AND r.start_datetime >= now()
+      UNION ALL
+      SELECT 'popbus_attivo', 'attivazione_popbus', a.id::text, a.stato::text, a.arrivo::timestamptz
+      FROM popbus_attivazioni a
+      WHERE a.autista_id = $1 AND a.stato IN ('in_attesa_autista', 'confermata') AND a.arrivo >= now()
+      UNION ALL
+      SELECT 'popbus_attivo', 'richiesta_popbus', r.id::text, r.stato::text, r.start_datetime::timestamptz
+      FROM richieste_pop_bus r
+      WHERE r.cliente_id = $1 AND r.stato IN ('in_attesa', 'in_lavorazione') AND r.start_datetime >= now()
+      UNION ALL
+      SELECT 'assegnazioni_attive', 'assegnazione', a.id::text, a.stato::text, upper(a.intervallo_operativo)
+      FROM assegnazioni_conducenti a
+      WHERE (a.operatore_id = $1 OR a.conducente_id = $1) AND a.stato = 'assegnata'
+        AND upper(a.intervallo_operativo) > now()
+    ), ranked AS (
+      SELECT *, count(*) OVER (PARTITION BY relation)::int AS totale,
+        row_number() OVER (PARTITION BY relation ORDER BY data DESC NULLS LAST, tipo, id) AS posizione
+      FROM commitments
     )
-    UNION ALL
-    SELECT 'assegnazioni_attive' WHERE EXISTS (
-      SELECT 1 FROM assegnazioni_conducenti
-      WHERE (operatore_id = $1 OR conducente_id = $1) AND stato = 'assegnata'
-        AND upper(intervallo_operativo) > now()
-    )
+    SELECT relation, tipo, id, stato, data, totale FROM ranked
+    WHERE posizione <= 10 ORDER BY relation, posizione
   `, [id]);
-  return rows.map(row => row.relation);
+  return rows;
+}
+
+function describeCommitments(commitments) {
+  return {
+    dipendenze: [...new Set(commitments.map(item => item.relation))],
+    blocchi: commitments,
+  };
 }
 
 router.get('/utenti/:id/eliminazione', handle(async (req, res, id) => {
@@ -85,9 +99,9 @@ router.get('/utenti/:id/eliminazione', handle(async (req, res, id) => {
       count(*) FILTER (WHERE stato = 'manuale')::int AS manuali
     FROM admin_rimozioni_file_utenti WHERE utente_id = $1
   `, [id]);
-  const dependencies = target.eliminato_il ? [] : await activeCommitments(pool, id);
-  res.json({ eliminabile: !target.eliminato_il && !dependencies.length, eliminato: Boolean(target.eliminato_il),
-    modalita: 'anonimizzazione', dipendenze: dependencies, file: files });
+  const commitments = target.eliminato_il ? [] : await activeCommitments(pool, id);
+  res.json({ eliminabile: !target.eliminato_il && !commitments.length, eliminato: Boolean(target.eliminato_il),
+    modalita: 'anonimizzazione', ...describeCommitments(commitments), file: files });
 }));
 
 router.delete('/utenti/:id', handle(async (req, res, id) => {
@@ -119,15 +133,16 @@ router.delete('/utenti/:id', handle(async (req, res, id) => {
     }
     if (!target.eliminato_il) {
       await db.query('SELECT id FROM veicolo WHERE driver_id = $1 ORDER BY id FOR UPDATE', [id]);
-      const dependencies = await activeCommitments(db, id);
-      if (dependencies.length) {
+      const commitments = await activeCommitments(db, id);
+      if (commitments.length) {
+        const details = describeCommitments(commitments);
         await db.query(`
           INSERT INTO admin_eliminazioni_utenti (admin_id, utente_id, esito, dipendenze)
           VALUES ($1, $2, 'bloccato', $3)
-        `, [req.user.id, id, dependencies]);
+        `, [req.user.id, id, details.dipendenze]);
         await db.query('COMMIT');
-        return res.status(409).json({ error: 'Completa le corse o le richieste ancora attive prima di eliminare l’account.',
-          dipendenze: dependencies });
+        return res.status(409).json({ error: 'Sono presenti impegni operativi che bloccano l’eliminazione dell’account.',
+          ...details });
       }
       await db.query("SET LOCAL turentu.anonimizzazione = 'on'");
       await anonymizeAccount(db, id);

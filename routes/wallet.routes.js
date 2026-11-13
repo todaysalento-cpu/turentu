@@ -200,6 +200,9 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       if (!quotation || Math.round(Number(quotation.prezzo) * 100) !== Math.round(Number(prezzo) * 100) || !isPopbusSlot(quotation)) {
         return res.status(409).json({ error: 'POPBUS: opzione o prezzo cambiati; ripetere la ricerca' });
       }
+      if (quotation.prezzo_massimo_popbus != null) {
+        return res.status(409).json({ error: 'Per il tetto PopBus è richiesta una preautorizzazione su carta' });
+      }
       pixelBySlot.set(slot, quotation);
     }
 

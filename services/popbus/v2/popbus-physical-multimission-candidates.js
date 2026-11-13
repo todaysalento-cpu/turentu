@@ -36,7 +36,8 @@ function convertiAlternativa({originale, alternativa, veicolo, richiesteById}) {
         ref.start >= ref.end || ref.end >= m.nodes.length ||
         !pos(r.posti_richiesti) || !finite(Number(r.prezzo)))
       fail(`richiesta fisica non valida: ${ref.id}`);
-    return {id:Number(ref.id), prezzo:Number(r.prezzo)};
+    return {id:Number(ref.id), prezzo:Number(r.prezzo),
+      prezzo_massimo_autorizzato: r.prezzo_massimo_autorizzato};
   });
   const kmMissione = m.legs.reduce((sum, leg) => {
     if (!finite(Number(leg.metres)) || Number(leg.metres) < 0 ||

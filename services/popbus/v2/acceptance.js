@@ -14,9 +14,14 @@ import Stripe from 'stripe';
 import polyline from 'polyline';
 import * as turf from '@turf/turf';
 
-export async function verificaPagamento(client, r) {
+export async function verificaPagamento(client, r, importo = Number(r.prezzo)) {
   assertConfirmationOpen(r);
   const ref = r.payment_intent_id;
+  if (r.prezzo_massimo_autorizzato != null &&
+      (!Number.isFinite(importo) || importo < Number(r.prezzo) ||
+       importo > Number(r.prezzo_massimo_autorizzato) || ref?.startsWith('wallet_'))) {
+    throw new Error('Prezzo PopBus fuori dal tetto autorizzato su carta');
+  }
 
   if (!ref) {
     throw new Error(
@@ -52,7 +57,8 @@ export async function verificaPagamento(client, r) {
     pi.currency !== 'eur' ||
     String(pi.metadata?.clienteId) !== String(r.cliente_id) ||
     pi.status !== 'requires_capture' ||
-    pi.amount_capturable < Math.round(Number(r.prezzo) * 100)
+    pi.amount_capturable < Math.round(importo * 100) ||
+    (r.prezzo_massimo_autorizzato != null && pi.amount !== Math.round(Number(r.prezzo_massimo_autorizzato) * 100))
   ) {
     throw new Error(
       `Richiesta ${r.id}: autorizzazione pagamento non valida`
@@ -542,11 +548,22 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
   // =====================================================
 
   const states = [];
+  const importiDefinitivi = new Map();
 
   for (const r of requests) {
-    states.push(
-      await verificaPagamento(client, r)
-    );
+    const importo = plan.prezziRiempimento == null ? Number(r.prezzo) : plan.prezziRiempimento[r.id];
+    if (plan.prezziRiempimento != null && r.prezzo_massimo_autorizzato == null) {
+      throw new Error('Tetto autorizzato PopBus mancante');
+    }
+    states.push(await verificaPagamento(client, r, importo));
+    importiDefinitivi.set(r.id, importo);
+  }
+
+  if (plan.prezziRiempimento != null) {
+    const somma = [...importiDefinitivi.values()].reduce((totale, importo) => totale + Math.round(importo * 100), 0);
+    if (somma !== Math.round(Number(a.ricavo) * 100)) {
+      throw new Error('Ricavo PopBus diverso dal totale delle quote verificate');
+    }
   }
 
   if (isMulti) {
@@ -739,11 +756,12 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
         lat_discesa,
         lon_discesa,
         ar_group_id,
-        ar_tratta
+        ar_tratta,
+        prezzo_riempimento_concordato
       )
       VALUES (
         $1,$2,$3,$3,$4,$5,$6,
-        $7,$8,$9,$10,$11,$12,$13,$14,$15
+        $7,$8,$9,$10,$11,$12,$13,$14,$15,$16
       )
       RETURNING id
       `,
@@ -751,7 +769,7 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
         corsa.id,
         r.cliente_id,
         r.posti_richiesti,
-        r.prezzo,
+        importiDefinitivi.get(r.id),
         indices[s],
         indices[e],
         offsets[s],
@@ -762,7 +780,8 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
         end.lat,
         end.lon,
         r.ar_group_id ?? null,
-        r.ar_tratta ?? null
+        r.ar_tratta ?? null,
+        plan.prezziRiempimento != null
       ]
     );
 
@@ -783,7 +802,7 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
       [
         ps[0].id,
         corsa.id,
-        r.prezzo,
+        importiDefinitivi.get(r.id),
         states[i],
         r.payment_intent_id
       ]

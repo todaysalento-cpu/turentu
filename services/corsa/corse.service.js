@@ -204,6 +204,7 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
           p.stripe_payment_intent,
           p.prenotazione_id,
           p.importo AS importo_db,
+          pr.prezzo_riempimento_concordato,
           p.stato AS stato_pagamento,
           pr.posti_richiesti,
           pr.cliente_id,
@@ -376,6 +377,11 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
               `Modello A: prezzo_totale non valido per prenotazione ${pren.prenotazione_id}`
             );
           }
+        } else if (pren.prezzo_riempimento_concordato) {
+          importoFinale = Number(pren.importo_db);
+          if (!Number.isFinite(importoFinale) || importoFinale <= 0) {
+            throw new Error('Importo concordato non valido per la prenotazione');
+          }
         } else {
           // Pricing legacy mantenuto: stessi parametri, algoritmo e fallback.
           let kmUtente = Number(pren.km_utente);
@@ -454,7 +460,7 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
           );
         }
 
-        const amountInCents = modelloA
+        const amountInCents = modelloA || pren.prezzo_riempimento_concordato
           ? calculatedCents
           : Math.min(calculatedCents, Number(pi.amount));
 

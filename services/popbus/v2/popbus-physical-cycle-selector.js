@@ -1,3 +1,4 @@
+import { ricaviPopbusPerRiempimento } from '../../../utils/maggiorazione-riempimento.js';
 // TURENTU POPBUS V2 ÔÇö Selettore cicli fisici SHADOW, senza persistenza.
 // Installare come services/popbus/v2/popbus-physical-cycle-selector.js
 // Richiede candidati da preparaCandidatiFisiciMultimissione e veicoli dallo snapshot.
@@ -327,8 +328,15 @@ export async function selezionaCicliFisiciShadow({
           continue;
         }
         diagnostica.singoleFisicamenteFattibili++;
+        let ricavi;
+        try {
+          ricavi = ricaviPopbusPerRiempimento(a.requests, vehicle, a.peak);
+        } catch {
+          diagnostica.singoleScartateEconomia++;
+          continue;
+        }
         const economy = valutaEconomiaCiclo({
-          ricaviRichiesteEuro:a.requests.map(r=>Number(r.prezzo)),
+          ricaviRichiesteEuro: Object.values(ricavi),
           kmAvvicinamento:Number(approach.metres)/1000,
           kmMissioni:Number(a.kmMissione),
           kmTrasferimenti:0,
@@ -376,8 +384,15 @@ export async function selezionaCicliFisiciShadow({
     for (const c of result.cicli) {
       diagnostica.cicliFisicamenteFattibili++;
       const s = c._shadow;
+      let ricavi;
+      try {
+        ricavi = ricaviPopbusPerRiempimento([...a.requests, ...b.requests], vehicle, Math.max(a.peak, b.peak));
+      } catch {
+        diagnostica.cicliScartatiEconomia++;
+        continue;
+      }
       const economy = valutaEconomiaCiclo({
-        ricaviRichiesteEuro:[...a.requests,...b.requests].map(r=>Number(r.prezzo)),
+        ricaviRichiesteEuro: Object.values(ricavi),
         kmAvvicinamento:Number(s.approach.metres)/1000,
         kmMissioni:Number(a.kmMissione)+Number(b.kmMissione),
         kmTrasferimenti:Number(s.transfer.metres)/1000,

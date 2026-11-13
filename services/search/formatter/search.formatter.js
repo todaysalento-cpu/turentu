@@ -1,3 +1,4 @@
+import { maggioraTotalePerRiempimento, piccoCondivisa } from '../../../utils/maggiorazione-riempimento.js';
 
 import { calcolaPrezzo, ripartisciCondivisaModelloA } from '../../../utils/pricing.util.js';
 import {
@@ -448,6 +449,7 @@ export async function formatResults(
                                         return null;
                                     }
 
+                                    const massimoPopbus = maggioraTotalePerRiempimento(prezzoVal, p.maggiorazioneMassimaPool, 1, 1);
                                     const formazioneGrezza =
                                         item.formazioni_popbus?.[
                                             classeCorrente
@@ -542,6 +544,7 @@ export async function formatResults(
                                             ),
 
                                         prezzo: prezzoVal,
+                                        prezzo_massimo_popbus: massimoPopbus > prezzoVal ? massimoPopbus : undefined,
                                         prezzo_display:
                                             `${prezzoVal}€`,
 
@@ -646,12 +649,20 @@ export async function formatResults(
                          return [];
                      }
                      const nuovoId = '__nuova_richiesta__';
+                     const prenotazioni = [
+                         ...snapshot.prenotazioni,
+                         {
+                             id: nuovoId, km: kmTrattaUtente, posti: postiUtenteRichiesti,
+                             tratta_id: item.tratta_id, posti_richiesti: postiUtenteRichiesti,
+                             start_offset: item.startOffset, end_offset: item.endOffset
+                         }
+                     ];
+                     const totale = snapshot.baseRiempimento > 0 && snapshot.percentualeRiempimento > 0
+                         ? maggioraTotalePerRiempimento(snapshot.baseRiempimento, snapshot.percentualeRiempimento,
+                             piccoCondivisa(prenotazioni), snapshot.capienza)
+                         : snapshot.costoCommercialeMissione;
                      const proiezione = ripartisciCondivisaModelloA({
-                         ...snapshot,
-                         prenotazioni: [
-                             ...snapshot.prenotazioni,
-                             { id: nuovoId, km: kmTrattaUtente, posti: postiUtenteRichiesti }
-                         ]
+                         ...snapshot, costoCommercialeMissione: totale, prenotazioni
                      });
                      prezzoModelloA = proiezione.prenotazioni.find(r => r.id === nuovoId)?.prezzoTotale;
                      if (!Number.isFinite(prezzoModelloA) || prezzoModelloA < 0.50) return [];
@@ -681,7 +692,7 @@ export async function formatResults(
                     return [];
                 }
 
-                const prezzoVal = tipoCoerente === 'condivisa'
+                const prezzoVal = tipoCoerente === 'condivisa' || p.prezzoRiempimentoConcordato
                     ? Math.round(Number(p.prezzo) * 100) / 100
                     : arrotondaPrezzo(p.prezzo);
 
@@ -777,11 +788,15 @@ export async function formatResults(
 
                     prezzo:
                         prezzoVal,
+                    prezzoRiempimentoConcordato: p.prezzoRiempimentoConcordato === true,
+                    prezzo_prima_condivisa: p.prezzoPrimaCondivisa,
+                    baseCondivisaRiempimento: p.baseCondivisaRiempimento,
+                    percentualeCondivisaRiempimento: p.percentualeCondivisaRiempimento,
 
                      modello_a: tipoCoerente === 'condivisa',
                      prezzo_provvisorio: tipoCoerente === 'condivisa',
                      prezzo_display:
-                         `${prezzoVal.toFixed(tipoCoerente === 'condivisa' ? 2 : 0)}€`,
+                         `${prezzoVal.toFixed((tipoCoerente === 'condivisa' || p.prezzoRiempimentoConcordato) ? 2 : 0)}€`,
 
                     postiDisponibili:
                         item.posti_disponibili ??

@@ -1,3 +1,4 @@
+import { maggioraTotalePerRiempimento } from './maggiorazione-riempimento.js';
 
 import { pool } from '../db/db.js';
 
@@ -174,26 +175,31 @@ export function ripartisciCondivisaModelloA(snapshot) {
  * Mantiene il fallback storico per non interrompere
  * le corse private già gestite dal sistema.
  */
-export async function getTariffe(veicolo_id) {
+export async function getTariffe(veicolo_id, soloStandard = false) {
     try {
         const { rows } = await pool.query(
             `
             SELECT
                 euro_km,
-                prezzo_passeggero
-            FROM tariffe
+                prezzo_passeggero,
+                v.posti_totali,
+                v.maggiorazione_riempimento_percentuale
+            FROM tariffe JOIN veicolo v ON v.id = tariffe.veicolo_id
             WHERE veicolo_id = $1
               AND euro_km > 0
+              AND (NOT $2::boolean OR tipo = 'standard')
             ORDER BY
                 (tipo = 'standard') DESC
             LIMIT 1
             `,
-            [veicolo_id]
+            [veicolo_id, soloStandard]
         );
 
         if (rows[0]) {
             return {
                 euro_km: Number(rows[0].euro_km),
+                posti_totali: Number(rows[0].posti_totali),
+                maggiorazione_riempimento_percentuale: Number(rows[0].maggiorazione_riempimento_percentuale),
                 prezzo_passeggero: Number(
                     rows[0].prezzo_passeggero
                 )
@@ -248,7 +254,8 @@ async function getDettaglioPool(veicoli_ids) {
             SELECT DISTINCT ON (t.veicolo_id)
                 t.veicolo_id,
                 t.euro_km,
-                v.posti_totali AS posti
+                v.posti_totali AS posti,
+                v.maggiorazione_riempimento_percentuale
             FROM tariffe t
             JOIN veicolo v
                 ON t.veicolo_id = v.id
@@ -271,6 +278,7 @@ async function getDettaglioPool(veicoli_ids) {
                 id: Number(r.veicolo_id),
                 euro_km,
                 posti,
+                maggiorazione: Number(r.maggiorazione_riempimento_percentuale),
                 indice: CALCOLA_INDICE(
                     euro_km,
                     posti
@@ -359,6 +367,7 @@ export async function calcolaPrezzo(
         riposizionamento;
 
     let prezzoCalcolato = null;
+    let tariffaPrivata;
     let targetPasseggeri = 1;
 
     const dettagli = dettagliDefault();
@@ -389,12 +398,12 @@ export async function calcolaPrezzo(
                     )
                     : TARIFF_DEFAULT;
 
-                prezzoCalcolato =
-                    (
-                        info.euro_km *
-                        kmComplessiviOperativi
-                    ) *
-                    postiUtente;
+                const nuovoPreventivoPrivato = tipoValido === 'privata' && isNuovoUtente;
+                if (nuovoPreventivoPrivato) tariffaPrivata = info;
+
+                prezzoCalcolato = info.euro_km * kmComplessiviOperativi;
+                // La chiusura delle vecchie private prive di prezzo concordato usa il calcolo storico.
+                if (!nuovoPreventivoPrivato) prezzoCalcolato *= postiUtente;
 
                 console.log(
                     `🚗 [PRICING PRIVATA] ` +
@@ -591,6 +600,7 @@ export async function calcolaPrezzo(
                     v.posti >= postiUtente
                 );
                 dettagli.veicoliCapienti = poolCapiente.length;
+                dettagli.maggiorazioneMassimaPool = Math.max(0, ...poolCapiente.map(v => v.maggiorazione || 0));
 
                 if (!poolCapiente.length) {
                     console.warn('[POPBUS] Nessun mezzo capiente per la richiesta', {
@@ -749,9 +759,27 @@ export async function calcolaPrezzo(
     // La commissione e' trattenuta sul prezzo finale, non aggiunta
     // con una semplice moltiplicazione per 1.15.
     const prezzoBase = Math.max(PREZZO_MINIMO, arrotondaEuro(prezzoCalcolato));
-    const finale = arrotondaEuroSuperiore(
-        prezzoBase / (1 - COMMISSIONE_TURENTU)
-    );
+    const commerciale = arrotondaEuroSuperiore(prezzoBase / (1 - COMMISSIONE_TURENTU));
+    const finale = tariffaPrivata
+        ? maggioraTotalePerRiempimento(commerciale, tariffaPrivata.maggiorazione_riempimento_percentuale,
+            postiUtente, tariffaPrivata.posti_totali)
+        : commerciale;
+    if (tariffaPrivata?.maggiorazione_riempimento_percentuale > 0) {
+        dettagli.prezzoRiempimentoConcordato = true;
+        const standard = await getTariffe(corsa.veicolo_id, true);
+        if (standard.maggiorazione_riempimento_percentuale > 0) {
+            const base = arrotondaEuroSuperiore(
+                arrotondaEuro(kmComplessiviOperativi * standard.euro_km) / (1 - COMMISSIONE_TURENTU)
+            );
+            if (base > 0) {
+                dettagli.baseCondivisaRiempimento = base;
+                dettagli.percentualeCondivisaRiempimento = standard.maggiorazione_riempimento_percentuale;
+                dettagli.prezzoPrimaCondivisa = maggioraTotalePerRiempimento(
+                    base, standard.maggiorazione_riempimento_percentuale, postiUtente, standard.posti_totali
+                );
+            }
+        }
+    }
     const commissioneImporto = arrotondaEuro(
         finale * COMMISSIONE_TURENTU
     );

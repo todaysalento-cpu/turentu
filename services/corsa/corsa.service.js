@@ -497,7 +497,10 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             client,
             {
                 ar_group_id: pending.ar_group_id ?? null,
-                ar_tratta: pending.ar_tratta ?? null
+                ar_tratta: pending.ar_tratta ?? null,
+                prezzoRiempimentoConcordato: pending.prezzo_riempimento_concordato === true,
+                baseCondivisaRiempimento: pending.base_condivisa_riempimento,
+                percentualeCondivisaRiempimento: pending.percentuale_condivisa_riempimento
             }
         );
         

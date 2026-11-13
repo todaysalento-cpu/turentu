@@ -1,3 +1,4 @@
+import { prezziPopbusPerRiempimento } from '../../../utils/maggiorazione-riempimento.js';
 
 import { verificaPagamento } from './acceptance.js';
 import { fingerprintRichiesta } from './request-fingerprint.js';
@@ -820,7 +821,7 @@ async function diagnosticaFattibilitaPixelReadOnly() {
     const prepared = preparaInputFattibilitaPixel(formazioni, requests, nodes);
     const nodeMap = new Map(nodes.map(n => [Number(n.id), n]));
     const { rows: vehicles } = await client.query(`
-      SELECT v.id, v.driver_id, v.posti_totali, t.euro_km,
+      SELECT v.id, v.driver_id, v.posti_totali, v.maggiorazione_riempimento_percentuale, t.euro_km,
              dv.start, dv.fine, dv.manual, dv.giorni_esclusi, dv.inattivita,
              ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
              ST_X(COALESCE(dv.coord,v.coord)::geometry) AS lon
@@ -855,9 +856,11 @@ async function diagnosticaFattibilitaPixelReadOnly() {
         if (busyStart <= Date.now() || !turno(vehicle, busyStart, busyEnd)) { skip('turno'); continue; }
         // Contratto economico condiviso con economiaCandidato()/scegliAttivazioni().
         // Ricavi reali: nessun moltiplicatore di collaudo nel worker originale.
-        const ricaviRichiesteEuro = f.selectedRequests.map(r => Number(r.prezzo));
+        let ricaviRichiesteEuro;
         let economia;
         try {
+          const richiesteOrdinate = [...f.selectedRequests].sort((a, b) => Number(a.id) - Number(b.id));
+          ricaviRichiesteEuro = prezziPopbusPerRiempimento(richiesteOrdinate, vehicle, evaluation.peak);
           economia = valutaEconomiaCiclo({
             ricaviRichiesteEuro,
             kmAvvicinamento: approach.metres / 1000,
@@ -1276,6 +1279,7 @@ export async function processaProposteDinamicheV2() {
         v.id,
         v.driver_id,
         v.posti_totali,
+        v.maggiorazione_riempimento_percentuale,
         t.euro_km,
         dv.start,
         dv.fine,
@@ -1735,12 +1739,15 @@ export async function processaProposteDinamicheV2() {
         });
 
         const selectedIdsEconomy = new Set(evaluation.requests.map(r => Number(r.id)));
-        const selectedEconomy = requests.filter(r => selectedIdsEconomy.has(Number(r.id)));
+        const selectedEconomy = requests.filter(r => selectedIdsEconomy.has(Number(r.id)))
+          .sort((a, b) => Number(a.id) - Number(b.id));
+        let ricaviRichiesteEuro;
         let economia;
         try {
           if (selectedEconomy.length !== selectedIdsEconomy.size) throw new Error('Richieste incomplete');
+          ricaviRichiesteEuro = prezziPopbusPerRiempimento(selectedEconomy, vehicle, evaluation.peak);
           economia = valutaEconomiaCiclo({
-            ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+            ricaviRichiesteEuro,
             kmAvvicinamento: metriAvvicinamento / 1000,
             kmMissioni: metriPercorso / 1000,
             kmTrasferimenti: 0,
@@ -1763,7 +1770,7 @@ export async function processaProposteDinamicheV2() {
           continue;
         }
         if (
-          evaluation.revenue < cost
+          economia.ricavoLordoEuro < cost
         ) {
           stats.veicoliCosto++;
 
@@ -1858,10 +1865,10 @@ export async function processaProposteDinamicheV2() {
 
         feasible.push({
           plan,
-          evaluation,
+          evaluation: { ...evaluation, revenue: economia.ricavoLordoEuro },
           vehicle,
           cost,
-          ricaviRichiesteEuro: selectedEconomy.map(r => Number(r.prezzo)),
+          ricaviRichiesteEuro,
           economia,
           approach,
           returnTrip,
@@ -2023,8 +2030,10 @@ export async function processaProposteDinamicheV2() {
        // Rivalidazione economica sulla richiesta bloccata e sulla tariffa corrente.
        // Non attiva catene; il ritorno alla base resta obbligatorio.
        const { rows: currentRates } = await client.query(`
-         SELECT MIN(euro_km) AS euro_km FROM tariffe
-         WHERE veicolo_id=$1 AND tipo='standard' AND euro_km>0
+         SELECT v.posti_totali, v.maggiorazione_riempimento_percentuale,
+           (SELECT MIN(t.euro_km) FROM tariffe t
+            WHERE t.veicolo_id=v.id AND t.tipo='standard' AND t.euro_km>0) AS euro_km
+         FROM veicolo v WHERE v.id=$1 FOR UPDATE
        `, [c.vehicle.id]);
        const rateNow = Number(currentRates[0]?.euro_km);
        if (currentRates[0]?.euro_km == null || !Number.isFinite(rateNow) || rateNow <= 0) {
@@ -2033,9 +2042,11 @@ export async function processaProposteDinamicheV2() {
          continue;
        }
        let finalEconomy;
+       let prezziDefinitivi;
        try {
+         prezziDefinitivi = prezziPopbusPerRiempimento(locked, currentRates[0], c.evaluation.peak);
          finalEconomy = valutaEconomiaCiclo({
-           ricaviRichiesteEuro: locked.map(r => Number(r.prezzo)),
+           ricaviRichiesteEuro: prezziDefinitivi,
            kmAvvicinamento: Number(c.approach.metres) / 1000,
            kmMissioni: c.plan.legs.reduce((s, l) => s + Number(l.metres), 0) / 1000,
            kmTrasferimenti: 0,
@@ -2046,6 +2057,17 @@ export async function processaProposteDinamicheV2() {
          stats.scartiRivalidazione++;
          log('ECONOMIA RIVALIDAZIONE', error.message);
          continue;
+       }
+       if (locked.every(r => r.prezzo_massimo_autorizzato != null)) {
+         try {
+           for (const [i, r] of locked.entries()) {
+             await verificaPagamento(client, r, prezziDefinitivi[i]);
+           }
+         } catch (error) {
+           stats.scartiRivalidazione++;
+           log('PAGAMENTO RIVALIDAZIONE', error.message);
+           continue;
+         }
        }
        if (!finalEconomy.economicamenteAttivabile ||
            finalEconomy.centesimi.costoCompleto !== c.economia?.centesimi.costoCompleto ||
@@ -2342,6 +2364,9 @@ export async function processaProposteDinamicheV2() {
 
       const piano = {
         ...c.plan,
+        prezziRiempimento: locked.every(r => r.prezzo_massimo_autorizzato != null)
+          ? Object.fromEntries(locked.map((r, i) => [r.id, prezziDefinitivi[i]]))
+          : undefined,
 
         requestSnapshot:
           locked.map(r => ({

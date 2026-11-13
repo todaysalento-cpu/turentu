@@ -78,7 +78,11 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     );
     // Il prezzo deve essere quotato dal server: null/undefined/NaN non sono prezzi.
     // Number(null) === 0: non utilizzare conversioni permissive per i pagamenti.
-    const prezzoQuotato = quotation?.prezzo;
+    const primaCondivisa = quotation?.tipo === 'privata' && String(quotation.id).startsWith('priv_') &&
+      sanitizedRequestedType(type) === 'condivisa';
+    const prezzoQuotato = primaCondivisa
+      ? quotation.prezzo_prima_condivisa ?? quotation.prezzo
+      : quotation?.prezzo;
     const prezzoQuotatoValido = prezzoQuotato !== null && prezzoQuotato !== undefined &&
       prezzoQuotato !== '' && Number.isFinite(Number(prezzoQuotato)) &&
       Math.round(Number(prezzoQuotato) * 100) >= 50;
@@ -113,6 +117,16 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     }
     // La quotazione fresca prevale su tutti i campi operativi forniti dal client.
     // Nessun ID di fermata o nodo territoriale viene accettato dal client.
+    const prezzoConcordato = Math.round(Number(prezzoQuotato) * 100) / 100;
+    const massimoPopbus = isPopbusSlot(quotation) ? quotation.prezzo_massimo_popbus : null;
+    if ((massimoPopbus != null || req.body.prezzo_massimo_popbus != null) &&
+        (typeof req.body.prezzo_massimo_popbus !== 'number' || req.body.prezzo_massimo_popbus !== massimoPopbus)) {
+      return res.status(409).json({ error: 'Il tetto PopBus è cambiato: ripeti la ricerca e autorizza il nuovo importo' });
+    }
+    if (massimoPopbus > prezzoConcordato && usaWallet) {
+      return res.status(409).json({ error: 'Per il tetto PopBus è richiesta una preautorizzazione su carta' });
+    }
+    const importoAutorizzato = massimoPopbus ?? prezzoConcordato;
     const slot = { ...selected, ...quotation, start_datetime: when, posti_richiesti: count };
     const popbusDeadline = isPopbusSlot(slot) ? resolveConfirmationDeadline(slot.start_datetime, req.body.scadenza_conferma_ore ?? 24) : null;
     // Non permettere che il tipo dichiarato dal client cambi il tipo della quotazione.
@@ -154,7 +168,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       );
       const saldoAttuale = parseFloat(saldoRes.rows[0]?.saldo_attuale || 0);
 
-      if (saldoAttuale >= parseFloat(prezzo)) {
+      if (saldoAttuale >= prezzoConcordato) {
         console.log(`👛 [PAYMENT:${requestId}] Saldo sufficiente (€${saldoAttuale}). Utilizzo il wallet per €${prezzo}.`);
         pagatoConWallet = true;
       } else {
@@ -167,7 +181,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if (!pagatoConWallet) {
       console.log(`💳 [PAYMENT:${requestId}] Creazione Stripe PaymentIntent per importo: €${prezzo}`);
       paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(Number(prezzo) * 100),
+        amount: Math.round(importoAutorizzato * 100),
         currency: 'eur',
         metadata: { tipo: isPopbusSlot(slot) ? 'popbus' : sanitizedType, clienteId: clienteId.toString(), requestId },
         capture_method: 'manual',
@@ -184,7 +198,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       await client.query(
         `INSERT INTO transazioni_wallet (utente_id, tipo, importo, riferimento_id) 
          VALUES ($1, 'pagamento_corsa', $2, $3)`,
-        [clienteId, -parseFloat(prezzo), requestId]
+        [clienteId, -prezzoConcordato, requestId]
       );
       console.log(`✅ [PAYMENT:${requestId}] Transazione wallet registrata.`);
     }
@@ -225,13 +239,13 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
           start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id,
-           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro
+           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro, prezzo_massimo_autorizzato
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         ) RETURNING *`,
         [
           clienteId,
@@ -244,7 +258,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           slot.classe || 'STANDARD',
           origineAddress,
           destinazioneAddress,
-          prezzo,
+          prezzoConcordato,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
           requestId,
           pixelValidated.origine_nodo_territoriale_id,
@@ -252,7 +266,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           null, // fermata salita assegnata successivamente da POPBUS V2
           null, // fermata discesa assegnata successivamente da POPBUS V2
           popbusDeadline.hours,
-          popbusDeadline.deadline
+          popbusDeadline.deadline,
+          massimoPopbus
         ]
       );
 
@@ -353,14 +368,15 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           veicolo_id, cliente_id, start_datetime, posti_richiesti, tipo_corsa, prezzo, 
           distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id, request_id,
           origine_address, destinazione_address, corsa_id,
-          start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id
+          start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id, prezzo_riempimento_concordato,
+          base_condivisa_riempimento, percentuale_condivisa_riempimento
         )
          VALUES (
           $1, $2, $3, $4, $5, $6, $7, ($8::numeric * INTERVAL '1 minute'), $9,
           ST_SetSRID(ST_MakePoint($10,$11),4326),
           ST_SetSRID(ST_MakePoint($12,$13),4326),
           'pending', $14, $15, $16, $17, $18,
-          $19, $20, $21, $22, $23
+          $19, $20, $21, $22, $23, $24, $25, $26
         ) RETURNING *`,
         [
           slot.veicolo_id,
@@ -368,7 +384,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           slot.start_datetime,
           slot.posti_richiesti || 1,
           sanitizedType,
-          prezzo,
+          prezzoConcordato,
           distanza,
           durata,
           expiresAt,
@@ -385,7 +401,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           endOffset,
           startIndexPolyline,
           endIndexPolyline,
-          trattaIdToSave
+          trattaIdToSave,
+          sanitizedType === 'privata',
+          primaCondivisa ? quotation.baseCondivisaRiempimento ?? null : null,
+          primaCondivisa ? quotation.percentualeCondivisaRiempimento ?? null : null
         ]
       );
 
@@ -448,7 +467,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
 
     console.log(`✅ [PAYMENT:${requestId}] Transazione SQL completata con successo (COMMIT).`);
 
-    res.json({ 
+    res.json({
+      importoAutorizzato,
       pagatoConWallet, 
       clientSecret: pagatoConWallet ? null : paymentIntent.client_secret, 
       pending: pendingRows, 
@@ -667,18 +687,18 @@ router.post('/ar/payment-intents', authMiddleware, async (req, res) => {
            distanza, durata, expires_at, origine, destinazione, stato, payment_intent_id,
            request_id, origine_address, destinazione_address, corsa_id,
            start_offset, end_offset, start_index_polyline, end_index_polyline, tratta_id,
-           ar_group_id, ar_tratta, ar_vincolata
+           ar_group_id, ar_tratta, ar_vincolata, prezzo_riempimento_concordato
          ) VALUES (
            $1,$2,$3,$4,'privata',$5,$6,($7::numeric * INTERVAL '1 minute'),$8,
            ST_SetSRID(ST_MakePoint($9,$10),4326),
            ST_SetSRID(ST_MakePoint($11,$12),4326),
-           'pending',$13,$14,$15,$16,NULL,$17,$18,$19,$20,NULL,$21,$22,TRUE
+           'pending',$13,$14,$15,$16,NULL,$17,$18,$19,$20,NULL,$21,$22,TRUE,$23
          ) RETURNING id`,
         [Number(leg.quote.veicolo_id), req.user.id, leg.when, leg.count,
          leg.cents / 100, leg.distanza, leg.durata, expiresAt,
          leg.o.lon, leg.o.lat, leg.d.lon, leg.d.lat, intent.id, requestId,
          origineAddress, destinazioneAddress, startOffset, endOffset,
-         startIndex, endIndex, groupId, leg.item.ar_tratta]
+         startIndex, endIndex, groupId, leg.item.ar_tratta, true]
       );
       rows.push({ ar_tratta: leg.item.ar_tratta, pending_id: inserted.rows[0].id,
         requestId, prezzo: leg.cents / 100, clientSecret: intent.client_secret });

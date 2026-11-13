@@ -7,6 +7,7 @@ router.use(authMiddleware);
 
 const validId = value => Number.isSafeInteger(Number(value)) && Number(value) > 0;
 const types = new Set(['standard', 'notturna', 'festivo']);
+const percentualeValida = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const ownVehicle = async (client, vehicleId, userId) => {
   const { rowCount } = await client.query('SELECT id FROM veicolo WHERE id=$1 AND driver_id=$2', [vehicleId, userId]);
   return rowCount > 0;
@@ -20,7 +21,9 @@ router.get('/veicolo/:id', async (req, res) => {
   if (!validId(id)) return res.status(400).json({ error: 'Veicolo non valido' });
   try {
     if (!(await ownVehicle(pool, id, req.user.id))) return res.status(404).json({ error: 'Veicolo non trovato' });
-    const { rows } = await pool.query(`SELECT ${tariffColumns} FROM tariffe WHERE veicolo_id=$1 ORDER BY tipo, giorno_settimana, ora_inizio`, [id]);
+    const { rows } = await pool.query(`SELECT ${tariffColumns},
+      (SELECT maggiorazione_riempimento_percentuale::float FROM veicolo WHERE id=$1) AS maggiorazione_riempimento_percentuale
+      FROM tariffe WHERE veicolo_id=$1 ORDER BY tipo, giorno_settimana, ora_inizio`, [id]);
     return res.json(rows);
   } catch (err) { console.error('GET tariffe:', err); return res.status(500).json({ error: 'Errore interno' }); }
 });
@@ -33,12 +36,30 @@ router.post('/', async (req, res) => {
       !Number.isFinite(Number(t.prezzo_passeggero)) || Number(t.prezzo_passeggero) < 0)) {
     return res.status(400).json({ error: 'Dati tariffari non validi' });
   }
+  const percentages = new Map();
+  for (const t of entries) {
+    const value = t.maggiorazione_riempimento_percentuale;
+    if (value === undefined) continue;
+    const id = Number(t.veicolo_id);
+    if (!percentualeValida(value) || (percentages.has(id) && percentages.get(id) !== value)) {
+      return res.status(400).json({ error: 'Maggiorazione riempimento non valida' });
+    }
+    percentages.set(id, value);
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const vehicleIds = [...new Set(entries.map(t => Number(t.veicolo_id)))];
     for (const id of vehicleIds) {
       if (!(await ownVehicle(client, id, req.user.id))) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Veicolo non trovato' });
+      }
+    }
+    for (const [id, value] of [...percentages].sort(([a], [b]) => a - b)) {
+      const result = await client.query('UPDATE veicolo SET maggiorazione_riempimento_percentuale=$1 WHERE id=$2 AND driver_id=$3',
+        [value, id, req.user.id]);
+      if (result.rowCount !== 1) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Veicolo non trovato' });
       }
@@ -55,7 +76,11 @@ router.post('/', async (req, res) => {
         RETURNING ${tariffColumns}`,
         [Number(t.veicolo_id),t.tipo,Number(t.euro_km),Number(t.prezzo_passeggero),
          t.giorno_settimana ?? null,t.ora_inizio ?? null,t.ora_fine ?? null]);
-      rows.push(result.rows[0]);
+      const rate = result.rows[0];
+      if (percentages.has(Number(t.veicolo_id))) {
+        rate.maggiorazione_riempimento_percentuale = percentages.get(Number(t.veicolo_id));
+      }
+      rows.push(rate);
     }
     await client.query('COMMIT');
     return res.status(201).json(rows);

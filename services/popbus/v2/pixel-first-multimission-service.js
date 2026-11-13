@@ -1,3 +1,4 @@
+import { ricaviPopbusPerRiempimento } from '../../../utils/maggiorazione-riempimento.js';
 // TURENTU ÔÇö PIXEL-first, coppie multimissione: integrazione transazionale controllata.
 // PIXEL e' l'unico produttore di direttrici. Nessuna scrittura fuori da BEGIN.
 // ROLLBACK_ONLY (default) / LIVE (opt-in esplicito, NON collaudato su DB reale).
@@ -154,7 +155,7 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
     FROM nodi_territoriali WHERE id=ANY($1::bigint[]) AND attivo=TRUE`,[nodeIds]);
   if (nodi.length !== nodeIds.length) fail('nodo PIXEL mancante/inattivo');
   const byNode = new Map(nodi.map(n=>[Number(n.id),n]));
-  const {rows:vehicles} = await client.query(`SELECT v.id,v.driver_id,v.posti_totali,t.euro_km,
+  const {rows:vehicles} = await client.query(`SELECT v.id,v.driver_id,v.posti_totali,v.maggiorazione_riempimento_percentuale,t.euro_km,
     to_jsonb(v)->>'tipo' AS tipo_veicolo,
     dv.start,dv.fine,dv.giorni_esclusi,dv.inattivita,
     ST_Y(COALESCE(dv.coord,v.coord)::geometry) AS lat,
@@ -237,7 +238,7 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
         corridoioPixelId:ctx.engine_id,
         from:first,to:last,plan:ctx.plan,evaluation,departure:Number(evaluation.departure),
         arrival:Number(evaluation.arrival),kmMissione:ctx.plan.legs.reduce((a,l)=>a+Number(l.metres),0)/1000,
-        peak:Number(evaluation.peak), requests:selected.map(r=>({id:Number(r.id),prezzo:Number(r.prezzo)}))});
+        peak:Number(evaluation.peak), requests:selected.map(r=>({id:Number(r.id),prezzo:Number(r.prezzo),prezzo_massimo_autorizzato:r.prezzo_massimo_autorizzato}))});
     }
     if (debugFiltri) {
       console.log('[PIXEL FILTRI]', {
@@ -316,7 +317,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
   const {rows:reserved}=await client.query(`SELECT richiesta_id FROM popbus_attivazione_richieste
     WHERE richiesta_id=ANY($1::integer[]) AND attiva=TRUE LIMIT 1`,[ids]);
   if (reserved.length) fail('richiesta gia riservata da altra attivazione');
-  const {rows:vs}=await client.query("SELECT id,driver_id,posti_totali,coord FROM veicolo WHERE id=$1 AND stato IS DISTINCT FROM 'eliminato' FOR UPDATE",[chosen.veicolo]);
+  const {rows:vs}=await client.query("SELECT id,driver_id,posti_totali,coord,maggiorazione_riempimento_percentuale FROM veicolo WHERE id=$1 AND stato IS DISTINCT FROM 'eliminato' FOR UPDATE",[chosen.veicolo]);
   const v=vs[0];
   if (!v || !positive(v.driver_id)) fail('veicolo scomparso o titolare assente');
   const {rows:locked}=await client.query('SELECT * FROM richieste_pop_bus WHERE id=ANY($1::integer[]) ORDER BY id FOR UPDATE',[ids]);
@@ -329,7 +330,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
   }
   // La validazione Stripe/wallet avviene solo in LIVE. Nessun accesso Stripe
   // e nessun commit in ROLLBACK_ONLY.
-  if (mode==='LIVE') for (const r of locked) await verificaPagamento(client,r);
+
   // Rilettura di TUTTE le coppie A/R sotto il lock globale; niente mezze coppie.
   for (const r of locked.filter(x=>x.ar_vincolata===true)) {
     if (!r.ar_group_id) fail('A/R senza gruppo');
@@ -436,7 +437,10 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
     postiTotali:Number(v.posti_totali)
   });
   checkPlanGeometry(plan);
-  const prezzi=ids.map(id=>Number(dbById.get(id).prezzo));
+  const importi = ricaviPopbusPerRiempimento(locked, v, plan.evaluation.peak);
+  const prezziRiempimento = locked.every(r => r.prezzo_massimo_autorizzato != null) ? importi : undefined;
+  if (mode === 'LIVE') for (const r of locked) await verificaPagamento(client, r, importi[r.id]);
+  const prezzi = Object.values(importi);
   const euroKm=Number(tariffe[0].euro_km);
   const economia=valutaEconomiaCiclo({ricaviRichiesteEuro:prezzi,
     kmAvvicinamento:approach.metres/1000,
@@ -470,7 +474,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
       pixelDirettriceId:Number(missions[i].pixelDirettriceId),
       pixelVersione:Number(missions[i].pixelVersione),
       corridoioPixelId:missions[i].corridoioPixelId})),
-    economia,requestSnapshot:locked.map(r=>({id:Number(r.id),fingerprint:fingerprintRichiesta(r)}))};
+    economia,prezziRiempimento,requestSnapshot:locked.map(r=>({id:Number(r.id),fingerprint:fingerprintRichiesta(r)}))};
   const {rows:acts}=await client.query(`INSERT INTO popbus_attivazioni
     (direttrice_id,pixel_opportunita_id,veicolo_id,autista_id,stato,partenza,arrivo,
      costo,ricavo,tariffa,piano,expires_at)
@@ -530,7 +534,13 @@ async function selezionaCicloConPreflight({snapshot,veicoli,reader,now}) {
       const ids = [...a.requests.map(r=>Number(r.id)),...b.requests.map(r=>Number(r.id))];
       if (new Set(ids).size!==ids.length) continue;
       if (!arComplete(ids,snapshot.registro)) {saltateAr++;continue;}
-      const prezzi=[...a.requests.map(r=>Number(r.prezzo)),...b.requests.map(r=>Number(r.prezzo))];
+      let prezzi;
+      try {
+        prezzi = Object.values(ricaviPopbusPerRiempimento([...a.requests, ...b.requests], v, Math.max(a.peak, b.peak)));
+      } catch {
+        saltateEconomia++;
+        continue;
+      }
       const limiteSuperiore=valutaEconomiaCiclo({
         ricaviRichiesteEuro:prezzi,kmAvvicinamento:0,
         kmMissioni:a.kmMissione+b.kmMissione,kmTrasferimenti:0,
@@ -588,7 +598,8 @@ async function selezionaCicloConPreflight({snapshot,veicoli,reader,now}) {
       // Il generatore calcola economia base. Aggiungiamo gli altri costi
       // e la soglia di margine configurabili PRIMA della selezione.
       const completa=valutaEconomiaCiclo({
-        ricaviRichiesteEuro:[...p.a.requests,...p.b.requests].map(r=>Number(r.prezzo)),
+        ricaviRichiesteEuro: Object.values(ricaviPopbusPerRiempimento(
+          [...p.a.requests, ...p.b.requests], p.v, Math.max(p.a.peak, p.b.peak))),
         kmAvvicinamento:Number(c._shadow.approach.metres)/1000,
         kmMissioni:p.a.kmMissione+p.b.kmMissione,
         kmTrasferimenti:Number(c._shadow.transfer.metres)/1000,

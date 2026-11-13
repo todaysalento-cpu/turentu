@@ -507,7 +507,8 @@ export async function cercaSlotUltra(richiesta) {
             capacitaMap.set(c.tratta_id, cap);
         }
         const { rows: snapshots } = await pool.query(`
-            SELECT c.id, c.tipo_corsa, c.prezzo_fisso, c.prenotazione_origine_id,
+            SELECT c.id, c.tipo_corsa, c.prezzo_fisso, c.prenotazione_origine_id, c.posti_totali,
+                   c.base_condivisa_riempimento, c.percentuale_condivisa_riempimento,
                    p.km_utente AS km_prima_prenotazione
             FROM corse c LEFT JOIN prenotazioni p ON p.id = c.prenotazione_origine_id
             WHERE c.id = ANY($1::int[])
@@ -516,9 +517,12 @@ export async function cercaSlotUltra(richiesta) {
             if (snapshot.tipo_corsa !== 'condivisa') continue;
             modelloAMap.set(Number(snapshot.id), {
                 costoCommercialeMissione: snapshot.prezzo_fisso == null ? null : Number(snapshot.prezzo_fisso),
+                baseRiempimento: Number(snapshot.base_condivisa_riempimento),
+                percentualeRiempimento: Number(snapshot.percentuale_condivisa_riempimento),
+                capienza: Number(snapshot.posti_totali),
                 kmPrimaPrenotazione: snapshot.km_prima_prenotazione == null ? null : Number(snapshot.km_prima_prenotazione),
                 prenotazioni: allPrenotazioni.filter(p => Number(p.corsa_id) === Number(snapshot.id)).map(p => ({
-                    id: Number(p.id), km: p.km_utente == null ? null : Number(p.km_utente), posti: Number(p.posti_richiesti)
+                    ...p, id: Number(p.id), km: p.km_utente == null ? null : Number(p.km_utente), posti: Number(p.posti_richiesti)
                 }))
             });
         }

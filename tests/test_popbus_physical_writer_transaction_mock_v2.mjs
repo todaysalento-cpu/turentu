@@ -76,7 +76,7 @@ function makeMock({
         };
       }
 
-      if (/^SELECT id, driver_id, posti_totali FROM veicolo/i.test(q)) {
+      if (/^SELECT id, driver_id, posti_totali, maggiorazione_riempimento_percentuale FROM veicolo/i.test(q)) {
         return {
           rows: vehicle
             ? [{ id: 7, driver_id: 8, posti_totali: 8 }]

@@ -1,3 +1,4 @@
+import { maggioraTotalePerRiempimento, piccoCondivisa } from '../../utils/maggiorazione-riempimento.js';
 import { pool } from '../../db/db.js';
 import { CacheManager } from '../../utils/cacheManager.js';
 import { calcolaPicco } from '../../utils/occupazione.util.js';
@@ -9,48 +10,56 @@ const arrotondaEuroSuperiore = value => Math.ceil(value * 100 - 1e-9) / 100;
 
 // Questa funzione opera nella stessa transazione e sotto il FOR UPDATE di corse.
 // NON usare il fallback storico di getTariffe per congelare un prezzo commerciale.
-async function applicaModelloA(client, current, prenotazione, prenotazioniPrecedenti) {
+async function applicaModelloA(client, current, prenotazione, prenotazioniPrecedenti, options) {
   const corsaId = Number(current.id);
   let prezzoFisso = current.prezzo_fisso == null ? null : Number(current.prezzo_fisso);
   let origineId = current.prenotazione_origine_id == null
     ? null : Number(current.prenotazione_origine_id);
 
-  if (prezzoFisso === null) {
+  const primoPreventivo = prezzoFisso === null;
+  const base = Number(primoPreventivo ? options.baseCondivisaRiempimento : current.base_condivisa_riempimento);
+  const percentuale = Number(primoPreventivo
+    ? options.percentualeCondivisaRiempimento : current.percentuale_condivisa_riempimento);
+  const ricalcolaRiempimento = base > 0 && percentuale > 0;
+
+  if (primoPreventivo) {
     // Una corsa condivisa gi├á prenotata senza snapshot non pu├▓ essere
     // convertita silenziosamente: i pagamenti precedenti usano il legacy.
     if (prenotazioniPrecedenti.length > 0 || origineId !== null) {
       throw new Error(`Modello A: corsa ${corsaId} preesistente senza prezzo fisso; migrazione necessaria`);
     }
 
-    const distanza = Number(current.distanza);
-    const avvicinamento = Number(current.km_avvicinamento);
-    const ritorno = Number(current.km_riposizionamento);
-    if (![distanza, avvicinamento, ritorno].every(Number.isFinite) ||
-        distanza <= 0 || avvicinamento < 0 || ritorno < 0) {
-      throw new Error(`Modello A: distanze operative non valide per corsa ${corsaId}`);
-    }
+    if (!ricalcolaRiempimento) {
+      const distanza = Number(current.distanza);
+      const avvicinamento = Number(current.km_avvicinamento);
+      const ritorno = Number(current.km_riposizionamento);
+      if (![distanza, avvicinamento, ritorno].every(Number.isFinite) ||
+          distanza <= 0 || avvicinamento < 0 || ritorno < 0) {
+        throw new Error(`Modello A: distanze operative non valide per corsa ${corsaId}`);
+      }
 
-    const { rows: tariffe } = await client.query(`
-      SELECT id, euro_km FROM tariffe
-      WHERE veicolo_id = $1 AND tipo = 'standard' AND euro_km > 0
-      ORDER BY id DESC LIMIT 1
-    `, [current.veicolo_id]);
-    if (!tariffe.length) {
-      throw new Error(`Modello A: tariffa standard non disponibile per veicolo ${current.veicolo_id}`);
-    }
-    const euroKm = Number(tariffe[0].euro_km);
-    if (!Number.isFinite(euroKm) || euroKm <= 0) {
-      throw new Error(`Modello A: tariffa chilometrica non valida per veicolo ${current.veicolo_id}`);
-    }
+      const { rows: tariffe } = await client.query(`
+        SELECT id, euro_km FROM tariffe
+        WHERE veicolo_id = $1 AND tipo = 'standard' AND euro_km > 0
+        ORDER BY id DESC LIMIT 1
+      `, [current.veicolo_id]);
+      if (!tariffe.length) {
+        throw new Error(`Modello A: tariffa standard non disponibile per veicolo ${current.veicolo_id}`);
+      }
+      const euroKm = Number(tariffe[0].euro_km);
+      if (!Number.isFinite(euroKm) || euroKm <= 0) {
+        throw new Error(`Modello A: tariffa chilometrica non valida per veicolo ${current.veicolo_id}`);
+      }
 
-    const costoBase = arrotondaEuro((distanza + avvicinamento + ritorno) * euroKm);
-    if (!Number.isFinite(costoBase) || costoBase <= 0) {
-      throw new Error(`Modello A: costo missione non valido per corsa ${corsaId}`);
+      const costoBase = arrotondaEuro((distanza + avvicinamento + ritorno) * euroKm);
+      if (!Number.isFinite(costoBase) || costoBase <= 0) {
+        throw new Error(`Modello A: costo missione non valido per corsa ${corsaId}`);
+      }
+      prezzoFisso = arrotondaEuroSuperiore(costoBase / (1 - COMMISSIONE_TURENTU));
     }
-    prezzoFisso = arrotondaEuroSuperiore(costoBase / (1 - COMMISSIONE_TURENTU));
     origineId = Number(prenotazione.id);
 
-    await client.query(`
+    if (!ricalcolaRiempimento) await client.query(`
       UPDATE corse SET prezzo_fisso = $2, prenotazione_origine_id = $3
       WHERE id = $1 AND prezzo_fisso IS NULL
     `, [corsaId, prezzoFisso, origineId]);
@@ -60,12 +69,17 @@ async function applicaModelloA(client, current, prenotazione, prenotazioniPreced
   }
 
   const { rows: prenotazioni } = await client.query(`
-    SELECT id, km_utente, posti_richiesti
+    SELECT id, km_utente, posti_richiesti, tratta_id, start_offset, end_offset
     FROM prenotazioni WHERE corsa_id = $1 ORDER BY id
   `, [corsaId]);
   const prima = prenotazioni.find(p => Number(p.id) === origineId);
   if (!prima) throw new Error(`Modello A: prenotazione origine ${origineId} non trovata`);
   const kmPrima = Number(prima.km_utente);
+
+  if (ricalcolaRiempimento) {
+    const picco = piccoCondivisa(prenotazioni);
+    prezzoFisso = maggioraTotalePerRiempimento(base, percentuale, picco, Number(current.posti_totali));
+  }
 
   const ripartizione = ripartisciCondivisaModelloA({
     costoCommercialeMissione: prezzoFisso,
@@ -74,6 +88,30 @@ async function applicaModelloA(client, current, prenotazione, prenotazioniPreced
       id: p.id, km: Number(p.km_utente), posti: Number(p.posti_richiesti)
     }))
   });
+
+  if (ricalcolaRiempimento && !primoPreventivo) {
+    const { rows: pagamenti } = await client.query(
+      'SELECT prenotazione_id, importo, stato FROM pagamenti WHERE corsa_id=$1 FOR UPDATE', [corsaId]);
+    const importi = new Map(pagamenti.map(p => [Number(p.prenotazione_id), p]));
+    for (const quota of ripartizione.prenotazioni) {
+      if (Number(quota.id) === Number(prenotazione.id)) continue;
+      const pagamento = importi.get(Number(quota.id));
+      const autorizzato = Math.round(Number(pagamento?.importo) * 100);
+      const proposto = Math.round(quota.prezzoTotale * 100);
+      if (!(pagamento?.stato === 'autorizzazione' && autorizzato >= proposto) &&
+          !(pagamento?.stato === 'pagato' && autorizzato === proposto)) {
+        const errore = new Error('La nuova quota richiede una nuova autorizzazione di pagamento');
+        errore.code = 'NCC_MODEL_A_PAYMENT_INVALID';
+        throw errore;
+      }
+    }
+  }
+
+  if (ricalcolaRiempimento) {
+    await client.query(
+      'UPDATE corse SET prezzo_fisso=$2, prenotazione_origine_id=$3, base_condivisa_riempimento=$4, percentuale_condivisa_riempimento=$5 WHERE id=$1',
+      [corsaId, prezzoFisso, origineId, base, percentuale]);
+  }
 
   for (const quota of ripartizione.prenotazioni) {
     await client.query(`
@@ -190,15 +228,15 @@ export async function prenotaCorsa(corsa, clienteId, postiRichiesti, segmenti, c
     const {rows: inserted} = await client.query(`
       INSERT INTO prenotazioni (corsa_id,cliente_id,posti_richiesti,posti_prenotati,
         start_index_polyline,end_index_polyline,start_offset,end_offset,km_utente,
-        lat_salita,lon_salita,lat_discesa,lon_discesa,tratta_id,ar_group_id,ar_tratta)
-      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *
+        lat_salita,lon_salita,lat_discesa,lon_discesa,tratta_id,ar_group_id,ar_tratta,prezzo_riempimento_concordato)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *
     `,[id,clienteId,posti,start,end,startOffset,endOffset,km,segmenti.latSalita ?? null,
       segmenti.lonSalita ?? null,segmenti.latDiscesa ?? null,segmenti.lonDiscesa ?? null,trattaId,
-      options.ar_group_id ?? null,options.ar_tratta ?? null]);
+      options.ar_group_id ?? null,options.ar_tratta ?? null, options.prezzoRiempimentoConcordato === true]);
 
     // Solo NCC condivisa. 'riempimento' (POPBUS) e 'privata' restano invariati.
     if (current.tipo_corsa === 'condivisa') {
-      const quota = await applicaModelloA(client, current, inserted[0], existing);
+      const quota = await applicaModelloA(client, current, inserted[0], existing, options);
       inserted[0].prezzo_totale = quota.prezzoTotale;
     }
 

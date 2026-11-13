@@ -1,3 +1,4 @@
+import { ricaviPopbusPerRiempimento } from '../../../utils/maggiorazione-riempimento.js';
 import { verificaPagamento } from './acceptance.js';
 import { assertCanaryCycle, validateCanaryScope } from './popbus-canary-scope.js';
 import { preparaPianoCicloFisicoV2 } from './popbus-physical-cycle-plan-v2.js';
@@ -48,7 +49,7 @@ function numeroConfigurazione(valore, nome) {
 }
 
 export function rivalidaEconomiaCicloFisicoV2({
-  ciclo, richiesteBloccate, euroKm,
+  ciclo, richiesteBloccate, euroKm, ricaviRichiesteEuro,
   costoAttesaOraEuro = 0, altriCostiEuro = 0, margineMinimoEuro = 0
 } = {}) {
   if (!ciclo || !Array.isArray(ciclo.missioni) ||
@@ -115,7 +116,7 @@ export function rivalidaEconomiaCicloFisicoV2({
     fail('attesa fisica discordante');
   }
   const economia = valutaEconomiaCiclo({
-    ricaviRichiesteEuro: richiesteBloccate.map(r => Number(r.prezzo)),
+    ricaviRichiesteEuro: ricaviRichiesteEuro ?? richiesteBloccate.map(r => Number(r.prezzo)),
     kmAvvicinamento: approach.metres / 1000,
     kmMissioni: metriMissioni / 1000,
     kmTrasferimenti: transfer.metres / 1000,
@@ -188,7 +189,7 @@ export async function rivalidaCicloFisicoInTransazioneV2({
   if (reserved.length) fail('richiesta gia riservata');
 
   const { rows: vehicles } = await client.query(
-    `SELECT id, driver_id, posti_totali
+    `SELECT id, driver_id, posti_totali, maggiorazione_riempimento_percentuale
      FROM veicolo
      WHERE id = $1 AND stato IS DISTINCT FROM 'eliminato'
      FOR UPDATE`,
@@ -365,9 +366,12 @@ export async function rivalidaCicloFisicoInTransazioneV2({
     [vehicleId]
   );
   if (!tariffe.length) fail('tariffa NCC standard assente');
+  const importi = ricaviPopbusPerRiempimento(locked, vehicle, Math.max(...ciclo.missioni.map(m => Number(m.peak))));
+  const prezziRiempimento = locked.every(r => r.prezzo_massimo_autorizzato != null) ? importi : undefined;
   const economia = rivalidaEconomiaCicloFisicoV2({
     ciclo,
     richiesteBloccate: locked,
+    ricaviRichiesteEuro: Object.values(importi),
     euroKm: Number(tariffe[0].euro_km),
     costoAttesaOraEuro,
     altriCostiEuro,
@@ -387,6 +391,7 @@ export async function rivalidaCicloFisicoInTransazioneV2({
     postiTotali: Number(vehicle.posti_totali),
     euroKm: Number(tariffe[0].euro_km),
     richiesteBloccate: locked,
+    prezziRiempimento,
     numeroMissioni: ciclo.missioni.length,
     numeroRichieste: ids.length,
     dbWrites: 0,
@@ -487,6 +492,7 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
     const persistedPlan = {
       ...piano,
       economia: pre.economia,
+      prezziRiempimento: pre.prezziRiempimento,
       requestSnapshot: richiesteInLavorazione.map(r => ({
         id: Number(r.id), fingerprint: fingerprintRichiesta(r)
       }))
@@ -561,7 +567,7 @@ export async function persistiCicloFisicoLiveInTransazioneV2({client,ciclo,now=D
     if (pre.richiesteBloccate.some(request => !request.payment_intent_id?.startsWith('wallet_')))
       throw new Error('POPBUS_CANARY_WALLET_REQUIRED');
   }
-  for (const r of pre.richiesteBloccate) await verificaPagamento(client,r);
+  for (const r of pre.richiesteBloccate) await verificaPagamento(client, r, pre.prezziRiempimento?.[r.id] ?? Number(r.prezzo));
   const result = await persistiCicloFisicoInTransazioneV2({client,ciclo,pre,nowMs});
   return {ok:true,percorso:'POPBUS_PHYSICAL_V2_LIVE',...result};
 }

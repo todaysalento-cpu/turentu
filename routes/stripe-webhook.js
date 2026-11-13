@@ -157,7 +157,7 @@ router.post(
 // Questa funzione NON crea pagamenti, NON converte richieste e NON cattura fondi.
 async function riconosciRichiestaPopbus(client, stripeIntentId, stato, intent) {
   const result = await client.query(
-    `SELECT id, stato, cliente_id, prezzo, payment_intent_id
+    `SELECT id, stato, cliente_id, prezzo, prezzo_massimo_autorizzato, payment_intent_id
        FROM public.richieste_pop_bus
       WHERE payment_intent_id = $1
       FOR UPDATE`,
@@ -183,7 +183,10 @@ async function riconosciRichiestaPopbus(client, stripeIntentId, stato, intent) {
         String(intent.currency).toLowerCase() !== 'eur') {
       throw new Error(`Autorizzazione POPBUS Stripe non valida: ${stripeIntentId}`);
     }
-    const previsto = Math.round(Number(richiesta.prezzo) * 100);
+    const previsto = Math.round(Number(richiesta.prezzo_massimo_autorizzato ?? richiesta.prezzo) * 100);
+    if (richiesta.prezzo_massimo_autorizzato != null && Number(intent.amount) !== previsto) {
+      throw new Error('Tetto autorizzato PopBus non coerente con Stripe');
+    }
     const disponibile = Number(intent.amount_capturable);
     if (!Number.isSafeInteger(previsto) || previsto <= 0 ||
         !Number.isSafeInteger(disponibile) || disponibile < previsto) {

@@ -8,7 +8,7 @@ const router = express.Router();
 const accountFields = 'u.id, u.nome, u.email, u.phone, u.tipo, u.created_at, u.modalita_operativa, u.email_verificata_il';
 const configuration = `
   vehicle_configuration AS (
-    SELECT v.id, v.driver_id, ${vehicleChecks} FROM veicolo v
+    SELECT v.id, v.driver_id, ${vehicleChecks} FROM veicolo v WHERE v.stato IS DISTINCT FROM 'eliminato'
   ),
   fleet AS (
     SELECT driver_id, count(*)::int AS veicoli,
@@ -235,7 +235,7 @@ router.get('/utenti/:id', adminRead(async (req, res) => {
     pool.query(`
       SELECT v.id, v.marca, v.modello, v.targa, v.stato, v.stato_verifica, v.localita,
         ${vehicleChecks}, ${vehicleOverview}
-      FROM veicolo v ${vehicleOverviewJoins} WHERE v.driver_id = $1 ORDER BY v.id
+      FROM veicolo v ${vehicleOverviewJoins} WHERE v.driver_id = $1 AND v.stato IS DISTINCT FROM 'eliminato' ORDER BY v.id
     `, [id]),
     pool.query(`
       SELECT id, tipo, veicolo_id, stato, created_at, coalesce(btrim(url) <> '', false) AS caricato

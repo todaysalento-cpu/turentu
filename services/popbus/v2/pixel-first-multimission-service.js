@@ -316,7 +316,7 @@ async function lockAndPersist(client, chosen, snapshot, mode, now) {
   const {rows:reserved}=await client.query(`SELECT richiesta_id FROM popbus_attivazione_richieste
     WHERE richiesta_id=ANY($1::integer[]) AND attiva=TRUE LIMIT 1`,[ids]);
   if (reserved.length) fail('richiesta gia riservata da altra attivazione');
-  const {rows:vs}=await client.query('SELECT id,driver_id,posti_totali,coord FROM veicolo WHERE id=$1 FOR UPDATE',[chosen.veicolo]);
+  const {rows:vs}=await client.query("SELECT id,driver_id,posti_totali,coord FROM veicolo WHERE id=$1 AND stato IS DISTINCT FROM 'eliminato' FOR UPDATE",[chosen.veicolo]);
   const v=vs[0];
   if (!v || !positive(v.driver_id)) fail('veicolo scomparso o titolare assente');
   const {rows:locked}=await client.query('SELECT * FROM richieste_pop_bus WHERE id=ANY($1::integer[]) ORDER BY id FOR UPDATE',[ids]);

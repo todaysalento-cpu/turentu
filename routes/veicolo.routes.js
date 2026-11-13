@@ -80,7 +80,7 @@ veicoloRouter.get('/', async (req, res) => {
                    FILTER (WHERE d.tipo IS NOT NULL) as documenti_array
             FROM veicolo v
             LEFT JOIN documenti_autista d ON v.id = d.veicolo_id
-            WHERE v.driver_id = $1
+            WHERE v.driver_id = $1 AND v.stato IS DISTINCT FROM 'eliminato'
             GROUP BY v.id`;
         
         const { rows } = await pool.query(query, [req.user.id]);
@@ -156,7 +156,7 @@ veicoloRouter.put('/:id', async (req, res) => {
                     servizi=$6::jsonb, tipo=$7, anno=$8, 
                     coord=ST_SetSRID(ST_MakePoint($9, $10), 4326), 
                     localita=$11, image_url=$12, numero_licenza_ncc=$13, comune_licenza=$14
-                WHERE id=$15 AND driver_id=$16 
+                WHERE id=$15 AND driver_id=$16 AND stato IS DISTINCT FROM 'eliminato'
                 RETURNING *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon`;
             
             queryParams = [
@@ -172,7 +172,7 @@ veicoloRouter.put('/:id', async (req, res) => {
                 SET marca=$1, modello=$2, posti_totali=$3, raggio_km=$4, targa=$5, 
                     servizi=$6::jsonb, tipo=$7, anno=$8, 
                     localita=COALESCE($9, localita), image_url=$10, numero_licenza_ncc=$11, comune_licenza=$12
-                WHERE id=$13 AND driver_id=$14 
+                WHERE id=$13 AND driver_id=$14 AND stato IS DISTINCT FROM 'eliminato'
                 RETURNING *, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon`;
             
             queryParams = [
@@ -201,7 +201,7 @@ veicoloRouter.put('/:id', async (req, res) => {
     }
 });
 
-// Rimuove solo veicoli privi di storico operativo, commerciale o recensioni.
+// Archivia i veicoli con storico mantenendo i dati collegati.
 veicoloRouter.delete('/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!/^\d+$/.test(req.params.id) || !Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
@@ -213,11 +213,35 @@ veicoloRouter.delete('/:id', async (req, res) => {
         await db.query('BEGIN');
         await db.query("SET LOCAL lock_timeout = '3s'");
         const { rows: [vehicle] } = await db.query(`
-            SELECT id, image_url FROM veicolo WHERE id = $1 AND driver_id = $2 FOR UPDATE
+            SELECT id, image_url, stato FROM veicolo WHERE id = $1 AND driver_id = $2 FOR UPDATE
         `, [id, req.user.id]);
         if (!vehicle) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Veicolo non trovato nella tua flotta.' });
+        }
+
+        if (vehicle.stato === 'eliminato') {
+            await db.query('COMMIT');
+            return res.json({ eliminato: true, archiviato: true });
+        }
+
+        const { rows: [active] } = await db.query(`
+            SELECT EXISTS (SELECT 1 FROM corse WHERE veicolo_id = $1 AND (
+                stato = 'in_corso' OR (stato IN ('prenotabile', 'accettata', 'da_attivare')
+                AND coalesce(fine_ciclo_operativo, arrivo_datetime, start_datetime + durata, start_datetime) >= now())
+            )) OR EXISTS (SELECT 1 FROM pending WHERE veicolo_id = $1 AND stato = 'pending' AND expires_at > now())
+            OR EXISTS (SELECT 1 FROM popbus_attivazioni WHERE veicolo_id = $1
+                AND stato IN ('in_attesa_autista', 'confermata') AND arrivo >= now())
+            OR EXISTS (SELECT 1 FROM assegnazioni_conducenti WHERE veicolo_id = $1
+                AND stato = 'assegnata' AND upper(intervallo_operativo) > now())
+            OR EXISTS (SELECT 1 FROM direttrici_virtuali WHERE veicolo_id = $1
+                AND stato IN ('in_formazione', 'in_attesa_autista', 'attivo', 'confermata'))
+            OR EXISTS (SELECT 1 FROM popbus_riserve r JOIN corse c ON c.id = r.corsa_id
+                WHERE c.veicolo_id = $1 AND r.stato = 'riservata' AND r.expires_at > now()) AS presente
+        `, [id]);
+        if (active.presente) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Chiudi le corse, le richieste o le assegnazioni ancora attive, poi rimuovi il veicolo.' });
         }
 
         const { rows: [history] } = await db.query(`
@@ -230,11 +254,6 @@ veicoloRouter.delete('/:id', async (req, res) => {
                 OR EXISTS (SELECT 1 FROM direttrici_virtuali WHERE veicolo_id = $1)
                 OR EXISTS (SELECT 1 FROM recensioni WHERE veicolo_id = $1) AS presente
         `, [id]);
-        if (history.presente) {
-            await db.query('ROLLBACK');
-            return res.status(409).json({ error: 'Questo veicolo ha corse, richieste o altri dati collegati da conservare.' });
-        }
-
         // La coda esistente ritenta la pulizia della cache e dei file dopo il commit.
         await db.query(`
             INSERT INTO admin_rimozioni_file_utenti (utente_id, tipo, risorsa_id)
@@ -242,6 +261,12 @@ veicoloRouter.delete('/:id', async (req, res) => {
             UNION ALL SELECT $2, 'veicolo', $1
             ON CONFLICT (utente_id, tipo, risorsa_id) DO NOTHING
         `, [id, req.user.id]);
+        if (history.presente) {
+            await db.query("UPDATE veicolo SET stato = 'eliminato' WHERE id = $1 AND driver_id = $2", [id, req.user.id]);
+            await db.query('COMMIT');
+            void processAccountRemovals().catch(error => console.error('Pulizia cache veicolo:', error.code || error.name));
+            return res.json({ eliminato: true, archiviato: true });
+        }
         await db.query(`
             INSERT INTO admin_rimozioni_file_utenti (utente_id, url)
             SELECT $2, url FROM (

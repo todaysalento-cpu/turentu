@@ -222,6 +222,7 @@ async function refreshCachesUltra() {
                 ORDER BY "timestamp" DESC 
                 LIMIT 1
             ) pv ON true
+            WHERE v.stato IS DISTINCT FROM 'eliminato'
             ORDER BY dv.id DESC
         `);
 
@@ -232,7 +233,7 @@ async function refreshCachesUltra() {
         }
 
         const [vRes, cRes, dirRes, nodiRes, tratteRes] = await Promise.all([
-            client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo`),
+            client.query(`SELECT id, ST_Y(coord::geometry) as lat, ST_X(coord::geometry) as lon, posti_totali, marca, modello, rating, servizi FROM veicolo WHERE stato IS DISTINCT FROM 'eliminato'`),
             client.query(`
                 SELECT c.*, 
                        ST_Y(c.origine::geometry) as origine_lat, 
@@ -242,12 +243,13 @@ async function refreshCachesUltra() {
                        v.marca, v.modello, v.rating, v.servizi 
                 FROM corse c 
                 LEFT JOIN veicolo v ON c.veicolo_id = v.id 
-                WHERE c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
+                WHERE v.stato IS DISTINCT FROM 'eliminato' AND c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
             `),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
             client.query(`SELECT id, nome, posizione, attivo FROM public.nodi_territoriali WHERE attivo = TRUE`),
             client.query(`SELECT t.* FROM public.corse_tratte t JOIN public.corse c ON c.id = t.corsa_id
-                          WHERE c.tipo_corsa = 'condivisa' AND c.stato IN ('prenotabile','in_corso','da_attivare')`)
+                          LEFT JOIN veicolo v ON v.id = c.veicolo_id
+                          WHERE v.stato IS DISTINCT FROM 'eliminato' AND c.tipo_corsa = 'condivisa' AND c.stato IN ('prenotabile','in_corso','da_attivare')`)
         ]);
         await client.query('COMMIT');
         readTx = false;

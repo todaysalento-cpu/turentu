@@ -190,7 +190,7 @@ export async function rivalidaCicloFisicoInTransazioneV2({
   const { rows: vehicles } = await client.query(
     `SELECT id, driver_id, posti_totali
      FROM veicolo
-     WHERE id = $1
+     WHERE id = $1 AND stato IS DISTINCT FROM 'eliminato'
      FOR UPDATE`,
     [vehicleId]
   );

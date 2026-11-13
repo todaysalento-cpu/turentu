@@ -30,13 +30,13 @@ router.get('/', async (req, res) => {
         FROM veicolo v
         LEFT JOIN utente u ON v.driver_id = u.id
         CROSS JOIN inizio_oggi
-        WHERE u.eliminato_il IS NULL
+        WHERE u.eliminato_il IS NULL AND v.stato IS DISTINCT FROM 'eliminato'
       ),
       veicoli_disponibili AS (
         SELECT COUNT(*) AS totale
         FROM veicolo v
         JOIN disponibilita_veicolo dv ON dv.veicolo_id = v.id
-        WHERE dv.start <= NOW() AND dv.fine >= NOW()
+        WHERE v.stato IS DISTINCT FROM 'eliminato' AND dv.start <= NOW() AND dv.fine >= NOW()
       ),
       corse_totali AS (SELECT COUNT(*) AS totale FROM corse),
       corse_oggi AS (SELECT COUNT(*) AS totale FROM corse WHERE DATE(created_at) = CURRENT_DATE),
@@ -113,7 +113,7 @@ router.get('/', async (req, res) => {
         SELECT u.id, u.nome, ST_Y(pv.coord::geometry) AS lat, ST_X(pv.coord::geometry) AS lng,
                CASE WHEN dv.start <= NOW() AND dv.fine >= NOW() THEN true ELSE false END AS disponibile
         FROM utente u
-        LEFT JOIN veicolo v ON v.driver_id = u.id
+        LEFT JOIN veicolo v ON v.driver_id = u.id AND v.stato IS DISTINCT FROM 'eliminato'
         LEFT JOIN disponibilita_veicolo dv ON dv.veicolo_id = v.id
         LEFT JOIN posizione_veicolo pv ON pv.veicolo_id = v.id AND pv.tipo = 'CORRENTE'
         WHERE u.eliminato_il IS NULL AND LOWER(TRIM(u.tipo)) = 'autista'
@@ -122,7 +122,7 @@ router.get('/', async (req, res) => {
         SELECT v.id, v.marca, v.modello, v.targa, v.localita, u.nome AS nome_autista,
           ${vehicleCoordinates}
         FROM veicolo v JOIN utente u ON u.id = v.driver_id
-        WHERE v.coord IS NOT NULL AND u.eliminato_il IS NULL AND lower(btrim(u.tipo)) = 'autista'
+        WHERE v.stato IS DISTINCT FROM 'eliminato' AND v.coord IS NOT NULL AND u.eliminato_il IS NULL AND lower(btrim(u.tipo)) = 'autista'
         ORDER BY v.id
       `)
     ]);

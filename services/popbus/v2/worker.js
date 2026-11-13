@@ -830,7 +830,7 @@ async function diagnosticaFattibilitaPixelReadOnly() {
         SELECT MIN(euro_km) AS euro_km FROM tariffe
         WHERE veicolo_id=v.id AND tipo='standard' AND euro_km>0
       ) t ON t.euro_km IS NOT NULL
-      WHERE v.driver_id IS NOT NULL AND v.posti_totali>0
+      WHERE v.stato IS DISTINCT FROM 'eliminato' AND v.driver_id IS NOT NULL AND v.posti_totali>0
         AND COALESCE(dv.coord,v.coord) IS NOT NULL
       ORDER BY t.euro_km,v.id`);
     const feasible = [];
@@ -1298,7 +1298,7 @@ export async function processaProposteDinamicheV2() {
           AND tipo='standard'
           AND euro_km>0
       ) t ON t.euro_km IS NOT NULL
-      WHERE v.driver_id IS NOT NULL
+      WHERE v.stato IS DISTINCT FROM 'eliminato' AND v.driver_id IS NOT NULL
         AND v.posti_totali>0
         AND COALESCE(dv.coord,v.coord) IS NOT NULL
       ORDER BY t.euro_km,v.id

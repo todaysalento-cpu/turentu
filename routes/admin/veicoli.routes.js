@@ -16,7 +16,7 @@ router.get('/', authMiddleware, requireRole('admin', 'Admin'), async (req, res) 
       FROM veicolo v
       LEFT JOIN utente u ON v.driver_id = u.id
       ${vehicleOverviewJoins}
-      WHERE u.eliminato_il IS NULL
+      WHERE u.eliminato_il IS NULL AND v.stato IS DISTINCT FROM 'eliminato'
       ORDER BY v.created_at DESC NULLS LAST, v.id DESC
     `);
     res.json(result.rows);

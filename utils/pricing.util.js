@@ -180,16 +180,17 @@ export async function getTariffe(veicolo_id, soloStandard = false) {
         const { rows } = await pool.query(
             `
             SELECT
-                euro_km,
-                prezzo_passeggero,
+                t.euro_km,
+                t.prezzo_passeggero,
                 v.posti_totali,
                 v.maggiorazione_riempimento_percentuale
-            FROM tariffe JOIN veicolo v ON v.id = tariffe.veicolo_id
-            WHERE veicolo_id = $1
-              AND euro_km > 0
-              AND (NOT $2::boolean OR tipo = 'standard')
+            FROM tariffe t
+            JOIN veicolo v ON v.id = t.veicolo_id
+            WHERE t.veicolo_id = $1
+              AND t.euro_km > 0
+              AND (NOT $2::boolean OR t.tipo = 'standard')
             ORDER BY
-                (tipo = 'standard') DESC
+                (t.tipo = 'standard') DESC
             LIMIT 1
             `,
             [veicolo_id, soloStandard]

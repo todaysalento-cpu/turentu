@@ -6,7 +6,7 @@ process.env.DATABASE_URL = 'postgresql://test:test@localhost/turentu_pricing_tes
 process.env.DATABASE_SSL_MODE = 'verify-full';
 
 const { pool } = await import('../db/db.js');
-const { calcolaPrezzo, ripartisciCondivisaModelloA } = await import('../utils/pricing.util.js');
+const { calcolaPrezzo, getTariffe, ripartisciCondivisaModelloA } = await import('../utils/pricing.util.js');
 
 test('maggiorazione proporzionale, capienza limitata e zero compatibile', () => {
     assert.equal(maggioraTotalePerRiempimento(100.123, 0, 8, 8), 100.123);
@@ -45,6 +45,24 @@ test('Modello A: a parità di totale restano identici pesi e centesimi residui',
     assert.deepEqual(ripartisci(totale), ripartisci(120));
     assert.deepEqual(ripartisci(totale).prenotazioni.map(p => p.prezzoTotale), [83.48, 31.3, 5.22]);
     assert.deepEqual(ripartisci(maggioraTotalePerRiempimento(100, 0, 4, 8)), ripartisci(100));
+});
+
+test('Lettura tariffa: filtro e priorità usano il tipo di tariffe, non quello del veicolo', async t => {
+    const query = t.mock.method(pool, 'query', async () => ({
+        rows: [{ euro_km: '1.20', prezzo_passeggero: '0', posti_totali: 8,
+            maggiorazione_riempimento_percentuale: '40' }],
+    }));
+
+    for (const soloStandard of [false, true]) {
+        const tariffa = await getTariffe(391, soloStandard);
+        const [sql, params] = query.mock.calls.at(-1).arguments;
+        assert.match(sql, /AND \(NOT \$2::boolean OR t\.tipo = 'standard'\)/);
+        assert.match(sql, /ORDER BY\s+\(t\.tipo = 'standard'\) DESC/);
+        assert.deepEqual(params, [391, soloStandard]);
+        assert.equal(tariffa.euro_km, 1.2);
+        assert.equal(tariffa.posti_totali, 8);
+        assert.equal(tariffa.maggiorazione_riempimento_percentuale, 40);
+    }
 });
 
 test('Privata: i posti incidono sul nuovo prezzo solo tramite il riempimento', async t => {

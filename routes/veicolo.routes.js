@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { processAccountRemovals } from '../services/auth/account-removals.service.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -198,4 +199,69 @@ veicoloRouter.put('/:id', async (req, res) => {
         console.error("❌ [Backend UPDATE Error]:", err.message);
         res.status(400).json({ error: err.message });
     }
+});
+
+// Rimuove solo veicoli privi di storico operativo, commerciale o recensioni.
+veicoloRouter.delete('/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!/^\d+$/.test(req.params.id) || !Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
+        return res.status(400).json({ error: 'ID veicolo non valido.' });
+    }
+    let db;
+    try {
+        db = await pool.connect();
+        await db.query('BEGIN');
+        await db.query("SET LOCAL lock_timeout = '3s'");
+        const { rows: [vehicle] } = await db.query(`
+            SELECT id, image_url FROM veicolo WHERE id = $1 AND driver_id = $2 FOR UPDATE
+        `, [id, req.user.id]);
+        if (!vehicle) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Veicolo non trovato nella tua flotta.' });
+        }
+
+        const { rows: [history] } = await db.query(`
+            SELECT EXISTS (SELECT 1 FROM corse WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM pending WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM popbus_attivazioni WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM assegnazioni_conducenti WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM ar_accettazioni WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM popbus_ar_accettazioni WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM direttrici_virtuali WHERE veicolo_id = $1)
+                OR EXISTS (SELECT 1 FROM recensioni WHERE veicolo_id = $1) AS presente
+        `, [id]);
+        if (history.presente) {
+            await db.query('ROLLBACK');
+            return res.status(409).json({ error: 'Questo veicolo ha corse, richieste o altri dati collegati da conservare.' });
+        }
+
+        // La coda esistente ritenta la pulizia della cache e dei file dopo il commit.
+        await db.query(`
+            INSERT INTO admin_rimozioni_file_utenti (utente_id, tipo, risorsa_id)
+            SELECT $2::integer, 'disponibilita', id FROM disponibilita_veicolo WHERE veicolo_id = $1
+            UNION ALL SELECT $2, 'veicolo', $1
+            ON CONFLICT (utente_id, tipo, risorsa_id) DO NOTHING
+        `, [id, req.user.id]);
+        await db.query(`
+            INSERT INTO admin_rimozioni_file_utenti (utente_id, url)
+            SELECT $2, url FROM (
+                SELECT url FROM documenti_autista WHERE veicolo_id = $1
+                UNION SELECT $3::text
+            ) AS assets WHERE url ~* '^https?://'
+            ON CONFLICT (utente_id, url) DO NOTHING
+        `, [id, req.user.id, vehicle.image_url]);
+        await db.query('DELETE FROM veicolo WHERE id = $1 AND driver_id = $2', [id, req.user.id]);
+        await db.query('COMMIT');
+    } catch (error) {
+        if (db) await db.query('ROLLBACK').catch(() => {});
+        if (['55P03', '23503', '40001', '40P01'].includes(error.code)) {
+            return res.status(409).json({ error: 'Il veicolo o i dati collegati sono in uso. Riprova più tardi.' });
+        }
+        console.error('Eliminazione veicolo:', error.code || error.name);
+        return res.status(500).json({ error: 'Impossibile eliminare il veicolo.' });
+    } finally {
+        if (db) db.release();
+    }
+    void processAccountRemovals().catch(error => console.error('Pulizia veicolo:', error.code || error.name));
+    return res.json({ eliminato: true });
 });

@@ -201,7 +201,7 @@ export async function rivalidaCicloFisicoInTransazioneV2({
       Number(vehicle.driver_id) <= 0 ||
       !Number.isSafeInteger(Number(vehicle.posti_totali)) ||
       Number(vehicle.posti_totali) <= 0) {
-    fail('veicolo o titolare non valido');
+    fail('veicolo o titolare non valido (veicolo_id=' + vehicleId + ')');
   }
 
   // Rivalidazione della disponibilita' operativa sotto transazione.

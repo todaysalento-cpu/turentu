@@ -59,12 +59,11 @@ export async function validatePixelStops(client, slot, quotation = null) {
   if (!origin || !destination || origin.attivo !== true || destination.attivo !== true) {
     throw pixelError('PIXEL: nodi territoriali non esistenti o inattivi', 409);
   }
-  const raccolta = quotation.raccolta_popbus;
-  let fermataRaccolta = null;
-  if (raccolta) {
-    const id = integerId(raccolta.fermata_id);
-    if (!id || integerId(raccolta.nodo_id) !== originNode) {
-      throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
+  async function verificaFermata(fermata, nodo) {
+    if (!fermata) return null;
+    const id = integerId(fermata.fermata_id);
+    if (!id || integerId(fermata.nodo_territoriale_id ?? fermata.nodo_id) !== nodo) {
+      throw pixelError('POPBUS: fermata cambiata, ripetere la ricerca', 409);
     }
 
     const { rows } = await client.query(`
@@ -81,17 +80,26 @@ export async function validatePixelStops(client, slot, quotation = null) {
           WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
         )
       FOR SHARE OF f
-    `, [id, originNode]);
-    fermataRaccolta = rows[0];
-    if (!fermataRaccolta || fermataRaccolta.lat !== raccolta.lat || fermataRaccolta.lon !== raccolta.lon) {
-      throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
+    `, [id, nodo]);
+    const corrente = rows[0];
+    if (!corrente || corrente.lat !== fermata.lat || corrente.lon !== fermata.lon) {
+      throw pixelError('POPBUS: fermata cambiata, ripetere la ricerca', 409);
     }
+    return corrente;
+  }
+
+  const raccolta = quotation.raccolta_popbus;
+  const assegnazione = quotation.fermate_pixel_popbus;
+  const salita = await verificaFermata(raccolta ?? assegnazione?.salita, originNode);
+  const discesa = await verificaFermata(assegnazione?.discesa, destNode);
+  if (salita && discesa && String(salita.id) === String(discesa.id)) {
+    throw pixelError('POPBUS: salita e discesa devono essere distinte, ripetere la ricerca', 409);
   }
   return {
     origine_nodo_territoriale_id: originNode,
     destinazione_nodo_territoriale_id: destNode,
-    origine_fermata_id: fermataRaccolta?.id ?? null,
-    destinazione_fermata_id: null,
-    ...(fermataRaccolta && { raccolta_popbus: fermataRaccolta })
+    origine_fermata_id: salita?.id ?? null,
+    destinazione_fermata_id: discesa?.id ?? null,
+    ...(raccolta && { raccolta_popbus: salita })
   };
 }

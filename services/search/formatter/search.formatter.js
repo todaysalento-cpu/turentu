@@ -503,6 +503,11 @@ export async function formatResults(
                                             item.pixel_fermate_disponibili === true,
                                         pixel_stato:
                                             item.pixel_stato ?? 'non_verificato',
+                                        ...(item.fermate_pixel_popbus && {
+                                            fermate_pixel_popbus: item.fermate_pixel_popbus,
+                                            origine_fermata_id: item.fermate_pixel_popbus.salita?.fermata_id ?? null,
+                                            destinazione_fermata_id: item.fermate_pixel_popbus.discesa?.fermata_id ?? null
+                                        }),
                                         ...(item.fermate_formazione_popbus && {
                                             fermate_formazione_popbus: item.fermate_formazione_popbus
                                         }),

@@ -4,6 +4,7 @@ import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 import { censisciFermateCentroPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
+import { assegnaFermatePixel, cercaFermateCandidate } from '../services/popbus/v2/popbus-stop-candidates.service.js';
 
 const origine = { lat: 40, lon: 18.2 };
 const destinazione = { lat: 40.65, lon: 17.94 };
@@ -191,4 +192,48 @@ test('la conferma usa il nodo e la fermata della quotazione', async () => {
     assert.equal(validated.origine_fermata_id, stop.id);
     stop.lat += 0.01;
     await assert.rejects(validatePixelStops(client, slot, quote), { status: 409 });
+});
+
+test('assegna due fermate PIXEL compatibili e le lega alla quotazione di entrambe le estremita', async () => {
+    const stop = (tipo, id, nodo, punto) => ({
+        tipo, fermata_id: id, nodo_territoriale_id: nodo, nome: 'Fermata ' + id, distanza_metri: 100, ...punto
+    });
+    const candidataSalita = stop('salita', 21, 11, origine);
+    const discesaStessoNodo = stop('discesa', 22, 11, destinazione);
+    const candidataDiscesa = stop('discesa', 23, 12, destinazione);
+    const righe = [candidataSalita, discesaStessoNodo, candidataDiscesa];
+    const fermate = await assegnaFermatePixel({
+        origine, destinazione, origineNodoId: 9, destinazioneNodoId: 4,
+        client: { async query(sql, params) {
+            assert.match(sql, /JOIN public.pixel_fermate f/);
+            assert.equal(params[1], 1500);
+            return { rows: righe };
+        } }
+    });
+    assert.equal(fermate.salita.fermata_id, 21);
+    assert.equal(fermate.discesa.fermata_id, 23);
+
+    const quote = { tipo: 'pop-bus', origine_nodo_territoriale_id: 11,
+        destinazione_nodo_territoriale_id: 12, fermate_pixel_popbus: fermate };
+    const client = { async query(sql, [id, nodo]) {
+        if (sql.includes('FROM public.nodi_territoriali')) {
+            return { rows: [{ id: '11', attivo: true }, { id: '12', attivo: true }] };
+        }
+        const row = righe.find(r => String(r.fermata_id) === id && String(r.nodo_territoriale_id) === nodo);
+        return { rows: row ? [{ ...row, id }] : [] };
+    } };
+    const validata = await validatePixelStops(client, { ...quote, destinazione_fermata_id: 22 }, quote);
+    assert.equal(validata.origine_fermata_id, '21');
+    assert.equal(validata.destinazione_fermata_id, '23');
+    candidataDiscesa.lat += 0.01;
+    await assert.rejects(validatePixelStops(client, quote, quote), { status: 409 });
+
+    await cercaFermateCandidate({
+        richiestaIds: [10],
+        client: { async query(sql) {
+            assert.match(sql, /destinazione_fermata_id AS fermata_fissata/);
+            assert.match(sql, /p\.fermata_fissata IS NULL OR f\.id = p\.fermata_fissata/);
+            return { rows: [] };
+        } }
+    });
 });

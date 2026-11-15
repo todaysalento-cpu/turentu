@@ -11,6 +11,7 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
+import { assegnaFermatePixel } from '../popbus/v2/popbus-stop-candidates.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
 import { percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
@@ -66,10 +67,6 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
         pixel_stato: 'nodi_risolti'
     };
 
-    if (String(origine.id) === String(destinazione.id)) {
-        return { ...base, pixel_stato: 'nodi_coincidenti' };
-    }
-
     const collaudo = pixelCollaudoEnabled();
     // In collaudo acquisizione on-demand prima del preventivo, in modo che
     // la riquotazione nel booking veda gli stessi ID persistenti.
@@ -83,40 +80,21 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             }
         }
     }
-    // Modalita' provvisoria: la certificazione e la tipologia veicolo
-    // non sono prerequisiti di disponibilita'. Il collaudo non bypassa
-    // mai i flag operativi; escludiamo le fermate sintetiche e respinte.
-    const { rows } = await pool.query(`
-        SELECT EXISTS (
-            SELECT 1
-            FROM public.pixel_fermate o
-            JOIN public.pixel_fermate d
-              ON d.nodo_territoriale_id = $2::BIGINT
-            WHERE o.nodo_territoriale_id = $1::BIGINT
-              AND o.id <> d.id
-              AND o.attiva = TRUE
-              AND d.attiva = TRUE
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM public.pixel_fermate_test_metadata t
-                  WHERE t.fermata_id IN (o.id, d.id)
-              )
-              AND upper(ltrim(o.nome)) NOT LIKE 'TEST PIXEL%'
-              AND upper(ltrim(o.nome)) NOT LIKE '[TEST PIXEL]%'
-              AND upper(ltrim(d.nome)) NOT LIKE 'TEST PIXEL%'
-              AND upper(ltrim(d.nome)) NOT LIKE '[TEST PIXEL]%'
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM public.pixel_fermate_fonti ff
-                  WHERE ff.fermata_id IN (o.id, d.id)
-                    AND ff.stato_verifica = 'non_ammessa'
-              )
-        ) AS disponibili
-    `, [origine.id, destinazione.id]);
+    const fermate = await assegnaFermatePixel({
+        client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta,
+        origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id)
+    });
+    const origineNodoId = fermate.salita?.nodo_territoriale_id ?? base.origine_nodo_territoriale_id;
+    const destinazioneNodoId = fermate.discesa?.nodo_territoriale_id ?? base.destinazione_nodo_territoriale_id;
+    const disponibili = Boolean(fermate.salita && fermate.discesa);
     return {
         ...base,
-        pixel_fermate_disponibili: rows[0]?.disponibili === true,
-        pixel_stato: rows[0]?.disponibili === true ? 'disponibile' : 'fermate_non_disponibili'
+        origine_nodo_territoriale_id: origineNodoId,
+        destinazione_nodo_territoriale_id: destinazioneNodoId,
+        ...(fermate.salita || fermate.discesa ? { fermate_pixel_popbus: fermate } : {}),
+        pixel_fermate_disponibili: disponibili,
+        pixel_stato: disponibili ? 'disponibile' :
+            origineNodoId === destinazioneNodoId ? 'nodi_coincidenti' : 'fermate_non_disponibili'
     };
 }
 
@@ -1045,11 +1023,13 @@ export async function cercaSlotUltra(richiesta) {
         const raccolta = pixelContext.raccolta_popbus;
         const kmPopbus = raccolta?.tratta_km ?? distanzaKm;
         // La riquotazione rifiuta una fermata cambiata anche se il prezzo è identico.
-        const chiaveRaccolta = raccolta && createHash('sha256')
-            .update(JSON.stringify([raccolta.nodo_id, raccolta.fermata_id, raccolta.lat, raccolta.lon]))
+        const fermate = pixelContext.fermate_pixel_popbus;
+        const identitaFermata = f => f && [f.nodo_territoriale_id ?? f.nodo_id, f.fermata_id, f.lat, f.lon];
+        const chiaveFermate = (fermate || raccolta) && createHash('sha256')
+            .update(JSON.stringify([identitaFermata(fermate?.salita ?? raccolta), identitaFermata(fermate?.discesa)]))
             .digest('hex').slice(0, 16);
         const virtualPopSlot = {
-            id: chiaveRaccolta ? `virtual_pop_pending_${chiaveRaccolta}` : 'virtual_pop_pending',
+            id: chiaveFermate ? `virtual_pop_pending_${chiaveFermate}` : 'virtual_pop_pending',
             ...pixelContext,
             tipo: 'pop-bus',
             is_pool: true,

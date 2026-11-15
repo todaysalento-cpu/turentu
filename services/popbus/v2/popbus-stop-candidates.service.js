@@ -49,24 +49,67 @@ export async function cercaFermateCandidate({
 
   const ids = [...new Set(richiestaIds.map(Number))];
 
-  const { rows } = await client.query(
+  const rows = await leggiFermateCandidate(client,
     `
     WITH richieste AS (
-      SELECT id, origine, destinazione
+      SELECT id, origine, destinazione, origine_fermata_id, destinazione_fermata_id
       FROM public.richieste_pop_bus
       WHERE id = ANY($1::bigint[])
     ),
     punti AS (
       SELECT id AS richiesta_id, 'salita'::text AS tipo,
-             origine AS posizione
+             origine::geography AS posizione, origine_fermata_id AS fermata_fissata
       FROM richieste
 
       UNION ALL
 
       SELECT id AS richiesta_id, 'discesa'::text AS tipo,
-             destinazione AS posizione
+             destinazione::geography AS posizione, destinazione_fermata_id AS fermata_fissata
       FROM richieste
-    ),
+    )`, [ids, raggioMetri, limite]
+  );
+
+  const risultato = new Map(ids.map(id => [id, { richiesta_id: id, salita: [], discesa: [] }]));
+  for (const row of rows) {
+    risultato.get(Number(row.richiesta_id))?.[row.tipo].push(normalizzaFermata(row));
+  }
+  return [...risultato.values()].map(item => ({
+    ...item,
+    completa: item.salita.length > 0 && item.discesa.length > 0
+  }));
+}
+
+export async function assegnaFermatePixel({
+  client, origine, destinazione, origineNodoId, destinazioneNodoId, raccolta
+}) {
+  const rows = await leggiFermateCandidate(client, `
+    WITH punti AS (
+      SELECT 1 AS richiesta_id, tipo,
+             ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione,
+             NULL::bigint AS fermata_fissata
+      FROM jsonb_to_recordset($1::jsonb) AS p(tipo text, lat float8, lon float8)
+    )`, [JSON.stringify([
+      ...(!raccolta ? [{ ...origine, tipo: 'salita' }] : []),
+      { ...destinazione, tipo: 'discesa' }
+    ]), DEFAULT_RADIUS_METERS, DEFAULT_LIMIT]);
+
+  const salite = raccolta ? [{ ...raccolta, nodo_territoriale_id: raccolta.nodo_id }] :
+    rows.filter(r => r.tipo === 'salita').map(normalizzaFermata);
+  const discese = rows.filter(r => r.tipo === 'discesa').map(normalizzaFermata);
+  for (const salita of salite) {
+    const discesa = discese.find(d => d.nodo_territoriale_id !== salita.nodo_territoriale_id);
+    if (discesa) return { salita, discesa };
+  }
+  const salita = salite.find(s => s.nodo_territoriale_id !== destinazioneNodoId) ?? null;
+  if (salita) return { salita, discesa: null };
+  return {
+    salita: null,
+    discesa: discese.find(d => d.nodo_territoriale_id !== origineNodoId) ?? null
+  };
+}
+
+async function leggiFermateCandidate(client, ctePunti, parametri) {
+  const { rows } = await client.query(`${ctePunti},
     candidate AS (
       SELECT
         p.richiesta_id,
@@ -89,6 +132,7 @@ export async function cercaFermateCandidate({
 
       JOIN public.pixel_fermate f
         ON f.attiva = TRUE
+       AND (p.fermata_fissata IS NULL OR f.id = p.fermata_fissata)
        AND ST_DWithin(
          p.posizione,
          f.posizione,
@@ -123,26 +167,13 @@ export async function cercaFermateCandidate({
     FROM candidate
     WHERE posizione_ordine <= $3::integer
     ORDER BY richiesta_id, tipo, posizione_ordine
-    `,
-    [ids, raggioMetri, limite]
+    `, parametri
   );
+  return rows;
+}
 
-  const risultato = new Map(
-    ids.map(id => [
-      id,
-      {
-        richiesta_id: id,
-        salita: [],
-        discesa: []
-      }
-    ])
-  );
-
-  for (const row of rows) {
-    const item = risultato.get(Number(row.richiesta_id));
-    if (!item) continue;
-
-    item[row.tipo].push({
+function normalizzaFermata(row) {
+    return {
       fermata_id: Number(row.fermata_id),
       nome: row.nome,
       nodo_territoriale_id: Number(row.nodo_territoriale_id),
@@ -151,11 +182,5 @@ export async function cercaFermateCandidate({
       distanza_metri: Number(row.distanza_metri),
       verificata: row.verificata === true,
       tipi_veicolo_ammessi: row.tipi_veicolo_ammessi
-    });
-  }
-
-  return [...risultato.values()].map(item => ({
-    ...item,
-    completa: item.salita.length > 0 && item.discesa.length > 0
-  }));
+    };
 }

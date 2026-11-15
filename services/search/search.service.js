@@ -14,7 +14,7 @@ import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
 import { percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
-import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
+import { censisciFermateCentroPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { identificaTerritorioPixel, resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -33,7 +33,8 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
                 destinazione: puntoDestinazione,
                 codiceOrigine: da.codiceIstat,
                 codiceDestinazione: destinazione.codice_istat_comune,
-                distanzaKm
+                distanzaKm,
+                censisciCentro: censisciFermateCentroPopbus
             });
         } catch (err) {
             console.warn('[POPBUS SEARCH] Nodo di raccolta non disponibile:', err.message);

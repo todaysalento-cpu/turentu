@@ -24,11 +24,14 @@ async function caricaComuni() {
         return [valori[codice]?.trim(), Number(valori[totale]?.trim().replaceAll('.', ''))];
     }));
 
-    return new Map(coordinate.split(/\r?\n/).flatMap(riga => {
+    const comuni = new Map([...residenti].filter(([id]) => /^\d{6}$/.test(id))
+        .map(([codice, popolazione]) => [codice, { codice, popolazione }]));
+    for (const riga of coordinate.split(/\r?\n/)) {
         const [id, lat, lon] = riga.split(',');
-        if (!/^\d{6}$/.test(id) || !lat || !lon) return [];
-        return [[id, { codice: id, lat: Number(lat), lon: Number(lon), popolazione: residenti.get(id) || 0 }]];
-    }));
+        if (!/^\d{6}$/.test(id) || !lat || !lon) continue;
+        comuni.set(id, { codice: id, popolazione: residenti.get(id) || 0, lat: Number(lat), lon: Number(lon) });
+    }
+    return comuni;
 }
 
 export function comuniRaccolta() {
@@ -79,9 +82,43 @@ async function cercaFermate(pool, polyline, origine, codiceDestinazione, alterna
     return rows;
 }
 
+async function cercaCentriSulPercorso(pool, polyline, origine, codiceDestinazione, comuni) {
+    const vicini = [...comuni.values()].filter(c =>
+        Number.isFinite(c.lat) && haversineDistance(origine, c) <= RAGGIO_ALTERNATIVE_METRI / 1000
+    );
+    const { rows } = await pool.query(`
+        WITH percorso AS (
+            SELECT ST_LineFromEncodedPolyline($1)::geography AS tracciato,
+                   ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography AS partenza
+        ), centri_istat AS (
+            SELECT codice, ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione
+            FROM jsonb_to_recordset($4::jsonb) AS c(codice text, lat float8, lon float8)
+        ), centri AS (
+            SELECT codice, posizione FROM centri_istat
+            UNION ALL
+            SELECT n.codice_istat_comune, n.posizione::geography
+            FROM public.nodi_territoriali n CROSS JOIN percorso p
+            WHERE n.attivo AND ST_DWithin(n.posizione::geography, p.partenza, $5)
+              AND NOT EXISTS (SELECT 1 FROM centri_istat c WHERE c.codice = n.codice_istat_comune)
+        )
+        SELECT DISTINCT ON (c.codice) c.codice,
+            ST_Y(c.posizione::geometry) AS lat, ST_X(c.posizione::geometry) AS lon,
+            ST_Distance(c.posizione, p.partenza) AS distanza_partenza
+        FROM centri c CROSS JOIN percorso p
+        WHERE c.codice ~ '^[0-9]{6}$' AND c.codice <> $6
+          AND ST_DWithin(c.posizione, p.tracciato, $7)
+        ORDER BY c.codice, distanza_partenza, lat, lon
+    `, [polyline, origine.lon, origine.lat, JSON.stringify(vicini), RAGGIO_ALTERNATIVE_METRI,
+        codiceDestinazione, RAGGIO_PERCORSO_METRI]);
+    return rows.map(centro => ({ ...centro, popolazione: comuni.get(centro.codice)?.popolazione ?? null }))
+        .sort((a, b) => (b.popolazione ?? 0) - (a.popolazione ?? 0) ||
+        a.distanza_partenza - b.distanza_partenza || a.codice.localeCompare(b.codice)).slice(0, MAX_COMUNI);
+}
+
 export async function scegliRaccoltaPopbus({
     pool, origine, destinazione, codiceOrigine, codiceDestinazione, distanzaKm,
-    route = getDurataDistanza, geometria = getRouteGeometry, caricaTerritorio = comuniRaccolta
+    route = getDurataDistanza, geometria = getRouteGeometry, caricaTerritorio = comuniRaccolta,
+    censisciCentro
 }) {
     if (!percorrenzaConRaccolta(distanzaKm) ||
         !/^\d{6}$/.test(codiceOrigine) || !/^\d{6}$/.test(codiceDestinazione) ||
@@ -132,10 +169,39 @@ export async function scegliRaccoltaPopbus({
         return risultato;
     }
 
+    let ordinaria = null;
     for (const accesso of preferite) {
         const opzione = await valuta(accesso);
-        if (opzione && !opzione.fuori_copertura) return opzione;
+        if (opzione && !opzione.fuori_copertura) {
+            ordinaria = { opzione, popolazione: accesso.popolazione };
+            break;
+        }
     }
+
+    if (censisciCentro) {
+        try {
+            const centri = await cercaCentriSulPercorso(pool, percorso.polyline, origine, codiceDestinazione, comuni);
+            const conFermate = new Set(fermate.map(f => f.codice));
+            const maxAccesso = ordinaria ? MAX_ACCESSO_MS : MAX_ACCESSO_ALTERNATIVO_MS;
+            for (const centro of centri) {
+                if (ordinaria && (centro.popolazione ?? 0) <= ordinaria.popolazione) break;
+                const coincide = haversineDistance(origine, centro) <= 0.01;
+                const accesso = coincide ? { distanzaKm: 0, durataMs: 0 } : await route(origine, centro);
+                if ((!coincide && !(accesso.distanzaKm > 0 && accesso.durataMs > 0)) ||
+                    accesso.durataMs > maxAccesso) continue;
+                const tratta = await route(centro, destinazione);
+                if (!(tratta.distanzaKm > 0 && tratta.durataMs > 0) ||
+                    accesso.distanzaKm + tratta.distanzaKm > maxKm) continue;
+                if (!conFermate.has(centro.codice)) {
+                    await censisciCentro(centro, { polyline: percorso.polyline, raggioMetri: RAGGIO_PERCORSO_METRI });
+                }
+                break;
+            }
+        } catch (error) {
+            console.warn('[POPBUS SEARCH] Censimento fermate non riuscito:', error.message);
+        }
+    }
+    if (ordinaria) return ordinaria.opzione;
 
     const fermateNote = new Set(fermate.map(f => f.fermata_id));
     const alternative = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, true);

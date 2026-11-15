@@ -54,7 +54,7 @@ export function mergePixelHybridCandidates(osm = [], interne = [], radiusMeters 
 }
 export async function discoverPixelHybridStops(nodoId, {
   database = pool, fetchImpl = globalThis.fetch, radiusMeters = RADIUS,
-  overpassUrl = OVERPASS_URL, includeOsm = true,
+  overpassUrl = OVERPASS_URL, includeOsm = true, limitaAlComune = false, timeoutMs = 30000,
 } = {}) {
   const id = Number(nodoId);
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('nodoId non valido');
@@ -77,14 +77,23 @@ export async function discoverPixelHybridStops(nodoId, {
   let osm = [];
   if (includeOsm) {
     if (typeof fetchImpl !== 'function') throw new Error('fetch non disponibile');
-    const filters = TYPES.map(([key, value]) => `nwr(around:${Math.round(radiusMeters)},${nodo.lat},${nodo.lon})["${key}"="${value}"];`).join('\n');
-    const query = `[out:json][timeout:25];(${filters});out center tags;`;
+    const istat = String(nodo.codice_istat_comune);
+    if (limitaAlComune && !/^\d{6}$/.test(istat)) throw new Error('Codice ISTAT non valido per la ricerca OSM');
+    const confine = limitaAlComune
+      ? `area["boundary"="administrative"]["admin_level"="8"]["ref:ISTAT"="${istat}"]->.comune;`
+      : '';
+    const area = limitaAlComune ? '(area.comune)' : '';
+    const filters = TYPES.map(([key, value]) =>
+      `nwr${area}(around:${Math.round(radiusMeters)},${nodo.lat},${nodo.lon})["${key}"="${value}"];`
+    ).join('\n');
+    const query = `[out:json][timeout:${Math.max(1, Math.min(25, Math.floor(timeoutMs / 1000) - 1))}];${confine}(${filters});out center tags;`;
     try {
       const response = await fetchImpl(overpassUrl, { method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Turentu-PIXEL/1.0' },
-        body: new URLSearchParams({ data: query }), signal: AbortSignal.timeout(30000) });
+        body: new URLSearchParams({ data: query }), signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) throw new Error(`Overpass HTTP ${response.status}`);
       const data = await response.json();
+      if (data.remark) throw new Error('Risposta Overpass incompleta');
       osm = (data.elements ?? []).map(normalizeOsm).filter(Boolean)
         .filter(c => distance(nodo, c) <= radiusMeters);
     } catch (error) { errori.push({ fonte: 'osm', errore: error.message }); }

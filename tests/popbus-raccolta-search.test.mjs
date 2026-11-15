@@ -3,6 +3,7 @@ import test from 'node:test';
 import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
+import { censisciFermateCentroPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
 
 const origine = { lat: 40, lon: 18.2 };
 const destinazione = { lat: 40.65, lon: 17.94 };
@@ -110,6 +111,65 @@ test('recupera la popolazione dei comuni dal dataset', async () => {
     const dati = await comuniRaccolta();
     assert.ok(dati.get('075003')?.popolazione > 0);
     assert.ok(dati.get('075081')?.popolazione > 0);
+});
+
+test('individua e censisce il centro compatibile piu popoloso anche senza fermate in catalogo', async () => {
+    const centro = { codice: '075001', lat: 40.04, lon: 18.23, popolazione: 35000, distanza_partenza: 5000 };
+    const censimenti = [];
+    const raccolta = await scegliRaccoltaPopbus({
+        ...opzioni,
+        pool: { async query(sql, params) {
+            if (sql.includes('centri_istat')) {
+                assert.ok(JSON.parse(params[3]).some(c => c.codice === centro.codice));
+                return { rows: [{ ...a, distanza_partenza: 10000 }, centro] };
+            }
+            return { rows: params[4] === 3000 ? [a] : [] };
+        } },
+        caricaTerritorio: async () => new Map([...comuni, [centro.codice, centro]]),
+        censisciCentro: async (c, opzioni) => censimenti.push([c.codice, opzioni.polyline])
+    });
+    assert.deepEqual(censimenti, [[centro.codice, 'rotta-corta']]);
+    assert.equal(raccolta.fermata_id, a.fermata_id);
+});
+
+test('salva una fermata OSM nel catalogo con provenienza, senza renderla prenotabile', async t => {
+    const centro = { codice: '075001', lat: 40.04, lon: 18.23, popolazione: 35000 };
+    t.mock.method(globalThis, 'fetch', async (_url, { body }) => {
+        assert.match(body.get('data'), /"ref:ISTAT"="075001"/);
+        return { ok: true, async json() {
+            return { elements: [{ type: 'node', id: 101, ...centro, tags: { highway: 'bus_stop', name: 'Fermata' } }] };
+        } };
+    });
+    const scritture = [];
+    const risultato = rows => ({ rows, rowCount: rows.length });
+    const database = {
+        async query(sql) {
+            if (sql.includes('AS residue')) return risultato([{ nodo_id: 9, residue: 1 }]);
+            if (sql.includes('jsonb_to_recordset')) return risultato([{ place_id: 'osm:node:101' }]);
+            if (sql.includes('FROM public.nodi_territoriali')) {
+                return risultato([{ ...centro, id: 9, codice_istat_comune: centro.codice }]);
+            }
+            return risultato([]);
+        },
+        async connect() {
+            return { release() {}, async query(sql, params) {
+                if (sql.includes('INSERT INTO')) scritture.push([sql, params]);
+                if (sql.includes('FROM public.nodi_territoriali')) return risultato([{ id: 9, codice_istat_comune: centro.codice }]);
+                if (sql.includes('FROM public.pixel_budget_comunali')) return risultato([{ limite: 1 }]);
+                if (sql.includes('COUNT(*)')) return risultato([{ censite: 0 }]);
+                if (sql.includes('INSERT INTO public.pixel_fermate\n')) return risultato([{ id: 55 }]);
+                return risultato([]);
+            } };
+        }
+    };
+    await censisciFermateCentroPopbus(centro, { database, polyline: 'rotta-corta', raggioMetri: 3000 });
+    assert.equal(scritture.length, 3);
+    assert.deepEqual(scritture[0][1], ['075001', 8]);
+    assert.match(scritture[0][0], /ON CONFLICT \(codice_istat_comune\) DO NOTHING/);
+    assert.match(scritture[1][0], /FALSE, FALSE/);
+    assert.match(scritture[2][0], /'da_verificare'/);
+    assert.equal(scritture[2][1][1], 'https://www.openstreetmap.org/node/101');
+    assert.equal(JSON.parse(scritture[2][1][2]).licenza, 'ODbL-1.0');
 });
 
 test('la conferma usa il nodo e la fermata della quotazione', async () => {

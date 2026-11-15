@@ -4,6 +4,10 @@
 // Il campo 'verificata' NON viene modificato; Google Places resta solo discovery.
 import { pool } from '../../db/db.js';
 import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.service.js';
+import { discoverPixelHybridStops } from './pixel-stop-hybrid-source.service.js';
+import { insertPixelStopCandidate } from './pixel-stop-budget.service.js';
+import { resolveOrCreateTerritorialNode } from './pixel-territorial-node-resolver.service.js';
+import { calcolaMaxFermate } from './pixel-demography.service.js';
 
 function normalizeNodeId(value) {
   const raw = String(value ?? '').trim();
@@ -110,4 +114,108 @@ export async function ensurePixelStopsForNode(nodoId, { database = pool } = {}) 
     pixel_fermate_disponibili: false,
     nota: 'Google Places usato solo per discovery; nessuna scrittura o attivazione commerciale.',
   };
+}
+
+const censimentiInCorso = new Map();
+const ultimiTentativi = new Map();
+const INTERVALLO_CENSIMENTO_MS = 60 * 60 * 1000;
+const INTERVALLO_ERRORE_MS = 5 * 60 * 1000;
+
+export async function censisciFermateCentroPopbus(centro, { polyline, raggioMetri, database = pool } = {}) {
+  const codice = centro.codice;
+  if ((ultimiTentativi.get(codice) ?? 0) > Date.now()) return;
+  if (censimentiInCorso.has(codice)) return censimentiInCorso.get(codice);
+
+  const censimento = eseguiCensimento(centro, polyline, raggioMetri, database);
+  censimentiInCorso.set(codice, censimento);
+  let intervallo = INTERVALLO_CENSIMENTO_MS;
+  try {
+    await censimento;
+  } catch (error) {
+    intervallo = INTERVALLO_ERRORE_MS;
+    throw error;
+  } finally {
+    censimentiInCorso.delete(codice);
+    if (ultimiTentativi.size >= 1000) ultimiTentativi.delete(ultimiTentativi.keys().next().value);
+    ultimiTentativi.set(codice, Date.now() + intervallo);
+  }
+}
+
+async function eseguiCensimento(centro, polyline, raggioMetri, database) {
+  const limiteAuto = Number.isSafeInteger(centro.popolazione) && centro.popolazione >= 0
+    ? calcolaMaxFermate(centro.popolazione) : null;
+  const { rows: [catalogo] } = await database.query(`
+    SELECT (
+      SELECT n.id FROM public.nodi_territoriali n
+      WHERE n.attivo AND n.codice_istat_comune = c.codice
+      ORDER BY n.posizione <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, n.id
+      LIMIT 1
+    ) AS nodo_id,
+    COALESCE(b.max_fermate_override, b.max_fermate_auto, $4::integer) - (
+      SELECT count(*) FROM public.pixel_fermate f
+      JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id
+      WHERE n.codice_istat_comune = c.codice
+    ) AS residue
+    FROM (SELECT $1::text AS codice) c
+    LEFT JOIN public.pixel_budget_comunali b ON b.codice_istat_comune = c.codice
+  `, [centro.codice, centro.lon, centro.lat, limiteAuto]);
+  if (!(Number(catalogo?.residue) > 0)) return;
+
+  let nodoId = catalogo.nodo_id;
+  if (!nodoId) {
+    const nodo = await resolveOrCreateTerritorialNode(centro, { database });
+    if (nodo?.codice_istat_comune !== centro.codice) return;
+    nodoId = nodo.id;
+  }
+  const fonte = await discoverPixelHybridStops(nodoId, {
+    database, radiusMeters: raggioMetri, limitaAlComune: true, timeoutMs: 4500,
+    overpassUrl: process.env.PIXEL_OVERPASS_URL || undefined
+  });
+  if (fonte.stato !== 'ok') throw new Error('Fonte OSM non disponibile per il comune ' + centro.codice);
+  const candidati = fonte.candidati.filter(c => c.fonte === 'osm' && c.nome &&
+    !/^\s*(?:\[TEST PIXEL\]|TEST PIXEL\b)/i.test(c.nome));
+  if (!candidati.length) return;
+
+  const { rows: sulPercorso } = await database.query(`
+    SELECT c.place_id
+    FROM jsonb_to_recordset($1::jsonb) AS c(place_id text, lat float8, lon float8)
+    WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(c.lon, c.lat), 4326)::geography,
+      ST_LineFromEncodedPolyline($2)::geography, $3)
+  `, [JSON.stringify(candidati), polyline, raggioMetri]);
+  const compatibili = new Set(sulPercorso.map(c => c.place_id));
+  const selezionate = candidati.filter(c => compatibili.has(c.place_id));
+  if (!selezionate.length) return;
+
+  const client = await database.connect();
+  try {
+    await client.query('BEGIN');
+    if (limiteAuto !== null) {
+      await client.query(`
+        INSERT INTO public.pixel_budget_comunali (codice_istat_comune, max_fermate_auto)
+        VALUES ($1, $2) ON CONFLICT (codice_istat_comune) DO NOTHING
+      `, [centro.codice, limiteAuto]);
+    }
+    for (const c of selezionate) {
+      const result = await insertPixelStopCandidate({
+        nodo_territoriale_id: nodoId, nome: c.nome, indirizzo: c.indirizzo, lat: c.lat, lon: c.lon
+      }, { client });
+      if (result.reason === 'budget_esaurito') break;
+      if (!result.inserted) continue;
+      await client.query(`
+        INSERT INTO public.pixel_fermate_fonti
+          (fermata_id, fonte, riferimento_fonte, stato_verifica, dettagli_verifica)
+        VALUES ($1, 'fonte_pubblica_riutilizzabile', $2, 'da_verificare', $3::jsonb)
+      `, [result.id, c.riferimento_fonte, JSON.stringify({
+        origine: 'censimento_popbus', licenza: 'ODbL-1.0',
+        attribuzione: 'OpenStreetMap contributors', url_attribuzione: 'https://www.openstreetmap.org/copyright'
+      })]);
+      if (!result.budget.residue) break;
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }

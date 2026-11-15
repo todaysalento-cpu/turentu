@@ -4,7 +4,9 @@ import { getDurataDistanza, getRouteGeometry } from '../../utils/maps.util.js';
 import { classePercorrenza, QUALITA_PERCORRENZA } from '../popbus/v2/model.js';
 
 const RAGGIO_PERCORSO_METRI = 3000;
+const RAGGIO_ALTERNATIVE_METRI = 20000;
 const MAX_ACCESSO_MS = 12 * 60000;
+const MAX_ACCESSO_ALTERNATIVO_MS = 30 * 60000;
 const MAX_COMUNI = 8;
 
 let comuniPromise;
@@ -39,7 +41,9 @@ export function comuniRaccolta() {
 
 export const percorrenzaConRaccolta = km => ['MEDIA', 'LUNGA'].includes(classePercorrenza({}, km));
 
-async function fermateSulPercorso(pool, polyline, origine, codiceDestinazione) {
+async function cercaFermate(pool, polyline, origine, codiceDestinazione, alternative = false) {
+    const riferimento = alternative ? 'p.partenza' : 'p.tracciato';
+    const raggio = alternative ? RAGGIO_ALTERNATIVE_METRI : RAGGIO_PERCORSO_METRI;
     const { rows } = await pool.query(`
         WITH percorso AS (
             SELECT ST_LineFromEncodedPolyline($1)::geography AS tracciato,
@@ -54,7 +58,7 @@ async function fermateSulPercorso(pool, polyline, origine, codiceDestinazione) {
                    ST_Distance(f.posizione::geography, p.partenza) AS distanza_partenza
             FROM percorso p
             JOIN public.pixel_fermate f ON f.attiva
-                AND ST_DWithin(f.posizione::geography, p.tracciato, $5)
+                AND ST_DWithin(f.posizione::geography, ${riferimento}, $5)
             JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id AND n.attivo
             LEFT JOIN public.pixel_demografia d ON d.nodo_territoriale_id = n.id
             WHERE n.codice_istat_comune <> $4
@@ -71,7 +75,7 @@ async function fermateSulPercorso(pool, polyline, origine, codiceDestinazione) {
                      ST_Distance(f.posizione::geography, p.tracciato), f.id
         )
         SELECT * FROM fermate ORDER BY distanza_partenza, fermata_id LIMIT $6
-    `, [polyline, origine.lon, origine.lat, codiceDestinazione, RAGGIO_PERCORSO_METRI, MAX_COMUNI]);
+    `, [polyline, origine.lon, origine.lat, codiceDestinazione, raggio, MAX_COMUNI]);
     return rows;
 }
 
@@ -90,8 +94,7 @@ export async function scegliRaccoltaPopbus({
     const classe = classePercorrenza({}, percorso.distanzaKm);
     if (!classe || classe === 'BASSA' || !percorso.polyline) return null;
 
-    const fermate = await fermateSulPercorso(pool, percorso.polyline, origine, codiceDestinazione);
-    const accessi = (await Promise.all(fermate.map(async fermata => {
+    const cercaAccessi = async fermate => (await Promise.all(fermate.map(async fermata => {
         const coincide = haversineDistance(origine, fermata) <= 0.01;
         const info = coincide ? { distanzaKm: 0, durataMs: 0 } : await route(origine, fermata);
         if (!coincide && !(info.distanzaKm > 0 && info.durataMs > 0)) return null;
@@ -99,11 +102,12 @@ export async function scegliRaccoltaPopbus({
         return { fermata, info, popolazione };
     }))).filter(Boolean);
 
+    const fermate = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione);
+    const accessi = await cercaAccessi(fermate);
     const perVicinanza = (a, b) => a.info.durataMs - b.info.durataMs ||
         a.info.distanzaKm - b.info.distanzaKm || Number(a.fermata.fermata_id) - Number(b.fermata.fermata_id);
     const preferite = accessi.filter(a => a.info.durataMs <= MAX_ACCESSO_MS)
         .sort((a, b) => b.popolazione - a.popolazione || perVicinanza(a, b));
-    const piuVicine = accessi.sort(perVicinanza);
     const maxKm = percorso.distanzaKm * (1 + QUALITA_PERCORRENZA[classe].maxDeviazionePct / 100);
     const esaminate = new Map();
 
@@ -132,9 +136,16 @@ export async function scegliRaccoltaPopbus({
         const opzione = await valuta(accesso);
         if (opzione && !opzione.fuori_copertura) return opzione;
     }
+
+    const fermateNote = new Set(fermate.map(f => f.fermata_id));
+    const alternative = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, true);
+    const accessiAlternativi = await cercaAccessi(alternative.filter(f => !fermateNote.has(f.fermata_id)));
+    const piuVicine = [...accessi, ...accessiAlternativi]
+        .filter(({ info }) => info.durataMs <= MAX_ACCESSO_ALTERNATIVO_MS)
+        .sort(perVicinanza);
     for (const accesso of piuVicine) {
         const opzione = await valuta(accesso);
-        if (opzione) return opzione;
+        if (opzione) return { ...opzione, fuori_copertura: true };
     }
     return null;
 }

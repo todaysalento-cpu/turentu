@@ -19,6 +19,10 @@ const opzioni = {
     },
     pool: { async query(sql, params) {
         assert.match(sql, /ST_LineFromEncodedPolyline/);
+        if (params[4] === 20000) {
+            assert.match(sql, /ST_DWithin\(f.posizione::geography, p.partenza, \$5\)/);
+            return { rows: [] };
+        }
         assert.match(sql, /ST_DWithin\(f.posizione::geography, p.tracciato, \$5\)/);
         assert.deepEqual(params.slice(0, 5), ['rotta-corta', origine.lon, origine.lat, '074001', 3000]);
         return { rows: [a, b] };
@@ -63,6 +67,29 @@ test('fuori copertura restituisce la fermata sul percorso raggiungibile in meno 
     assert.equal(raccolta.fermata_id, a.fermata_id);
     assert.equal(raccolta.accesso_minuti, 19);
     assert.equal(raccolta.fuori_copertura, true);
+});
+
+test('fuori copertura considera una fermata fuori dal tracciato e scarta accessi oltre 30 minuti', async () => {
+    for (const minuti of [21, 31]) {
+        const raccolta = await scegliRaccoltaPopbus({
+            ...opzioni,
+            pool: { async query(sql, params) {
+                await opzioni.pool.query(sql, params);
+                return { rows: params[4] === 20000 ? [a, b] : [b] };
+            } },
+            async route(da, a) {
+                if (a === destinazione) return percorso(80, 60);
+                return a === b ? percorso(43, 54) : percorso(15, minuti);
+            }
+        });
+        if (minuti === 21) {
+            assert.equal(raccolta.fermata_id, a.fermata_id);
+            assert.equal(raccolta.accesso_minuti, 21);
+            assert.equal(raccolta.fuori_copertura, true);
+        } else {
+            assert.equal(raccolta, null);
+        }
+    }
 });
 
 test('un comune raggiungibile ma con deviazione alta resta una proposta alternativa', async () => {

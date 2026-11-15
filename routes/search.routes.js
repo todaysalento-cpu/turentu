@@ -1,4 +1,5 @@
 import express from "express";
+import { performance } from "node:perf_hooks";
 // Importazione standard: se nel file di servizio usi 'export async function cercaSlotUltra'
 import { cercaSlotUltra } from "../services/search/search.service.js";
 
@@ -26,9 +27,9 @@ router.post("/", async (req, res) => {
       throw new Error("Il servizio di ricerca 'cercaSlotUltra' non è stato importato correttamente.");
     }
 
-    console.time("⏱️ Performance Timer: cercaSlotUltra");
+    const inizio = performance.now();
     const risultati = await cercaSlotUltra(form);
-    console.timeEnd("⏱️ Performance Timer: cercaSlotUltra");
+    console.log(`⏱️ Performance Timer: cercaSlotUltra: ${(performance.now() - inizio).toFixed(1)} ms`);
 
     console.log(`🔍 Search elaborata. Risultati trovati: ${risultati?.length || 0}`);
 
@@ -52,6 +53,8 @@ router.post("/", async (req, res) => {
         classe: r.classe,
         origine_nodo_territoriale_id: r.origine_nodo_territoriale_id ?? null,
         destinazione_nodo_territoriale_id: r.destinazione_nodo_territoriale_id ?? null,
+        origine_fermata_id: r.origine_fermata_id ?? null,
+        destinazione_fermata_id: r.destinazione_fermata_id ?? null,
         pixel_fermate_disponibili: r.pixel_fermate_disponibili ?? null,
         pixel_stato: r.pixel_stato ?? null
       })),

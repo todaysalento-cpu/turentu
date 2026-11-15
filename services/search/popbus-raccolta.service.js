@@ -1,71 +1,115 @@
 import { readFile } from 'node:fs/promises';
+import { haversineDistance } from '../../utils/geo.util.js';
 import { getDurataDistanza } from '../../utils/maps.util.js';
-import { classePercorrenza, QUALITA_PERCORRENZA } from '../popbus/v2/model.js';
+import { classePercorrenza, QUALITA_PERCORRENZA, SOGLIE_PERCORRENZA_KM } from '../popbus/v2/model.js';
 
-const RAGGIO_RICERCA_METRI = 8000;
-const MAX_ACCESSO_MS = 10 * 60000;
-const MAX_NODI = 6;
+const RAGGIO_KM = 8;
+const MAX_ACCESSO_MS = 12 * 60000;
+const MAX_RACCOLTE = 2;
 
 let comuniPromise;
-const normalizza = nome => String(nome ?? '').normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+async function caricaComuni() {
+    const [popolazione, coordinate] = await Promise.all([
+        readFile(new URL('../../data/ISTAT/ASL_comuni_popolazione_2024.csv', import.meta.url), 'utf8'),
+        readFile(new URL('../../data/ISTAT/comuni-coordinate.csv', import.meta.url), 'utf8')
+    ]);
+    const [header, ...righe] = popolazione.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
+    const colonne = header.split(';');
+    const codice = colonne.indexOf('CODICE COMUNE');
+    const totale = colonne.indexOf('TOTALE');
+    const residenti = new Map(righe.map(riga => {
+        const valori = riga.split(';');
+        return [valori[codice]?.trim(), Number(valori[totale]?.trim().replaceAll('.', ''))];
+    }));
 
-function comuniDalDataset() {
-    comuniPromise ??= readFile(new URL('../../data/ISTAT/ASL_comuni_popolazione_2024.csv', import.meta.url), 'utf8')
-        .then(csv => {
-            const [header, ...righe] = csv.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
-            const colonne = header.split(';');
-            const codice = colonne.indexOf('CODICE COMUNE');
-            const nome = colonne.indexOf('COMUNE');
-            const totale = colonne.indexOf('TOTALE');
-            return new Map(righe.flatMap(riga => {
-                const valori = riga.split(';').map(v => v.trim());
-                const residenti = Number(valori[totale]?.replaceAll('.', ''));
-                if (!/^\d{6}$/.test(valori[codice]) || !valori[nome] || !(residenti > 0)) return [];
-                return [[valori[codice], { nome: normalizza(valori[nome]), residenti }]];
-            }));
-        });
+    return new Map(coordinate.split(/\r?\n/).flatMap(riga => {
+        const [id, lat, lon] = riga.split(',');
+        if (!/^\d{6}$/.test(id) || !lat || !lon) return [];
+        return [[id, { codice: id, lat: Number(lat), lon: Number(lon), popolazione: residenti.get(id) || 0 }]];
+    }));
+}
+
+export function comuniRaccolta() {
+    comuniPromise ??= caricaComuni().catch(error => {
+        comuniPromise = null;
+        throw error;
+    });
     return comuniPromise;
 }
 
-function popolazioneLocale(valore, codice, nome, comuni) {
-    if (valore != null && Number.isFinite(Number(valore))) return Number(valore);
-    const comune = comuni.get(String(codice ?? '').trim().padStart(6, '0'));
-    if (!comune) return null;
-    if (comune.nome === normalizza(nome)) return comune.residenti;
-    // Per una frazione senza dato proprio, valuta come raccolta i comuni vicini.
-    return null;
+export const percorrenzaConRaccolta = km => ['MEDIA', 'LUNGA'].includes(classePercorrenza({}, km));
+
+function comuniCompatibili(comuni, provincia, destinazione, classe) {
+    return [...comuni.values()].flatMap(comune => {
+        if (!comune.codice.startsWith(provincia) || comune.codice === destinazione.codice) return [];
+        const distanza = haversineDistance(comune, destinazione);
+        // Filtro geografico preliminare. La classe effettiva usa la strada nella Search.
+        const { bassaMax, mediaMax } = SOGLIE_PERCORRENZA_KM;
+        if (classe === 'MEDIA' && (distanza * 1.3 < bassaMax || distanza > mediaMax)) return [];
+        if (classe === 'LUNGA' && distanza * 1.3 <= mediaMax) return [];
+        return [{ comune, distanza }];
+    });
 }
 
-export async function scegliRaccoltaPopbus({
-    pool, origine, destinazione, origineNodoId, destinazioneNodoId,
-    distanzaKm, route = getDurataDistanza
-}) {
-    const classe = classePercorrenza({}, distanzaKm);
-    if (!classe || classe === 'BASSA' || !origineNodoId || !destinazioneNodoId ||
-        origineNodoId === destinazioneNodoId) return null;
+export function pianificaPuntiRaccolta({ comuni, fermate, provincia, destinazione, classe }) {
+    const localita = comuniCompatibili(comuni, provincia, destinazione, classe);
+    const qualita = QUALITA_PERCORRENZA[classe];
+    const candidati = fermate.flatMap(fermata => {
+        const kmVersoDestinazione = haversineDistance(fermata, destinazione);
+        const copertura = new Map();
+        for (const { comune, distanza } of localita) {
+            const accesso = haversineDistance(comune, fermata);
+            const maxKm = distanza * (1 + qualita.maxDeviazionePct / 100);
+            if (accesso <= RAGGIO_KM && accesso + kmVersoDestinazione <= maxKm) {
+                copertura.set(comune.codice, accesso);
+            }
+        }
+        if (!copertura.size) return [];
+        return [{ fermata, copertura, popolazione: Number(fermata.popolazione) ||
+            comuni.get(fermata.codice)?.popolazione || 0 }];
+    }).sort((a, b) => Number(a.fermata.fermata_id) - Number(b.fermata.fermata_id));
 
-    // Una fermata di riferimento per nodo rende la proposta stabile fra ricerche diverse.
+    let migliore = { punti: [], coperti: 0, popolazione: 0, distanza: Infinity };
+    function valuta(punti) {
+        const coperti = new Map();
+        for (const { copertura } of punti) {
+            for (const [codice, km] of copertura) {
+                coperti.set(codice, Math.min(km, coperti.get(codice) ?? Infinity));
+            }
+        }
+        const popolazione = punti.reduce((somma, p) => somma + p.popolazione, 0);
+        const distanza = [...coperti.values()].reduce((somma, km) => somma + km, 0);
+        if (coperti.size > migliore.coperti ||
+            (coperti.size === migliore.coperti && punti.length < migliore.punti.length) ||
+            (coperti.size === migliore.coperti && punti.length === migliore.punti.length &&
+                (popolazione > migliore.popolazione ||
+                    (popolazione === migliore.popolazione && distanza < migliore.distanza)))) {
+            migliore = { punti, coperti: coperti.size, popolazione, distanza };
+        }
+    }
+
+    const limite = Math.min(MAX_RACCOLTE, qualita.maxFermate);
+    for (const [i, prima] of candidati.entries()) {
+        valuta([prima]);
+        if (limite < 2) continue;
+        for (const seconda of candidati.slice(i + 1)) {
+            if (prima.fermata.codice !== seconda.fermata.codice) valuta([prima, seconda]);
+        }
+    }
+    return migliore.punti.map(p => p.fermata);
+}
+
+async function fermateDellaDirettrice(pool, provincia, codiceDestinazione) {
     const { rows } = await pool.query(`
-        WITH punto AS (
-            SELECT ST_SetSRID(ST_MakePoint($3, $4), 4326)::geography AS posizione
-        )
-        SELECT DISTINCT ON (n.id)
-               n.id AS nodo_id, btrim(split_part(n.nome, ',', 1)) AS localita,
-               n.codice_istat_comune AS codice, d.popolazione,
-               btrim(split_part(o.nome, ',', 1)) AS localita_origine,
-               o.codice_istat_comune AS codice_origine, od.popolazione AS popolazione_origine,
+        SELECT DISTINCT ON (n.codice_istat_comune)
+               n.id AS nodo_id, n.codice_istat_comune AS codice, d.popolazione,
+               btrim(split_part(n.nome, ',', 1)) AS localita,
                f.id AS fermata_id, f.nome AS fermata,
-               ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon,
-               ST_Distance(f.posizione::geography, p.posizione) AS distanza
-        FROM public.nodi_territoriali o
-        JOIN public.nodi_territoriali n ON n.attivo AND n.id NOT IN ($1, $2)
-        LEFT JOIN public.pixel_demografia d ON d.nodo_territoriale_id = n.id
-        LEFT JOIN public.pixel_demografia od ON od.nodo_territoriale_id = o.id
+               ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon
+        FROM public.nodi_territoriali n
         JOIN public.pixel_fermate f ON f.nodo_territoriale_id = n.id AND f.attiva
-        CROSS JOIN punto p
-        WHERE o.id = $1 AND o.attivo
-          AND ST_DWithin(n.posizione::geography, p.posizione, $5)
+        LEFT JOIN public.pixel_demografia d ON d.nodo_territoriale_id = n.id
+        WHERE n.attivo AND n.codice_istat_comune LIKE $1 AND n.codice_istat_comune <> $2
           AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
           AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
           AND NOT EXISTS (
@@ -75,39 +119,43 @@ export async function scegliRaccoltaPopbus({
               SELECT 1 FROM public.pixel_fermate_fonti ff
               WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
           )
-        ORDER BY n.id, ST_Distance(f.posizione::geography, n.posizione::geography), f.id
-    `, [origineNodoId, destinazioneNodoId, origine.lon, origine.lat, RAGGIO_RICERCA_METRI]);
+        ORDER BY n.codice_istat_comune,
+                 (d.popolazione IS NOT NULL) DESC,
+                 ST_Distance(f.posizione::geography, n.posizione::geography), f.id
+    `, [`${provincia}%`, codiceDestinazione]);
+    return rows;
+}
 
-    if (!rows.length) return null;
-    const comuni = await comuniDalDataset().catch(() => new Map());
-    const da = rows[0];
-    const popolazioneOrigine = popolazioneLocale(
-        da.popolazione_origine, da.codice_origine, da.localita_origine, comuni
-    );
-    const comuneOrigine = comuni.get(String(da.codice_origine ?? '').trim().padStart(6, '0'));
-    const frazioneSenzaDato = popolazioneOrigine == null && comuneOrigine &&
-        normalizza(da.localita_origine) !== comuneOrigine.nome;
+export async function scegliRaccoltaPopbus({
+    pool, origine, destinazione, codiceOrigine, codiceDestinazione, distanzaKm,
+    route = getDurataDistanza, caricaTerritorio = comuniRaccolta
+}) {
+    if (!percorrenzaConRaccolta(distanzaKm) ||
+        !/^\d{6}$/.test(codiceOrigine) || !/^\d{6}$/.test(codiceDestinazione) ||
+        codiceOrigine === codiceDestinazione) return null;
 
-    const candidati = rows.filter(f => {
-        if (f.distanza > RAGGIO_RICERCA_METRI) return false;
-        const popolazione = popolazioneLocale(f.popolazione, f.codice, f.localita, comuni);
-        return popolazione != null && (frazioneSenzaDato ||
-            (popolazioneOrigine != null && popolazione > popolazioneOrigine));
-    })
-        .sort((a, b) => a.distanza - b.distanza || Number(a.nodo_id) - Number(b.nodo_id))
-        .slice(0, MAX_NODI);
+    const classe = classePercorrenza({}, distanzaKm);
+    const provincia = codiceOrigine.slice(0, 3);
+    const comuni = await caricaTerritorio();
+    const centroDestinazione = comuni.get(codiceDestinazione);
+    if (!centroDestinazione) return null;
 
-    const accessi = await Promise.all(candidati.map(async fermata => {
-        const info = await route(origine, fermata);
-        return { fermata, info };
+    const fermate = await fermateDellaDirettrice(pool, provincia, codiceDestinazione);
+    const piano = pianificaPuntiRaccolta({ comuni, fermate, provincia, destinazione: centroDestinazione, classe });
+    const accessi = await Promise.all(piano.flatMap(fermata => {
+        const km = haversineDistance(origine, fermata);
+        if (km > RAGGIO_KM) return [];
+        return [(async () => {
+            const info = km <= 0.01 ? { distanzaKm: 0, durataMs: 0 } : await route(origine, fermata);
+            if (km > 0.01 && !(info.distanzaKm > 0 && info.durataMs > 0)) return null;
+            return info.durataMs <= MAX_ACCESSO_MS ? { fermata, info } : null;
+        })()];
     }));
-    accessi.sort((a, b) => a.info.durataMs - b.info.durataMs ||
-        a.info.distanzaKm - b.info.distanzaKm || Number(a.fermata.nodo_id) - Number(b.fermata.nodo_id));
+    const ordinati = accessi.filter(Boolean).sort((a, b) => a.info.durataMs - b.info.durataMs ||
+        a.info.distanzaKm - b.info.distanzaKm || Number(a.fermata.fermata_id) - Number(b.fermata.fermata_id));
 
     const maxKm = distanzaKm * (1 + QUALITA_PERCORRENZA[classe].maxDeviazionePct / 100);
-    for (const { fermata, info } of accessi) {
-        if (!(info.durataMs > 0 && info.durataMs <= MAX_ACCESSO_MS && info.distanzaKm > 0)) continue;
-
+    for (const { fermata, info } of ordinati) {
         const tratta = await route(fermata, destinazione);
         if (!(tratta.distanzaKm > 0 && tratta.durataMs > 0) ||
             info.distanzaKm + tratta.distanzaKm > maxKm) continue;

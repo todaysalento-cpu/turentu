@@ -12,10 +12,10 @@ import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
-import { scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
+import { percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
-import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
+import { identificaTerritorioPixel, resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -23,35 +23,40 @@ const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
 // Il resolver identifica la localita' e il comune ISTAT: non usa una soglia
 // di distanza dal nodo piu' vicino e distingue le frazioni dello stesso comune.
 async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm) {
-    const [origineRichiesta, destinazione] = await Promise.all([
-        resolveOrCreateTerritorialNode({ lat, lon }),
-        resolveOrCreateTerritorialNode({ lat: destLat, lon: destLon })
-    ]);
+    const puntoOrigine = { lat, lon };
+    const puntoDestinazione = { lat: destLat, lon: destLon };
+    const trovaRaccolta = async (da, destinazione) => {
+        try {
+            return await scegliRaccoltaPopbus({
+                pool,
+                origine: puntoOrigine,
+                destinazione: puntoDestinazione,
+                codiceOrigine: da.codiceIstat,
+                codiceDestinazione: destinazione.codice_istat_comune,
+                distanzaKm
+            });
+        } catch (err) {
+            console.warn('[POPBUS SEARCH] Nodo di raccolta non disponibile:', err.message);
+            return null;
+        }
+    };
 
-    if (!origineRichiesta?.id || !destinazione?.id) {
+    const [da, destinazione] = await Promise.all([
+        percorrenzaConRaccolta(distanzaKm)
+            ? identificaTerritorioPixel(puntoOrigine).catch(() => null)
+            : null,
+        resolveOrCreateTerritorialNode(puntoDestinazione)
+    ]);
+    const raccolta = da && destinazione ? await trovaRaccolta(da, destinazione) : null;
+    const origine = raccolta ? { id: raccolta.nodo_id } : await resolveOrCreateTerritorialNode(puntoOrigine);
+    if (!origine?.id || !destinazione?.id) {
         return {
-            origine_nodo_territoriale_id: origineRichiesta?.id ? Number(origineRichiesta.id) : null,
+            origine_nodo_territoriale_id: origine?.id ? Number(origine.id) : null,
             destinazione_nodo_territoriale_id: destinazione?.id ? Number(destinazione.id) : null,
             pixel_fermate_disponibili: false,
             pixel_stato: 'nodi_non_disponibili'
         };
     }
-
-    let raccolta;
-    try {
-        raccolta = await scegliRaccoltaPopbus({
-            pool,
-            origine: { lat, lon },
-            destinazione: { lat: destLat, lon: destLon },
-            origineNodoId: Number(origineRichiesta.id),
-            destinazioneNodoId: Number(destinazione.id),
-            distanzaKm
-        });
-    } catch (err) {
-        console.warn('[POPBUS SEARCH] Nodo di raccolta non disponibile:', err.message);
-    }
-
-    const origine = raccolta ? { id: raccolta.nodo_id } : origineRichiesta;
     const base = {
         ...(raccolta && { raccolta_popbus: raccolta }),
         origine_nodo_territoriale_id: Number(origine.id),

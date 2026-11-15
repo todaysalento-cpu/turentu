@@ -181,6 +181,14 @@ async function resolveRepresentativeCoordinates(details, inputCoord) {
   };
 }
 
+export async function identificaTerritorioPixel(coord) {
+  const inputCoord = validateCoordinates(coord);
+  const details = await getLocalitaDetails(inputCoord);
+  assert(details?.localita && details?.comune,
+    'reverse geocoding non ha identificato localita e comune');
+  return { inputCoord, details, codiceIstat: await resolveIstatCode(details) };
+}
+
 /**
  * Risolve o crea il nodo territoriale corrispondente alla localita' delle
  * coordinate ricevute.
@@ -192,13 +200,7 @@ async function resolveRepresentativeCoordinates(details, inputCoord) {
 export async function resolveOrCreateTerritorialNode(coord, {
   database = pool
 } = {}) {
-  const inputCoord = validateCoordinates(coord);
-
-  const details = await getLocalitaDetails(inputCoord);
-  assert(details?.localita && details?.comune,
-    'reverse geocoding non ha identificato localita e comune');
-
-  const codiceIstat = await resolveIstatCode(details);
+  const { inputCoord, details, codiceIstat } = await identificaTerritorioPixel(coord);
   const localita = String(details.localita).trim();
 
   // Percorso veloce: le localita' gia' censite non richiedono Places.

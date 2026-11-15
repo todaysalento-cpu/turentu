@@ -24,9 +24,10 @@ pixelRouter.get('/fermate', async (req, res) => {
 
     const collaudo = pixelCollaudoEnabled();
     const read = () => pool.query(`
-      SELECT fermata_id AS id, nome, indirizzo, lat, lon, tipi_veicolo_ammessi
-      FROM public.pixel_fermate_per_nodo($1::bigint)
-      ORDER BY nome, fermata_id`, [nodoId]);
+      SELECT p.fermata_id AS id, p.nome, p.indirizzo, p.lat, p.lon, p.tipi_veicolo_ammessi, f.verificata
+      FROM public.pixel_fermate_per_nodo($1::bigint) p
+      JOIN public.pixel_fermate f ON f.id = p.fermata_id
+      ORDER BY p.nome, p.fermata_id`, [nodoId]);
     let { rows } = await read();
     if (collaudo && rows.length === 0) {
       // Solo discovery informativa: non persiste dati Google Places.
@@ -46,6 +47,7 @@ pixelRouter.get('/fermate', async (req, res) => {
         lat: Number(row.lat),
         lon: Number(row.lon),
         tipi_veicolo_ammessi: row.tipi_veicolo_ammessi || [],
+        verificata: row.verificata === true,
       })),
     });
   } catch (error) {
@@ -128,7 +130,7 @@ pixelRouter.get('/fermate/candidati-google', authMiddleware, requireRole('Admin'
 });
 
 // Registrazione amministrativa: solo dati indipendenti da Google Places.
-// Le dichiarazioni dell'amministratore sono registrate, non costituiscono certificazione.
+// L'amministratore può registrare e attivare in via provvisoria anche prima della verifica.
 pixelRouter.post('/fermate/registrazione', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
   try {
     const body = req.body;
@@ -137,7 +139,7 @@ pixelRouter.post('/fermate/registrazione', authMiddleware, requireRole('Admin', 
     }
     const {
       nodo_territoriale_id, nome, indirizzo = null, lat, lon,
-      fonte, riferimento_fonte, autorizzazione_uso_dati, conferma_punto_salita,
+      fonte, riferimento_fonte, autorizzazione_uso_dati, conferma_punto_salita = false,
     } = body;
     const nodo = Number(nodo_territoriale_id);
     if (!Number.isSafeInteger(nodo) || nodo <= 0 ||
@@ -147,7 +149,7 @@ pixelRouter.post('/fermate/registrazione', authMiddleware, requireRole('Admin', 
         typeof lon !== 'number' || !Number.isFinite(lon) || lon < -180 || lon > 180 ||
         !['rilievo_operatore', 'fonte_pubblica_riutilizzabile'].includes(fonte) ||
         typeof riferimento_fonte !== 'string' || !riferimento_fonte.trim() || riferimento_fonte.length > 1000 ||
-        autorizzazione_uso_dati !== true || conferma_punto_salita !== true) {
+        autorizzazione_uso_dati !== true || typeof conferma_punto_salita !== 'boolean') {
       return res.status(400).json({ success: false, error: 'Dati di registrazione non validi o attestazioni mancanti' });
     }
 

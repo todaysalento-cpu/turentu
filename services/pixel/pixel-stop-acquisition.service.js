@@ -4,8 +4,6 @@
 // Il campo 'verificata' NON viene modificato; Google Places resta solo discovery.
 import { pool } from '../../db/db.js';
 import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.service.js';
-import { discoverPixelHybridStops } from './pixel-stop-hybrid-source.service.js';
-import { insertPixelStopCandidate } from './pixel-stop-budget.service.js';
 import { resolveOrCreateTerritorialNode } from './pixel-territorial-node-resolver.service.js';
 import { calcolaMaxFermate } from './pixel-demography.service.js';
 import { cercaIdFermateGoogle } from './pixel-stop-discovery.service.js';
@@ -122,12 +120,12 @@ const ultimiTentativi = new Map();
 const INTERVALLO_CENSIMENTO_MS = 60 * 60 * 1000;
 const INTERVALLO_ERRORE_MS = 5 * 60 * 1000;
 
-export function censisciFermateCentroPopbus(centro, { polyline, raggioMetri, database = pool } = {}) {
-  return pianificaCensimento(centro.codice, centro, { polyline, raggioMetri, database });
+export function censisciFermateCentroPopbus(centro, { raggioMetri, database = pool } = {}) {
+  return pianificaCensimento(centro.codice, centro, { raggioMetri, database });
 }
 
 export function censisciFermateEstremoPopbus(nodo, punto, { popolazione, raggioMetri, database = pool } = {}) {
-  // Il fornitore riceve una zona approssimata. Il raggio esatto usa PostGIS.
+  // Il fornitore riceve una zona approssimata. Il raggio esatto e' verificato in memoria.
   const centroRicerca = { lat: Number(punto.lat.toFixed(2)), lon: Number(punto.lon.toFixed(2)) };
   const chiave = `estremo:${nodo.id}:${centroRicerca.lat}:${centroRicerca.lon}`;
   return pianificaCensimento(chiave, { ...punto, codice: nodo.codice_istat_comune, popolazione },
@@ -135,25 +133,28 @@ export function censisciFermateEstremoPopbus(nodo, punto, { popolazione, raggioM
 }
 
 async function pianificaCensimento(chiave, centro, opzioni) {
-  if ((ultimiTentativi.get(chiave) ?? 0) > Date.now()) return;
+  const ultimo = ultimiTentativi.get(chiave);
+  if (ultimo?.finoA > Date.now()) return ultimo.candidati;
   if (censimentiInCorso.has(chiave)) return censimentiInCorso.get(chiave);
 
   const censimento = eseguiCensimento(centro, opzioni);
   censimentiInCorso.set(chiave, censimento);
   let intervallo = INTERVALLO_CENSIMENTO_MS;
+  let candidati = 0;
   try {
-    return await censimento;
+    candidati = await censimento;
+    return candidati;
   } catch (error) {
     intervallo = INTERVALLO_ERRORE_MS;
     throw error;
   } finally {
     censimentiInCorso.delete(chiave);
     if (ultimiTentativi.size >= 1000) ultimiTentativi.delete(ultimiTentativi.keys().next().value);
-    ultimiTentativi.set(chiave, Date.now() + intervallo);
+    ultimiTentativi.set(chiave, { finoA: Date.now() + intervallo, candidati });
   }
 }
 
-async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoId: nodoRichiesto, centroRicerca }) {
+async function eseguiCensimento(centro, { raggioMetri, database, nodoId: nodoRichiesto, centroRicerca }) {
   const limiteAuto = Number.isSafeInteger(centro.popolazione) && centro.popolazione >= 0
     ? calcolaMaxFermate(centro.popolazione) : null;
   const { rows: [catalogo] } = await database.query(`
@@ -172,88 +173,32 @@ async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoI
     FROM (SELECT $1::text AS codice) c
     LEFT JOIN public.pixel_budget_comunali b ON b.codice_istat_comune = c.codice
   `, [centro.codice, centro.lon, centro.lat, limiteAuto, nodoRichiesto ?? null]);
-  if (!(Number(catalogo?.residue) > 0)) return;
+  if (!(Number(catalogo?.residue) > 0)) return 0;
 
   let nodoId = catalogo.nodo_id;
   if (!nodoId) {
-    if (nodoRichiesto) return;
+    if (nodoRichiesto) return 0;
     const nodo = await resolveOrCreateTerritorialNode(centro, { database });
-    if (nodo?.codice_istat_comune !== centro.codice) return;
+    if (nodo?.codice_istat_comune !== centro.codice) return 0;
     nodoId = nodo.id;
   }
-  const fonte = await discoverPixelHybridStops(nodoId, {
-    database, radiusMeters: centroRicerca ? raggioMetri + 1000 : raggioMetri,
-    centroRicerca, limitaAlComune: true, timeoutMs: 4500,
-    overpassUrl: process.env.PIXEL_OVERPASS_URL || undefined
-  });
-  const cercaConGoogle = () => segnalaCandidatiGoogle(
-    database, nodoId, centro, centroRicerca, raggioMetri, Number(catalogo.residue)
-  );
-  if (fonte.stato !== 'ok') return cercaConGoogle();
-  const candidati = fonte.candidati.filter(c => c.fonte === 'osm' && c.nome &&
-    !/^\s*(?:\[TEST PIXEL\]|TEST PIXEL\b)/i.test(c.nome));
-  if (!candidati.length) return cercaConGoogle();
-
-  const { rows: compatibili } = await database.query(`
-    WITH area AS (
-      SELECT CASE WHEN $2::text IS NOT NULL THEN ST_LineFromEncodedPolyline($2)::geography
-                  ELSE ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography END AS riferimento
-    )
-    SELECT c.place_id
-    FROM jsonb_to_recordset($1::jsonb) AS c(place_id text, lat float8, lon float8) CROSS JOIN area
-    WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(c.lon, c.lat), 4326)::geography,
-      area.riferimento, $3)
-  `, [JSON.stringify(candidati), polyline ?? null, raggioMetri, centro.lon, centro.lat]);
-  const idCompatibili = new Set(compatibili.map(c => c.place_id));
-  const selezionate = candidati.filter(c => idCompatibili.has(c.place_id));
-  if (!selezionate.length) return cercaConGoogle();
-
-  const client = await database.connect();
-  let inserite = 0;
-  try {
-    await client.query('BEGIN');
-    if (limiteAuto !== null) {
-      await client.query(`
-        INSERT INTO public.pixel_budget_comunali (codice_istat_comune, max_fermate_auto)
-        VALUES ($1, $2) ON CONFLICT (codice_istat_comune) DO NOTHING
-      `, [centro.codice, limiteAuto]);
-    }
-    for (const c of selezionate) {
-      const result = await insertPixelStopCandidate({
-        nodo_territoriale_id: nodoId, nome: c.nome, indirizzo: c.indirizzo, lat: c.lat, lon: c.lon
-      }, { client });
-      if (result.reason === 'budget_esaurito') break;
-      if (!result.inserted) continue;
-      await client.query(`
-        INSERT INTO public.pixel_fermate_fonti
-          (fermata_id, fonte, riferimento_fonte, stato_verifica, dettagli_verifica)
-        VALUES ($1, 'fonte_pubblica_riutilizzabile', $2, 'da_verificare', $3::jsonb)
-      `, [result.id, c.riferimento_fonte, JSON.stringify({
-        origine: 'censimento_popbus', licenza: 'ODbL-1.0',
-        attribuzione: 'OpenStreetMap contributors', url_attribuzione: 'https://www.openstreetmap.org/copyright'
-      })]);
-      inserite++;
-      if (!result.budget.residue) break;
-    }
-    await client.query('COMMIT');
-    return inserite;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function segnalaCandidatiGoogle(database, nodoId, centro, centroRicerca, raggioMetri, capienza) {
   const placeIds = await cercaIdFermateGoogle(centro, { centroRicerca, raggioMetri });
-  if (!placeIds.length) return;
+  const selezionati = placeIds.slice(0, Number(catalogo.residue));
+  if (!selezionati.length) return 0;
+
+  // I place ID formano una coda di verifica, separata dal catalogo operativo.
   const risultato = await database.query(`
+    WITH budget AS (
+      INSERT INTO public.pixel_budget_comunali (codice_istat_comune, max_fermate_auto)
+      SELECT $3::text, $4::integer WHERE $4::integer IS NOT NULL
+      ON CONFLICT (codice_istat_comune) DO NOTHING
+    )
     INSERT INTO public.pixel_candidati_google (nodo_territoriale_id, place_id)
-    SELECT $1::bigint, place_id FROM unnest($2::text[]) AS id(place_id)
+    SELECT $1::bigint, place_id FROM unnest($2::text[]) AS candidati(place_id)
     ON CONFLICT (nodo_territoriale_id, place_id) DO NOTHING
-  `, [nodoId, placeIds.slice(0, capienza)]);
+  `, [nodoId, selezionati, centro.codice, limiteAuto]);
   if (risultato.rowCount > 0) {
     console.info('[POPBUS PIXEL] Candidati Google da verificare', { nodo: nodoId, candidati: risultato.rowCount });
   }
+  return selezionati.length;
 }

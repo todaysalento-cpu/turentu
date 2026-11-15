@@ -88,16 +88,16 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
         { tipo: 'salita', nodo: origine, punto: puntoOrigine },
         { tipo: 'discesa', nodo: destinazione, punto: puntoDestinazione }
     ].filter(({ tipo, nodo }) => !fermate[tipo] && /^\d{6}$/.test(nodo.codice_istat_comune));
-    await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
+    const candidati = await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
         try {
             const comuni = await comuniRaccolta();
-            const inserite = await censisciFermateEstremoPopbus(nodo, punto, {
+            return await censisciFermateEstremoPopbus(nodo, punto, {
                 popolazione: comuni.get(nodo.codice_istat_comune)?.popolazione,
                 raggioMetri: DEFAULT_RADIUS_METERS
             });
-            if (inserite > 0) console.info('[POPBUS PIXEL] Fermate censite da verificare', { tipo, nodo: nodo.id, inserite });
         } catch (error) {
             console.warn('[POPBUS PIXEL] Censimento estremo non riuscito:', { tipo, nodo: nodo.id, errore: error.message });
+            return 0;
         }
     }));
     const origineNodoId = fermate.salita?.nodo_territoriale_id ?? base.origine_nodo_territoriale_id;
@@ -110,7 +110,8 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
         ...(fermate.salita || fermate.discesa ? { fermate_pixel_popbus: fermate } : {}),
         pixel_fermate_disponibili: disponibili,
         pixel_stato: disponibili ? 'disponibile' :
-            origineNodoId === destinazioneNodoId ? 'nodi_coincidenti' : 'fermate_non_disponibili'
+            origineNodoId === destinazioneNodoId ? 'nodi_coincidenti' :
+            candidati.some(numero => numero > 0) ? 'candidati_da_verificare' : 'fermate_non_disponibili'
     };
 }
 

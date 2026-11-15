@@ -15,7 +15,7 @@ export async function registerPixelStopCandidate({
   nodo_territoriale_id, nome, indirizzo = null, lat, lon,
   fonte, riferimento_fonte, autorizzazione_uso_dati = false,
   conferma_punto_salita = false,
-}) {
+}, { database = pool } = {}) {
   if (!SOURCES.has(fonte)) {
     throw new Error('Fonte non ammessa: vietato registrare direttamente dati Google Places');
   }
@@ -23,15 +23,15 @@ export async function registerPixelStopCandidate({
       typeof riferimento_fonte !== 'string' || !riferimento_fonte.trim()) {
     throw new Error('Servono diritti di riutilizzo e riferimento della fonte');
   }
-  if (conferma_punto_salita !== true) {
-    throw new Error('Punto di salita non ancora confermato');
+  if (typeof conferma_punto_salita !== 'boolean') {
+    throw new Error('Conferma del punto di salita non valida');
   }
   // Non creare nuove fermate sintetiche nel flusso operativo.
   if (isSyntheticStopName(nome)) {
     throw new Error('PIXEL: fermata sintetica esclusa dalla registrazione operativa');
   }
 
-  const client = await pool.connect();
+  const client = await database.connect();
   try {
     await client.query('BEGIN');
     const result = await insertPixelStopCandidate({
@@ -95,7 +95,7 @@ export async function registerPixelStopCandidate({
        RETURNING id`,
       [fermataId, fonte, riferimento_fonte.trim(), JSON.stringify({
         autorizzazione_uso_dati_dichiarata: true,
-        conferma_punto_salita_dichiarata: true,
+        conferma_punto_salita_dichiarata: conferma_punto_salita,
       })]
     );
 

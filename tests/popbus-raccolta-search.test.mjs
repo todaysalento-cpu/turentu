@@ -3,6 +3,7 @@ import test from 'node:test';
 import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
+import { registerPixelStopCandidate } from '../services/pixel/pixel-stop-registration.service.js';
 import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
 import { assegnaFermatePixel, cercaFermateCandidate } from '../services/popbus/v2/popbus-stop-candidates.service.js';
 
@@ -133,47 +134,17 @@ test('individua e censisce il centro compatibile piu popoloso anche senza fermat
     assert.equal(raccolta.fermata_id, a.fermata_id);
 });
 
-test('salva una fermata OSM nel catalogo con provenienza, senza renderla prenotabile', async t => {
+test('un comune con budget esaurito non avvia il censimento Google', async t => {
     const centro = { codice: '075001', lat: 40.04, lon: 18.23, popolazione: 35000 };
-    t.mock.method(globalThis, 'fetch', async (_url, { body }) => {
-        assert.match(body.get('data'), /"ref:ISTAT"="075001"/);
-        return { ok: true, async json() {
-            return { elements: [{ type: 'node', id: 101, ...centro, tags: { highway: 'bus_stop', name: 'Fermata' } }] };
-        } };
-    });
-    const scritture = [];
-    const risultato = rows => ({ rows, rowCount: rows.length });
-    const database = {
-        async query(sql) {
-            if (sql.includes('AS residue')) return risultato([{ nodo_id: 9, residue: 1 }]);
-            if (sql.includes('jsonb_to_recordset')) return risultato([{ place_id: 'osm:node:101' }]);
-            if (sql.includes('FROM public.nodi_territoriali')) {
-                return risultato([{ ...centro, id: 9, codice_istat_comune: centro.codice }]);
-            }
-            return risultato([]);
-        },
-        async connect() {
-            return { release() {}, async query(sql, params) {
-                if (sql.includes('INSERT INTO')) scritture.push([sql, params]);
-                if (sql.includes('FROM public.nodi_territoriali')) return risultato([{ id: 9, codice_istat_comune: centro.codice }]);
-                if (sql.includes('FROM public.pixel_budget_comunali')) return risultato([{ limite: 1 }]);
-                if (sql.includes('COUNT(*)')) return risultato([{ censite: 0 }]);
-                if (sql.includes('INSERT INTO public.pixel_fermate\n')) return risultato([{ id: 55 }]);
-                return risultato([]);
-            } };
-        }
-    };
-    await censisciFermateCentroPopbus(centro, { database, polyline: 'rotta-corta', raggioMetri: 3000 });
-    assert.equal(scritture.length, 3);
-    assert.deepEqual(scritture[0][1], ['075001', 8]);
-    assert.match(scritture[0][0], /ON CONFLICT \(codice_istat_comune\) DO NOTHING/);
-    assert.match(scritture[1][0], /FALSE, FALSE/);
-    assert.match(scritture[2][0], /'da_verificare'/);
-    assert.equal(scritture[2][1][1], 'https://www.openstreetmap.org/node/101');
-    assert.equal(JSON.parse(scritture[2][1][2]).licenza, 'ODbL-1.0');
+    t.mock.method(globalThis, 'fetch', async () => assert.fail('Chiamata esterna inattesa'));
+    const database = { async query(sql) {
+        assert.match(sql, /AS residue/);
+        return { rows: [{ nodo_id: 9, residue: 0 }] };
+    } };
+    assert.equal(await censisciFermateCentroPopbus(centro, { database, raggioMetri: 3000 }), 0);
 });
 
-test('usa Google se il censimento nell’area dell’estremo non ha candidato e salva solo i place ID', async t => {
+test('usa solo Google ai punti senza fermata e salva i place ID candidati', async t => {
     const punto = { lat: 39.9021, lon: 18.2649 };
     const nodo = { id: 46, codice_istat_comune: '075003' };
     const risultato = rows => ({ rows, rowCount: rows.length });
@@ -183,22 +154,18 @@ test('usa Google se il censimento nell’area dell’estremo non ha candidato e 
         if (apiKeyOriginale === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
         else process.env.GOOGLE_MAPS_API_KEY = apiKeyOriginale;
     });
+    let chiamate = 0;
     t.mock.method(globalThis, 'fetch', async (url, { body }) => {
-        if (url === 'https://places.googleapis.com/v1/places:searchNearby') {
-            assert.deepEqual(JSON.parse(body).locationRestriction.circle.center, { latitude: 39.9, longitude: 18.26 });
-            const location = { latitude: punto.lat, longitude: punto.lon };
-            return { ok: true, async json() { return { places: [
-                { id: 'place-1', location, displayName: { text: 'Nome da non salvare' } },
-                { id: 'place-2', location, businessStatus: 'CLOSED_PERMANENTLY' },
-                { id: 'place-3', location: { ...location, latitude: 39.93 } }
-            ] }; } };
-        }
-        assert.match(body.get('data'), /around:2500,39\.9,18\.26/);
-        return { ok: true, async json() {
-            return { elements: [{ type: 'node', id: 102, ...punto, tags: { highway: 'bus_stop', name: 'Fermata' } }] };
-        } };
+        chiamate++;
+        assert.equal(url, 'https://places.googleapis.com/v1/places:searchNearby');
+        assert.deepEqual(JSON.parse(body).locationRestriction.circle.center, { latitude: 39.9, longitude: 18.26 });
+        const location = { latitude: punto.lat, longitude: punto.lon };
+        return { ok: true, async json() { return { places: [
+            { id: 'place-1', location, displayName: { text: 'Nome da non salvare' } },
+            { id: 'place-2', location, businessStatus: 'CLOSED_PERMANENTLY' },
+            { id: 'place-3', location: { ...location, latitude: 39.93 } }
+        ] }; } };
     });
-    let filtrate = false;
     let segnalati;
     const database = {
         async query(sql, params) {
@@ -206,25 +173,55 @@ test('usa Google se il censimento nell’area dell’estremo non ha candidato e 
                 assert.equal(params[4], nodo.id);
                 return risultato([{ nodo_id: nodo.id, residue: 3 }]);
             }
-            if (sql.includes('jsonb_to_recordset')) {
-                assert.deepEqual(params.slice(1), [null, 1500, punto.lon, punto.lat]);
-                filtrate = true;
-                return risultato([]);
-            }
-            if (sql.includes('FROM public.nodi_territoriali')) {
-                return risultato([{ ...nodo, lat: 40, lon: 18 }]);
-            }
             if (sql.includes('INSERT INTO public.pixel_candidati_google')) {
                 segnalati = params;
                 return risultato([]);
             }
-            return risultato([]);
+            assert.fail('Query inattesa durante la ricerca Google');
         },
-        async connect() { assert.fail('Una candidata fuori raggio non va censita'); }
+        async connect() { assert.fail('Un candidato Google non va scritto nel catalogo operativo'); }
     };
-    await censisciFermateEstremoPopbus(nodo, punto, { database, raggioMetri: 1500, popolazione: 5000 });
-    assert.equal(filtrate, true);
-    assert.deepEqual(segnalati, [nodo.id, ['place-1']]);
+    const opzioni = { database, raggioMetri: 1500, popolazione: 5000 };
+    assert.equal(await censisciFermateEstremoPopbus(nodo, punto, opzioni), 1);
+    assert.equal(await censisciFermateEstremoPopbus(nodo, punto, opzioni), 1);
+    assert.equal(chiamate, 1);
+    assert.deepEqual(segnalati, [nodo.id, ['place-1'], nodo.codice_istat_comune, 3]);
+});
+
+test('la registrazione amministrativa attiva una fermata con evidenza ancora da verificare', async () => {
+    const risultato = rows => ({ rows, rowCount: rows.length });
+    let dichiarazione;
+    const database = {
+        async connect() {
+            return { release() {}, async query(sql, params) {
+                if (['BEGIN', 'COMMIT'].includes(sql)) return risultato([]);
+                if (sql.includes('FROM public.nodi_territoriali')) return risultato([{ id: 46, codice_istat_comune: '075003' }]);
+                if (sql.includes('FROM public.pixel_budget_comunali')) return risultato([{ limite: 5 }]);
+                if (sql.includes('COUNT(*)')) return risultato([{ censite: 0 }]);
+                if (sql.includes('ST_DWithin')) return risultato([]);
+                if (sql.includes('INSERT INTO public.pixel_fermate\n')) return risultato([{ id: 60 }]);
+                if (sql.includes('FOR UPDATE OF f')) return risultato([{
+                    id: 60, nome: 'Punto di raccolta', attiva: false, verificata: false,
+                    nodo_attivo: true, fermata_test: false, evidenza_negativa: false
+                }]);
+                if (sql.includes('INSERT INTO public.pixel_fermate_fonti')) {
+                    assert.match(sql, /'da_verificare'/);
+                    dichiarazione = JSON.parse(params[3]);
+                    return risultato([{ id: 70 }]);
+                }
+                if (sql.includes('SET attiva = TRUE')) return risultato([{ attiva: true }]);
+                assert.fail('Query inattesa durante la registrazione della fermata');
+            } };
+        }
+    };
+    const fermata = await registerPixelStopCandidate({
+        nodo_territoriale_id: 46, nome: 'Punto di raccolta', lat: 39.9, lon: 18.26,
+        fonte: 'rilievo_operatore', riferimento_fonte: 'Rilievo di prova', autorizzazione_uso_dati: true
+    }, { database });
+    assert.equal(fermata.attiva, true);
+    assert.equal(fermata.verificata, false);
+    assert.equal(fermata.attivazione_provvisoria, true);
+    assert.equal(dichiarazione.conferma_punto_salita_dichiarata, false);
 });
 
 test('la conferma usa il nodo e la fermata della quotazione', async () => {

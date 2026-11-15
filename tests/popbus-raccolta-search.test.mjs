@@ -1,88 +1,106 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { comuniRaccolta, pianificaPuntiRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
+import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
+import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 
-const centro = (codice, lat, popolazione = 2000) => ({ codice, lat, lon: 18.35, popolazione });
-const brindisi = centro('074001', 40.65);
-const diso = centro('075027', 40.01);
-const andrano = centro('075005', 39.995);
-const cavallino = centro('075020', 40.22);
-const soleto = centro('075076', 40.10);
-const poggiardo = centro('075061', 40.033, 6000);
-const lecce = centro('075035', 40.24, 60000);
-const comuni = new Map([brindisi, diso, andrano, cavallino, soleto, poggiardo, lecce]
-    .map(p => [p.codice, p]));
-const fermata = (p, id, localita) => ({ ...p, fermata_id: id, nodo_id: id + 100, fermata: 'Stazione', localita });
-const sud = fermata(poggiardo, 20, 'Poggiardo');
-const nord = fermata(lecce, 30, 'Lecce');
-const ripetuta = fermata(diso, 15, 'Diso');
-const percorso = (distanzaKm, minuti) => ({ distanzaKm, durataMs: minuti * 60000 });
+const origine = { lat: 40, lon: 18.2 };
+const destinazione = { lat: 40.65, lon: 17.94 };
+const a = { codice: '075039', nodo_id: 10, fermata_id: 20, fermata: 'Piazzale', localita: 'Maglie', lat: 40.1, lon: 18.3 };
+const b = { codice: '075035', nodo_id: 11, fermata_id: 21, fermata: 'Stazione', localita: 'Lecce', lat: 40.3, lon: 18.1 };
+const percorso = (km, minuti) => ({ distanzaKm: km, durataMs: minuti * 60000 });
+const comuni = new Map([[a.codice, { popolazione: 14000 }], [b.codice, { popolazione: 90000 }]]);
 const opzioni = {
-    origine: diso, destinazione: brindisi, codiceOrigine: diso.codice, codiceDestinazione: brindisi.codice,
-    distanzaKm: 95, caricaTerritorio: async () => comuni,
+    origine, destinazione, codiceOrigine: '075003', codiceDestinazione: '074001', distanzaKm: 95,
+    caricaTerritorio: async () => comuni,
+    async geometria(da, a, options) {
+        assert.deepEqual([da, a, options], [origine, destinazione, { shortest: true }]);
+        return { polyline: 'rotta-corta', distanzaKm: 90 };
+    },
     pool: { async query(sql, params) {
-        assert.match(sql, /n.codice_istat_comune LIKE \$1/);
-        assert.deepEqual(params, ['075%', '074001']);
-        return { rows: [nord, ripetuta, sud] };
+        assert.match(sql, /ST_LineFromEncodedPolyline/);
+        assert.match(sql, /ST_DWithin\(f.posizione::geography, p.tracciato, \$5\)/);
+        assert.deepEqual(params.slice(0, 5), ['rotta-corta', origine.lon, origine.lat, '074001', 3000]);
+        return { rows: [a, b] };
     } },
     async route(da, a) {
-        return a === brindisi ? percorso(87, 65) : percorso(6, 10 + 5 / 60);
+        if (a === destinazione) return percorso(80, 60);
+        return a === b ? percorso(8, 11) : percorso(5, 6);
     }
 };
 
-test('il piano limita a due fermate e copre comuni senza nodi PIXEL', () => {
-    const result = pianificaPuntiRaccolta({ comuni, fermate: [nord, sud, ripetuta],
-        provincia: '075', destinazione: brindisi, classe: 'MEDIA' });
-    assert.deepEqual(result.map(p => p.localita), ['Poggiardo', 'Lecce']);
+test('sceglie la rotta piu corta fra le alternative del router', async () => {
+    const parti = (points, km, seconds) => ({ overview_polyline: { points },
+        legs: [{ distance: { value: km * 1000 }, duration: { value: seconds } }] });
+    const fetchImpl = async url => {
+        assert.match(url, /alternatives=true/);
+        return { ok: true, async json() { return { status: 'OK',
+            routes: [parti('veloce', 95, 3600), parti('breve', 90, 4200)] }; } };
+    };
+    assert.equal((await getRouteGeometry(origine, destinazione, { apiKey: 'test', fetchImpl, shortest: true })).polyline, 'breve');
 });
 
-test('Diso e Andrano scelgono la stessa fermata da un piano indipendente dalle richieste', async () => {
-    const daAndrano = await scegliRaccoltaPopbus({ ...opzioni, origine: andrano, codiceOrigine: andrano.codice });
-    const daDiso = await scegliRaccoltaPopbus(opzioni);
-    assert.equal(daDiso.fermata_id, sud.fermata_id);
-    assert.equal(daAndrano.fermata_id, sud.fermata_id);
-    assert.equal(daDiso.accesso_minuti, 11);
+test('tra i comuni vicini al tracciato e accessibili sceglie il piu popoloso', async () => {
+    const raccolta = await scegliRaccoltaPopbus(opzioni);
+    assert.equal(raccolta.fermata_id, b.fermata_id);
+    assert.equal(raccolta.fuori_copertura, false);
 });
 
-test('un punto fuori copertura stradale mantiene il nodo originale', async () => {
-    assert.equal(await scegliRaccoltaPopbus({ ...opzioni, origine: soleto, codiceOrigine: soleto.codice,
-        async route(da, a) { return a === brindisi ? percorso(87, 65) : percorso(7, 14); } }), null);
+test('una fermata ordinaria ha priorita su una raccolta fuori copertura', async () => {
+    const raccolta = await scegliRaccoltaPopbus({ ...opzioni, async route(da, a) {
+        if (a === b) return percorso(16, 19);
+        return opzioni.route(da, a);
+    } });
+    assert.equal(raccolta.fermata_id, a.fermata_id);
+    assert.equal(raccolta.fuori_copertura, false);
 });
 
-test('la breve percorrenza evita la selezione dei punti di raccolta', async () => {
-    assert.equal(await scegliRaccoltaPopbus({ ...opzioni, distanzaKm: 39.9, pool: null }), null);
+test('fuori copertura restituisce la fermata sul percorso raggiungibile in meno tempo', async () => {
+    const raccolta = await scegliRaccoltaPopbus({ ...opzioni, async route(da, a) {
+        if (a === destinazione) return percorso(80, 60);
+        return a === b ? percorso(16, 27) : percorso(12, 19);
+    } });
+    assert.equal(raccolta.fermata_id, a.fermata_id);
+    assert.equal(raccolta.accesso_minuti, 19);
+    assert.equal(raccolta.fuori_copertura, true);
 });
 
-test('la verifica stradale rifiuta un percorso troppo deviato', async () => {
-    const route = async (da, a) => a === brindisi ? percorso(120, 90) : percorso(6, 10);
-    assert.equal(await scegliRaccoltaPopbus({ ...opzioni, route }), null);
+test('un comune raggiungibile ma con deviazione alta resta una proposta alternativa', async () => {
+    const raccolta = await scegliRaccoltaPopbus({ ...opzioni, async route(da, a) {
+        if (a === destinazione) return percorso(115, 85);
+        return opzioni.route(da, a);
+    } });
+    assert.equal(raccolta.fermata_id, a.fermata_id);
+    assert.equal(raccolta.fuori_copertura, true);
 });
 
-test('il dataset riconosce i quattro comuni anche senza fermate registrate', async () => {
+test('breve percorrenza e catalogo vuoto mantengono la partenza originale', async () => {
+    assert.equal(await scegliRaccoltaPopbus({ ...opzioni, distanzaKm: 39.9, geometria: null }), null);
+    assert.equal(await scegliRaccoltaPopbus({ ...opzioni, pool: { async query() { return { rows: [] }; } } }), null);
+});
+
+test('recupera la popolazione dei comuni dal dataset', async () => {
     const dati = await comuniRaccolta();
-    for (const { codice } of [diso, andrano, cavallino, soleto]) {
-        assert.ok(dati.get(codice)?.popolazione > 0);
-    }
+    assert.ok(dati.get('075003')?.popolazione > 0);
+    assert.ok(dati.get('075081')?.popolazione > 0);
 });
 
 test('la conferma usa il nodo e la fermata della quotazione', async () => {
     const raccolta_popbus = await scegliRaccoltaPopbus(opzioni);
-    const quote = { tipo: 'pop-bus', origine_nodo_territoriale_id: sud.nodo_id,
+    const quote = { tipo: 'pop-bus', origine_nodo_territoriale_id: b.nodo_id,
         destinazione_nodo_territoriale_id: 4, raccolta_popbus };
     const slot = { ...quote, origine_nodo_territoriale_id: 9, origine_fermata_id: 90 };
-    const stop = { id: String(sud.fermata_id), nome: sud.fermata, lat: sud.lat, lon: sud.lon };
+    const stop = { id: String(b.fermata_id), nome: b.fermata, lat: b.lat, lon: b.lon };
     const client = { async query(sql, params) {
         if (sql.includes('nodi_territoriali')) {
-            assert.deepEqual(params, [[String(sud.nodo_id), '4']]);
-            return { rows: [{ id: String(sud.nodo_id), attivo: true }, { id: '4', attivo: true }] };
+            assert.deepEqual(params, [[String(b.nodo_id), '4']]);
+            return { rows: [{ id: String(b.nodo_id), attivo: true }, { id: '4', attivo: true }] };
         }
-        assert.match(sql, /f.nodo_territoriale_id = \$2 AND f.attiva/);
-        assert.deepEqual(params, [stop.id, String(sud.nodo_id)]);
+        assert.deepEqual(params, [stop.id, String(b.nodo_id)]);
         return { rows: [stop] };
     } };
     const validated = await validatePixelStops(client, slot, quote);
-    assert.equal(validated.origine_nodo_territoriale_id, String(sud.nodo_id));
+    assert.equal(validated.origine_nodo_territoriale_id, String(b.nodo_id));
     assert.equal(validated.origine_fermata_id, stop.id);
     stop.lat += 0.01;
     await assert.rejects(validatePixelStops(client, slot, quote), { status: 409 });

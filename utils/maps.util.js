@@ -31,7 +31,7 @@ function makeCacheKey(o, d) {
 // DIRECTIONS API (ROBUSTA)
 // =========================
 export async function getRouteGeometry(origine, destinazione, {
-  timeoutMs = 12000, fetchImpl = fetch, apiKey = GOOGLE_MAPS_API_KEY
+  timeoutMs = 12000, fetchImpl = fetch, apiKey = GOOGLE_MAPS_API_KEY, shortest = false
 } = {}) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000 || typeof fetchImpl !== 'function')
     throw new Error('Configurazione routing non valida');
@@ -47,7 +47,8 @@ export async function getRouteGeometry(origine, destinazione, {
   const url = `https://maps.googleapis.com/maps/api/directions/json` +
     `?origin=${o.lat},${o.lon}` +
     `&destination=${d.lat},${d.lon}` +
-    `&overview=full` + 
+    `&overview=full` +
+    (shortest ? '&alternatives=true' : '') +
     `&key=${apiKey}`;
 
   const controller = new AbortController();
@@ -66,10 +67,12 @@ export async function getRouteGeometry(origine, destinazione, {
       throw new Error("Nessuna rotta trovata nei risultati");
     }
 
-    const route = data.routes[0];
+    const route = shortest ? data.routes
+      .filter(item => item.overview_polyline?.points && item.legs?.[0]?.distance?.value > 0)
+      .sort((a, b) => a.legs[0].distance.value - b.legs[0].distance.value)[0] : data.routes[0];
     
     // Validazione finale della polyline
-    if (!route.overview_polyline?.points) {
+    if (!route?.overview_polyline?.points) {
       throw new Error("Polyline assente nella risposta");
     }
 

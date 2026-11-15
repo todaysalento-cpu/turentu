@@ -8,6 +8,9 @@ import { generaFormazioniAlternative, valutaRichieste, verificaQualitaRichieste 
 import { leggiContestiOpportunitaPixel } from './pixel-opportunity-adapter.js';
 import { leggiRegistroAr } from './pixel-ar-registry.js';
 import { generaFormazioniArSafe } from './pixel-ar-safe-formations.js';
+import { generaFormazioniPerQuantita, indicizzaGruppiEquivalenti, riassegnaRichiesteEquivalenti } from './popbus-request-groups.js';
+import { DEFAULT_RADIUS_METERS, DEFAULT_LIMIT } from './popbus-stop-candidates.service.js';
+import { creaRicercaFermateSnapshot } from './popbus-stop-snapshot.service.js';
 import { generaCicliDueMissioniShadow } from './pixel-multimission-shadow.js';
 import { componiCicloInCorsa } from './popbus-single-corsa-assembler.js';
 import { preparaCicloPixelPerPersistenza } from './popbus-p0-c8-adapter.js';
@@ -138,7 +141,8 @@ async function conflicts(client, vehicleId, start, end) {
 `, [vehicleId,new Date(start),new Date(end)]);
   return rows.length > 0;
 }
-async function candidates(client, now, opportunityIds = null, historicalPhysicalShadow = false, canary = null) {
+async function candidates(client, now, opportunityIds = null, historicalPhysicalShadow = false,
+  canary = null, raggruppaFermate = false) {
   const contexts = await leggiContestiOpportunitaPixel({
     client,
     limit: limits.opportunita + 1,
@@ -169,6 +173,19 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
   // Una configurazione del turno per ogni veicolo resta una scelta diversa
   // per l'ottimizzazione: capienza/margine sono ricalcolati in transazione.
   if (vehicles.length > limits.veicoli) fail('limite veicoli raggiunto: niente troncamento');
+  let ricercaFermate;
+  let gruppiRichieste = new Map();
+  let fermatePerRichiesta;
+  if (raggruppaFermate && vehicles.length && contexts.some(c => c.requests.length > 1)) {
+    ricercaFermate = creaRicercaFermateSnapshot({client, richiestaIds:ids});
+    const fermate = await ricercaFermate.cerca({
+      client, richiestaIds:ids, raggioMetri:DEFAULT_RADIUS_METERS, limite:DEFAULT_LIMIT
+    });
+    gruppiRichieste = indicizzaGruppiEquivalenti(contexts, fermate, registro,
+      vehicles.some(v => Number(v.maggiorazione_riempimento_percentuale) > 0));
+    fermatePerRichiesta = new Map(fermate.map(f => [Number(f.richiesta_id), f]));
+  }
+  const diagnosticaRaggruppamento = [];
   const missioni=[];
   for (const ctx of contexts) {
     // La finestra PIXEL vincola la partenza gia' durante la formazione.
@@ -178,11 +195,18 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
       valutaRichieste(plan,requests,seeds,{...options,departureWindow});
     const generaNellaFinestraPixel = (plan,requests,seeds,options={}) =>
       generaFormazioniAlternative(plan,requests,seeds,{...options,departureWindow});
-    const {formazioni,diagnostica} = generaFormazioniArSafe({plan:ctx.plan,requests:ctx.requests,
+    const raggruppata = ctx.richiesta_ids.some(id => gruppiRichieste.has(Number(id)));
+    const {formazioni,diagnostica} = raggruppata
+      ? generaFormazioniPerQuantita({plan:ctx.plan, requests:ctx.requests,
+        gruppi:gruppiRichieste, departureWindow, maxFormazioni:limits.formazioni})
+      : generaFormazioniArSafe({plan:ctx.plan,requests:ctx.requests,
       seeds:ctx.richiesta_ids,registro,
       generaFormazioniAlternative:generaNellaFinestraPixel,
       valutaRichieste:valutaNellaFinestraPixel,
       maxSeeds:100,maxFormazioni:limits.formazioni});
+    if (raggruppata) diagnosticaRaggruppamento.push({
+      opportunitaId:ctx.pixel_opportunita_id, ...diagnostica
+    });
     if (process.env.POPBUS_PIXEL_DIAGNOSTICA === '1') {
       console.log('[PIXEL FORMAZIONI]', {
         opportunitaId: ctx.pixel_opportunita_id,
@@ -253,7 +277,8 @@ async function candidates(client, now, opportunityIds = null, historicalPhysical
       });
     }
   }
-  return {contexts,missioni,vehicles,nodi,registro};
+  return {contexts,missioni,vehicles,nodi,registro,ricercaFermate,gruppiRichieste,
+    fermatePerRichiesta,diagnosticaRaggruppamento};
 }
 // Percorso diagnostico esclusivamente read-only: nessun assemblaggio o persistenza.
 // Il bridge verifica fermate, sequenza, routing, tempo e qualita per il tipo mezzo.
@@ -783,7 +808,9 @@ export async function processaPixelFirstMultimissione({
         ? physicalOpportunityIds.map(Number)
         : null,
       historicalPhysicalShadow,
-      canary
+      canary,
+      (mode === 'LIVE' || physicalShadow) && !canary &&
+        !historicalPhysicalShadow && !physicalShadowBridge
     );
     const scopedIds = canary ? [canary.opportunityId] : physicalOpportunityIds;
     if (routing && scopedIds !== null) {
@@ -819,33 +846,34 @@ export async function processaPixelFirstMultimissione({
       });
     }
     if (physicalShadow || mode === 'LIVE') {
-      let fisiche;
-      try {
-        fisiche = await preparaCandidatiFisiciMultimissione({
-          client: reader,
-          snapshot,
-          ...(routing ? {routing} : {}),
-          riusaFermate: mode === 'ROLLBACK_ONLY' &&
-            (process.env.POPBUS_SHADOW_STOP_CANDIDATES_CACHE ?? '1') === '1',
-          maxTentativi: Number(mode === 'LIVE'
-            ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600)
-            : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
-          ...(physicalShadowBridge ? {bridge: physicalShadowBridge} : {})
-        });
-      } catch (error) {
-        const budgetEsaurito = error?.message ===
-          'POPBUS_PHYSICAL_MULTI: budget combinazioni superato: nessun risultato parziale';
-        if (mode !== 'LIVE' || !budgetEsaurito) throw error;
-        console.warn('[PIXEL FIRST LIVE] Budget fisico esaurito: nessuna attivazione.');
-        return {
-          modalita: 'LIVE',
-          offerte: 0,
-          persistita: false,
-          attivabile: false,
-          motivo: 'BUDGET_FISICO_ESAURITO'
+      const maxCombinazioni = mode === 'LIVE'
+        ? process.env.POPBUS_PIXEL_LIVE_MAX_COMBINAZIONI
+        : process.env.POPBUS_SHADOW_MAX_COMBINAZIONI;
+      const fisiche = await preparaCandidatiFisiciMultimissione({
+        client: reader,
+        snapshot,
+        ...(routing ? {routing} : {}),
+        riusaFermate: mode === 'ROLLBACK_ONLY' &&
+          (process.env.POPBUS_SHADOW_STOP_CANDIDATES_CACHE ?? '1') === '1',
+        maxTentativi: Number(mode === 'LIVE'
+          ? (process.env.POPBUS_PIXEL_LIVE_MAX_TENTATIVI ?? 600)
+          : (process.env.POPBUS_SHADOW_MAX_TENTATIVI ?? 600)),
+        maxCombinazioni: maxCombinazioni === undefined ? undefined : Number(maxCombinazioni),
+        ...(physicalShadowBridge ? {bridge: physicalShadowBridge} : {})
+      });
+      const interrottoPerBudget = fisiche.diagnostica.interrottoPerBudget === true;
+      if (interrottoPerBudget && mode === 'LIVE') {
+        const { budgetEsaurito, combinazioniResidue, tentativi, calcoliFisici } = fisiche.diagnostica;
+        const diagnostica = {
+          completo:false, interrottoPerBudget, budgetEsaurito, combinazioniResidue,
+          tentativi, calcoliFisici
         };
+        console.warn('[PIXEL FIRST LIVE] Ricerca fisica incompleta', diagnostica);
+        return {modalita:mode, offerte:0, persistita:false, attivabile:false,
+          parziale:true, motivo:'BUDGET_FISICO_ESAURITO', diagnostica};
       }
-      const timeShadowEnabled = mode === 'ROLLBACK_ONLY' && process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1';
+      const timeShadowEnabled = !interrottoPerBudget && mode === 'ROLLBACK_ONLY' &&
+        process.env.POPBUS_SHADOW_MULTIMISSION_TIME === '1';
       const finestreFisicheShadow = timeShadowEnabled
         ? diagnosticaFinestreCandidatiFisiciShadow({ candidati:fisiche.candidati, contexts:snapshot.contexts })
         : null;
@@ -855,7 +883,7 @@ export async function processaPixelFirstMultimissione({
         ? diagnosticaCoppieFisicheTemporaliShadow({ finestre:finestreFisicheShadow })
         : null;
       let selezioneFisica = null;
-      if (physicalCycleShadow || mode === 'LIVE') {
+      if (!interrottoPerBudget && (physicalCycleShadow || mode === 'LIVE')) {
         if (fisiche.diagnostica.completo !== true || fisiche.parziale === true)
           fail('selezione cicli vietata su candidati fisici incompleti');
         const veicoliUnici = new Map();
@@ -925,6 +953,10 @@ export async function processaPixelFirstMultimissione({
             const ids=[...a.requests,...b.requests].map(r=>Number(r.id));
             return new Set(ids).size===ids.length && arComplete(ids,snapshot.registro);
           },
+          ...(snapshot.gruppiRichieste?.size ? {
+            riassegnaEquivalenti:(a,b) => riassegnaRichiesteEquivalenti(
+              a,b,snapshot.gruppiRichieste,snapshot.fermatePerRichiesta)
+          } : {}),
           ...costi
         });
         if (mode === 'LIVE') {
@@ -940,10 +972,13 @@ export async function processaPixelFirstMultimissione({
           : 'PIXEL_FERMATE_FISICHE_CANDIDATI_V2',
         missioniCandidateFisiche:fisiche.candidati.length,
         diagnostica:fisiche.diagnostica,
+        ...(snapshot.diagnosticaRaggruppamento?.length
+          ? {raggruppamentoFormazioni:snapshot.diagnosticaRaggruppamento} : {}),
         candidati:fisiche.candidati,
         ...(timeShadowEnabled ? { finestreFisicheShadow: finestreFisicheShadow.map(x => ({ pixelOpportunitaId:x.candidato.pixelOpportunitaId, vehicleId:x.candidato.vehicleId, richiestaIds:x.candidato.requests.map(r => Number(r.id)), temporalShadow:x.temporalShadow })) } : {}),
         ...(timeShadowEnabled ? {coppieTemporaliShadow} : {}),
         ...(physicalCycleShadow ? {selezioneFisica} : {}),
+        ...(interrottoPerBudget ? {parziale:true, motivo:'BUDGET_FISICO_ESAURITO'} : {}),
         offerte:0,
         dbWrites:0,
         attivabile:false

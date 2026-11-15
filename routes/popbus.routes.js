@@ -51,10 +51,32 @@ router.get('/offerte/veicolo/:veicolo_id', async (req, res) => {
         a.piano->'evaluation'->>'peak' AS posti_richiesti,
         a.piano->'coordinates'->0->>'nome_nodo' AS origine_address,
         a.piano->'coordinates'->-1->>'nome_nodo' AS destinazione_address,
+        a.arrivo AS arrivo_datetime,
+        percorso.passeggeri,
+        percorso.fermate_pianificate,
         o.expires_at
       FROM offerte_autisti o
       JOIN popbus_attivazioni a ON a.id = o.attivazione_id
       JOIN veicolo v ON v.id = a.veicolo_id
+      LEFT JOIN LATERAL (
+        SELECT SUM(fermata.salite) AS passeggeri,
+          jsonb_agg(jsonb_build_object(
+            'ordine', fermata.ordine,
+            'indirizzo', a.piano->'coordinates'->(fermata.ordine::int)->>'nome_nodo',
+            'salite', fermata.salite,
+            'discese', fermata.discese
+          ) ORDER BY fermata.ordine) AS fermate_pianificate
+        FROM (
+          SELECT evento.ordine,
+            COALESCE(SUM(r.posti_richiesti) FILTER (WHERE evento.tipo = 'salita'), 0) AS salite,
+            COALESCE(SUM(r.posti_richiesti) FILTER (WHERE evento.tipo = 'discesa'), 0) AS discese
+          FROM popbus_attivazione_richieste ar
+          JOIN richieste_pop_bus r ON r.id = ar.richiesta_id
+          CROSS JOIN LATERAL (VALUES (ar.indice_salita, 'salita'), (ar.indice_discesa, 'discesa')) evento(ordine, tipo)
+          WHERE ar.attivazione_id = a.id AND ar.attiva AND evento.ordine >= 0
+          GROUP BY evento.ordine
+        ) fermata
+      ) percorso ON TRUE
       WHERE o.autista_id = $1 AND v.driver_id = $1 AND v.id = $2
         AND o.stato = 'inviata' AND a.stato = 'in_attesa_autista'
         AND o.expires_at > NOW()

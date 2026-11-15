@@ -277,6 +277,42 @@ export function createIncrementalCorridorEngine({ routeNodes, initialCorridors =
   async function temporalCandidatesCompleteWithReturns(id, options = {}) {
     return buildCandidatesWithReturns(id, options, true);
   }
+  async function materializzaDirettriciRitorno({ bufferMinuti = 0 } = {}) {
+    return enqueueMutation(async () => {
+      const nuoviPercorsi = new Map();
+      // Esamina una sola volta le direttrici costruite dalla domanda.
+      // I ritorni appena trovati non sono sorgenti di ulteriori varianti.
+      for (const andata of listCorridors()) {
+        if (!andata.richiestaIds.length) continue;
+        const gruppi = await temporalCandidatesCompleteWithReturns(andata.id, { bufferMinuti });
+        for (const gruppo of gruppi) {
+          const destinazioni = new Set(gruppo.richiestaIds.map(id => requests.get(id).end_node_id));
+          for (const ritorni of Object.values(gruppo.finestreRitornoPerNodo)) {
+            for (const ritorno of ritorni) {
+              if (!destinazioni.has(ritorno.inversioneNodoId)) continue;
+              const key = routeKey(ritorno.percorsoRitorno);
+              if (!geometryIndex.has(key) && !nuoviPercorsi.has(key)) {
+                nuoviPercorsi.set(key, reverseRouteCache.get(key));
+              }
+            }
+          }
+        }
+      }
+      const nuoveDirettrici = [];
+      for (const route of nuoviPercorsi.values()) {
+        const id = `px-${nextId++}`;
+        // Ricalcola l'appartenenza e le finestre sul ritorno stesso.
+        // Una richiesta resta disponibile anche sulle altre direttrici.
+        insertCorridor(normalizeCorridor({
+          id, nodes: route.nodes, legs: route.legs,
+          richiestaIds: territorialMembership(route.nodes)
+        }));
+        nuoveDirettrici.push(id);
+      }
+      invalidate(nuoveDirettrici);
+      return freezeArray(nuoveDirettrici);
+    });
+  }
   async function temporalCandidatesWithReturns(id, options = {}) {
     return buildCandidatesWithReturns(id, options, false);
   }
@@ -443,5 +479,5 @@ export function createIncrementalCorridorEngine({ routeNodes, initialCorridors =
     invalidate(affectedByRequest(old));
     return true; // Le direttrici spaziali restano nel catalogo.
   }
-  return Object.freeze({ processRequest, listCorridors, getCorridor, getRequest, temporalCandidates, temporalCandidatesComplete, temporalCandidatesWithReturns, temporalCandidatesCompleteWithReturns, detachRequest, detachRequestAsync, mutationQueueState, consumeOpportunityChanges, opportunityRevision });
+  return Object.freeze({ processRequest, listCorridors, getCorridor, getRequest, temporalCandidates, temporalCandidatesComplete, temporalCandidatesWithReturns, temporalCandidatesCompleteWithReturns, materializzaDirettriciRitorno, detachRequest, detachRequestAsync, mutationQueueState, consumeOpportunityChanges, opportunityRevision });
 }

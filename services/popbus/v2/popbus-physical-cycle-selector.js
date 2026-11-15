@@ -134,6 +134,7 @@ function normalizeVehicles(vehicles) {
 export async function selezionaCicliFisiciShadow({
   candidati, vehicles, movement, isAvailable, hasConflicts, validatePair,
   validateSingle = null,
+  riassegnaEquivalenti = null,
   now = Date.now(), maxPairs = 100000, maxRoutingCalls = 500,
   costoAttesaOraEuro = 0, altriCostiEuro = 0, margineMinimoEuro = 0,
   maxRisultati = 10, contrattoRoutingFisicoV2 = false
@@ -147,6 +148,8 @@ export async function selezionaCicliFisiciShadow({
       !finite(now) || ![costoAttesaOraEuro,altriCostiEuro,margineMinimoEuro].every(nonNegative))
     fail('parametri di selezione non validi');
   if (typeof contrattoRoutingFisicoV2 !== 'boolean') fail('contrattoRoutingFisicoV2 non valido');
+  if (riassegnaEquivalenti !== null && typeof riassegnaEquivalenti !== 'function')
+    fail('riassegnazione richieste non valida');
   const vehicleMap = normalizeVehicles(vehicles);
   const groups = new Map();
   for (const c of candidati) {
@@ -182,7 +185,8 @@ export async function selezionaCicliFisiciShadow({
       coppieConRichiesteDisgiunte:0,coppieAmmesseDaVincoli:0,
       coppieScartateVincoli:0};
     diagnostica.diagnosticaPerVeicolo.push(perVeicolo);
-    for (const a of ordered) for (const b of ordered) {
+    for (const a of ordered) for (const candidataB of ordered) {
+      let b = candidataB;
       diagnostica.coppieTeoricheOrdinate++;
       perVeicolo.coppieTeoricheOrdinate++;
       if (a === b) {
@@ -204,9 +208,12 @@ export async function selezionaCicliFisiciShadow({
       perVeicolo.coppieTemporali++;
       const aa = new Set(idsOf(a));
       if (idsOf(b).some(id=>aa.has(id))) {
-        diagnostica.coppieScartateRichiesteComuni++;
-        perVeicolo.scartiRichiesteComuni++;
-        continue;
+        b = riassegnaEquivalenti?.(a,b);
+        if (!b || idsOf(b).some(id=>aa.has(id))) {
+          diagnostica.coppieScartateRichiesteComuni++;
+          perVeicolo.scartiRichiesteComuni++;
+          continue;
+        }
       }
       diagnostica.coppieConRichiesteDisgiunte++;
       perVeicolo.coppieConRichiesteDisgiunte++;

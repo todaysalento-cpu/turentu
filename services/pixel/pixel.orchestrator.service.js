@@ -117,6 +117,7 @@ export async function costruisciBootstrapPixel({
     elaborazioni.push({ richiestaId: r.id, azione: result.azione,
       direttrici: result.direttrici, variantiP1: result.variantiP1 ?? [] });
   }
+  await engine.materializzaDirettriciRitorno({ bufferMinuti });
   const corridors = engine.listCorridors();
   const opportunita = [];
   for (const c of corridors) {

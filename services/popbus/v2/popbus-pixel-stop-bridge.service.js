@@ -1,6 +1,6 @@
 // TURENTU POPBUS V2 - Bridge PIXEL -> alternative fisiche (SHADOW).
 // Nessuna persistenza, nessuna scelta finale di veicolo, nessuna attivazione.
-import { cercaFermateCandidate } from './popbus-stop-candidates.service.js';
+import { cercaFermateCandidate, DEFAULT_RADIUS_METERS, DEFAULT_LIMIT } from './popbus-stop-candidates.service.js';
 import { generaAssegnazioniFermate } from './popbus-stop-assignment.service.js';
 import { valutaCombinazioniFermate } from './popbus-stop-evaluator.service.js';
 import { adattaMissioneFermate } from './popbus-stop-mission-adapter.service.js';
@@ -13,8 +13,9 @@ export async function generaAlternativeFisichePixelShadow({
   client, formazione, richieste, postiTotali,
   // Accepted for backwards compatibility, but not used to exclude stops.
   tipoVeicolo: _tipoVeicolo = 'ncc',
-  raggioMetri = 1500, limiteFermate = 5, maxCombinazioni = 100,
+  raggioMetri = DEFAULT_RADIUS_METERS, limiteFermate = DEFAULT_LIMIT, maxCombinazioni = 100,
   maxEspansioni = 20000, maxValutazioni = 100, routing,
+  gruppiEquivalenti,
   // Dipendenze iniettabili esclusivamente per test shadow senza DB/routing.
   servizi = {}
 } = {}) {
@@ -59,6 +60,7 @@ export async function generaAlternativeFisichePixelShadow({
   const assegnazioni = assign({
     evaluation:formazione.evaluation,
     candidati,
+    gruppiEquivalenti,
     maxCombinazioni,
     maxEspansioni
   });

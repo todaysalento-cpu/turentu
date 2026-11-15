@@ -74,14 +74,18 @@ function pairKey(assegnazione) {
   return `${assegnazione.salita.fermata_id}:${assegnazione.discesa.fermata_id}`;
 }
 
+function compareStopIds(a, b) {
+  return a.salita.fermata_id - b.salita.fermata_id ||
+    a.discesa.fermata_id - b.discesa.fermata_id;
+}
+
 function comparePairs(a, b) {
   const da = a.salita.distanza_metri + a.discesa.distanza_metri;
   const db = b.salita.distanza_metri + b.discesa.distanza_metri;
 
   return (
     da - db ||
-    a.salita.fermata_id - b.salita.fermata_id ||
-    a.discesa.fermata_id - b.discesa.fermata_id
+    compareStopIds(a, b)
   );
 }
 
@@ -164,6 +168,7 @@ export function generaAssegnazioniFermate({
   evaluation,
   candidati,
   tipoVeicolo,
+  gruppiEquivalenti,
   maxCombinazioni = 100,
   maxEspansioni = 20000
 }) {
@@ -213,6 +218,7 @@ export function generaAssegnazioniFermate({
 
   const alternative = [];
   const seen = new Set();
+  const ultimoLivelloGruppo = new Map();
 
   for (const ref of evaluation.requests) {
     if (!validId(ref?.id) || seen.has(Number(ref.id))) {
@@ -264,7 +270,10 @@ export function generaAssegnazioniFermate({
       };
     }
 
-    alternative.push(result.coppie);
+    const gruppo = gruppiEquivalenti?.get(richiestaId);
+    const precedente = ultimoLivelloGruppo.get(gruppo);
+    if (gruppo) ultimoLivelloGruppo.set(gruppo, alternative.length);
+    alternative.push({ coppie: result.coppie, precedente });
   }
 
   // Beam search: ogni livello aggiunge una richiesta alla combinazione.
@@ -274,12 +283,13 @@ export function generaAssegnazioniFermate({
 
   let espansioni = 0;
   let potature = 0;
+  let permutazioniEquivalentiSaltate = 0;
   let budgetRaggiunto = false;
 
   const livelli = [];
 
   for (let livello = 0; livello < alternative.length; livello++) {
-    const coppie = alternative[livello];
+    const { coppie, precedente } = alternative[livello];
     const nuove = [];
     const remainingBudget = maxEspansioni - espansioni;
 
@@ -293,6 +303,12 @@ export function generaAssegnazioniFermate({
     outer:
     for (const stato of beam) {
       for (const coppia of coppie) {
+        // Nei gruppi equivalenti conserviamo una sola permutazione per
+        // ripartizione di persone tra le coppie di fermate.
+        if (precedente !== undefined && compareStopIds(coppia, stato.assegnazioni[precedente]) < 0) {
+          permutazioniEquivalentiSaltate++;
+          continue;
+        }
         if (espansioni >= maxEspansioni) {
           budgetRaggiunto = true;
           break outer;
@@ -342,6 +358,7 @@ export function generaAssegnazioniFermate({
         livelliCompletati: livelli.length,
         espansioni,
         potature,
+        permutazioniEquivalentiSaltate,
         budgetRaggiunto,
         ricercaEsaustiva: false,
         livelli
@@ -362,6 +379,7 @@ export function generaAssegnazioniFermate({
       combinazioniRestituite: beam.length,
       espansioni,
       potature,
+      permutazioniEquivalentiSaltate,
       budgetRaggiunto,
       ricercaEsaustiva,
       livelli

@@ -33,6 +33,7 @@ export async function getCorseByAutista(driver_id, status = 'tutte') {
         COALESCE(NULLIF(c.origine_address, 'N/D'), NULLIF(c.origine_address, ''), 'Non specificato') AS origine_address,
         COALESCE(NULLIF(c.destinazione_address, 'N/D'), NULLIF(c.destinazione_address, ''), 'Non specificato') AS destinazione_address,
         COALESCE(SUM(p.posti_richiesti), 0) AS posti_prenotati,
+        CASE WHEN COUNT(p.id) = COUNT(p.prezzo_totale) THEN SUM(p.prezzo_totale) END AS prezzo_prenotazioni,
         COALESCE(
           json_agg(
             json_build_object(

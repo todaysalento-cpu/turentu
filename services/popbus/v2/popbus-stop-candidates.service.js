@@ -4,8 +4,8 @@
  // Verifica/certificazione non obbligatoria nella fase provvisoria.
  // Sola lettura: nessuna attivazione e nessuna scrittura DB.
 
-const DEFAULT_RADIUS_METERS = 1500;
-const DEFAULT_LIMIT = 5;
+export const DEFAULT_RADIUS_METERS = 1500;
+export const DEFAULT_LIMIT = 5;
 
 const fail = message => {
   throw new Error(`POPBUS_STOP_CANDIDATES: ${message}`);

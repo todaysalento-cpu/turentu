@@ -80,13 +80,16 @@ function convertiAlternativa({originale, alternativa, veicolo, richiesteById}) {
 }
 
 export async function preparaCandidatiFisiciMultimissione({
-  client, snapshot, maxTentativi=250, routing, bridge, riusaFermate=false
+  client, snapshot, maxTentativi=250, maxCombinazioni=Math.max(2000, maxTentativi),
+  routing, bridge, riusaFermate=false
 }={}) {
   if (!client || typeof client.query !== 'function' ||
       !Array.isArray(snapshot?.missioni) || !Array.isArray(snapshot?.contexts) ||
       !Array.isArray(snapshot?.vehicles)) fail('snapshot o client non valido');
   if (!Number.isSafeInteger(maxTentativi) || maxTentativi < 1)
-    fail('budget non valido');
+    fail('budget calcoli fisici non valido');
+  if (!Number.isSafeInteger(maxCombinazioni) || maxCombinazioni < 1)
+    fail('budget combinazioni non valido');
   if (typeof riusaFermate !== 'boolean') fail('riusaFermate non booleano');
   const richiesteById = new Map();
   for (const ctx of snapshot.contexts) for (const r of ctx.requests ?? []) {
@@ -97,9 +100,9 @@ export async function preparaCandidatiFisiciMultimissione({
   }
   const diagnosticaLimitata = process.env.POPBUS_PHYSICAL_DIAGNOSTIC_LIMIT != null;
   const limiteDiagnostico = diagnosticaLimitata ? Number(process.env.POPBUS_PHYSICAL_DIAGNOSTIC_LIMIT) : null;
-  if (diagnosticaLimitata && (!Number.isSafeInteger(limiteDiagnostico) || limiteDiagnostico < 1 || limiteDiagnostico > maxTentativi))
+  if (diagnosticaLimitata && (!Number.isSafeInteger(limiteDiagnostico) || limiteDiagnostico < 1 || limiteDiagnostico > maxCombinazioni))
     fail('POPBUS_PHYSICAL_DIAGNOSTIC_LIMIT non valido');
-  const limiteEffettivo = diagnosticaLimitata ? limiteDiagnostico : maxTentativi;
+  const limiteCombinazioni = diagnosticaLimitata ? limiteDiagnostico : maxCombinazioni;
   // Opt-in esclusivamente per benchmark SHADOW: nessuna modifica allo snapshot o al DB.
   const escludiVeicoliTest = process.env.POPBUS_SHADOW_EXCLUDE_TEST_VEHICLES === '1';
   const veicoliEsclusi = [];
@@ -137,7 +140,8 @@ export async function preparaCandidatiFisiciMultimissione({
   // Opt-in diagnostico: permette il confronto dello stesso snapshot con/senza cache.
   const disabilitaCacheFisica = process.env.POPBUS_SHADOW_DISABLE_PHYSICAL_CACHE === '1';
   const diagnostica = {tentativi:0,alternative:0,scarti:[],completo:true,attivabile:false,
-    diagnosticaLimitata,limiteEffettivo,combinazioniElegibili,
+    diagnosticaLimitata,limiteEffettivo:limiteCombinazioni,combinazioniElegibili,
+    limiteCombinazioni,limiteCalcoliFisici:maxTentativi,budgetEsaurito:null,
     combinazioniResidue:combinazioniElegibili,
     ricercaInternaNonEsaustiva:0,
     interrottoPerBudget:false,
@@ -184,28 +188,36 @@ departureShadow: {
   }
   if (missioniBilanciate.length !== snapshot.missioni.length)
     fail('ordinamento missioni incompleto');
-  let bridgeEffettivo = bridge;
+  let ricercaFermate = snapshot.ricercaFermate;
   const calcoliPrevisti = disabilitaCacheFisica ? combinazioniElegibili : chiaviFisicheNecessarie;
-  if (riusaFermate && !bridge && !diagnosticaLimitata && Math.min(calcoliPrevisti,limiteEffettivo)>2) {
+  if (!ricercaFermate && riusaFermate && !bridge && !diagnosticaLimitata &&
+      Math.min(calcoliPrevisti, maxTentativi, limiteCombinazioni)>2) {
     const idsFermate = [...new Set(missioniBilanciate
       .filter(m=>veicoliValutabili.some(v=>!(Number(m.peak)>Number(v.posti_totali))))
       .flatMap(m=>Array.isArray(m.evaluation?.requests)?m.evaluation.requests.map(r=>Number(r.id)):[])
       .filter(pos))];
-    const ricerca = creaRicercaFermateSnapshot({client,richiestaIds:idsFermate});
-    diagnostica.fermateSnapshot = ricerca.diagnostica;
-    bridgeEffettivo = args=>generaAlternativeFisichePixelShadow({
-      ...args,servizi:{...args.servizi,cercaFermateCandidate:ricerca.cerca}
+    ricercaFermate = creaRicercaFermateSnapshot({client,richiestaIds:idsFermate});
+  }
+  let bridgeEffettivo = bridge;
+  if (ricercaFermate && !bridge) {
+    diagnostica.fermateSnapshot = ricercaFermate.diagnostica;
+    bridgeEffettivo = args => generaAlternativeFisichePixelShadow({
+      ...args, gruppiEquivalenti:snapshot.gruppiRichieste,
+      servizi:{...args.servizi,cercaFermateCandidate:ricercaFermate.cerca}
     });
   }
   for (const [indiceMissione, m] of missioniBilanciate.entries()) {
     for (const v of veicoliValutabili) {
       if (Number(m.peak) > Number(v.posti_totali)) continue;
-      if (diagnostica.tentativi >= limiteEffettivo) {
-        if (!diagnosticaLimitata)
-          fail('budget combinazioni superato: nessun risultato parziale');
+      // Un riuso vale una combinazione ma non richiede un nuovo calcolo fisico.
+      const cacheKey = `${indiceMissione}|${Number(v.posti_totali)}`;
+      const cacheHit = !disabilitaCacheFisica && cacheFisica.has(cacheKey);
+      const budgetEsaurito = diagnostica.tentativi >= limiteCombinazioni ? 'COMBINAZIONI'
+        : !cacheHit && diagnostica.calcoliFisici >= maxTentativi ? 'CALCOLI_FISICI' : null;
+      if (budgetEsaurito) {
         diagnostica.completo = false;
         diagnostica.interrottoPerBudget = true;
-        diagnostica.combinazioniResidue = combinazioniElegibili - diagnostica.tentativi;
+        diagnostica.budgetEsaurito = budgetEsaurito;
         return {candidati,diagnostica,attivabile:false,parziale:true};
       }
       diagnostica.tentativi++;
@@ -224,11 +236,8 @@ departureShadow: {
         });
         fail(`engine_id PIXEL autorevole assente: opportunita=${m.pixelOpportunitaId}, direttrice=${m.pixelDirettriceId}`);
       }
-      // Identita per indice: evita di confondere formazioni con stessi ID ma
-      // valutazioni/orari differenti. Capienza e tipo restano nella chiave.
-      const cacheKey = `${indiceMissione}|${Number(v.posti_totali)}`;
       let result;
-      if (!disabilitaCacheFisica && cacheFisica.has(cacheKey)) {
+      if (cacheHit) {
         result = cacheFisica.get(cacheKey);
         diagnostica.cacheHits++;
       } else {

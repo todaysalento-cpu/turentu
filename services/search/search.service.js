@@ -10,6 +10,7 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
+import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
@@ -1092,6 +1093,20 @@ export async function cercaSlotUltra(richiesta) {
                 '[POPBUS PREVIEW] Anteprima non disponibile:',
                 err.message
             );
+        }
+
+        try {
+            virtualPopSlot.fermate_formazione_popbus = await cercaFermateFormazionePopbus({
+                pool,
+                origine: { lat, lon },
+                destinazione: { lat: destLat, lon: destLon },
+                origineNodoId: pixelContext.origine_nodo_territoriale_id,
+                destinazioneNodoId: pixelContext.destinazione_nodo_territoriale_id,
+                partenzaRichiesta: orarioAndataUtente,
+                postiRichiesti
+            });
+        } catch (err) {
+            console.warn('[POPBUS SEARCH] Fermate formazione non disponibili:', err.message);
         }
 
         risultatiFinali.push(

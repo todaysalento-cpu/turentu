@@ -499,6 +499,9 @@ export async function formatResults(
                                             item.pixel_fermate_disponibili === true,
                                         pixel_stato:
                                             item.pixel_stato ?? 'non_verificato',
+                                        ...(item.fermate_formazione_popbus && {
+                                            fermate_formazione_popbus: item.fermate_formazione_popbus
+                                        }),
 
                                         colore_ui:
                                             UI_CONFIG['pop-bus'].colore,

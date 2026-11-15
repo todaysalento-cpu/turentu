@@ -254,7 +254,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       if (isPopBus) {
         const pixel = validatedPixel.get(slot);
         const raccolta = pixel.raccolta_popbus;
-        const salita = raccolta ?? origin;
+        const salita = raccolta && !pixel.raccolta_google ? raccolta : origin;
         const origineAddress = slot.origine_address || slot.localitaOrigine || 'Partenza';
         const nodeRes = await client.query(
           `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
@@ -289,7 +289,8 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
             pixel.origine_fermata_id,
             pixel.destinazione_fermata_id,
             raccolta ? JSON.stringify({
-              lat: Number(origin.lat), lon: Number(origin.lon), indirizzo: origineAddress
+              lat: Number(origin.lat), lon: Number(origin.lon), indirizzo: origineAddress,
+              ...(pixel.raccolta_google && { raccolta_google: true })
             }) : null
           ]
         );

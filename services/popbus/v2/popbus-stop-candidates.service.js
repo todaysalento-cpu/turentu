@@ -52,21 +52,23 @@ export async function cercaFermateCandidate({
   const rows = await leggiFermateCandidate(client,
     `
     WITH richieste AS (
-      SELECT id, origine, destinazione, origine_fermata_id, destinazione_fermata_id, start_datetime
+      SELECT id, origine, destinazione, origine_fermata_id, destinazione_fermata_id, start_datetime, origine_richiesta
       FROM public.richieste_pop_bus
       WHERE id = ANY($1::bigint[])
     ),
     punti AS (
       SELECT id AS richiesta_id, 'salita'::text AS tipo,
              origine::geography AS posizione, origine_fermata_id AS fermata_fissata,
-             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo
+             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo,
+             COALESCE(origine_richiesta->'raccolta_google' = 'true'::jsonb, FALSE) AS raccolta_google
       FROM richieste
 
       UNION ALL
 
       SELECT id AS richiesta_id, 'discesa'::text AS tipo,
              destinazione::geography AS posizione, destinazione_fermata_id AS fermata_fissata,
-             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo
+             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo,
+             FALSE AS raccolta_google
       FROM richieste
     )`, [ids, raggioMetri, limite]
   );
@@ -89,7 +91,7 @@ export async function assegnaFermatePixel({
       SELECT 1 AS richiesta_id, tipo,
              ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione,
              NULL::bigint AS fermata_fissata, $4::timestamptz AS scadenza_minima,
-             TRUE AS ricerca_prima_del_preventivo
+             TRUE AS ricerca_prima_del_preventivo, FALSE AS raccolta_google
       FROM jsonb_to_recordset($1::jsonb) AS p(tipo text, lat float8, lon float8)
     )`, [JSON.stringify([
       ...(!raccolta ? [{ ...origine, tipo: 'salita' }] : []),
@@ -142,11 +144,11 @@ async function leggiFermateCandidate(client, ctePunti, parametri) {
             AND (p.ricerca_prima_del_preventivo OR f.id = p.fermata_fissata)
        ))
        AND (p.fermata_fissata IS NULL OR f.id = p.fermata_fissata)
-       AND ST_DWithin(
+       AND ((p.raccolta_google AND f.google_place_id IS NOT NULL AND f.id = p.fermata_fissata) OR ST_DWithin(
          p.posizione,
          f.posizione,
          $2::double precision
-       )
+       ))
 
       JOIN public.nodi_territoriali n
         ON n.id = f.nodo_territoriale_id
@@ -181,6 +183,16 @@ async function leggiFermateCandidate(client, ctePunti, parametri) {
   return rows;
 }
 
+export function dettaglioFermataGoogle(placeId) {
+    if (!placeId) return {};
+    return {
+      provvisoria: true,
+      google_maps_url: 'https://www.google.com/maps/search/?' + new URLSearchParams({
+        api: '1', query: 'fermata', query_place_id: placeId
+      })
+    };
+}
+
 function normalizzaFermata(row) {
     return {
       fermata_id: Number(row.fermata_id),
@@ -190,12 +202,7 @@ function normalizzaFermata(row) {
       lon: Number(row.lon),
       distanza_metri: Number(row.distanza_metri),
       verificata: row.verificata === true,
-      ...(row.google_place_id && {
-        provvisoria: true,
-        google_maps_url: 'https://www.google.com/maps/search/?' + new URLSearchParams({
-          api: '1', query: 'fermata', query_place_id: row.google_place_id
-        })
-      }),
+      ...dettaglioFermataGoogle(row.google_place_id),
       tipi_veicolo_ammessi: row.tipi_veicolo_ammessi
     };
 }

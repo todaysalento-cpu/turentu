@@ -54,6 +54,46 @@ test('tra i comuni vicini al tracciato e accessibili sceglie il piu popoloso', a
     assert.equal(raccolta.fuori_copertura, false);
 });
 
+test('le fermate provvisorie partecipano alla scelta del comune, e il capoluogo puo servire una frazione', async () => {
+    const vicina = { ...a, localita: 'Frazione', google_place_id: 'google-vicina' };
+    const pop = { ...b, localita: 'Comune maggiore', google_place_id: 'google-popoloso' };
+    const scadenzaMinima = new Date(Date.now() + 3600000);
+    const capoluogo = { ...a, nodo_id: 99, fermata_id: 100, localita: 'Capoluogo', google_place_id: 'google-centro' };
+    const base = {
+        ...opzioni,
+        scadenzaMinima,
+        pool: { async query(sql, args) {
+            assert.match(sql, /f.google_geo_scade_il > GREATEST/);
+            assert.equal(args[6], scadenzaMinima);
+            if (args[7]) {
+                assert.equal(args[8], 'Capoluogo');
+                return { rows: [capoluogo] };
+            }
+            return { rows: args[4] === 3000 ? [vicina, pop] : [] };
+        } }
+    };
+    const comunePopoloso = await scegliRaccoltaPopbus(base);
+    assert.equal(comunePopoloso.fermata_id, pop.fermata_id);
+    assert.equal(comunePopoloso.provvisoria, true);
+    const frazione = {
+        ...base,
+        codiceOrigine: a.codice, localitaOrigine: 'Frazione', comuneOrigine: 'Capoluogo',
+        async route(da, a) {
+            if (a === destinazione) return percorso(80, 60);
+            if (a === pop) return percorso(16, 18);
+            return a === capoluogo ? percorso(8, 13) : percorso(3, 5);
+        }
+    };
+    const scelta = await scegliRaccoltaPopbus(frazione);
+    assert.equal(scelta.fermata_id, capoluogo.fermata_id);
+    assert.equal(scelta.fuori_copertura, true);
+    const inaccessibile = await scegliRaccoltaPopbus({
+        ...frazione,
+        route: async (da, a) => a === capoluogo ? percorso(23, 31) : frazione.route(da, a)
+    });
+    assert.equal(inaccessibile.fermata_id, vicina.fermata_id);
+});
+
 test('una fermata ordinaria ha priorita su una raccolta fuori copertura', async () => {
     const raccolta = await scegliRaccoltaPopbus({ ...opzioni, async route(da, a) {
         if (a === b) return percorso(16, 19);
@@ -332,4 +372,20 @@ test('la prenotazione rifiuta una fermata Google che scade prima della corsa', a
         return { rows: [{ id: 20, ...origine, google_place_id: 'g1', google_geo_scade_il: new Date(partenza) }] };
     } };
     await assert.rejects(validatePixelStops(client, quote, quote), { status: 409 });
+});
+
+test('una raccolta Google validata conserva il riferimento al punto assegnato', async () => {
+    const partenza = Date.now() + 86400000;
+    const raccolta = { fermata_id: 20, nodo_id: 10, ...origine, provvisoria: true };
+    const quote = { tipo: 'pop-bus', start_datetime: new Date(partenza),
+        origine_nodo_territoriale_id: 10, destinazione_nodo_territoriale_id: 11, raccolta_popbus: raccolta };
+    const client = { async query(sql) {
+        if (sql.includes('FROM public.nodi_territoriali')) {
+            return { rows: [{ id: 10, attivo: true }, { id: 11, attivo: true }] };
+        }
+        return { rows: [{ id: 20, ...origine, google_place_id: 'g1', google_geo_scade_il: new Date(partenza + 86400000) }] };
+    } };
+    const validata = await validatePixelStops(client, quote, quote);
+    assert.equal(validata.raccolta_google, true);
+    assert.equal(validata.origine_fermata_id, 20);
 });

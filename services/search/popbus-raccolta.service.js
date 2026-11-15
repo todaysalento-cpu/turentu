@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { haversineDistance } from '../../utils/geo.util.js';
 import { getDurataDistanza, getRouteGeometry } from '../../utils/maps.util.js';
 import { classePercorrenza, QUALITA_PERCORRENZA } from '../popbus/v2/model.js';
+import { dettaglioFermataGoogle } from '../popbus/v2/popbus-stop-candidates.service.js';
 
 const RAGGIO_PERCORSO_METRI = 3000;
 const RAGGIO_ALTERNATIVE_METRI = 20000;
@@ -44,7 +45,9 @@ export function comuniRaccolta() {
 
 export const percorrenzaConRaccolta = km => ['MEDIA', 'LUNGA'].includes(classePercorrenza({}, km));
 
-async function cercaFermate(pool, polyline, origine, codiceDestinazione, alternative = false) {
+async function cercaFermate(pool, polyline, origine, codiceDestinazione, {
+    alternative = false, scadenzaMinima = null, capoluogo = null
+} = {}) {
     const riferimento = alternative ? 'p.partenza' : 'p.tracciato';
     const raggio = alternative ? RAGGIO_ALTERNATIVE_METRI : RAGGIO_PERCORSO_METRI;
     const { rows } = await pool.query(`
@@ -56,15 +59,19 @@ async function cercaFermate(pool, polyline, origine, codiceDestinazione, alterna
             SELECT DISTINCT ON (n.codice_istat_comune)
                    n.id AS nodo_id, n.codice_istat_comune AS codice, d.popolazione,
                    btrim(split_part(n.nome, ',', 1)) AS localita,
-                   f.id AS fermata_id, f.nome AS fermata,
+                   f.id AS fermata_id, f.nome AS fermata, f.google_place_id,
                    ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon,
                    ST_Distance(f.posizione::geography, p.partenza) AS distanza_partenza
             FROM percorso p
-            JOIN public.pixel_fermate f ON f.attiva AND f.google_place_id IS NULL
+            JOIN public.pixel_fermate f ON f.attiva
+                AND (f.google_place_id IS NULL OR ($7::timestamptz IS NOT NULL
+                     AND f.google_geo_scade_il > GREATEST(NOW(), $7)))
                 AND ST_DWithin(f.posizione::geography, ${riferimento}, $5)
             JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id AND n.attivo
             LEFT JOIN public.pixel_demografia d ON d.nodo_territoriale_id = n.id
             WHERE n.codice_istat_comune <> $4
+              AND ($8::text IS NULL OR (n.codice_istat_comune = $8
+                   AND lower(btrim(split_part(n.nome, ',', 1))) = lower($9::text)))
               AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
               AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
               AND NOT EXISTS (
@@ -78,7 +85,8 @@ async function cercaFermate(pool, polyline, origine, codiceDestinazione, alterna
                      ST_Distance(f.posizione::geography, p.tracciato), f.id
         )
         SELECT * FROM fermate ORDER BY distanza_partenza, fermata_id LIMIT $6
-    `, [polyline, origine.lon, origine.lat, codiceDestinazione, raggio, MAX_COMUNI]);
+    `, [polyline, origine.lon, origine.lat, codiceDestinazione, raggio, MAX_COMUNI, scadenzaMinima,
+        capoluogo?.codice ?? null, capoluogo?.nome ?? null]);
     return rows;
 }
 
@@ -118,7 +126,7 @@ async function cercaCentriSulPercorso(pool, polyline, origine, codiceDestinazion
 export async function scegliRaccoltaPopbus({
     pool, origine, destinazione, codiceOrigine, codiceDestinazione, distanzaKm,
     route = getDurataDistanza, geometria = getRouteGeometry, caricaTerritorio = comuniRaccolta,
-    censisciCentro
+    censisciCentro, scadenzaMinima = null, localitaOrigine, comuneOrigine
 }) {
     if (!percorrenzaConRaccolta(distanzaKm) ||
         !/^\d{6}$/.test(codiceOrigine) || !/^\d{6}$/.test(codiceDestinazione) ||
@@ -135,11 +143,11 @@ export async function scegliRaccoltaPopbus({
         const coincide = haversineDistance(origine, fermata) <= 0.01;
         const info = coincide ? { distanzaKm: 0, durataMs: 0 } : await route(origine, fermata);
         if (!coincide && !(info.distanzaKm > 0 && info.durataMs > 0)) return null;
-        const popolazione = Number(fermata.popolazione) || comuni.get(fermata.codice)?.popolazione || 0;
+        const popolazione = comuni.get(fermata.codice)?.popolazione || Number(fermata.popolazione) || 0;
         return { fermata, info, popolazione };
     }))).filter(Boolean);
 
-    const fermate = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione);
+    const fermate = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, { scadenzaMinima });
     const accessi = await cercaAccessi(fermate);
     const perVicinanza = (a, b) => a.info.durataMs - b.info.durataMs ||
         a.info.distanzaKm - b.info.distanzaKm || Number(a.fermata.fermata_id) - Number(b.fermata.fermata_id);
@@ -162,6 +170,7 @@ export async function scegliRaccoltaPopbus({
             accesso_minuti: Math.ceil(info.durataMs / 60000),
             tratta_km: tratta.distanzaKm,
             tratta_minuti: tratta.durataMs / 60000,
+            ...dettaglioFermataGoogle(fermata.google_place_id),
             fuori_copertura: info.durataMs > MAX_ACCESSO_MS ||
                 info.distanzaKm + tratta.distanzaKm > maxKm
         } : null;
@@ -173,7 +182,7 @@ export async function scegliRaccoltaPopbus({
     for (const accesso of preferite) {
         const opzione = await valuta(accesso);
         if (opzione && !opzione.fuori_copertura) {
-            ordinaria = { opzione, popolazione: accesso.popolazione };
+            ordinaria = { opzione, popolazione: accesso.popolazione, codice: accesso.fermata.codice };
             break;
         }
     }
@@ -201,17 +210,37 @@ export async function scegliRaccoltaPopbus({
             console.warn('[POPBUS SEARCH] Censimento fermate non riuscito:', error.message);
         }
     }
+    const normalizza = nome => nome?.trim().toLocaleLowerCase('it-IT');
+    const comune = normalizza(comuneOrigine);
+    const parteDaFrazione = comune && localitaOrigine && normalizza(localitaOrigine) !== comune;
+    if (parteDaFrazione && (!ordinaria ||
+        (ordinaria.codice === codiceOrigine && normalizza(ordinaria.opzione.localita) !== comune))) {
+        const capoluogo = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, {
+            alternative: true, scadenzaMinima, capoluogo: { codice: codiceOrigine, nome: comuneOrigine.trim() }
+        });
+        for (const accesso of await cercaAccessi(capoluogo)) {
+            if (accesso.info.durataMs > MAX_ACCESSO_ALTERNATIVO_MS) continue;
+            const opzione = await valuta(accesso);
+            if (opzione && accesso.info.distanzaKm + opzione.tratta_km <= maxKm) {
+                return { ...opzione, fuori_copertura: true };
+            }
+        }
+    }
     if (ordinaria) return ordinaria.opzione;
 
     const fermateNote = new Set(fermate.map(f => f.fermata_id));
-    const alternative = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, true);
+    const alternative = await cercaFermate(pool, percorso.polyline, origine, codiceDestinazione, {
+        alternative: true, scadenzaMinima
+    });
     const accessiAlternativi = await cercaAccessi(alternative.filter(f => !fermateNote.has(f.fermata_id)));
     const piuVicine = [...accessi, ...accessiAlternativi]
         .filter(({ info }) => info.durataMs <= MAX_ACCESSO_ALTERNATIVO_MS)
         .sort(perVicinanza);
     for (const accesso of piuVicine) {
         const opzione = await valuta(accesso);
-        if (opzione) return { ...opzione, fuori_copertura: true };
+        if (opzione && (!opzione.provvisoria || accesso.info.distanzaKm + opzione.tratta_km <= maxKm)) {
+            return { ...opzione, fuori_copertura: true };
+        }
     }
     return null;
 }

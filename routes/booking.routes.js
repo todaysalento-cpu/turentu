@@ -236,7 +236,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`[PIXEL-NODES:${requestId}] Nodi territoriali validati: ${startNodeId} -> ${endNodeId}`);
 
       const raccolta = pixelValidated.raccolta_popbus;
-      const salita = raccolta ?? finalOrigine;
+      const salita = raccolta && !pixelValidated.raccolta_google ? raccolta : finalOrigine;
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
@@ -271,7 +271,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           popbusDeadline.hours,
           popbusDeadline.deadline,
           massimoPopbus,
-          raccolta ? JSON.stringify({ ...finalOrigine, indirizzo: origineAddress }) : null
+          raccolta ? JSON.stringify({
+            ...finalOrigine, indirizzo: origineAddress,
+            ...(pixelValidated.raccolta_google && { raccolta_google: true })
+          }) : null
         ]
       );
 

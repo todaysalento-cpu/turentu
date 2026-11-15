@@ -101,9 +101,6 @@ export async function validatePixelStops(client, slot, quotation = null) {
   const assegnazione = quotation.fermate_pixel_popbus;
   const salita = await verificaFermata(raccolta ?? assegnazione?.salita, originNode);
   const discesa = await verificaFermata(assegnazione?.discesa, destNode);
-  if (raccolta && salita?.google_place_id != null) {
-    throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
-  }
   if (salita && discesa && String(salita.id) === String(discesa.id)) {
     throw pixelError('POPBUS: salita e discesa devono essere distinte, ripetere la ricerca', 409);
   }
@@ -112,6 +109,6 @@ export async function validatePixelStops(client, slot, quotation = null) {
     destinazione_nodo_territoriale_id: destNode,
     origine_fermata_id: salita?.id ?? null,
     destinazione_fermata_id: discesa?.id ?? null,
-    ...(raccolta && { raccolta_popbus: salita })
+    ...(raccolta && { raccolta_popbus: salita, raccolta_google: salita.google_place_id != null })
   };
 }

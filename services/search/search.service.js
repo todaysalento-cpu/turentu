@@ -27,6 +27,7 @@ const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
 async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm, partenza) {
     const puntoOrigine = { lat, lon };
     const puntoDestinazione = { lat: destLat, lon: destLon };
+    const scadenzaMinima = scadenzaUtileGoogle(partenza);
     const trovaRaccolta = async (da, destinazione) => {
         try {
             return await scegliRaccoltaPopbus({
@@ -36,6 +37,9 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
                 codiceOrigine: da.codiceIstat,
                 codiceDestinazione: destinazione.codice_istat_comune,
                 distanzaKm,
+                scadenzaMinima,
+                localitaOrigine: da.details.localita,
+                comuneOrigine: da.details.comune,
                 censisciCentro: censisciFermateCentroPopbus
             });
         } catch (err) {
@@ -81,7 +85,6 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             }
         }
     }
-    const scadenzaMinima = scadenzaUtileGoogle(partenza);
     const assegna = () => assegnaFermatePixel({
         client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta,
         origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id), scadenzaMinima

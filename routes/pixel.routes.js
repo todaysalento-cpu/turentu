@@ -104,6 +104,29 @@ pixelRouter.get('/fermate-test', async (req, res) => {
   }
 });
 
+pixelRouter.get('/fermate/candidati-google', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {
+  const nodo = parseNodoId(req.query.nodo_id);
+  if (nodo === null) return res.status(400).json({ success: false, error: 'nodo_id non valido' });
+  try {
+    const { rows } = await pool.query(`
+      SELECT place_id, rilevato_il
+      FROM public.pixel_candidati_google
+      WHERE nodo_territoriale_id = $1
+      ORDER BY rilevato_il DESC, place_id
+      LIMIT 50
+    `, [nodo]);
+    return res.json({ success: true, candidati: rows.map(row => ({
+      ...row,
+      google_maps_url: 'https://www.google.com/maps/search/?' + new URLSearchParams({
+        api: '1', query: 'fermata', query_place_id: row.place_id
+      })
+    })) });
+  } catch (error) {
+    console.error('[PIXEL] Lettura candidati Google fallita:', error);
+    return res.status(500).json({ success: false, error: 'Lettura candidati non riuscita' });
+  }
+});
+
 // Registrazione amministrativa: solo dati indipendenti da Google Places.
 // Le dichiarazioni dell'amministratore sono registrate, non costituiscono certificazione.
 pixelRouter.post('/fermate/registrazione', authMiddleware, requireRole('Admin', 'admin'), async (req, res) => {

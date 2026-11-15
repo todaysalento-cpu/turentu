@@ -38,15 +38,17 @@ const NEARBY_TYPES = Object.freeze({
   aeroporto: ['airport'],
   stadio: ['stadium'],
 });
-async function searchGoogleNearby(tipo, center, { apiKey, fetchImpl, radiusMeters }) {
-  const includedTypes = NEARBY_TYPES[tipo];
-  if (!includedTypes) throw new Error(`Tipo Nearby non supportato: ${tipo}`);
+async function searchGoogleNearby(includedTypes, center, {
+  apiKey, fetchImpl, radiusMeters, signal, fields =
+    'places.id,places.location,places.displayName,places.formattedAddress,places.primaryType,places.types,places.businessStatus'
+}) {
+  if (!includedTypes?.length) throw new Error('Tipo Nearby non supportato');
   const response = await fetchImpl('https://places.googleapis.com/v1/places:searchNearby', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': 'places.id,places.location,places.displayName,places.formattedAddress,places.primaryType,places.types,places.businessStatus',
+      'X-Goog-FieldMask': fields,
     },
     body: JSON.stringify({
       includedTypes,
@@ -54,6 +56,7 @@ async function searchGoogleNearby(tipo, center, { apiKey, fetchImpl, radiusMeter
       rankPreference: 'DISTANCE',
       locationRestriction: { circle: { center: { latitude: center.lat, longitude: center.lon }, radius: radiusMeters } },
     }),
+    signal,
   });
   if (!response.ok) {
     const body = await response.text();
@@ -77,6 +80,33 @@ function validCoords(p) {
   return p && Number.isFinite(p.lat) && Number.isFinite(p.lon) &&
     p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180;
 }
+
+export async function cercaIdFermateGoogle(centro, {
+  centroRicerca = centro, raggioMetri, apiKey = process.env.GOOGLE_MAPS_API_KEY, fetchImpl = globalThis.fetch
+} = {}) {
+  if (!apiKey) throw new Error('GOOGLE_MAPS_API_KEY mancante');
+  if (!validCoords(centro) || !validCoords(centroRicerca) || !(raggioMetri > 0 && raggioMetri <= 10000)) {
+    throw new Error('Area della ricerca fermate Google non valida');
+  }
+  const places = await searchGoogleNearby(
+    ['train_station', 'bus_station', 'bus_stop', 'transit_station', 'airport', 'ferry_terminal'],
+    centroRicerca, {
+      apiKey, fetchImpl, radiusMeters: raggioMetri + (centroRicerca === centro ? 0 : 1000),
+      fields: 'places.id,places.location,places.businessStatus',
+      signal: AbortSignal.timeout(4500)
+    }
+  );
+  const ids = new Set();
+  for (const p of places) {
+    const punto = { lat: p.location?.latitude, lon: p.location?.longitude };
+    if (typeof p.id === 'string' && p.id.trim() && p.businessStatus !== 'CLOSED_PERMANENTLY' &&
+        validCoords(punto) && pixelDistanceMeters(centro, punto) <= raggioMetri) {
+      ids.add(p.id);
+    }
+  }
+  return [...ids];
+}
+
 export async function getPixelDiscoveryContext(nodoId) {
   const id = Number(nodoId);
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('nodoId non valido');
@@ -134,7 +164,7 @@ export async function discoverPixelStopCandidates(nodoId, {
       chiamateEffettive++;
       if (typeof onGoogleAttempt === 'function') onGoogleAttempt({ nodo_id: nodo.id, categoria: s.tipo, centro });
       const places = searchMode === 'NEARBY'
-        ? await searchGoogleNearby(s.tipo, centro, { apiKey, fetchImpl, radiusMeters })
+        ? await searchGoogleNearby(NEARBY_TYPES[s.tipo], centro, { apiKey, fetchImpl, radiusMeters })
         : await searchGooglePlaces(`${s.query} ${nodo.nome}`, centro, { apiKey, fetchImpl, radiusMeters });
       chiamateRiuscite++;
       diag.risultati_grezzi = places.length;

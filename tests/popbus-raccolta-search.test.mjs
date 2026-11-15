@@ -173,17 +173,33 @@ test('salva una fermata OSM nel catalogo con provenienza, senza renderla prenota
     assert.equal(JSON.parse(scritture[2][1][2]).licenza, 'ODbL-1.0');
 });
 
-test('cerca le fermate mancanti nell’area dell’estremo e applica il raggio PIXEL sul punto esatto', async t => {
+test('usa Google se il censimento nell’area dell’estremo non ha candidato e salva solo i place ID', async t => {
     const punto = { lat: 39.9021, lon: 18.2649 };
     const nodo = { id: 46, codice_istat_comune: '075003' };
     const risultato = rows => ({ rows, rowCount: rows.length });
-    t.mock.method(globalThis, 'fetch', async (_url, { body }) => {
+    const apiKeyOriginale = process.env.GOOGLE_MAPS_API_KEY;
+    process.env.GOOGLE_MAPS_API_KEY = 'chiave-test';
+    t.after(() => {
+        if (apiKeyOriginale === undefined) delete process.env.GOOGLE_MAPS_API_KEY;
+        else process.env.GOOGLE_MAPS_API_KEY = apiKeyOriginale;
+    });
+    t.mock.method(globalThis, 'fetch', async (url, { body }) => {
+        if (url === 'https://places.googleapis.com/v1/places:searchNearby') {
+            assert.deepEqual(JSON.parse(body).locationRestriction.circle.center, { latitude: 39.9, longitude: 18.26 });
+            const location = { latitude: punto.lat, longitude: punto.lon };
+            return { ok: true, async json() { return { places: [
+                { id: 'place-1', location, displayName: { text: 'Nome da non salvare' } },
+                { id: 'place-2', location, businessStatus: 'CLOSED_PERMANENTLY' },
+                { id: 'place-3', location: { ...location, latitude: 39.93 } }
+            ] }; } };
+        }
         assert.match(body.get('data'), /around:2500,39\.9,18\.26/);
         return { ok: true, async json() {
             return { elements: [{ type: 'node', id: 102, ...punto, tags: { highway: 'bus_stop', name: 'Fermata' } }] };
         } };
     });
     let filtrate = false;
+    let segnalati;
     const database = {
         async query(sql, params) {
             if (sql.includes('AS residue')) {
@@ -198,12 +214,17 @@ test('cerca le fermate mancanti nell’area dell’estremo e applica il raggio P
             if (sql.includes('FROM public.nodi_territoriali')) {
                 return risultato([{ ...nodo, lat: 40, lon: 18 }]);
             }
+            if (sql.includes('INSERT INTO public.pixel_candidati_google')) {
+                segnalati = params;
+                return risultato([]);
+            }
             return risultato([]);
         },
         async connect() { assert.fail('Una candidata fuori raggio non va censita'); }
     };
     await censisciFermateEstremoPopbus(nodo, punto, { database, raggioMetri: 1500, popolazione: 5000 });
     assert.equal(filtrate, true);
+    assert.deepEqual(segnalati, [nodo.id, ['place-1']]);
 });
 
 test('la conferma usa il nodo e la fermata della quotazione', async () => {

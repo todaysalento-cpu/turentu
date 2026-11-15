@@ -8,6 +8,7 @@ import { discoverPixelHybridStops } from './pixel-stop-hybrid-source.service.js'
 import { insertPixelStopCandidate } from './pixel-stop-budget.service.js';
 import { resolveOrCreateTerritorialNode } from './pixel-territorial-node-resolver.service.js';
 import { calcolaMaxFermate } from './pixel-demography.service.js';
+import { cercaIdFermateGoogle } from './pixel-stop-discovery.service.js';
 
 function normalizeNodeId(value) {
   const raw = String(value ?? '').trim();
@@ -185,10 +186,13 @@ async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoI
     centroRicerca, limitaAlComune: true, timeoutMs: 4500,
     overpassUrl: process.env.PIXEL_OVERPASS_URL || undefined
   });
-  if (fonte.stato !== 'ok') throw new Error('Fonte OSM non disponibile per il comune ' + centro.codice);
+  const cercaConGoogle = () => segnalaCandidatiGoogle(
+    database, nodoId, centro, centroRicerca, raggioMetri, Number(catalogo.residue)
+  );
+  if (fonte.stato !== 'ok') return cercaConGoogle();
   const candidati = fonte.candidati.filter(c => c.fonte === 'osm' && c.nome &&
     !/^\s*(?:\[TEST PIXEL\]|TEST PIXEL\b)/i.test(c.nome));
-  if (!candidati.length) return;
+  if (!candidati.length) return cercaConGoogle();
 
   const { rows: compatibili } = await database.query(`
     WITH area AS (
@@ -202,7 +206,7 @@ async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoI
   `, [JSON.stringify(candidati), polyline ?? null, raggioMetri, centro.lon, centro.lat]);
   const idCompatibili = new Set(compatibili.map(c => c.place_id));
   const selezionate = candidati.filter(c => idCompatibili.has(c.place_id));
-  if (!selezionate.length) return;
+  if (!selezionate.length) return cercaConGoogle();
 
   const client = await database.connect();
   let inserite = 0;
@@ -238,5 +242,18 @@ async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoI
     throw error;
   } finally {
     client.release();
+  }
+}
+
+async function segnalaCandidatiGoogle(database, nodoId, centro, centroRicerca, raggioMetri, capienza) {
+  const placeIds = await cercaIdFermateGoogle(centro, { centroRicerca, raggioMetri });
+  if (!placeIds.length) return;
+  const risultato = await database.query(`
+    INSERT INTO public.pixel_candidati_google (nodo_territoriale_id, place_id)
+    SELECT $1::bigint, place_id FROM unnest($2::text[]) AS id(place_id)
+    ON CONFLICT (nodo_territoriale_id, place_id) DO NOTHING
+  `, [nodoId, placeIds.slice(0, capienza)]);
+  if (risultato.rowCount > 0) {
+    console.info('[POPBUS PIXEL] Candidati Google da verificare', { nodo: nodoId, candidati: risultato.rowCount });
   }
 }

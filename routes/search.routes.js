@@ -70,7 +70,19 @@ router.post("/", async (req, res) => {
     }
 
     // 4. INVIO RISPOSTA
-    return res.json(risultati || []);
+    const risultatiPubblici = (risultati || []).map(item => {
+      const fermate = item.fermate_pixel_popbus;
+      if (!fermate?.salita?.provvisoria && !fermate?.discesa?.provvisoria) return item;
+      const pubblica = fermata => {
+        if (!fermata?.provvisoria) return fermata;
+        const { lat, lon, ...riferimento } = fermata;
+        return riferimento;
+      };
+      return { ...item, fermate_pixel_popbus: {
+        salita: pubblica(fermate.salita), discesa: pubblica(fermate.discesa)
+      } };
+    });
+    return res.json(risultatiPubblici);
 
   } catch (err) {
     console.error("❌ CRITICAL SEARCH ERROR:", err);

@@ -4,6 +4,7 @@ import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 import { registerPixelStopCandidate } from '../services/pixel/pixel-stop-registration.service.js';
+import { preparaFermataGoogleProvvisoria, scadenzaUtileGoogle } from '../services/pixel/pixel-google-provisional.service.js';
 import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
 import { assegnaFermatePixel, cercaFermateCandidate } from '../services/popbus/v2/popbus-stop-candidates.service.js';
 
@@ -287,4 +288,48 @@ test('assegna due fermate PIXEL compatibili e le lega alla quotazione di entramb
             return { rows: [] };
         } }
     });
+});
+
+test('riusa il place ID più vicino con una geometria a scadenza, senza salvare dati descrittivi di Google', async () => {
+    const nodo = { id: 46 };
+    const scadenzaMinima = scadenzaUtileGoogle(new Date());
+    const scritture = [];
+    const database = { async query(sql, params) {
+        if (sql.includes('FROM public.pixel_candidati_google')) {
+            assert.deepEqual(params, [46]);
+            return { rows: [{ place_id: 'fuori' }, { place_id: 'vicina' }] };
+        }
+        assert.match(sql, /FALSE, TRUE, \$4, NOW\(\) \+ interval '7 days'/);
+        assert.match(sql, /ON CONFLICT \(nodo_territoriale_id, google_place_id\)/);
+        scritture.push(params);
+        return { rowCount: 1 };
+    } };
+    const fetchImpl = async url => ({
+        ok: true, json: async () => ({
+            displayName: { text: 'Nome Google da non salvare' },
+            location: { latitude: url.endsWith('vicina') ? origine.lat : origine.lat + 1, longitude: origine.lon }
+        })
+    });
+    const opzioni = { database, apiKey: 'test', fetchImpl, raggioMetri: 1500, scadenzaMinima };
+    assert.equal(await preparaFermataGoogleProvvisoria(nodo, origine, opzioni), true);
+    assert.deepEqual(scritture, [[46, origine.lon, origine.lat, 'vicina', scadenzaMinima]]);
+    assert.equal(await preparaFermataGoogleProvvisoria(nodo, origine, {
+        ...opzioni, scadenzaMinima: new Date(Date.now() + 8 * 86400000)
+    }), false);
+    assert.equal(scritture.length, 1);
+});
+
+test('la prenotazione rifiuta una fermata Google che scade prima della corsa', async () => {
+    const partenza = Date.now() + 86400000;
+    const salita = { fermata_id: 20, nodo_territoriale_id: 10, ...origine };
+    const quote = { tipo: 'pop-bus', start_datetime: new Date(partenza),
+        origine_nodo_territoriale_id: 10, destinazione_nodo_territoriale_id: 11,
+        fermate_pixel_popbus: { salita } };
+    const client = { async query(sql) {
+        if (sql.includes('FROM public.nodi_territoriali')) {
+            return { rows: [{ id: 10, attivo: true }, { id: 11, attivo: true }] };
+        }
+        return { rows: [{ id: 20, ...origine, google_place_id: 'g1', google_geo_scade_il: new Date(partenza) }] };
+    } };
+    await assert.rejects(validatePixelStops(client, quote, quote), { status: 409 });
 });

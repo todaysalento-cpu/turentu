@@ -211,6 +211,7 @@ export async function cercaPopbusAttivate({ pool, richiesta, options = {} }) {
       AND c.start_datetime <= $2::timestamptz
       AND c.arrivo_datetime >= $1::timestamptz
       AND c.arrivo_datetime > NOW()
+      AND (c.google_geo_scade_il IS NULL OR c.google_geo_scade_il > NOW())
       AND c.posti_totali >= $3
     ORDER BY c.start_datetime, c.id
     LIMIT $4

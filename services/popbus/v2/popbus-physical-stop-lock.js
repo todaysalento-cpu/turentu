@@ -106,6 +106,8 @@ export async function validaFermateFisicheTransazionali({
       f.verificata,
       f.nome,
       f.nodo_territoriale_id,
+      f.google_place_id,
+      f.google_geo_scade_il,
       ST_Y(f.posizione::geometry) AS lat,
       ST_X(f.posizione::geometry) AS lon,
       n.attivo AS nodo_attivo
@@ -123,6 +125,7 @@ export async function validaFermateFisicheTransazionali({
     fail('una o piÃ¹ fermate non esistono nel catalogo');
   }
 
+  let googleGeoScadeIl = null;
   for (const row of result.rows) {
     const id = Number(row.id);
     const attesa = catalogo.get(id);
@@ -133,6 +136,11 @@ export async function validaFermateFisicheTransazionali({
 
     if (row.attiva !== true || row.nodo_attivo !== true) {
       fail(`fermata o nodo territoriale non attivo: ${id}`);
+    }
+    if (row.google_place_id != null) {
+      const scadenza = new Date(row.google_geo_scade_il).getTime();
+      if (!Number.isFinite(scadenza) || scadenza <= Date.now()) fail(`fermata Google ${id} scaduta`);
+      googleGeoScadeIl = Math.min(googleGeoScadeIl ?? Infinity, scadenza);
     }
 
     if (
@@ -177,6 +185,7 @@ export async function validaFermateFisicheTransazionali({
     ok: true,
     numeroFermate: ids.length,
     fermateIds: ids,
+    ...(googleGeoScadeIl != null && { googleGeoScadeIl }),
     attivabile: false
   };
 }

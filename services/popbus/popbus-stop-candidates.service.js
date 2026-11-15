@@ -96,6 +96,7 @@ export async function cercaFermateCandidate({
 
       JOIN public.pixel_fermate f
         ON f.attiva = TRUE
+       AND f.google_place_id IS NULL
        AND ST_DWithin(
          p.posizione,
          f.posizione,

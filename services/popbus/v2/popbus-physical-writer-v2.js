@@ -348,6 +348,9 @@ export async function rivalidaCicloFisicoInTransazioneV2({
   if (fermate.ok !== true) {
     fail('rivalidazione fermate fallita');
   }
+  if (fermate.googleGeoScadeIl != null && Number(ciclo.ritornoBase) >= fermate.googleGeoScadeIl) {
+    fail('la validità delle fermate Google deve coprire il ritorno del mezzo');
+  }
 
   const rivalidazione = rivalidaMissioniFisicheV2({
     ciclo,
@@ -500,14 +503,15 @@ async function persistiCicloFisicoInTransazioneV2({client, ciclo, pre, nowMs}) {
     const {rows: attivazioni} = await client.query(`
       INSERT INTO popbus_attivazioni
         (direttrice_id, pixel_opportunita_id, veicolo_id, autista_id,
-         stato, partenza, arrivo, costo, ricavo, tariffa, piano, expires_at)
+         stato, partenza, arrivo, costo, ricavo, tariffa, piano, expires_at, google_geo_scade_il)
       VALUES (NULL, NULL, $1, $2, 'in_attesa_autista',
-              $3, $4, $5, $6, $7, $8::jsonb, $9)
+              $3, $4, $5, $6, $7, $8::jsonb, $9, $10)
       RETURNING id
     `, [pre.veicoloId, pre.autistaId,
         new Date(piano.evaluation.departure), new Date(piano.evaluation.arrival),
         pre.economia.costoCompletoEuro, pre.economia.ricavoLordoEuro,
-        pre.euroKm, JSON.stringify(persistedPlan), expiresAt]);
+        pre.euroKm, JSON.stringify(persistedPlan), expiresAt,
+        pre.fermate.googleGeoScadeIl == null ? null : new Date(pre.fermate.googleGeoScadeIl)]);
     const attivazioneId = Number(attivazioni[0]?.id);
     if (!Number.isSafeInteger(attivazioneId) || attivazioneId <= 0)
       fail('attivazione non creata');

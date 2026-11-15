@@ -67,7 +67,8 @@ export async function validatePixelStops(client, slot, quotation = null) {
     }
 
     const { rows } = await client.query(`
-      SELECT f.id, f.nome, ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon
+      SELECT f.id, f.nome, ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon,
+             f.google_place_id, f.google_geo_scade_il
       FROM public.pixel_fermate f
       WHERE f.id = $1 AND f.nodo_territoriale_id = $2 AND f.attiva
         AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
@@ -85,6 +86,14 @@ export async function validatePixelStops(client, slot, quotation = null) {
     if (!corrente || corrente.lat !== fermata.lat || corrente.lon !== fermata.lon) {
       throw pixelError('POPBUS: fermata cambiata, ripetere la ricerca', 409);
     }
+    if (corrente.google_place_id != null) {
+      const partenza = new Date(quotation.start_datetime).getTime();
+      const scadenza = new Date(corrente.google_geo_scade_il).getTime();
+      if (!Number.isFinite(partenza) || !Number.isFinite(scadenza) ||
+          scadenza <= Math.max(Date.now(), partenza + 12 * 3600000)) {
+        throw pixelError('POPBUS: fermata provvisoria scaduta, ripetere la ricerca', 409);
+      }
+    }
     return corrente;
   }
 
@@ -92,6 +101,9 @@ export async function validatePixelStops(client, slot, quotation = null) {
   const assegnazione = quotation.fermate_pixel_popbus;
   const salita = await verificaFermata(raccolta ?? assegnazione?.salita, originNode);
   const discesa = await verificaFermata(assegnazione?.discesa, destNode);
+  if (raccolta && salita?.google_place_id != null) {
+    throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
+  }
   if (salita && discesa && String(salita.id) === String(discesa.id)) {
     throw pixelError('POPBUS: salita e discesa devono essere distinte, ripetere la ricerca', 409);
   }

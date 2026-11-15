@@ -99,6 +99,7 @@ export const upsertPrenotazione = async (prenotazione) => {
 };
 
 export const upsertCorsa = async (c, indicizzare = false, store = CacheStore) => {
+    if (c.google_geo_scade_il != null) return;
     changed(store);
     c.partenza_prevista = c.start_datetime;
     c.arrivo_previsto = c.arrivo_datetime;
@@ -244,6 +245,7 @@ async function refreshCachesUltra() {
                 FROM corse c 
                 LEFT JOIN veicolo v ON c.veicolo_id = v.id 
                 WHERE v.stato IS DISTINCT FROM 'eliminato' AND c.stato IN ('prenotabile', 'in_corso', 'da_attivare')
+                  AND c.google_geo_scade_il IS NULL
             `),
             client.query(`SELECT * FROM direttrici_virtuali WHERE stato IN ('in_formazione', 'in_attesa_autista', 'confermata')`),
             client.query(`SELECT id, nome, posizione, attivo FROM public.nodi_territoriali WHERE attivo = TRUE`),

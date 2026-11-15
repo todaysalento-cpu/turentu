@@ -60,7 +60,7 @@ async function cercaFermate(pool, polyline, origine, codiceDestinazione, alterna
                    ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon,
                    ST_Distance(f.posizione::geography, p.partenza) AS distanza_partenza
             FROM percorso p
-            JOIN public.pixel_fermate f ON f.attiva
+            JOIN public.pixel_fermate f ON f.attiva AND f.google_place_id IS NULL
                 AND ST_DWithin(f.posizione::geography, ${riferimento}, $5)
             JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id AND n.attivo
             LEFT JOIN public.pixel_demografia d ON d.nodo_territoriale_id = n.id

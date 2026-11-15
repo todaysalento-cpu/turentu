@@ -52,19 +52,21 @@ export async function cercaFermateCandidate({
   const rows = await leggiFermateCandidate(client,
     `
     WITH richieste AS (
-      SELECT id, origine, destinazione, origine_fermata_id, destinazione_fermata_id
+      SELECT id, origine, destinazione, origine_fermata_id, destinazione_fermata_id, start_datetime
       FROM public.richieste_pop_bus
       WHERE id = ANY($1::bigint[])
     ),
     punti AS (
       SELECT id AS richiesta_id, 'salita'::text AS tipo,
-             origine::geography AS posizione, origine_fermata_id AS fermata_fissata
+             origine::geography AS posizione, origine_fermata_id AS fermata_fissata,
+             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo
       FROM richieste
 
       UNION ALL
 
       SELECT id AS richiesta_id, 'discesa'::text AS tipo,
-             destinazione::geography AS posizione, destinazione_fermata_id AS fermata_fissata
+             destinazione::geography AS posizione, destinazione_fermata_id AS fermata_fissata,
+             start_datetime + interval '12 hours' AS scadenza_minima, FALSE AS ricerca_prima_del_preventivo
       FROM richieste
     )`, [ids, raggioMetri, limite]
   );
@@ -80,18 +82,19 @@ export async function cercaFermateCandidate({
 }
 
 export async function assegnaFermatePixel({
-  client, origine, destinazione, origineNodoId, destinazioneNodoId, raccolta
+  client, origine, destinazione, origineNodoId, destinazioneNodoId, raccolta, scadenzaMinima = null
 }) {
   const rows = await leggiFermateCandidate(client, `
     WITH punti AS (
       SELECT 1 AS richiesta_id, tipo,
              ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione,
-             NULL::bigint AS fermata_fissata
+             NULL::bigint AS fermata_fissata, $4::timestamptz AS scadenza_minima,
+             TRUE AS ricerca_prima_del_preventivo
       FROM jsonb_to_recordset($1::jsonb) AS p(tipo text, lat float8, lon float8)
     )`, [JSON.stringify([
       ...(!raccolta ? [{ ...origine, tipo: 'salita' }] : []),
       { ...destinazione, tipo: 'discesa' }
-    ]), DEFAULT_RADIUS_METERS, DEFAULT_LIMIT]);
+    ]), DEFAULT_RADIUS_METERS, DEFAULT_LIMIT, scadenzaMinima]);
 
   const salite = raccolta ? [{ ...raccolta, nodo_territoriale_id: raccolta.nodo_id }] :
     rows.filter(r => r.tipo === 'salita').map(normalizzaFermata);
@@ -119,19 +122,25 @@ async function leggiFermateCandidate(client, ctePunti, parametri) {
         f.nodo_territoriale_id,
         f.tipi_veicolo_ammessi,
         f.verificata,
+        f.google_place_id,
         ST_Y(f.posizione::geometry) AS lat,
         ST_X(f.posizione::geometry) AS lon,
         ST_Distance(p.posizione, f.posizione) AS distanza_metri,
 
         ROW_NUMBER() OVER (
           PARTITION BY p.richiesta_id, p.tipo
-          ORDER BY ST_Distance(p.posizione, f.posizione), f.id
+          ORDER BY (f.google_place_id IS NOT NULL), ST_Distance(p.posizione, f.posizione), f.id
         ) AS posizione_ordine
 
       FROM punti p
 
       JOIN public.pixel_fermate f
         ON f.attiva = TRUE
+       AND (f.google_place_id IS NULL OR (
+            p.scadenza_minima IS NOT NULL
+            AND f.google_geo_scade_il > GREATEST(NOW(), p.scadenza_minima)
+            AND (p.ricerca_prima_del_preventivo OR f.id = p.fermata_fissata)
+       ))
        AND (p.fermata_fissata IS NULL OR f.id = p.fermata_fissata)
        AND ST_DWithin(
          p.posizione,
@@ -181,6 +190,12 @@ function normalizzaFermata(row) {
       lon: Number(row.lon),
       distanza_metri: Number(row.distanza_metri),
       verificata: row.verificata === true,
+      ...(row.google_place_id && {
+        provvisoria: true,
+        google_maps_url: 'https://www.google.com/maps/search/?' + new URLSearchParams({
+          api: '1', query: 'fermata', query_place_id: row.google_place_id
+        })
+      }),
       tipi_veicolo_ammessi: row.tipi_veicolo_ammessi
     };
 }

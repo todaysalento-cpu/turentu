@@ -191,6 +191,9 @@ const startServer = async () => {
     
     pendingService.cleanupExpired().catch(e => console.error('⚠️ [CLEANUP] Errore:', e.message));
 
+    const { avviaScadenzaGeometrieGoogle } = await import('./services/pixel/pixel-google-provisional.service.js');
+    await avviaScadenzaGeometrieGoogle();
+
     if (
   process.env.POPBUS_PIXEL_FIRST_ENABLED === 'true' &&
   process.env.POPBUS_PIXEL_FIRST === '1'

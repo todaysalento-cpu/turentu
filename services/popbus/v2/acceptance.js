@@ -166,6 +166,11 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
   if (!a) {
     throw new Error('Attivazione non trovata');
   }
+  if (a.google_geo_scade_il != null &&
+      (new Date(a.google_geo_scade_il).getTime() <= Date.now() ||
+       new Date(a.google_geo_scade_il).getTime() <= new Date(a.piano?.busyEnd).getTime())) {
+    throw new Error('Fermata POPBUS provvisoria scaduta');
+  }
 
   const plan = a.piano;
   const isPhysicalV2 = plan?.schemaVersion === 2 && plan?.tipoItinerario === 'FERMATE_FISICHE';
@@ -679,7 +684,8 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
       percorso_polyline,
       fermate_pianificate,
       km_avvicinamento,
-      km_riposizionamento
+      km_riposizionamento,
+      google_geo_scade_il
     )
     VALUES (
       $1,
@@ -699,7 +705,8 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
       $13,
       $14::jsonb,
       $15,
-      $16
+      $16,
+      $17
     )
     RETURNING *
     `,
@@ -719,7 +726,8 @@ async function convertiAttivazioneInterna(client, offertaId, autistaId, sceltaCo
       polyline.encode(coords),
       JSON.stringify(stops),
       plan.approach.metres / 1000,
-      plan.returnTrip.metres / 1000
+      plan.returnTrip.metres / 1000,
+      a.google_geo_scade_il ?? null
     ]
   );
 

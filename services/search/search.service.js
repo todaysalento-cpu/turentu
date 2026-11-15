@@ -17,13 +17,14 @@ import { comuniRaccolta, percorrenzaConRaccolta, scegliRaccoltaPopbus } from './
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { identificaTerritorioPixel, resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
+import { preparaFermataGoogleProvvisoria, scadenzaUtileGoogle } from '../pixel/pixel-google-provisional.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
 // PIXEL e POPBUS V2 condividono i nodi territoriali persistenti.
 // Il resolver identifica la localita' e il comune ISTAT: non usa una soglia
 // di distanza dal nodo piu' vicino e distingue le frazioni dello stesso comune.
-async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm) {
+async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm, partenza) {
     const puntoOrigine = { lat, lon };
     const puntoDestinazione = { lat: destLat, lon: destLon };
     const trovaRaccolta = async (da, destinazione) => {
@@ -80,26 +81,34 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             }
         }
     }
-    const fermate = await assegnaFermatePixel({
+    const scadenzaMinima = scadenzaUtileGoogle(partenza);
+    const assegna = () => assegnaFermatePixel({
         client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta,
-        origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id)
+        origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id), scadenzaMinima
     });
+    let fermate = await assegna();
     const estremiSenzaFermata = [
         { tipo: 'salita', nodo: origine, punto: puntoOrigine },
         { tipo: 'discesa', nodo: destinazione, punto: puntoDestinazione }
     ].filter(({ tipo, nodo }) => !fermate[tipo] && /^\d{6}$/.test(nodo.codice_istat_comune));
-    const candidati = await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
+    const esiti = await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
+        const prepara = () => preparaFermataGoogleProvvisoria(nodo, punto, {
+            raggioMetri: DEFAULT_RADIUS_METERS, scadenzaMinima
+        });
         try {
+            if (await prepara()) return { aggiornata: true, candidati: 0 };
             const comuni = await comuniRaccolta();
-            return await censisciFermateEstremoPopbus(nodo, punto, {
+            const candidati = await censisciFermateEstremoPopbus(nodo, punto, {
                 popolazione: comuni.get(nodo.codice_istat_comune)?.popolazione,
                 raggioMetri: DEFAULT_RADIUS_METERS
             });
+            return { aggiornata: candidati > 0 && await prepara(), candidati };
         } catch (error) {
-            console.warn('[POPBUS PIXEL] Censimento estremo non riuscito:', { tipo, nodo: nodo.id, errore: error.message });
-            return 0;
+            console.warn('[POPBUS PIXEL] Fermata provvisoria non disponibile:', { tipo, nodo: nodo.id, errore: error.code ?? error.name });
+            return { aggiornata: false, candidati: 0 };
         }
     }));
+    if (esiti.some(esito => esito.aggiornata)) fermate = await assegna();
     const origineNodoId = fermate.salita?.nodo_territoriale_id ?? base.origine_nodo_territoriale_id;
     const destinazioneNodoId = fermate.discesa?.nodo_territoriale_id ?? base.destinazione_nodo_territoriale_id;
     const disponibili = Boolean(fermate.salita && fermate.discesa);
@@ -111,7 +120,7 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
         pixel_fermate_disponibili: disponibili,
         pixel_stato: disponibili ? 'disponibile' :
             origineNodoId === destinazioneNodoId ? 'nodi_coincidenti' :
-            candidati.some(numero => numero > 0) ? 'candidati_da_verificare' : 'fermate_non_disponibili'
+            esiti.some(esito => esito.candidati > 0) ? 'candidati_da_verificare' : 'fermate_non_disponibili'
     };
 }
 
@@ -1030,9 +1039,13 @@ export async function cercaSlotUltra(richiesta) {
         };
         try {
             pixelContext = await getPixelTerritorialContext(
-                lat, lon, destLat, destLon, info.distanzaKm
+                lat, lon, destLat, destLon, info.distanzaKm, orarioAndataUtente
             );
-            console.log("[PIXEL SEARCH NODI]", JSON.stringify({origine:{lat,lon},destinazione:{lat:destLat,lon:destLon},...pixelContext}));
+            console.log("[PIXEL SEARCH NODI]", {
+                origine: pixelContext.origine_nodo_territoriale_id,
+                destinazione: pixelContext.destinazione_nodo_territoriale_id,
+                stato: pixelContext.pixel_stato
+            });
         } catch (err) {
             console.error('[PIXEL] Errore associazione nodi territoriali:', err);
         }

@@ -58,7 +58,7 @@ export async function registerPixelStopCandidate({
     // Blocca la fermata prima di esaminare o aggiornare la sua ammissibilita'.
     // Vale anche per il caso di duplicato gia' esistente.
     const { rows: stopRows } = await client.query(`
-      SELECT f.id, f.nome, f.attiva, f.verificata,
+      SELECT f.id, f.nome, f.attiva, f.verificata, f.google_place_id,
              n.attivo AS nodo_attivo,
              EXISTS (
                SELECT 1 FROM public.pixel_fermate_test_metadata t
@@ -100,7 +100,18 @@ export async function registerPixelStopCandidate({
     );
 
     let attiva = stop.attiva === true;
-    if (ammissibileProvvisoria && !attiva) {
+    if (ammissibileProvvisoria && stop.google_place_id != null) {
+      // L'operatore ha fornito coordinate indipendenti, che sostituiscono la geometria temporanea.
+      const conversione = await client.query(`
+        UPDATE public.pixel_fermate
+        SET posizione = ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
+            nome = $4, indirizzo = $5, google_place_id = NULL, google_geo_scade_il = NULL,
+            attiva = TRUE, updated_at = NOW()
+        WHERE id = $1::bigint
+        RETURNING attiva
+      `, [fermataId, lon, lat, nome.trim(), indirizzo]);
+      attiva = conversione.rows[0]?.attiva === true;
+    } else if (ammissibileProvvisoria && !attiva) {
       const activation = await client.query(`
         UPDATE public.pixel_fermate
         SET attiva = TRUE, updated_at = NOW()

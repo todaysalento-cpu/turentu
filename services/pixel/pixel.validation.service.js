@@ -1,6 +1,6 @@
 // Turentu POPBUS + PIXEL — validazione server-side condivisa (Stripe / wallet).
 // Usare ESCLUSIVAMENTE il client pg della transazione corrente (BEGIN ... COMMIT/ROLLBACK).
-// Fail closed: nodi territoriali PIXEL autorevoli obbligatori; fermate operative assegnate dal worker.
+// I nodi territoriali e l'eventuale punto di raccolta provengono dal preventivo server.
 
 const pixelError = (message, status = 422) => {
   const error = new Error(message);
@@ -33,7 +33,7 @@ export function isPopbusSlot(slot) {
 
 /**
  * Valida i nodi territoriali del preventivo fresco PIXEL, nella transazione corrente.
- * Le fermate fisiche sono assegnate successivamente da POPBUS V2.
+ * Verifica anche la fermata proposta per il nodo di raccolta, se presente.
  * Non accetta nodi territoriali autorevoli dal payload del client.
  */
 export async function validatePixelStops(client, slot, quotation = null) {
@@ -59,10 +59,39 @@ export async function validatePixelStops(client, slot, quotation = null) {
   if (!origin || !destination || origin.attivo !== true || destination.attivo !== true) {
     throw pixelError('PIXEL: nodi territoriali non esistenti o inattivi', 409);
   }
+  const raccolta = quotation.raccolta_popbus;
+  let fermataRaccolta = null;
+  if (raccolta) {
+    const id = integerId(raccolta.fermata_id);
+    if (!id || integerId(raccolta.nodo_id) !== originNode) {
+      throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
+    }
+
+    const { rows } = await client.query(`
+      SELECT f.id, f.nome, ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon
+      FROM public.pixel_fermate f
+      WHERE f.id = $1 AND f.nodo_territoriale_id = $2 AND f.attiva
+        AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
+        AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
+        AND NOT EXISTS (
+          SELECT 1 FROM public.pixel_fermate_test_metadata t WHERE t.fermata_id = f.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM public.pixel_fermate_fonti ff
+          WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
+        )
+      FOR SHARE OF f
+    `, [id, originNode]);
+    fermataRaccolta = rows[0];
+    if (!fermataRaccolta || fermataRaccolta.lat !== raccolta.lat || fermataRaccolta.lon !== raccolta.lon) {
+      throw pixelError('POPBUS: punto di raccolta cambiato, ripetere la ricerca', 409);
+    }
+  }
   return {
     origine_nodo_territoriale_id: originNode,
     destinazione_nodo_territoriale_id: destNode,
-    origine_fermata_id: null,
-    destinazione_fermata_id: null
+    origine_fermata_id: fermataRaccolta?.id ?? null,
+    destinazione_fermata_id: null,
+    ...(fermataRaccolta && { raccolta_popbus: fermataRaccolta })
   };
 }

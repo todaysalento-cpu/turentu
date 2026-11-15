@@ -235,39 +235,43 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       }
       console.log(`[PIXEL-NODES:${requestId}] Nodi territoriali validati: ${startNodeId} -> ${endNodeId}`);
 
+      const raccolta = pixelValidated.raccolta_popbus;
+      const salita = raccolta ?? finalOrigine;
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
           start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo, payment_intent_id, request_id,
-           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro, prezzo_massimo_autorizzato
+           origine_nodo_territoriale_id, destinazione_nodo_territoriale_id, origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro, prezzo_massimo_autorizzato,
+           origine_richiesta
         )
          VALUES (
           $1,
           ST_SetSRID(ST_MakePoint($2,$3),4326),
           ST_SetSRID(ST_MakePoint($4,$5),4326),
-          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+          $6, $7, 'in_attesa', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb
         ) RETURNING *`,
         [
           clienteId,
-          finalOrigine.lon, finalOrigine.lat,
+          salita.lon, salita.lat,
           finalDestinazione.lon, finalDestinazione.lat,
           slot.start_datetime,
           slot.posti_richiesti || 1,
           startNodeId,
           endNodeId,
           slot.classe || 'STANDARD',
-          origineAddress,
+          raccolta?.nome ?? origineAddress,
           destinazioneAddress,
           prezzoConcordato,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
           requestId,
           pixelValidated.origine_nodo_territoriale_id,
           pixelValidated.destinazione_nodo_territoriale_id,
-          null, // fermata salita assegnata successivamente da POPBUS V2
-          null, // fermata discesa assegnata successivamente da POPBUS V2
+          pixelValidated.origine_fermata_id,
+          pixelValidated.destinazione_fermata_id,
           popbusDeadline.hours,
           popbusDeadline.deadline,
-          massimoPopbus
+          massimoPopbus,
+          raccolta ? JSON.stringify({ ...finalOrigine, indirizzo: origineAddress }) : null
         ]
       );
 

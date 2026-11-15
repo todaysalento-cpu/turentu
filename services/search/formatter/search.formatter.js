@@ -403,6 +403,10 @@ export async function formatResults(
                             ? item.veicoli_pool_ids
                             : [];
 
+                    const raccolta = item.raccolta_popbus;
+                    const kmPopbus = raccolta?.tratta_km ?? distKmRichiesta;
+                    const minutiPopbus = raccolta?.tratta_minuti ?? durataMinutiRichiesta;
+
                     const opzioniPopBusMappe =
                         await Promise.all(
                             CLASSI_POPBUS.map(
@@ -427,8 +431,8 @@ export async function formatResults(
                                         },
                                         postiUtenteRichiesti,
                                         'pop-bus',
-                                        distKmRichiesta,
-                                        distKmRichiesta,
+                                        kmPopbus,
+                                        kmPopbus,
                                         0,
                                         classeCorrente,
                                         kmAvv,
@@ -513,8 +517,9 @@ export async function formatResults(
                                         marca: marcaVal,
                                         modello: modelloVal,
 
-                                        localitaOrigine,
+                                        localitaOrigine: raccolta?.localita ?? localitaOrigine,
                                         localitaDestinazione,
+                                        ...(raccolta && { raccolta_popbus: raccolta }),
 
                                         oraPartenza:
                                             oraPartenzaISO,
@@ -524,7 +529,7 @@ export async function formatResults(
                                         oraArrivo:
                                             determinaArrivoReale(
                                                 oraPartenzaISO,
-                                                durataMinutiRichiesta
+                                                minutiPopbus
                                             ),
 
                                         oraRitorno:
@@ -538,13 +543,8 @@ export async function formatResults(
                                                 )
                                                 : null,
 
-                                        distanza_metri:
-                                            distMetriRichiesta,
-
-                                        durata_minuti:
-                                            Math.round(
-                                                durataMinutiRichiesta
-                                            ),
+                                        distanza_metri: kmPopbus * 1000,
+                                        durata_minuti: Math.round(minutiPopbus),
 
                                         prezzo: prezzoVal,
                                         prezzo_massimo_popbus: massimoPopbus > prezzoVal ? massimoPopbus : undefined,

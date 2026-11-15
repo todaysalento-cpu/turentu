@@ -66,7 +66,7 @@ export async function anonymizeAccount(db, id) {
     `UPDATE pending SET origine = NULL, destinazione = NULL,
       origine_address = NULL, destinazione_address = NULL WHERE cliente_id = $1`,
     `UPDATE richieste_pop_bus SET origine = NULL, destinazione = NULL,
-      origine_address = NULL, destinazione_address = NULL WHERE cliente_id = $1`,
+      origine_address = NULL, destinazione_address = NULL, origine_richiesta = NULL WHERE cliente_id = $1`,
     `UPDATE veicolo SET targa = NULL, numero_licenza_ncc = NULL,
       comune_licenza = NULL, image_url = NULL, coord = NULL, localita = NULL,
       stato = 'eliminato', stato_verifica = NULL WHERE driver_id = $1`,

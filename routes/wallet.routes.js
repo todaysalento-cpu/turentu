@@ -252,9 +252,13 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       let savedRow;
 
       if (isPopBus) {
+        const pixel = validatedPixel.get(slot);
+        const raccolta = pixel.raccolta_popbus;
+        const salita = raccolta ?? origin;
+        const origineAddress = slot.origine_address || slot.localitaOrigine || 'Partenza';
         const nodeRes = await client.query(
           `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-          [Number(origin.lat), Number(origin.lon), Number(destination.lat), Number(destination.lon)]
+          [Number(salita.lat), Number(salita.lon), Number(destination.lat), Number(destination.lon)]
         );
 
         const result = await client.query(
@@ -263,27 +267,30 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
             start_node_id, end_node_id, classe, origine_address, destinazione_address,
             prezzo, payment_intent_id, request_id,
             origine_nodo_territoriale_id, destinazione_nodo_territoriale_id,
-            origine_fermata_id, destinazione_fermata_id
+            origine_fermata_id, destinazione_fermata_id, origine_richiesta
           ) VALUES (
             $1, ST_SetSRID(ST_MakePoint($2,$3),4326),
             ST_SetSRID(ST_MakePoint($4,$5),4326),
             $6, $7, 'in_attesa', $8, $9, $10, $11, $12,
-            $13, $14, $15, $16, $17, $18, $19
+            $13, $14, $15, $16, $17, $18, $19, $20::jsonb
           ) RETURNING *`,
           [
             clienteId,
-            Number(origin.lon), Number(origin.lat),
+            Number(salita.lon), Number(salita.lat),
             Number(destination.lon), Number(destination.lat),
             slot.start_datetime, slot.posti_richiesti,
             nodeRes.rows[0].start, nodeRes.rows[0].end,
             slot.classe || 'STANDARD',
-            slot.origine_address || slot.localitaOrigine || 'Partenza',
+            raccolta?.nome ?? origineAddress,
             slot.destinazione_address || slot.localitaDestinazione || 'Arrivo',
             Number(prezzo), `wallet_${requestId}`, requestId,
-            validatedPixel.get(slot).origine_nodo_territoriale_id,
-            validatedPixel.get(slot).destinazione_nodo_territoriale_id,
-            validatedPixel.get(slot).origine_fermata_id,
-            validatedPixel.get(slot).destinazione_fermata_id
+            pixel.origine_nodo_territoriale_id,
+            pixel.destinazione_nodo_territoriale_id,
+            pixel.origine_fermata_id,
+            pixel.destinazione_fermata_id,
+            raccolta ? JSON.stringify({
+              lat: Number(origin.lat), lon: Number(origin.lon), indirizzo: origineAddress
+            }) : null
           ]
         );
 

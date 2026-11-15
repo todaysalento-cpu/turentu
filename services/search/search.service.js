@@ -1,5 +1,6 @@
 
 import * as turf from '@turf/turf';
+import { createHash } from 'node:crypto';
 import ngeohash from 'ngeohash';
 import { redisClient } from '../../redis.js';
 import { pool } from '../../db/db.js';
@@ -11,6 +12,7 @@ import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
+import { scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
@@ -20,22 +22,38 @@ const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
 // PIXEL e POPBUS V2 condividono i nodi territoriali persistenti.
 // Il resolver identifica la localita' e il comune ISTAT: non usa una soglia
 // di distanza dal nodo piu' vicino e distingue le frazioni dello stesso comune.
-async function getPixelTerritorialContext(lat, lon, destLat, destLon) {
-    const [origine, destinazione] = await Promise.all([
+async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm) {
+    const [origineRichiesta, destinazione] = await Promise.all([
         resolveOrCreateTerritorialNode({ lat, lon }),
         resolveOrCreateTerritorialNode({ lat: destLat, lon: destLon })
     ]);
 
-    if (!origine?.id || !destinazione?.id) {
+    if (!origineRichiesta?.id || !destinazione?.id) {
         return {
-            origine_nodo_territoriale_id: origine?.id ? Number(origine.id) : null,
+            origine_nodo_territoriale_id: origineRichiesta?.id ? Number(origineRichiesta.id) : null,
             destinazione_nodo_territoriale_id: destinazione?.id ? Number(destinazione.id) : null,
             pixel_fermate_disponibili: false,
             pixel_stato: 'nodi_non_disponibili'
         };
     }
 
+    let raccolta;
+    try {
+        raccolta = await scegliRaccoltaPopbus({
+            pool,
+            origine: { lat, lon },
+            destinazione: { lat: destLat, lon: destLon },
+            origineNodoId: Number(origineRichiesta.id),
+            destinazioneNodoId: Number(destinazione.id),
+            distanzaKm
+        });
+    } catch (err) {
+        console.warn('[POPBUS SEARCH] Nodo di raccolta non disponibile:', err.message);
+    }
+
+    const origine = raccolta ? { id: raccolta.nodo_id } : origineRichiesta;
     const base = {
+        ...(raccolta && { raccolta_popbus: raccolta }),
         origine_nodo_territoriale_id: Number(origine.id),
         destinazione_nodo_territoriale_id: Number(destinazione.id),
         pixel_fermate_disponibili: false,
@@ -1011,15 +1029,21 @@ export async function cercaSlotUltra(richiesta) {
         };
         try {
             pixelContext = await getPixelTerritorialContext(
-                lat, lon, destLat, destLon
+                lat, lon, destLat, destLon, info.distanzaKm
             );
             console.log("[PIXEL SEARCH NODI]", JSON.stringify({origine:{lat,lon},destinazione:{lat:destLat,lon:destLon},...pixelContext}));
         } catch (err) {
             console.error('[PIXEL] Errore associazione nodi territoriali:', err);
         }
 
+        const raccolta = pixelContext.raccolta_popbus;
+        const kmPopbus = raccolta?.tratta_km ?? distanzaKm;
+        // La riquotazione rifiuta una fermata cambiata anche se il prezzo è identico.
+        const chiaveRaccolta = raccolta && createHash('sha256')
+            .update(JSON.stringify([raccolta.nodo_id, raccolta.fermata_id, raccolta.lat, raccolta.lon]))
+            .digest('hex').slice(0, 16);
         const virtualPopSlot = {
-            id: 'virtual_pop_pending',
+            id: chiaveRaccolta ? `virtual_pop_pending_${chiaveRaccolta}` : 'virtual_pop_pending',
             ...pixelContext,
             tipo: 'pop-bus',
             is_pool: true,
@@ -1028,9 +1052,9 @@ export async function cercaSlotUltra(richiesta) {
             stato: 'in_attesa',
             distanza: distanzaMetri,
             distanzaKm,
-            km_utente: distanzaKm,
+            km_utente: kmPopbus,
             km_totali_percorso:
-                distanzaKm +
+                kmPopbus +
                 kmAvvFallback +
                 kmRipFallback,
             km_avvicinamento:
@@ -1096,7 +1120,7 @@ export async function cercaSlotUltra(richiesta) {
         }
 
         try {
-            virtualPopSlot.fermate_formazione_popbus = await cercaFermateFormazionePopbus({
+            virtualPopSlot.fermate_formazione_popbus = raccolta ? null : await cercaFermateFormazionePopbus({
                 pool,
                 origine: { lat, lon },
                 destinazione: { lat: destLat, lon: destLon },

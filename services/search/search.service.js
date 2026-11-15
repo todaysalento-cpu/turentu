@@ -11,11 +11,11 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
-import { assegnaFermatePixel } from '../popbus/v2/popbus-stop-candidates.service.js';
+import { assegnaFermatePixel, DEFAULT_RADIUS_METERS } from '../popbus/v2/popbus-stop-candidates.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
-import { percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
+import { comuniRaccolta, percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
-import { censisciFermateCentroPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
+import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { identificaTerritorioPixel, resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
@@ -84,6 +84,22 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
         client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta,
         origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id)
     });
+    const estremiSenzaFermata = [
+        { tipo: 'salita', nodo: origine, punto: puntoOrigine },
+        { tipo: 'discesa', nodo: destinazione, punto: puntoDestinazione }
+    ].filter(({ tipo, nodo }) => !fermate[tipo] && /^\d{6}$/.test(nodo.codice_istat_comune));
+    await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
+        try {
+            const comuni = await comuniRaccolta();
+            const inserite = await censisciFermateEstremoPopbus(nodo, punto, {
+                popolazione: comuni.get(nodo.codice_istat_comune)?.popolazione,
+                raggioMetri: DEFAULT_RADIUS_METERS
+            });
+            if (inserite > 0) console.info('[POPBUS PIXEL] Fermate censite da verificare', { tipo, nodo: nodo.id, inserite });
+        } catch (error) {
+            console.warn('[POPBUS PIXEL] Censimento estremo non riuscito:', { tipo, nodo: nodo.id, errore: error.message });
+        }
+    }));
     const origineNodoId = fermate.salita?.nodo_territoriale_id ?? base.origine_nodo_territoriale_id;
     const destinazioneNodoId = fermate.discesa?.nodo_territoriale_id ?? base.destinazione_nodo_territoriale_id;
     const disponibili = Boolean(fermate.salita && fermate.discesa);

@@ -55,6 +55,7 @@ export function mergePixelHybridCandidates(osm = [], interne = [], radiusMeters 
 export async function discoverPixelHybridStops(nodoId, {
   database = pool, fetchImpl = globalThis.fetch, radiusMeters = RADIUS,
   overpassUrl = OVERPASS_URL, includeOsm = true, limitaAlComune = false, timeoutMs = 30000,
+  centroRicerca,
 } = {}) {
   const id = Number(nodoId);
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('nodoId non valido');
@@ -64,6 +65,8 @@ export async function discoverPixelHybridStops(nodoId, {
     FROM public.nodi_territoriali WHERE id=$1 AND attivo=TRUE`, [id]);
   if (!node.rowCount) throw new Error('Nodo inesistente o inattivo');
   const nodo = { ...node.rows[0], id: String(node.rows[0].id), lat: Number(node.rows[0].lat), lon: Number(node.rows[0].lon) };
+  const centro = centroRicerca ?? nodo;
+  if (!validCoords(centro.lat, centro.lon)) throw new Error('Centro di ricerca non valido');
   const saved = await database.query(`SELECT f.id, f.nome, f.indirizzo,
     ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lon
     FROM public.pixel_fermate f JOIN public.nodi_territoriali n ON n.id=f.nodo_territoriale_id
@@ -72,7 +75,7 @@ export async function discoverPixelHybridStops(nodoId, {
     indirizzo: f.indirizzo, lat: Number(f.lat), lon: Number(f.lon),
     tipo: 'turentu', priorita: 110, fonte: 'turentu', esistente_id: Number(f.id),
     registrabile_automaticamente: false,
-  })).filter(c => distance(nodo, c) <= radiusMeters);
+  })).filter(c => distance(centro, c) <= radiusMeters);
   const errori = [];
   let osm = [];
   if (includeOsm) {
@@ -84,7 +87,7 @@ export async function discoverPixelHybridStops(nodoId, {
       : '';
     const area = limitaAlComune ? '(area.comune)' : '';
     const filters = TYPES.map(([key, value]) =>
-      `nwr${area}(around:${Math.round(radiusMeters)},${nodo.lat},${nodo.lon})["${key}"="${value}"];`
+      `nwr${area}(around:${Math.round(radiusMeters)},${centro.lat},${centro.lon})["${key}"="${value}"];`
     ).join('\n');
     const query = `[out:json][timeout:${Math.max(1, Math.min(25, Math.floor(timeoutMs / 1000) - 1))}];${confine}(${filters});out center tags;`;
     try {
@@ -95,7 +98,7 @@ export async function discoverPixelHybridStops(nodoId, {
       const data = await response.json();
       if (data.remark) throw new Error('Risposta Overpass incompleta');
       osm = (data.elements ?? []).map(normalizeOsm).filter(Boolean)
-        .filter(c => distance(nodo, c) <= radiusMeters);
+        .filter(c => distance(centro, c) <= radiusMeters);
     } catch (error) { errori.push({ fonte: 'osm', errore: error.message }); }
   }
   const candidati = mergePixelHybridCandidates(osm, interne, radiusMeters);

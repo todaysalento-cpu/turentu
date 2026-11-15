@@ -121,33 +121,45 @@ const ultimiTentativi = new Map();
 const INTERVALLO_CENSIMENTO_MS = 60 * 60 * 1000;
 const INTERVALLO_ERRORE_MS = 5 * 60 * 1000;
 
-export async function censisciFermateCentroPopbus(centro, { polyline, raggioMetri, database = pool } = {}) {
-  const codice = centro.codice;
-  if ((ultimiTentativi.get(codice) ?? 0) > Date.now()) return;
-  if (censimentiInCorso.has(codice)) return censimentiInCorso.get(codice);
+export function censisciFermateCentroPopbus(centro, { polyline, raggioMetri, database = pool } = {}) {
+  return pianificaCensimento(centro.codice, centro, { polyline, raggioMetri, database });
+}
 
-  const censimento = eseguiCensimento(centro, polyline, raggioMetri, database);
-  censimentiInCorso.set(codice, censimento);
+export function censisciFermateEstremoPopbus(nodo, punto, { popolazione, raggioMetri, database = pool } = {}) {
+  // Il fornitore riceve una zona approssimata. Il raggio esatto usa PostGIS.
+  const centroRicerca = { lat: Number(punto.lat.toFixed(2)), lon: Number(punto.lon.toFixed(2)) };
+  const chiave = `estremo:${nodo.id}:${centroRicerca.lat}:${centroRicerca.lon}`;
+  return pianificaCensimento(chiave, { ...punto, codice: nodo.codice_istat_comune, popolazione },
+    { nodoId: nodo.id, centroRicerca, raggioMetri, database });
+}
+
+async function pianificaCensimento(chiave, centro, opzioni) {
+  if ((ultimiTentativi.get(chiave) ?? 0) > Date.now()) return;
+  if (censimentiInCorso.has(chiave)) return censimentiInCorso.get(chiave);
+
+  const censimento = eseguiCensimento(centro, opzioni);
+  censimentiInCorso.set(chiave, censimento);
   let intervallo = INTERVALLO_CENSIMENTO_MS;
   try {
-    await censimento;
+    return await censimento;
   } catch (error) {
     intervallo = INTERVALLO_ERRORE_MS;
     throw error;
   } finally {
-    censimentiInCorso.delete(codice);
+    censimentiInCorso.delete(chiave);
     if (ultimiTentativi.size >= 1000) ultimiTentativi.delete(ultimiTentativi.keys().next().value);
-    ultimiTentativi.set(codice, Date.now() + intervallo);
+    ultimiTentativi.set(chiave, Date.now() + intervallo);
   }
 }
 
-async function eseguiCensimento(centro, polyline, raggioMetri, database) {
+async function eseguiCensimento(centro, { polyline, raggioMetri, database, nodoId: nodoRichiesto, centroRicerca }) {
   const limiteAuto = Number.isSafeInteger(centro.popolazione) && centro.popolazione >= 0
     ? calcolaMaxFermate(centro.popolazione) : null;
   const { rows: [catalogo] } = await database.query(`
     SELECT (
       SELECT n.id FROM public.nodi_territoriali n
       WHERE n.attivo AND n.codice_istat_comune = c.codice
+        AND ($5::bigint IS NULL OR n.id = $5)
       ORDER BY n.posizione <-> ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, n.id
       LIMIT 1
     ) AS nodo_id,
@@ -158,17 +170,19 @@ async function eseguiCensimento(centro, polyline, raggioMetri, database) {
     ) AS residue
     FROM (SELECT $1::text AS codice) c
     LEFT JOIN public.pixel_budget_comunali b ON b.codice_istat_comune = c.codice
-  `, [centro.codice, centro.lon, centro.lat, limiteAuto]);
+  `, [centro.codice, centro.lon, centro.lat, limiteAuto, nodoRichiesto ?? null]);
   if (!(Number(catalogo?.residue) > 0)) return;
 
   let nodoId = catalogo.nodo_id;
   if (!nodoId) {
+    if (nodoRichiesto) return;
     const nodo = await resolveOrCreateTerritorialNode(centro, { database });
     if (nodo?.codice_istat_comune !== centro.codice) return;
     nodoId = nodo.id;
   }
   const fonte = await discoverPixelHybridStops(nodoId, {
-    database, radiusMeters: raggioMetri, limitaAlComune: true, timeoutMs: 4500,
+    database, radiusMeters: centroRicerca ? raggioMetri + 1000 : raggioMetri,
+    centroRicerca, limitaAlComune: true, timeoutMs: 4500,
     overpassUrl: process.env.PIXEL_OVERPASS_URL || undefined
   });
   if (fonte.stato !== 'ok') throw new Error('Fonte OSM non disponibile per il comune ' + centro.codice);
@@ -176,17 +190,22 @@ async function eseguiCensimento(centro, polyline, raggioMetri, database) {
     !/^\s*(?:\[TEST PIXEL\]|TEST PIXEL\b)/i.test(c.nome));
   if (!candidati.length) return;
 
-  const { rows: sulPercorso } = await database.query(`
+  const { rows: compatibili } = await database.query(`
+    WITH area AS (
+      SELECT CASE WHEN $2::text IS NOT NULL THEN ST_LineFromEncodedPolyline($2)::geography
+                  ELSE ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography END AS riferimento
+    )
     SELECT c.place_id
-    FROM jsonb_to_recordset($1::jsonb) AS c(place_id text, lat float8, lon float8)
+    FROM jsonb_to_recordset($1::jsonb) AS c(place_id text, lat float8, lon float8) CROSS JOIN area
     WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(c.lon, c.lat), 4326)::geography,
-      ST_LineFromEncodedPolyline($2)::geography, $3)
-  `, [JSON.stringify(candidati), polyline, raggioMetri]);
-  const compatibili = new Set(sulPercorso.map(c => c.place_id));
-  const selezionate = candidati.filter(c => compatibili.has(c.place_id));
+      area.riferimento, $3)
+  `, [JSON.stringify(candidati), polyline ?? null, raggioMetri, centro.lon, centro.lat]);
+  const idCompatibili = new Set(compatibili.map(c => c.place_id));
+  const selezionate = candidati.filter(c => idCompatibili.has(c.place_id));
   if (!selezionate.length) return;
 
   const client = await database.connect();
+  let inserite = 0;
   try {
     await client.query('BEGIN');
     if (limiteAuto !== null) {
@@ -209,9 +228,11 @@ async function eseguiCensimento(centro, polyline, raggioMetri, database) {
         origine: 'censimento_popbus', licenza: 'ODbL-1.0',
         attribuzione: 'OpenStreetMap contributors', url_attribuzione: 'https://www.openstreetmap.org/copyright'
       })]);
+      inserite++;
       if (!result.budget.residue) break;
     }
     await client.query('COMMIT');
+    return inserite;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
-import { censisciFermateCentroPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
+import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
 import { assegnaFermatePixel, cercaFermateCandidate } from '../services/popbus/v2/popbus-stop-candidates.service.js';
 
 const origine = { lat: 40, lon: 18.2 };
@@ -171,6 +171,39 @@ test('salva una fermata OSM nel catalogo con provenienza, senza renderla prenota
     assert.match(scritture[2][0], /'da_verificare'/);
     assert.equal(scritture[2][1][1], 'https://www.openstreetmap.org/node/101');
     assert.equal(JSON.parse(scritture[2][1][2]).licenza, 'ODbL-1.0');
+});
+
+test('cerca le fermate mancanti nell’area dell’estremo e applica il raggio PIXEL sul punto esatto', async t => {
+    const punto = { lat: 39.9021, lon: 18.2649 };
+    const nodo = { id: 46, codice_istat_comune: '075003' };
+    const risultato = rows => ({ rows, rowCount: rows.length });
+    t.mock.method(globalThis, 'fetch', async (_url, { body }) => {
+        assert.match(body.get('data'), /around:2500,39\.9,18\.26/);
+        return { ok: true, async json() {
+            return { elements: [{ type: 'node', id: 102, ...punto, tags: { highway: 'bus_stop', name: 'Fermata' } }] };
+        } };
+    });
+    let filtrate = false;
+    const database = {
+        async query(sql, params) {
+            if (sql.includes('AS residue')) {
+                assert.equal(params[4], nodo.id);
+                return risultato([{ nodo_id: nodo.id, residue: 3 }]);
+            }
+            if (sql.includes('jsonb_to_recordset')) {
+                assert.deepEqual(params.slice(1), [null, 1500, punto.lon, punto.lat]);
+                filtrate = true;
+                return risultato([]);
+            }
+            if (sql.includes('FROM public.nodi_territoriali')) {
+                return risultato([{ ...nodo, lat: 40, lon: 18 }]);
+            }
+            return risultato([]);
+        },
+        async connect() { assert.fail('Una candidata fuori raggio non va censita'); }
+    };
+    await censisciFermateEstremoPopbus(nodo, punto, { database, raggioMetri: 1500, popolazione: 5000 });
+    assert.equal(filtrate, true);
 });
 
 test('la conferma usa il nodo e la fermata della quotazione', async () => {

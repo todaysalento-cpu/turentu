@@ -88,18 +88,10 @@ export async function assegnaFermatePixel({
   client, origine, destinazione, origineNodoId, destinazioneNodoId, raccolta, scadenzaMinima = null,
   vincolaNodoSalita = false
 }) {
-  const rows = await leggiFermateCandidate(client, `
-    WITH punti AS (
-      SELECT 1 AS richiesta_id, tipo,
-             ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione,
-             NULL::bigint AS fermata_fissata, $4::timestamptz AS scadenza_minima,
-             TRUE AS ricerca_prima_del_preventivo, FALSE AS raccolta_google,
-             CASE WHEN tipo = 'salita' THEN $5::bigint END AS nodo_richiesto
-      FROM jsonb_to_recordset($1::jsonb) AS p(tipo text, lat float8, lon float8)
-    )`, [JSON.stringify([
-      ...(!raccolta ? [{ ...origine, tipo: 'salita' }] : []),
+  const rows = await cercaPerCoordinate(client, [
+      ...(!raccolta ? [{ ...origine, tipo: 'salita', nodo_id: vincolaNodoSalita ? origineNodoId : null }] : []),
       { ...destinazione, tipo: 'discesa' }
-    ]), DEFAULT_RADIUS_METERS, DEFAULT_LIMIT, scadenzaMinima, vincolaNodoSalita ? origineNodoId : null]);
+  ], { raggioMetri: DEFAULT_RADIUS_METERS, limite: DEFAULT_LIMIT, scadenzaMinima });
 
   const salite = raccolta ? [{ ...raccolta, nodo_territoriale_id: raccolta.nodo_id }] :
     rows.filter(r => r.tipo === 'salita').map(normalizzaFermata);
@@ -114,6 +106,24 @@ export async function assegnaFermatePixel({
     salita: null,
     discesa: discese.find(d => d.nodo_territoriale_id !== origineNodoId) ?? null
   };
+}
+
+export async function cercaFermataLocalePixel({ client, nodoId, punto, raggioMetri = DEFAULT_RADIUS_METERS, scadenzaMinima }) {
+  const [row] = await cercaPerCoordinate(client, [{ ...punto, tipo: 'salita', nodo_id: nodoId }], {
+    raggioMetri, limite: 1, scadenzaMinima
+  });
+  return row ? normalizzaFermata(row) : null;
+}
+
+function cercaPerCoordinate(client, punti, { raggioMetri, limite, scadenzaMinima }) {
+  return leggiFermateCandidate(client, `
+    WITH punti AS (
+      SELECT 1 AS richiesta_id, tipo,
+             ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography AS posizione,
+             NULL::bigint AS fermata_fissata, $4::timestamptz AS scadenza_minima,
+             TRUE AS ricerca_prima_del_preventivo, FALSE AS raccolta_google, nodo_id AS nodo_richiesto
+      FROM jsonb_to_recordset($1::jsonb) AS p(tipo text, lat float8, lon float8, nodo_id bigint)
+    )`, [JSON.stringify(punti), raggioMetri, limite, scadenzaMinima]);
 }
 
 async function leggiFermateCandidate(client, ctePunti, parametri) {

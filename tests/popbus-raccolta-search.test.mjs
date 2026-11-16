@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cercaSalitaLocalePrimaDellAlternativa, comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
+import { comuniRaccolta, scegliRaccoltaPopbus, usaSalitaLocalePrimaDellAlternativa } from '../services/search/popbus-raccolta.service.js';
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 import { registerPixelStopCandidate } from '../services/pixel/pixel-stop-registration.service.js';
 import { preparaFermataGoogleProvvisoria, scadenzaUtileGoogle } from '../services/pixel/pixel-google-provisional.service.js';
-import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
+import { assicuraFermataLocalePopbus, censisciFermateCentroPopbus, censisciFermateEstremoPopbus } from '../services/pixel/pixel-stop-acquisition.service.js';
 import { assegnaFermatePixel, cercaFermateCandidate } from '../services/popbus/v2/popbus-stop-candidates.service.js';
 
 const origine = { lat: 40, lon: 18.2 };
@@ -95,39 +95,38 @@ test('le fermate provvisorie partecipano alla scelta del comune, e il capoluogo 
     assert.equal(inaccessibile.fermata_id, vicina.fermata_id);
 });
 
-test('prima di usare una raccolta alternativa cerca e acquisisce la salita nel nodo di partenza', async () => {
-    const origine = { id: 36, codice_istat_comune: '075098' };
-    const fermate = { salita: { fermata_id: 100, nodo_territoriale_id: 36 }, discesa: null };
-    let creata = false;
-    let tentativi = 0;
+test('censisce ogni estremo mancante e riusa subito la fermata trovata', async () => {
+    const origine = { id: 29, codice_istat_comune: '075061' };
+    const destinazione = { id: 3, codice_istat_comune: '074001' };
+    const salite = { fermata_id: 100, nodo_territoriale_id: 29 };
+    const discese = { fermata_id: 21, nodo_territoriale_id: 3 };
+    const locali = new Map([[3, discese]]);
+    const chiamate = [];
     const opzioni = {
-        raccolta: { nodo_id: 49, fuori_copertura: true },
-        destinazioneNodoId: 3,
-        async risolviOrigine() { return origine; },
-        async assegnaLocale(nodo) {
-            assert.equal(nodo, origine);
-            return creata ? fermate : { salita: null, discesa: null };
+        async cerca({ nodoId }) { return locali.get(nodoId) ?? null; },
+        async censisci(nodo) {
+            chiamate.push('censimento ' + nodo.id);
+            return 1;
         },
-        async acquisisci() {
-            tentativi++;
-            creata = true;
-            return { aggiornata: true };
+        async prepara(nodo) {
+            chiamate.push('preparazione ' + nodo.id);
+            if (!chiamate.includes('censimento ' + nodo.id)) return false;
+            locali.set(nodo.id, salite);
+            return true;
         }
     };
-    assert.deepEqual(await cercaSalitaLocalePrimaDellAlternativa(opzioni), { origine, fermate });
-    assert.equal(tentativi, 1);
-
-    creata = false;
-    assert.equal(await cercaSalitaLocalePrimaDellAlternativa({
-        ...opzioni, acquisisci: async () => ({ aggiornata: false })
-    }), null);
-    for (const raccolta of [
-        { nodo_id: 49, fuori_copertura: false },
-        { nodo_id: 38, fuori_copertura: true, capoluogo_frazione: true }
-    ]) {
-        assert.equal(await cercaSalitaLocalePrimaDellAlternativa({ ...opzioni, raccolta }), null);
-    }
-    assert.equal(tentativi, 1);
+    assert.deepEqual(await assicuraFermataLocalePopbus(origine, {}, opzioni), { fermata: salite, candidati: 1 });
+    assert.deepEqual(await assicuraFermataLocalePopbus(destinazione, {}, opzioni), { fermata: discese, candidati: 0 });
+    assert.deepEqual(chiamate, ['preparazione 29', 'censimento 29', 'preparazione 29']);
+    assert.equal(usaSalitaLocalePrimaDellAlternativa({
+        raccolta: { nodo_id: 34, fuori_copertura: true }, fermataLocale: salite, destinazioneNodoId: 3
+    }), true);
+    assert.equal(usaSalitaLocalePrimaDellAlternativa({
+        raccolta: { nodo_id: 34, fuori_copertura: false }, fermataLocale: salite, destinazioneNodoId: 3
+    }), false);
+    assert.equal(usaSalitaLocalePrimaDellAlternativa({
+        raccolta: { nodo_id: 34, fuori_copertura: true, capoluogo_frazione: true }, fermataLocale: salite, destinazioneNodoId: 3
+    }), false);
 });
 
 test('una fermata ordinaria ha priorita su una raccolta fuori copertura', async () => {

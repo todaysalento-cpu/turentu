@@ -7,6 +7,8 @@ import { discoverPixelComuneCandidates } from './pixel-stop-selection-comune.ser
 import { resolveOrCreateTerritorialNode } from './pixel-territorial-node-resolver.service.js';
 import { calcolaMaxFermate } from './pixel-demography.service.js';
 import { cercaIdFermateGoogle } from './pixel-stop-discovery.service.js';
+import { cercaFermataLocalePixel, DEFAULT_RADIUS_METERS } from '../popbus/v2/popbus-stop-candidates.service.js';
+import { preparaFermataGoogleProvvisoria } from './pixel-google-provisional.service.js';
 
 function normalizeNodeId(value) {
   const raw = String(value ?? '').trim();
@@ -130,6 +132,22 @@ export function censisciFermateEstremoPopbus(nodo, punto, { popolazione, raggioM
   const chiave = `estremo:${nodo.id}:${centroRicerca.lat}:${centroRicerca.lon}`;
   return pianificaCensimento(chiave, { ...punto, codice: nodo.codice_istat_comune, popolazione },
     { nodoId: nodo.id, centroRicerca, raggioMetri, database });
+}
+
+export async function assicuraFermataLocalePopbus(nodo, punto, {
+  popolazione, scadenzaMinima, database = pool,
+  cerca = cercaFermataLocalePixel, prepara = preparaFermataGoogleProvvisoria, censisci = censisciFermateEstremoPopbus
+} = {}) {
+  const raggioMetri = DEFAULT_RADIUS_METERS;
+  const leggi = () => cerca({ client: database, nodoId: nodo.id, punto, raggioMetri, scadenzaMinima });
+  const presente = await leggi();
+  if (presente || !/^\d{6}$/.test(nodo.codice_istat_comune)) return { fermata: presente, candidati: 0 };
+
+  const opzioni = { database, raggioMetri, scadenzaMinima };
+  if (await prepara(nodo, punto, opzioni)) return { fermata: await leggi(), candidati: 0 };
+  const candidati = await censisci(nodo, punto, { database, popolazione, raggioMetri });
+  if (candidati > 0) await prepara(nodo, punto, opzioni);
+  return { fermata: await leggi(), candidati };
 }
 
 async function pianificaCensimento(chiave, centro, opzioni) {

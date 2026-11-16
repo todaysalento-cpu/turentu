@@ -45,20 +45,10 @@ export function comuniRaccolta() {
 
 export const percorrenzaConRaccolta = km => ['MEDIA', 'LUNGA'].includes(classePercorrenza({}, km));
 
-export async function cercaSalitaLocalePrimaDellAlternativa({
-    raccolta, destinazioneNodoId, risolviOrigine, assegnaLocale, acquisisci
-}) {
-    if (!raccolta?.fuori_copertura || raccolta.capoluogo_frazione) return null;
-    const origine = await risolviOrigine();
-    if (!origine?.id || Number(origine.id) === Number(destinazioneNodoId) ||
-        Number(origine.id) === Number(raccolta.nodo_id)) return null;
-
-    let fermate = await assegnaLocale(origine);
-    if (!fermate.salita) {
-        const esito = await acquisisci(origine);
-        if (esito.aggiornata) fermate = await assegnaLocale(origine);
-    }
-    return fermate.salita ? { origine, fermate } : null;
+export function usaSalitaLocalePrimaDellAlternativa({ raccolta, fermataLocale, destinazioneNodoId }) {
+    const nodoLocale = fermataLocale?.nodo_territoriale_id;
+    return Boolean(raccolta?.fuori_copertura && !raccolta.capoluogo_frazione && nodoLocale &&
+        Number(nodoLocale) !== Number(destinazioneNodoId) && Number(nodoLocale) !== Number(raccolta.nodo_id));
 }
 
 async function cercaFermate(pool, polyline, origine, codiceDestinazione, {

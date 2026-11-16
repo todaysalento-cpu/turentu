@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
+import { cercaSalitaLocalePrimaDellAlternativa, comuniRaccolta, scegliRaccoltaPopbus } from '../services/search/popbus-raccolta.service.js';
 import { getRouteGeometry } from '../utils/maps.util.js';
 import { validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 import { registerPixelStopCandidate } from '../services/pixel/pixel-stop-registration.service.js';
@@ -87,11 +87,47 @@ test('le fermate provvisorie partecipano alla scelta del comune, e il capoluogo 
     const scelta = await scegliRaccoltaPopbus(frazione);
     assert.equal(scelta.fermata_id, capoluogo.fermata_id);
     assert.equal(scelta.fuori_copertura, true);
+    assert.equal(scelta.capoluogo_frazione, true);
     const inaccessibile = await scegliRaccoltaPopbus({
         ...frazione,
         route: async (da, a) => a === capoluogo ? percorso(23, 31) : frazione.route(da, a)
     });
     assert.equal(inaccessibile.fermata_id, vicina.fermata_id);
+});
+
+test('prima di usare una raccolta alternativa cerca e acquisisce la salita nel nodo di partenza', async () => {
+    const origine = { id: 36, codice_istat_comune: '075098' };
+    const fermate = { salita: { fermata_id: 100, nodo_territoriale_id: 36 }, discesa: null };
+    let creata = false;
+    let tentativi = 0;
+    const opzioni = {
+        raccolta: { nodo_id: 49, fuori_copertura: true },
+        destinazioneNodoId: 3,
+        async risolviOrigine() { return origine; },
+        async assegnaLocale(nodo) {
+            assert.equal(nodo, origine);
+            return creata ? fermate : { salita: null, discesa: null };
+        },
+        async acquisisci() {
+            tentativi++;
+            creata = true;
+            return { aggiornata: true };
+        }
+    };
+    assert.deepEqual(await cercaSalitaLocalePrimaDellAlternativa(opzioni), { origine, fermate });
+    assert.equal(tentativi, 1);
+
+    creata = false;
+    assert.equal(await cercaSalitaLocalePrimaDellAlternativa({
+        ...opzioni, acquisisci: async () => ({ aggiornata: false })
+    }), null);
+    for (const raccolta of [
+        { nodo_id: 49, fuori_copertura: false },
+        { nodo_id: 38, fuori_copertura: true, capoluogo_frazione: true }
+    ]) {
+        assert.equal(await cercaSalitaLocalePrimaDellAlternativa({ ...opzioni, raccolta }), null);
+    }
+    assert.equal(tentativi, 1);
 });
 
 test('una fermata ordinaria ha priorita su una raccolta fuori copertura', async () => {

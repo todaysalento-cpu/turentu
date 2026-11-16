@@ -45,6 +45,22 @@ export function comuniRaccolta() {
 
 export const percorrenzaConRaccolta = km => ['MEDIA', 'LUNGA'].includes(classePercorrenza({}, km));
 
+export async function cercaSalitaLocalePrimaDellAlternativa({
+    raccolta, destinazioneNodoId, risolviOrigine, assegnaLocale, acquisisci
+}) {
+    if (!raccolta?.fuori_copertura || raccolta.capoluogo_frazione) return null;
+    const origine = await risolviOrigine();
+    if (!origine?.id || Number(origine.id) === Number(destinazioneNodoId) ||
+        Number(origine.id) === Number(raccolta.nodo_id)) return null;
+
+    let fermate = await assegnaLocale(origine);
+    if (!fermate.salita) {
+        const esito = await acquisisci(origine);
+        if (esito.aggiornata) fermate = await assegnaLocale(origine);
+    }
+    return fermate.salita ? { origine, fermate } : null;
+}
+
 async function cercaFermate(pool, polyline, origine, codiceDestinazione, {
     alternative = false, scadenzaMinima = null, capoluogo = null
 } = {}) {
@@ -222,7 +238,7 @@ export async function scegliRaccoltaPopbus({
             if (accesso.info.durataMs > MAX_ACCESSO_ALTERNATIVO_MS) continue;
             const opzione = await valuta(accesso);
             if (opzione && accesso.info.distanzaKm + opzione.tratta_km <= maxKm) {
-                return { ...opzione, fuori_copertura: true };
+                return { ...opzione, fuori_copertura: true, capoluogo_frazione: true };
             }
         }
     }

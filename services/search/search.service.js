@@ -13,7 +13,7 @@ import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
 import { assegnaFermatePixel, DEFAULT_RADIUS_METERS } from '../popbus/v2/popbus-stop-candidates.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
-import { comuniRaccolta, percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
+import { cercaSalitaLocalePrimaDellAlternativa, comuniRaccolta, percorrenzaConRaccolta, scegliRaccoltaPopbus } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { censisciFermateCentroPopbus, censisciFermateEstremoPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { identificaTerritorioPixel, resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
@@ -54,8 +54,9 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             : null,
         resolveOrCreateTerritorialNode(puntoDestinazione)
     ]);
-    const raccolta = da && destinazione ? await trovaRaccolta(da, destinazione) : null;
-    const origine = raccolta ? { id: raccolta.nodo_id } : await resolveOrCreateTerritorialNode(puntoOrigine);
+    let raccolta = da && destinazione ? await trovaRaccolta(da, destinazione) : null;
+    const risolviOrigine = () => resolveOrCreateTerritorialNode(puntoOrigine);
+    let origine = raccolta ? { id: raccolta.nodo_id } : await risolviOrigine();
     if (!origine?.id || !destinazione?.id) {
         return {
             origine_nodo_territoriale_id: origine?.id ? Number(origine.id) : null,
@@ -64,6 +65,44 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             pixel_stato: 'nodi_non_disponibili'
         };
     }
+    async function acquisisciEstremo({ tipo, nodo, punto }) {
+        if (!/^\d{6}$/.test(nodo.codice_istat_comune)) return { aggiornata: false, candidati: 0 };
+        const prepara = () => preparaFermataGoogleProvvisoria(nodo, punto, {
+            raggioMetri: DEFAULT_RADIUS_METERS, scadenzaMinima
+        });
+        try {
+            if (await prepara()) return { aggiornata: true, candidati: 0 };
+            const comuni = await comuniRaccolta();
+            const candidati = await censisciFermateEstremoPopbus(nodo, punto, {
+                popolazione: comuni.get(nodo.codice_istat_comune)?.popolazione,
+                raggioMetri: DEFAULT_RADIUS_METERS
+            });
+            return { aggiornata: candidati > 0 && await prepara(), candidati };
+        } catch (error) {
+            console.warn('[POPBUS PIXEL] Fermata provvisoria non disponibile:', { tipo, nodo: nodo.id, errore: error.code ?? error.name });
+            return { aggiornata: false, candidati: 0 };
+        }
+    }
+
+    const assegna = (nodo, puntoRaccolta, vincolaNodoSalita = false) => assegnaFermatePixel({
+        client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta: puntoRaccolta,
+        origineNodoId: Number(nodo.id), destinazioneNodoId: Number(destinazione.id), scadenzaMinima, vincolaNodoSalita
+    });
+    let locale = null;
+    try {
+        locale = await cercaSalitaLocalePrimaDellAlternativa({
+            raccolta, destinazioneNodoId: destinazione.id, risolviOrigine,
+            assegnaLocale: nodo => assegna(nodo, null, true),
+            acquisisci: nodo => acquisisciEstremo({ tipo: 'salita', nodo, punto: puntoOrigine })
+        });
+    } catch (error) {
+        console.warn('[POPBUS PIXEL] Ricerca salita locale non disponibile:', error.code ?? error.name);
+    }
+    if (locale) {
+        origine = locale.origine;
+        raccolta = null;
+    }
+
     const base = {
         ...(raccolta && { raccolta_popbus: raccolta }),
         origine_nodo_territoriale_id: Number(origine.id),
@@ -85,33 +124,13 @@ async function getPixelTerritorialContext(lat, lon, destLat, destLon, distanzaKm
             }
         }
     }
-    const assegna = () => assegnaFermatePixel({
-        client: pool, origine: puntoOrigine, destinazione: puntoDestinazione, raccolta,
-        origineNodoId: Number(origine.id), destinazioneNodoId: Number(destinazione.id), scadenzaMinima
-    });
-    let fermate = await assegna();
+    let fermate = locale?.fermate ?? await assegna(origine, raccolta);
     const estremiSenzaFermata = [
         { tipo: 'salita', nodo: origine, punto: puntoOrigine },
         { tipo: 'discesa', nodo: destinazione, punto: puntoDestinazione }
     ].filter(({ tipo, nodo }) => !fermate[tipo] && /^\d{6}$/.test(nodo.codice_istat_comune));
-    const esiti = await Promise.all(estremiSenzaFermata.map(async ({ tipo, nodo, punto }) => {
-        const prepara = () => preparaFermataGoogleProvvisoria(nodo, punto, {
-            raggioMetri: DEFAULT_RADIUS_METERS, scadenzaMinima
-        });
-        try {
-            if (await prepara()) return { aggiornata: true, candidati: 0 };
-            const comuni = await comuniRaccolta();
-            const candidati = await censisciFermateEstremoPopbus(nodo, punto, {
-                popolazione: comuni.get(nodo.codice_istat_comune)?.popolazione,
-                raggioMetri: DEFAULT_RADIUS_METERS
-            });
-            return { aggiornata: candidati > 0 && await prepara(), candidati };
-        } catch (error) {
-            console.warn('[POPBUS PIXEL] Fermata provvisoria non disponibile:', { tipo, nodo: nodo.id, errore: error.code ?? error.name });
-            return { aggiornata: false, candidati: 0 };
-        }
-    }));
-    if (esiti.some(esito => esito.aggiornata)) fermate = await assegna();
+    const esiti = await Promise.all(estremiSenzaFermata.map(acquisisciEstremo));
+    if (esiti.some(esito => esito.aggiornata)) fermate = await assegna(origine, raccolta, Boolean(locale));
     const origineNodoId = fermate.salita?.nodo_territoriale_id ?? base.origine_nodo_territoriale_id;
     const destinazioneNodoId = fermate.discesa?.nodo_territoriale_id ?? base.destinazione_nodo_territoriale_id;
     const disponibili = Boolean(fermate.salita && fermate.discesa);

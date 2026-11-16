@@ -5,6 +5,71 @@ import { cercaSlotUltra } from "../services/search/search.service.js";
 
 const router = express.Router();
 
+async function richiestaGooglePlaces(path, fieldMask, body) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) throw new Error("Google Places non configurato");
+  const risposta = await fetch(`https://places.googleapis.com/v1/${path}`, {
+    headers: {
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": fieldMask,
+      ...(body && { "Content-Type": "application/json" })
+    },
+    ...(body && { method: "POST", body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(6000)
+  });
+  if (!risposta.ok) {
+    const errore = new Error(`Google Places HTTP ${risposta.status}`);
+    errore.http = risposta.status;
+    throw errore;
+  }
+  return risposta.json();
+}
+
+router.get("/suggerimenti", async (req, res) => {
+  const testo = typeof req.query.testo === "string" ? req.query.testo.trim() : "";
+  if (testo.length < 2 || testo.length > 180) {
+    return res.status(400).json({ error: "Inserisci un nome o un indirizzo valido." });
+  }
+  try {
+    const { suggestions = [] } = await richiestaGooglePlaces(
+      "places:autocomplete",
+      "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
+      { input: testo, languageCode: "it", regionCode: "it",
+        locationBias: { circle: { center: { latitude: 40.35, longitude: 18.17 }, radius: 50000 } } }
+    );
+    const luoghi = suggestions.flatMap(({ placePrediction }) => {
+      const place_id = placePrediction?.placeId;
+      const description = placePrediction?.text?.text;
+      return place_id && description ? [{ place_id, description }] : [];
+    });
+    return res.set("Cache-Control", "no-store").json(luoghi);
+  } catch (errore) {
+    console.warn("[SEARCH] Suggerimenti Google non disponibili:", errore.http ?? errore.name);
+    return res.status(502).json({ error: "Suggerimenti non disponibili. Riprova." });
+  }
+});
+
+router.get("/luoghi/:placeId", async (req, res) => {
+  const { placeId } = req.params;
+  if (!/^[A-Za-z0-9._~-]{1,512}$/.test(placeId)) {
+    return res.status(400).json({ error: "Località non valida." });
+  }
+  try {
+    const { location } = await richiestaGooglePlaces(`places/${encodeURIComponent(placeId)}`, "location");
+    const lat = location?.latitude;
+    const lng = location?.longitude;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 ||
+        (lat === 0 && lng === 0)) {
+      return res.status(404).json({ error: "Coordinate non trovate. Scegli un altro suggerimento." });
+    }
+    return res.set("Cache-Control", "no-store").json({ lat, lng });
+  } catch (errore) {
+    if (errore.http === 404) return res.status(404).json({ error: "Località non più disponibile." });
+    console.warn("[SEARCH] Dettagli Google non disponibili:", errore.http ?? errore.name);
+    return res.status(502).json({ error: "Impossibile aprire la località. Riprova." });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const form = req.body;

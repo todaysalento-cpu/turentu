@@ -4,7 +4,7 @@ import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { prenotaCorsa } from '../services/prenotazione/prenotazione.service.js';
-import { createCorsaFromPending } from '../services/corsa/corsa.service.js';
+import { createCorsaFromPending, preparaCicloNccCondiviso } from '../services/corsa/corsa.service.js';
 import { assegnaConducente } from '../services/conducenti/assegnazioni.service.js';
 import { upsertCorsa, upsertTratta } from '../services/search/search.cache.js';
 import { CacheManager } from '../utils/cacheManager.js';
@@ -299,6 +299,12 @@ router.post('/:id/accetta', async (req, res) => {
              error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
              throw error;
            }
+            const fineCiclo = new Date(corsa.fine_ciclo_operativo).getTime();
+            if (!Number.isFinite(fineCiclo) || partenza + durataMs > fineCiclo) {
+              const error = new Error('NCC ritorno oltre il ciclo operativo riservato');
+              error.code = 'NCC_SHARED_COURSE_UNAVAILABLE';
+              throw error;
+            }
            ritornoFlessibile = {
              trattaId: Number(t.id),
              partenza: new Date(partenza),
@@ -366,15 +372,32 @@ router.post('/:id/accetta', async (req, res) => {
             throw error;
           }
 
+          console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
+          // Base operativa dichiarata del veicolo (PostGIS geography, WGS84).
+          const vRes = await client.query(`
+            SELECT id, posti_totali,
+                   ST_Y(coord::geometry) AS lat_base,
+                   ST_X(coord::geometry) AS lon_base
+            FROM veicolo
+            WHERE id = $1
+          `, [pRow.veicolo_id]);
+          if (!vRes.rows.length) throw new Error(`Veicolo ${pRow.veicolo_id} non trovato`);
+          const v = vRes.rows[0];
+          const veicoloNcc = {id:v.id,posti:v.posti_totali,posti_totali:v.posti_totali,
+            lat_base:v.lat_base,lon_base:v.lon_base};
+          const cicloNccPreparato = isNccCondivisa
+            ? await preparaCicloNccCondiviso(pRow,veicoloNcc) : null;
+          const missioneVerifica = cicloNccPreparato ? {
+            inizio:cicloNccPreparato.inizio,fine:cicloNccPreparato.fine,
+            origine:cicloNccPreparato.origine,destinazione:cicloNccPreparato.destinazione
+          } : {
+            inizio:inizioMissione,fine:fineMissione,
+            origine:{lat:origineLat,lon:origineLon},destinazione:{lat:destinazioneLat,lon:destinazioneLon}
+          };
           const verifica = await verificaTrasferimentiVeicolo(
             client,
             pRow.veicolo_id,
-            {
-              inizio: inizioMissione,
-              fine: fineMissione,
-              origine: { lat: origineLat, lon: origineLon },
-              destinazione: { lat: destinazioneLat, lon: destinazioneLon }
-            }
+            missioneVerifica
           );
           if (!verifica.compatibile) {
             console.warn('[VEHICLE COMMITMENTS] Assegnazione NCC non compatibile', {
@@ -399,17 +422,7 @@ router.post('/:id/accetta', async (req, res) => {
             throw error;
           }
 
-          console.log(`🚙 [ACCETTA] Creazione nuova corsa dedicata...`);
-          // Base operativa dichiarata del veicolo (PostGIS geography, WGS84).
-          const vRes = await client.query(`
-            SELECT id, posti_totali,
-                   ST_Y(coord::geometry) AS lat_base,
-                   ST_X(coord::geometry) AS lon_base
-            FROM veicolo
-            WHERE id = $1
-          `, [pRow.veicolo_id]);
-          if (!vRes.rows.length) throw new Error(`Veicolo ${pRow.veicolo_id} non trovato`);
-          const v = vRes.rows[0];
+          if (cicloNccPreparato) pRow.cicloNccPreparato = cicloNccPreparato;
           const resCorsa = await createCorsaFromPending(pRow, {
             id: v.id,
             posti: v.posti_totali,

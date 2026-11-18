@@ -100,7 +100,7 @@ export async function createCorsaFromDirettrice(direttriceId, autistaId, client)
     let pathGeohashes = [];
     try {
         if (coordOrig.lat && coordOrig.lon && coordDest.lat && coordDest.lon) {
-            const routeData = await getRouteGeometry(coordOrig, coordDest);
+            const routeData = isNccCondivisa ? cicloNccPreparato.routePrincipale : await getRouteGeometry(coordOrig, coordDest);
             polylineString = routeData?.polyline || '';
             if (routeData?.distanzaKm && distanzaKm === 0) {
                 distanzaKm = routeData.distanzaKm;
@@ -224,6 +224,48 @@ async function distanzaTrattaNcc(da, a, nome, { conDurata = false } = {}) {
     throw erroreGeoNcc(`Distanza stradale ${nome} non valida`);
 }
 
+/** Calcolo unico, fail-closed, del ciclo NCC condiviso. Da usare nel preflight e nell'INSERT. */
+export async function preparaCicloNccCondiviso(pending, veicolo) {
+  const startDatetime = new Date(pending.start_datetime || pending.startDatetime);
+  const durataMin = Number(pending.durataMinuti ?? pending.durata_minuti);
+  const coordOrig = { lat: Number(pending.origine_lat), lon: Number(pending.origine_lon) };
+  const coordDest = { lat: Number(pending.destinazione_lat), lon: Number(pending.destinazione_lon) };
+  if (!Number.isFinite(startDatetime.getTime()) || !Number.isFinite(durataMin) || durataMin <= 0 ||
+      !coordinateBaseValide(coordOrig.lat, coordOrig.lon) || !coordinateBaseValide(coordDest.lat, coordDest.lon))
+    throw erroreGeoNcc('Orari o coordinate passeggeri NCC non validi');
+  const latBase = veicolo?.lat_base == null ? NaN : Number(veicolo.lat_base);
+  const lonBase = veicolo?.lon_base == null ? NaN : Number(veicolo.lon_base);
+  if (!coordinateBaseValide(latBase, lonBase)) throw erroreGeoNcc('Base operativa NCC mancante');
+  const base = {lat:latBase,lon:lonBase};
+  const avvicinamento = await distanzaTrattaNcc(base,coordOrig,'avvicinamento',{conDurata:true});
+  if (stessoPunto(coordDest,base)) throw erroreGeoNcc('Ritorno commerciale assente: destinazione coincidente con la base');
+  let percorsoRitornoNcc;
+  try { percorsoRitornoNcc = await getRouteGeometry(coordDest,base); }
+  catch(e) { throw erroreGeoNcc(`Routing ritorno alla base non disponibile: ${e.message}`); }
+  const kmRitorno = Number(percorsoRitornoNcc?.distanzaKm);
+  const durataRitorno = Number(percorsoRitornoNcc?.durata);
+  if (!percorsoRitornoNcc?.polyline || !Number.isFinite(kmRitorno) || kmRitorno <= 0 ||
+      !Number.isFinite(durataRitorno) || durataRitorno <= 0)
+    throw erroreGeoNcc('Geometria, distanza o durata del ritorno non valide');
+  let routePrincipale;
+  try { routePrincipale = await getRouteGeometry(coordOrig,coordDest); }
+  catch(e) { throw erroreGeoNcc(`Routing principale non disponibile: ${e.message}`); }
+  const distanzaKm = Number(routePrincipale?.distanzaKm);
+  if (!Number.isFinite(distanzaKm) || distanzaKm <= 0 || !routePrincipale?.polyline)
+    throw erroreGeoNcc('Percorso principale incompleto');
+  const bufferRitornoMinuti = distanzaKm <= 15 ? 20 : distanzaKm <= 30 ? 30 :
+    distanzaKm <= 60 ? 45 : distanzaKm <= 100 ? 60 : distanzaKm <= 150 ? 90 : 120;
+  const arrivoDatetime = new Date(startDatetime.getTime() + durataMin * 60000);
+  const inizio = new Date(startDatetime.getTime() - avvicinamento.durataSecondi * 1000);
+  const fine = new Date(arrivoDatetime.getTime() + bufferRitornoMinuti * 60000 + durataRitorno * 1000);
+  if (![inizio,fine].every(x=>Number.isFinite(x.getTime())) || fine <= inizio)
+    throw erroreGeoNcc('Intervallo ciclo NCC non valido');
+  return {inizio:inizio.toISOString(),fine:fine.toISOString(),origine:base,destinazione:base,
+    durataAvvicinamentoSecondi:avvicinamento.durataSecondi,durataRientroSecondi:durataRitorno,
+    kmAvvicinamento:avvicinamento.km,kmRiposizionamento:kmRitorno,
+    bufferRitornoMinuti,percorsoRitornoNcc,routePrincipale,distanzaKm};
+}
+
 // --- FUNZIONE PRINCIPALE ---
 export async function createCorsaFromPending(pending, veicolo, client, isPopBus = false, autistaId = null) {
   let localClient = false;
@@ -278,34 +320,19 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         // Le missioni NCC condivise richiedono una base reale e due tratte
         // stradali affidabili. Non usare l'origine del cliente come base fittizia.
-        if (isNccCondivisa) {
-            const latBase = veicolo?.lat_base == null ? NaN : Number(veicolo.lat_base);
-            const lonBase = veicolo?.lon_base == null ? NaN : Number(veicolo.lon_base);
-            if (!coordinateBaseValide(latBase, lonBase)) {
-                throw erroreGeoNcc(`Base operativa mancante o non valida per veicolo ${veicolo?.id ?? pending.veicolo_id}`);
-            }
-            const base = { lat: latBase, lon: lonBase };
-            const avvicinamento = await distanzaTrattaNcc(base, coordOrig, 'avvicinamento', { conDurata: true });
-            kmAvvicinamento = avvicinamento.km;
-            durataAvvicinamentoSecondi = avvicinamento.durataSecondi;
-            // La tratta di ritorno e' una direzione commerciale autonoma della stessa missione.
-            // Conserviamo geometria e durata, oltre ai km gia' conteggiati nel costo fisso.
-            if (stessoPunto(coordDest, base)) {
-                throw erroreGeoNcc('Ritorno commerciale assente: destinazione coincidente con la base');
-            }
-            try {
-                percorsoRitornoNcc = await getRouteGeometry(coordDest, base);
-            } catch (err) {
-                throw erroreGeoNcc(`Routing ritorno alla base non disponibile: ${err.message}`);
-            }
-            const kmRitorno = Number(percorsoRitornoNcc?.distanzaKm);
-            const durataRitorno = Number(percorsoRitornoNcc?.durata);
-            if (!percorsoRitornoNcc?.polyline || !Number.isFinite(kmRitorno) || kmRitorno <= 0 ||
-                !Number.isFinite(durataRitorno) || durataRitorno <= 0) {
-                throw erroreGeoNcc('Geometria, distanza o durata del ritorno non valide');
-            }
-            kmRiposizionamento = kmRitorno;
-            durataRientroSecondi = durataRitorno;
+         let cicloNccPreparato = null;
+         if (isNccCondivisa) {
+             cicloNccPreparato = pending.cicloNccPreparato ?? await preparaCicloNccCondiviso(pending, veicolo);
+             // La base e gli orari della preparazione devono coincidere con i dati correnti.
+             if (!stessoPunto(cicloNccPreparato.origine, {lat:Number(veicolo.lat_base),lon:Number(veicolo.lon_base)}) ||
+                 new Date(cicloNccPreparato.inizio).getTime() > startDatetime.getTime() ||
+                 new Date(cicloNccPreparato.fine).getTime() < arrivoDatetime.getTime())
+                 throw erroreGeoNcc('Ciclo prevalidato NCC incoerente');
+             kmAvvicinamento = cicloNccPreparato.kmAvvicinamento;
+             kmRiposizionamento = cicloNccPreparato.kmRiposizionamento;
+             durataAvvicinamentoSecondi = cicloNccPreparato.durataAvvicinamentoSecondi;
+             durataRientroSecondi = cicloNccPreparato.durataRientroSecondi;
+             percorsoRitornoNcc = cicloNccPreparato.percorsoRitornoNcc;
         } else {
             // Comportamento storico delle corse private, salvo correzione
             // della longitudine usata per il ritorno.
@@ -334,7 +361,7 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
 
         try {
             console.log(`🗺 [ROUTE] Richiesta geometria rotta stradale principale per pending ${pending.id}...`);
-            const routeData = await getRouteGeometry(coordOrig, coordDest); 
+            const routeData = isNccCondivisa ? cicloNccPreparato.routePrincipale : await getRouteGeometry(coordOrig, coordDest); 
             
             polylineString = routeData?.polyline || '';
             if (routeData?.distanzaKm) {
@@ -401,14 +428,10 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             distanzaKm <= 100 ? 60 : distanzaKm <= 150 ? 90 : 120;
         const durateValide = [durataAvvicinamentoSecondi, durataRientroSecondi]
             .every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0);
-        const inizioCiclo = durateValide
-            ? new Date(startDatetime.getTime() - durataAvvicinamentoSecondi * 1000)
-            : null;
-        const fineCiclo = durateValide
-            ? new Date(arrivoDatetime.getTime() +
-                (isNccCondivisa ? bufferRitornoMinuti * 60000 : 0) +
-                durataRientroSecondi * 1000)
-            : null;
+        const inizioCiclo = isNccCondivisa ? new Date(cicloNccPreparato.inizio) :
+            durateValide ? new Date(startDatetime.getTime() - durataAvvicinamentoSecondi * 1000) : null;
+        const fineCiclo = isNccCondivisa ? new Date(cicloNccPreparato.fine) :
+            durateValide ? new Date(arrivoDatetime.getTime() + durataRientroSecondi * 1000) : null;
         // Dato transitorio non enumerabile; gli estremi vengono persistiti sotto.
         Object.defineProperty(corsa, 'cicloOperativoNcc', {
             value: durateValide && Number.isFinite(inizioCiclo.getTime()) &&
@@ -430,12 +453,17 @@ export async function createCorsaFromPending(pending, veicolo, client, isPopBus 
             await client.query(`
                 UPDATE public.corse
                 SET inizio_ciclo_operativo = $1,
-                    fine_ciclo_operativo = $2
+                    fine_ciclo_operativo = $2,
+                    origine_ciclo_operativo = CASE WHEN $4::double precision IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint($5,$4),4326)::geography END,
+                    destinazione_ciclo_operativo = CASE WHEN $4::double precision IS NULL THEN NULL ELSE ST_SetSRID(ST_MakePoint($5,$4),4326)::geography END,
+                    fonte_estremi_operativi = CASE WHEN $4::double precision IS NULL THEN NULL ELSE 'NCC_BASE_VERIFICATA_CREAZIONE' END
                 WHERE id = $3
             `, [
                 corsa.cicloOperativoNcc.inizio,
                 corsa.cicloOperativoNcc.fine,
-                corsa.id
+                corsa.id,
+                isNccCondivisa ? cicloNccPreparato.origine.lat : null,
+                isNccCondivisa ? cicloNccPreparato.origine.lon : null
             ]);
             corsa.inizio_ciclo_operativo = new Date(corsa.cicloOperativoNcc.inizio);
             corsa.fine_ciclo_operativo = new Date(corsa.cicloOperativoNcc.fine);

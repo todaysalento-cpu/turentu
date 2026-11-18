@@ -61,12 +61,14 @@ COALESCE(
   c.arrivo_datetime,
   c.start_datetime + c.durata
 ) AS fine,
-      ST_Y(c.origine::geometry) AS origine_lat,
-      ST_X(c.origine::geometry) AS origine_lon,
-      ST_Y(c.destinazione::geometry) AS destinazione_lat,
-      ST_X(c.destinazione::geometry) AS destinazione_lon,
+      ST_Y(COALESCE(c.origine_ciclo_operativo,c.origine)::geometry) AS origine_lat,
+      ST_X(COALESCE(c.origine_ciclo_operativo,c.origine)::geometry) AS origine_lon,
+      ST_Y(COALESCE(c.destinazione_ciclo_operativo,c.destinazione)::geometry) AS destinazione_lat,
+      ST_X(COALESCE(c.destinazione_ciclo_operativo,c.destinazione)::geometry) AS destinazione_lon,
       c.start_datetime AS inizio_missione,
-      COALESCE(c.arrivo_datetime, c.start_datetime + c.durata) AS fine_missione
+      COALESCE(c.arrivo_datetime, c.start_datetime + c.durata) AS fine_missione,
+      (c.origine_ciclo_operativo IS NOT NULL AND c.destinazione_ciclo_operativo IS NOT NULL
+       AND c.fonte_estremi_operativi = 'NCC_BASE_VERIFICATA_CREAZIONE') AS estremi_verificati
     FROM corse c
     WHERE c.veicolo_id = $1 AND c.stato IN ('prenotabile','da_attivare','in_corso')
 
@@ -80,7 +82,8 @@ COALESCE(
       NULL::double precision AS destinazione_lat,
       NULL::double precision AS destinazione_lon,
       a.partenza AS inizio_missione,
-      a.arrivo AS fine_missione
+      a.arrivo AS fine_missione,
+      false AS estremi_verificati
     FROM popbus_attivazioni a
     WHERE a.veicolo_id = $1 AND a.stato IN ('in_attesa_autista','confermata')
 
@@ -93,7 +96,8 @@ COALESCE(
       ST_Y(p.destinazione::geometry) AS destinazione_lat,
       ST_X(p.destinazione::geometry) AS destinazione_lon,
       NULL::timestamptz AS inizio_missione,
-      NULL::timestamptz AS fine_missione
+      NULL::timestamptz AS fine_missione,
+      false AS estremi_verificati
     FROM ar_accettazioni aa
     JOIN pending p ON p.id = aa.pending_id
     WHERE aa.veicolo_id = $1 AND aa.stato = 'provvisoria' AND aa.expires_at > NOW()
@@ -163,9 +167,10 @@ export async function verificaTrasferimentiVeicolo(client, veicoloId, missione, 
         start: validDate(impegno.inizio_missione),
         end: validDate(impegno.fine_missione)
       };
-      if (!servizio.start || !servizio.end ||
-          servizio.start.getTime() !== a.getTime() ||
-          servizio.end.getTime() !== b.getTime()) {
+      if (!impegno.estremi_verificati &&
+          (!servizio.start || !servizio.end ||
+           servizio.start.getTime() !== a.getTime() ||
+           servizio.end.getTime() !== b.getTime())) {
         nonVerificabili.push({ impegno, motivo: 'NCC_ESTREMI_CICLO_NON_VERIFICATI' });
         continue;
       }

@@ -1,4 +1,3 @@
-
 import * as turf from '@turf/turf';
 import { createHash } from 'node:crypto';
 import ngeohash from 'ngeohash';
@@ -348,6 +347,18 @@ export async function cercaSlotUltra(richiesta) {
     let orarioAndataUtente = new Date(
         richiesta.start_datetime || new Date()
     );
+
+    // Diagnostica temporanea orario Search / corsa NCC 1048: sola lettura.
+    console.log('[SEARCH TIME DIAG]', JSON.stringify({
+        ricevuto: richiesta.start_datetime ?? null,
+        interpretatoUTC: Number.isFinite(orarioAndataUtente.getTime())
+            ? orarioAndataUtente.toISOString()
+            : null,
+        corsa1048UTC: '2026-11-18T19:00:00.000Z',
+        differenzaMinuti: Number.isFinite(orarioAndataUtente.getTime())
+            ? (orarioAndataUtente.getTime() - Date.parse('2026-11-18T19:00:00.000Z')) / 60000
+            : null
+    }));
 
     let orarioRitornoUtente = richiesta.return_datetime
         ? new Date(richiesta.return_datetime)

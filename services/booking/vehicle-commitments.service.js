@@ -68,7 +68,7 @@ COALESCE(
       c.start_datetime AS inizio_missione,
       COALESCE(c.arrivo_datetime, c.start_datetime + c.durata) AS fine_missione,
       (c.origine_ciclo_operativo IS NOT NULL AND c.destinazione_ciclo_operativo IS NOT NULL
-       AND c.fonte_estremi_operativi = 'NCC_BASE_VERIFICATA_CREAZIONE') AS estremi_verificati
+       AND c.fonte_estremi_operativi IN ('NCC_BASE_VERIFICATA_CREAZIONE', 'POLYLINE_STORICA_VERIFICATA')) AS estremi_verificati
     FROM corse c
     WHERE c.veicolo_id = $1 AND c.stato IN ('prenotabile','da_attivare','in_corso')
 

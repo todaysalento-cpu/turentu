@@ -431,9 +431,13 @@ router.post('/:id/accetta', async (req, res) => {
             lon_base: v.lon_base
           }, client, false);
           corsa = resCorsa.corsa ?? resCorsa;
-          // Attivazione progressiva: in assenza della flag il flusso resta invariato.
+          // Se il client ha indicato un conducente, non ignorare la scelta
+          // anche quando la feature flag non e' attiva. In assenza di scelta,
+          // si conserva il percorso legacy se la flag e' disabilitata.
           // Il titolare NCC e' l'operatore, non necessariamente il conducente fisico.
-          if (process.env.NCC_CONDUCENTI_ENABLED === 'true') {
+          const sceltaConducente = req.body?.conducente;
+          const sceltaEsplicita = sceltaConducente != null;
+          if (process.env.NCC_CONDUCENTI_ENABLED === 'true' || sceltaEsplicita) {
             const ciclo = corsa?.cicloOperativoNcc;
             if (!ciclo?.inizio || !ciclo?.fine) {
               const error = new Error('Durata completa del ciclo NCC non verificabile');
@@ -441,7 +445,7 @@ router.post('/:id/accetta', async (req, res) => {
               error.status = 409;
               throw error;
             }
-            const scelta = req.body?.conducente ?? {};
+            const scelta = sceltaConducente ?? {};
             if (!['automatica', 'manuale', 'titolare'].includes(scelta.modalita)) {
               const error = new Error('Selezionare una modalita di assegnazione conducente');
               error.code = 'CONDUCENTE_SCELTA_RICHIESTA';

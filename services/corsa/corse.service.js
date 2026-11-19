@@ -183,8 +183,9 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
     `, [corsa_id, Number(utenteId), corsa.veicolo_id]);
 
     // Una assegnazione esplicita resta sempre la fonte primaria di autorizzazione.
-    // Fallback limitato al titolare di un operatore senza conducenti associati:
-    // non si applica a POPBUS, flotte o corse assegnate ad altri.
+    // Fallback NCC limitato al titolare del veicolo: la presenza di altri
+    // conducenti associati non impedisce di guidare personalmente.
+    // Non si applica a POPBUS o a corse gia' assegnate a terzi.
     let assegnazioneId = null;
     if (assegnazioni.rows.length === 1) {
       assegnazioneId = assegnazioni.rows[0].id;
@@ -202,10 +203,6 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
         const vincoliRes = await client.query(`
           SELECT
             EXISTS (
-              SELECT 1 FROM public.conducenti_operatori co
-              WHERE co.operatore_id = $2 AND co.stato = 'attivo'
-            ) AS ha_conducenti,
-            EXISTS (
               SELECT 1 FROM public.assegnazioni_conducenti ac
               WHERE ac.stato = 'assegnata'
                 AND (ac.corsa_id = $1 OR ac.attivazione_id IN (
@@ -217,9 +214,9 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
               JOIN public.pagamenti p ON p.prenotazione_id = pr.id AND p.corsa_id = pr.corsa_id
               WHERE pr.corsa_id = $1 AND p.stato IN ('autorizzazione', 'pagato')
             ) AS ha_prenotazione_pagata_o_autorizzata
-        `, [corsa_id, Number(utenteId)]);
+        `, [corsa_id]);
         const vincoli = vincoliRes.rows[0];
-        if (vincoli && !vincoli.ha_conducenti && !vincoli.ha_assegnazione &&
+        if (vincoli && !vincoli.ha_assegnazione &&
             vincoli.ha_prenotazione_pagata_o_autorizzata) {
           console.info(`[CORSA] Titolare operatore ${utenteId} autorizzato senza assegnazione esplicita: corsa ${corsa_id}`);
         } else {

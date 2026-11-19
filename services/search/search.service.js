@@ -17,6 +17,8 @@ import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
 import { assicuraFermataLocalePopbus, censisciFermateCentroPopbus, ensurePixelStopsForNode } from '../pixel/pixel-stop-acquisition.service.js';
 import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-resolver.service.js';
 import { scadenzaUtileGoogle } from '../pixel/pixel-google-provisional.service.js';
+import { classePercorrenza, QUALITA_PERCORRENZA } from '../popbus/v2/model.js';
+import { generaCoppieFermatePopbus } from './popbus-fermate-alternative.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -1045,6 +1047,39 @@ export async function cercaSlotUltra(richiesta) {
             });
         } catch (err) {
             console.error('[PIXEL] Errore associazione nodi territoriali:', err);
+        }
+
+        // Fase 2: diagnostica alternative in sola lettura, disabilitata per default.
+        // Non altera quotazione, ID slot, fermate PIXEL, risultati o prenotazioni.
+        if (process.env.POPBUS_ALTERNATIVE_SHADOW_ENABLED === '1') {
+            try {
+                const classePercorso = classePercorrenza({}, distanzaKm);
+                const maxDeviazionePct = QUALITA_PERCORRENZA[classePercorso]?.maxDeviazionePct;
+                if (['MEDIA', 'LUNGA'].includes(classePercorso) &&
+                    Number.isFinite(maxDeviazionePct) &&
+                    pixelContext.pixel_fermate_disponibili &&
+                    pixelContext.origine_nodo_territoriale_id &&
+                    pixelContext.destinazione_nodo_territoriale_id) {
+                    const alternative = await generaCoppieFermatePopbus({
+                        pool,
+                        origine: { lat, lon },
+                        destinazione: { lat: destLat, lon: destLon },
+                        origineNodoId: pixelContext.origine_nodo_territoriale_id,
+                        destinazioneNodoId: pixelContext.destinazione_nodo_territoriale_id,
+                        startDatetime: orarioAndataUtente,
+                        maxDeviazionePct
+                    });
+                    console.log('[POPBUS ALTERNATIVE SHADOW]', {
+                        classe: classePercorso,
+                        stato: alternative.stato,
+                        coppie_valide_stradalmente: alternative.totale,
+                        coppie_restituite: alternative.coppie.length,
+                        prenotazione_abilitata: false
+                    });
+                }
+            } catch (error) {
+                console.warn('[POPBUS ALTERNATIVE SHADOW] Diagnostica non disponibile:', error.message);
+            }
         }
 
         const raccolta = pixelContext.raccolta_popbus;

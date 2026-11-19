@@ -182,13 +182,64 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
       FOR UPDATE OF ac
     `, [corsa_id, Number(utenteId), corsa.veicolo_id]);
 
-    if (assegnazioni.rows.length !== 1) {
-      const err = new Error('Conducente non autorizzato o assegnazione ambigua/assente');
+    // Una assegnazione esplicita resta sempre la fonte primaria di autorizzazione.
+    // Fallback limitato al titolare di un operatore senza conducenti associati:
+    // non si applica a POPBUS, flotte o corse assegnate ad altri.
+    let assegnazioneId = null;
+    if (assegnazioni.rows.length === 1) {
+      assegnazioneId = assegnazioni.rows[0].id;
+    } else if (assegnazioni.rows.length === 0 &&
+               ['privata', 'condivisa'].includes(corsa.tipo_corsa)) {
+      const titolareRes = await client.query(`
+        SELECT v.driver_id AS operatore_id
+        FROM public.veicolo v
+        WHERE v.id = $1
+        FOR SHARE OF v
+      `, [corsa.veicolo_id]);
+      const titolare = Number(titolareRes.rows[0]?.operatore_id) === Number(utenteId);
+
+      if (titolare) {
+        const vincoliRes = await client.query(`
+          SELECT
+            EXISTS (
+              SELECT 1 FROM public.conducenti_operatori co
+              WHERE co.operatore_id = $2 AND co.stato = 'attivo'
+            ) AS ha_conducenti,
+            EXISTS (
+              SELECT 1 FROM public.assegnazioni_conducenti ac
+              WHERE ac.stato = 'assegnata'
+                AND (ac.corsa_id = $1 OR ac.attivazione_id IN (
+                  SELECT pa.id FROM public.popbus_attivazioni pa WHERE pa.corsa_id = $1
+                ))
+            ) AS ha_assegnazione,
+            EXISTS (
+              SELECT 1 FROM public.prenotazioni pr
+              JOIN public.pagamenti p ON p.prenotazione_id = pr.id AND p.corsa_id = pr.corsa_id
+              WHERE pr.corsa_id = $1 AND p.stato IN ('autorizzazione', 'pagato')
+            ) AS ha_prenotazione_pagata_o_autorizzata
+        `, [corsa_id, Number(utenteId)]);
+        const vincoli = vincoliRes.rows[0];
+        if (vincoli && !vincoli.ha_conducenti && !vincoli.ha_assegnazione &&
+            vincoli.ha_prenotazione_pagata_o_autorizzata) {
+          console.info(`[CORSA] Titolare operatore ${utenteId} autorizzato senza assegnazione esplicita: corsa ${corsa_id}`);
+        } else {
+          const err = new Error('Assegnazione conducente richiesta per questa corsa');
+          err.status = 403;
+          err.code = 'CONDUCENTE_NON_AUTORIZZATO';
+          throw err;
+        }
+      } else {
+        const err = new Error('Conducente non autorizzato o assegnazione assente');
+        err.status = 403;
+        err.code = 'CONDUCENTE_NON_AUTORIZZATO';
+        throw err;
+      }
+    } else {
+      const err = new Error('Conducente non autorizzato o assegnazione ambigua');
       err.status = 403;
       err.code = 'CONDUCENTE_NON_AUTORIZZATO';
       throw err;
     }
-    const assegnazioneId = assegnazioni.rows[0].id;
 
     if (action === 'end') {
       console.log(`\n🚀 [CAPTURE FLOW START] Chiusura corsa ID: ${corsa_id} in corso...`);
@@ -566,7 +617,7 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
       );
     }
 
-    if (action === 'end') {
+    if (action === 'end' && assegnazioneId !== null) {
       const completata = await client.query(`
         UPDATE public.assegnazioni_conducenti
         SET stato = 'completata', aggiornata_il = NOW()

@@ -119,16 +119,16 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
   try {
     await client.query('BEGIN');
     const newStato = action === 'start' ? 'in_corso' : 'completata';
-    const statoRichiesto = action === 'start' ? 'accettata' : 'in_corso';
+    const statiConsentiti = action === 'start' ? ['prenotabile', 'accettata'] : ['in_corso'];
 
     // La transizione condizionata protegge anche da richieste concorrenti.
     // La riga resta bloccata fino a COMMIT/ROLLBACK.
     const corsaRes = await client.query(
       `UPDATE public.corse
        SET "stato" = $1
-       WHERE id = $2 AND "stato" = $3
+       WHERE id = $2 AND "stato" = ANY($3::text[])
        RETURNING *`,
-      [newStato, corsa_id, statoRichiesto]
+      [newStato, corsa_id, statiConsentiti]
     );
 
     if (!corsaRes.rows.length) {
@@ -139,10 +139,12 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
       if (!statoRes.rows.length) {
         throw new Error(`Corsa ${corsa_id} non trovata`);
       }
-      throw new Error(
+      const err = new Error(
         `Transizione non consentita: corsa ${corsa_id} ` +
         `in stato '${statoRes.rows[0].stato}', azione '${action}'`
       );
+      err.status = 409;
+      throw err;
     }
     const corsa = corsaRes.rows[0];
 

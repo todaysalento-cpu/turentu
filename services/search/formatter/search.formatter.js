@@ -404,8 +404,8 @@ export async function formatResults(
                             : [];
 
                     const raccolta = item.raccolta_popbus;
-                    const kmPopbus = raccolta?.tratta_km ?? distKmRichiesta;
-                    const minutiPopbus = raccolta?.tratta_minuti ?? durataMinutiRichiesta;
+                    const kmPopbus = item.tratta_catalogo_km ?? raccolta?.tratta_km ?? distKmRichiesta;
+                    const minutiPopbus = item.tratta_catalogo_minuti ?? raccolta?.tratta_minuti ?? durataMinutiRichiesta;
 
                     const opzioniPopBusMappe =
                         await Promise.all(
@@ -503,6 +503,11 @@ export async function formatResults(
                                             item.pixel_fermate_disponibili === true,
                                         pixel_stato:
                                             item.pixel_stato ?? 'non_verificato',
+                                        ...(item.fermate_catalogo_prenotabili && { fermate_catalogo_prenotabili: true }),
+                                        ...(item.catalogo_territoriale_collaudo && {
+                                            catalogo_territoriale_collaudo: item.catalogo_territoriale_collaudo,
+                                            prenotabile: false
+                                        }),
                                         ...(item.fermate_pixel_popbus && {
                                             fermate_pixel_popbus: item.fermate_pixel_popbus,
                                             origine_fermata_id: item.fermate_pixel_popbus.salita?.fermata_id ?? null,

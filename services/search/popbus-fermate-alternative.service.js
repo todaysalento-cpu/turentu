@@ -32,7 +32,7 @@ const metricheValide = v => v && Number.isFinite(Number(v.distanzaKm)) &&
 export async function generaCoppieFermatePopbus({
   pool, origine, destinazione, origineNodoId, destinazioneNodoId, startDatetime,
   route = getDurataDistanza, maxAccessoMinuti = 12, maxDeviazionePct,
-  maxFermatePerNodo = 8, maxCoppie = 20
+  maxFermatePerNodo = 8, maxCoppie = 20, fermateCatalogoIds = null, soloVerificate = false
 }) {
   if (!pool || typeof pool.query !== 'function') throw new Error('Pool PostgreSQL obbligatorio');
   const nodoOrigine = idValido(origineNodoId);
@@ -59,6 +59,8 @@ export async function generaCoppieFermatePopbus({
     FROM public.pixel_fermate f
     JOIN public.nodi_territoriali n ON n.id = f.nodo_territoriale_id AND n.attivo = TRUE
     WHERE f.nodo_territoriale_id = ANY($1::bigint[]) AND f.attiva = TRUE
+      AND ($8::bigint[] IS NULL OR f.id = ANY($8::bigint[]))
+      AND (NOT $9::boolean OR f.verificata IS TRUE)
       AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
       AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
       AND NOT EXISTS (SELECT 1 FROM public.pixel_fermate_test_metadata t WHERE t.fermata_id = f.id)
@@ -73,7 +75,8 @@ export async function generaCoppieFermatePopbus({
           ELSE ST_SetSRID(ST_MakePoint($6, $7), 4326)::geography END),
       f.id
   `, [[nodoOrigine, nodoDestinazione], new Date(partenza).toISOString(),
-      nodoOrigine, Number(origine.lon), Number(origine.lat), Number(destinazione.lon), Number(destinazione.lat)]);
+      nodoOrigine, Number(origine.lon), Number(origine.lat), Number(destinazione.lon), Number(destinazione.lat),
+      fermateCatalogoIds == null ? null : fermateCatalogoIds.map(idValido).filter(Boolean), soloVerificate === true]);
 
   const origineFermate = rows.filter(r => String(r.nodo_territoriale_id) === nodoOrigine && coordValide(r))
     .slice(0, maxFermatePerNodo);
@@ -129,6 +132,7 @@ export async function generaCoppieFermatePopbus({
         accesso_discesa_minuti: Math.ceil(uscita.durataMs / 60000),
         distanza_totale_km: Math.round(distanzaTotaleKm * 100) / 100,
         durata_totale_minuti: Math.ceil(durataTotaleMinuti),
+        ...(soloVerificate && { distanza_tratta_km: tratta.distanzaKm, durata_tratta_minuti: tratta.durataMs / 60000 }),
         stato: 'candidata_stradale', prenotabile: false
       });
     }

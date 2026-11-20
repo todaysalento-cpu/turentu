@@ -19,6 +19,7 @@ import { resolveOrCreateTerritorialNode } from '../pixel/pixel-territorial-node-
 import { scadenzaUtileGoogle } from '../pixel/pixel-google-provisional.service.js';
 import { classePercorrenza, QUALITA_PERCORRENZA } from '../popbus/v2/model.js';
 import { generaCoppieFermatePopbus } from './popbus-fermate-alternative.service.js';
+import { cercaCatalogoPrenotabile, cercaCatalogoTerritoriale } from './search-catalogo-territoriale.service.js';
 
 const GEOHASH_PRECISION_TRATTA = 5;
 const CLASSI_ANTEPRIMA_POPBUS = ['EXPRESS', 'STANDARD', 'SAVER'];
@@ -325,7 +326,7 @@ async function getOccupazioneSegmenti(
     return Number(rows[0]?.occupati || 0);
 }
 
-export async function cercaSlotUltra(richiesta) {
+export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale = false, prenotazioneCatalogo = false } = {}) {
     await loadCachesUltra();
 
     let lat = Number(richiesta.coord?.lat ?? richiesta.lat);
@@ -1036,10 +1037,39 @@ export async function cercaSlotUltra(richiesta) {
             pixel_fermate_disponibili: false,
             pixel_stato: 'non_verificato'
         };
+        let coppieCatalogo = [];
+        if (prenotazioneCatalogo) {
+            try {
+                coppieCatalogo = await cercaCatalogoPrenotabile({
+                    pool, origine: { lat, lon }, destinazione: { lat: destLat, lon: destLon },
+                    distanzaKm: info.distanzaKm, partenza: orarioAndataUtente
+                });
+            } catch (err) {
+                console.warn('[SEARCH CATALOGO] Coppie non disponibili:', err.code ?? err.name);
+            }
+        }
         try {
-            pixelContext = await getPixelTerritorialContext(
-                lat, lon, destLat, destLon, info.distanzaKm, orarioAndataUtente
-            );
+            if (coppieCatalogo.length) {
+                const { salita, discesa } = coppieCatalogo[0];
+                pixelContext = {
+                    origine_nodo_territoriale_id: salita.nodo_territoriale_id,
+                    destinazione_nodo_territoriale_id: discesa.nodo_territoriale_id,
+                    pixel_fermate_disponibili: true, pixel_stato: 'catalogo_disponibile'
+                };
+            } else if (collaudoCatalogoTerritoriale && !prenotazioneCatalogo) {
+                pixelContext = {
+                    ...pixelContext,
+                    pixel_stato: 'collaudo_catalogo',
+                    catalogo_territoriale_collaudo: await cercaCatalogoTerritoriale({
+                        pool, origine: { lat, lon }, destinazione: { lat: destLat, lon: destLon },
+                        distanzaKm: info.distanzaKm, partenza: orarioAndataUtente
+                    })
+                };
+            } else {
+                pixelContext = await getPixelTerritorialContext(
+                    lat, lon, destLat, destLon, info.distanzaKm, orarioAndataUtente
+                );
+            }
             console.log("[PIXEL SEARCH NODI]", {
                 origine: pixelContext.origine_nodo_territoriale_id,
                 destinazione: pixelContext.destinazione_nodo_territoriale_id,
@@ -1181,9 +1211,25 @@ export async function cercaSlotUltra(richiesta) {
             console.warn('[POPBUS SEARCH] Fermate formazione non disponibili:', err.message);
         }
 
-        risultatiFinali.push(
-            virtualPopSlot
-        );
+        if (coppieCatalogo.length) {
+            for (const pair of coppieCatalogo) {
+                const { salita, discesa } = pair;
+                const key = createHash('sha256').update(JSON.stringify([
+                    identitaFermata(salita), identitaFermata(discesa)
+                ])).digest('hex').slice(0, 16);
+                risultatiFinali.push({
+                    ...virtualPopSlot,
+                    id: `virtual_pop_catalogo_${key}`,
+                    fermate_pixel_popbus: { salita, discesa },
+                    fermate_catalogo_prenotabili: true,
+                    tratta_catalogo_km: pair.distanza_tratta_km,
+                    tratta_catalogo_minuti: pair.durata_tratta_minuti,
+                    fermate_formazione_popbus: null
+                });
+            }
+        } else {
+            risultatiFinali.push(virtualPopSlot);
+        }
     }
 
     console.log(

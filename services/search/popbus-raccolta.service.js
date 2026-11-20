@@ -158,7 +158,7 @@ export async function scegliRaccoltaPopbus({
     const perVicinanza = (a, b) => a.info.durataMs - b.info.durataMs ||
         a.info.distanzaKm - b.info.distanzaKm || Number(a.fermata.fermata_id) - Number(b.fermata.fermata_id);
     const preferite = accessi.filter(a => a.info.durataMs <= MAX_ACCESSO_MS)
-        .sort((a, b) => b.popolazione - a.popolazione || perVicinanza(a, b));
+        .sort((a, b) => perVicinanza(a, b) || b.popolazione - a.popolazione);
     const maxKm = percorso.distanzaKm * (1 + QUALITA_PERCORRENZA[classe].maxDeviazionePct / 100);
     const esaminate = new Map();
 

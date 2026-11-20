@@ -84,6 +84,9 @@ export async function cercaCatalogoPrenotabile({ pool, origine, destinazione, di
     const livelli = levelsByClass[classe];
     const origini = nodeChoices(catalog, origine, classe).filter(c => c.node.dbId);
     const destinazioni = nodeChoices(catalog, destinazione, classe).filter(c => c.node.dbId);
+    // Esamina tutte le combinazioni autorizzate: la prima puo' non avere coppie stradali valide.
+    // Il catalogo e' l'unica fonte: nessuna nuova fermata viene acquisita o creata.
+    const coppie = new Map();
     for (const start of origini) {
         for (const end of destinazioni) {
             if (start.node.id === end.node.id) continue;
@@ -96,10 +99,21 @@ export async function cercaCatalogoPrenotabile({ pool, origine, destinazione, di
                 fermateCatalogoIds: [...salita, ...discesa].map(s => s.dbId),
                 soloVerificate: true, maxCoppie: 8, ...(route && { route })
             });
-            return esito.coppie;
+            for (const coppia of esito.coppie) {
+                const chiave = `${coppia.origine_fermata_id}:${coppia.destinazione_fermata_id}`;
+                const precedente = coppie.get(chiave);
+                if (!precedente || coppia.durata_totale_minuti < precedente.durata_totale_minuti) {
+                    coppie.set(chiave, coppia);
+                }
+            }
         }
     }
-    return [];
+    return [...coppie.values()].sort((a, b) =>
+        a.durata_totale_minuti - b.durata_totale_minuti ||
+        a.distanza_totale_km - b.distanza_totale_km ||
+        a.origine_fermata_id.localeCompare(b.origine_fermata_id) ||
+        a.destinazione_fermata_id.localeCompare(b.destinazione_fermata_id)
+    ).slice(0, 20);
 }
 
 /** Anteprima del catalogo. Le associazioni sperimentali restano fuori dalla prenotazione. */
@@ -132,4 +146,3 @@ export async function cercaCatalogoTerritoriale({ pool, origine, destinazione, d
         coppie_stradali:resultPairs.coppie
     };
 }
-

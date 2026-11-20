@@ -2,6 +2,9 @@ import express from "express";
 import { performance } from "node:perf_hooks";
 // Importazione standard: se nel file di servizio usi 'export async function cercaSlotUltra'
 import { cercaSlotUltra } from "../services/search/search.service.js";
+import { catalogoBookingEnabled } from "../services/search/search-catalogo-territoriale.service.js";
+
+import { coordinatePolo, suggerimentiPoli } from "../services/search/search-poli-pubblici.service.js";
 
 import { coordinatePolo, suggerimentiPoli } from "../services/search/search-poli-pubblici.service.js";
 
@@ -110,7 +113,10 @@ router.post("/", async (req, res) => {
     }
 
     const inizio = performance.now();
-    const risultati = await cercaSlotUltra(form);
+    const risultati = await cercaSlotUltra(form, {
+      collaudoCatalogoTerritoriale: process.env.POPBUS_CATALOGO_TERRITORIALE_COLLAUDO === '1',
+      prenotazioneCatalogo: catalogoBookingEnabled() && form.catalogo_fermate === true
+    });
     console.log(`⏱️ Performance Timer: cercaSlotUltra: ${(performance.now() - inizio).toFixed(1)} ms`);
 
     console.log(`🔍 Search elaborata. Risultati trovati: ${risultati?.length || 0}`);

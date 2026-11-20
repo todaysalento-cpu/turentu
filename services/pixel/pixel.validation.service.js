@@ -71,6 +71,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
              f.google_place_id, f.google_geo_scade_il
       FROM public.pixel_fermate f
       WHERE f.id = $1 AND f.nodo_territoriale_id = $2 AND f.attiva
+        AND (NOT $3::boolean OR f.verificata IS TRUE)
         AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
         AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
         AND NOT EXISTS (
@@ -81,7 +82,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
           WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
         )
       FOR SHARE OF f
-    `, [id, nodo]);
+    `, [id, nodo, quotation.fermate_catalogo_prenotabili === true]);
     const corrente = rows[0];
     if (!corrente || corrente.lat !== fermata.lat || corrente.lon !== fermata.lon) {
       throw pixelError('POPBUS: fermata cambiata, ripetere la ricerca', 409);
@@ -101,6 +102,9 @@ export async function validatePixelStops(client, slot, quotation = null) {
   const assegnazione = quotation.fermate_pixel_popbus;
   const salita = await verificaFermata(raccolta ?? assegnazione?.salita, originNode);
   const discesa = await verificaFermata(assegnazione?.discesa, destNode);
+  if (quotation.fermate_catalogo_prenotabili === true && (!salita || !discesa)) {
+    throw pixelError('POPBUS: servono entrambe le fermate del catalogo', 409);
+  }
   if (salita && discesa && String(salita.id) === String(discesa.id)) {
     throw pixelError('POPBUS: salita e discesa devono essere distinte, ripetere la ricerca', 409);
   }
@@ -109,6 +113,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
     destinazione_nodo_territoriale_id: destNode,
     origine_fermata_id: salita?.id ?? null,
     destinazione_fermata_id: discesa?.id ?? null,
+    ...(quotation.fermate_catalogo_prenotabili === true && { fermate_catalogo: { salita, discesa } }),
     ...(raccolta && { raccolta_popbus: salita, raccolta_google: salita.google_place_id != null })
   };
 }

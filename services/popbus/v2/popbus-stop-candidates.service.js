@@ -1,8 +1,7 @@
-
- // services/popbus/v2/popbus-stop-candidates.service.js
- // PIXEL -> POPBUS V2: selezione fermate candidate.
- // Verifica/certificazione non obbligatoria nella fase provvisoria.
- // Sola lettura: nessuna attivazione e nessuna scrittura DB.
+// services/popbus/v2/popbus-stop-candidates.service.js
+// PIXEL -> POPBUS V2: selezione fermate candidate.
+// Verifica/certificazione non obbligatoria nella fase provvisoria.
+// Sola lettura: nessuna attivazione e nessuna scrittura DB.
 
 export const DEFAULT_RADIUS_METERS = 1500;
 export const DEFAULT_LIMIT = 5;
@@ -219,4 +218,71 @@ function normalizzaFermata(row) {
       ...dettaglioFermataGoogle(row.google_place_id),
       tipi_veicolo_ammessi: row.tipi_veicolo_ammessi
     };
+}
+// AGGIUNGERE a services/popbus/v2/popbus-stop-candidates.service.js
+// Nuova funzione indipendente. Non modifica gli export esistenti.
+// Restituisce candidate anagraficamente ammissibili, NON ancora selezionabili:
+// Search deve verificare routing, deviazioni, missione e coppia salita/discesa.
+
+export async function cercaFermateCandidateNodoPixel({
+  client,
+  nodoId,
+  punto,
+  scadenzaMinima = null,
+  limite = 30
+}) {
+  if (!client || typeof client.query !== 'function') {
+    fail('client PostgreSQL obbligatorio');
+  }
+  const id = Number(nodoId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    fail('nodoId non valido');
+  }
+  if (!punto || !Number.isFinite(Number(punto.lat)) ||
+      !Number.isFinite(Number(punto.lon)) ||
+      Number(punto.lat) < -90 || Number(punto.lat) > 90 ||
+      Number(punto.lon) < -180 || Number(punto.lon) > 180) {
+    fail('coordinate punto non valide');
+  }
+  if (!Number.isSafeInteger(limite) || limite < 1 || limite > 100) {
+    fail('limite non valido');
+  }
+  if (scadenzaMinima !== null &&
+      (!(scadenzaMinima instanceof Date) && typeof scadenzaMinima !== 'string' ||
+       Number.isNaN(new Date(scadenzaMinima).getTime()))) {
+    fail('scadenzaMinima non valida');
+  }
+
+  const { rows } = await client.query(`
+    WITH riferimento AS (
+      SELECT ST_SetSRID(ST_MakePoint($2::float8, $3::float8), 4326)::geography AS posizione
+    )
+    SELECT f.id AS fermata_id, f.nome, f.nodo_territoriale_id,
+           f.tipi_veicolo_ammessi, f.verificata, f.google_place_id,
+           ST_Y(f.posizione::geometry) AS lat,
+           ST_X(f.posizione::geometry) AS lon,
+           ST_Distance(f.posizione::geography, r.posizione) AS distanza_metri
+    FROM public.pixel_fermate f
+    JOIN public.nodi_territoriali n
+      ON n.id = f.nodo_territoriale_id AND n.attivo = TRUE
+    CROSS JOIN riferimento r
+    WHERE f.nodo_territoriale_id = $1::bigint
+      AND f.attiva = TRUE
+      AND (f.google_place_id IS NULL OR
+           ($4::timestamptz IS NOT NULL AND
+            f.google_geo_scade_il > GREATEST(NOW(), $4::timestamptz)))
+      AND NOT EXISTS (
+        SELECT 1 FROM public.pixel_fermate_test_metadata tm
+        WHERE tm.fermata_id = f.id
+      )
+      AND f.nome !~* '^[[:space:]]*(\\[TEST PIXEL\\]|TEST PIXEL([[:space:]]|$))'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.pixel_fermate_fonti ff
+        WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
+      )
+    ORDER BY ST_Distance(f.posizione::geography, r.posizione), f.id
+    LIMIT $5::integer
+  `, [id, Number(punto.lon), Number(punto.lat), scadenzaMinima, limite]);
+
+  return rows.map(normalizzaFermata);
 }

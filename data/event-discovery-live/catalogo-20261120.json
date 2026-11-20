@@ -1,0 +1,2168 @@
+{
+  "name": "Turentu - catalogo iniziale LIVE",
+  "verified_on": "2026-11-20",
+  "timezone": "Europe/Rome",
+  "events": [
+    {
+      "id": "turentu-live-20261120-001",
+      "title": "BREAKING BRECHT",
+      "category": "Teatro",
+      "start": "2026-12-01T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-002",
+      "title": "FALSTAFF",
+      "category": "Teatro",
+      "start": "2026-12-15T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-003",
+      "title": "IL RITRATTO DI DORIAN GRAY",
+      "category": "Teatro",
+      "start": "2027-01-14T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-004",
+      "title": "LE ULTIME LUNE",
+      "category": "Teatro",
+      "start": "2027-01-19T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-005",
+      "title": "SERENATE SINCERE",
+      "category": "Musica",
+      "start": "2027-01-29T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Paisiello",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35558,
+      "lng": 18.1688,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-006",
+      "title": "EGO, EGO, EGO...",
+      "category": "Teatro",
+      "start": "2027-02-05T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Paisiello",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35558,
+      "lng": 18.1688,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-007",
+      "title": "CARI GENITORI",
+      "category": "Teatro",
+      "start": "2027-02-18T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-008",
+      "title": "LA MANDRAGOLA",
+      "category": "Teatro",
+      "start": "2027-02-25T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-009",
+      "title": "IL COMMISSARIO MONTALBANO",
+      "category": "Teatro",
+      "start": "2027-03-05T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-010",
+      "title": "KIRIE",
+      "category": "Teatro",
+      "start": "2027-03-11T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Paisiello",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35558,
+      "lng": 18.1688,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-011",
+      "title": "LA RIGENERAZIONE",
+      "category": "Teatro",
+      "start": "2027-03-17T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-012",
+      "title": "MALINCONICO",
+      "category": "Teatro",
+      "start": "2027-03-19T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-013",
+      "title": "GIARDINIERI DEL DOLORE",
+      "category": "Teatro",
+      "start": "2027-04-03T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Paisiello",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35558,
+      "lng": 18.1688,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-014",
+      "title": "TOSCA - FEMINAE a Teatro",
+      "category": "Musica",
+      "start": "2027-04-09T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-015",
+      "title": "UNOUNO",
+      "category": "Teatro",
+      "start": "2027-04-16T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Paisiello",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35558,
+      "lng": 18.1688,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-016",
+      "title": "LE NOSTRE DONNE",
+      "category": "Teatro",
+      "start": "2027-04-22T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Apollo",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35345,
+      "lng": 18.17546,
+      "url": "https://www.pugliaculture.it/rassegna/lecce-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-017",
+      "title": "CIÒ CHE VIDE IL MAGGIORDOMO",
+      "category": "Teatro",
+      "start": "2026-12-04T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-018",
+      "title": "NEL BLU",
+      "category": "Teatro",
+      "start": "2026-12-15T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-019",
+      "title": "IL RIPETENTE",
+      "category": "Teatro",
+      "start": "2027-01-16T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-020",
+      "title": "LE ULTIME LUNE",
+      "category": "Teatro",
+      "start": "2027-01-23T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-021",
+      "title": "TERZO TEMPO",
+      "category": "Teatro",
+      "start": "2027-02-09T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-022",
+      "title": "ABRACADABRA",
+      "category": "Teatro",
+      "start": "2027-02-20T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-023",
+      "title": "KIRIE",
+      "category": "Teatro",
+      "start": "2027-03-12T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-024",
+      "title": "L’ARTE DELLA TRUFFA",
+      "category": "Teatro",
+      "start": "2027-04-08T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Nuovo Cinema Paradiso",
+      "city": "Melendugno",
+      "province": "Lecce",
+      "lat": 40.27371,
+      "lng": 18.33658,
+      "url": "https://www.pugliaculture.it/rassegna/melendugno-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-025",
+      "title": "FALSTAFF",
+      "category": "Teatro",
+      "start": "2026-12-11T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-026",
+      "title": "INFERNOITALIA",
+      "category": "Teatro",
+      "start": "2026-12-27T18:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-027",
+      "title": "TOMBOLATA MUSICALE CON VALERIO LUNDINI & I VAZZANIKKI",
+      "category": "Teatro",
+      "start": "2027-01-05T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-028",
+      "title": "LISISTRATA",
+      "category": "Teatro",
+      "start": "2027-01-16T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-029",
+      "title": "FISICAMENTE MI PIACCIONO TUTTI",
+      "category": "Teatro",
+      "start": "2027-02-07T18:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-030",
+      "title": "IL SINDACO DEL RIONE SANITÀ",
+      "category": "Teatro",
+      "start": "2027-02-13T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-031",
+      "title": "CARI GENITORI",
+      "category": "Teatro",
+      "start": "2027-02-20T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-032",
+      "title": "ROMEO E GIULIETTA",
+      "category": "Teatro",
+      "start": "2027-03-09T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-033",
+      "title": "STATO CONTRO NOLAN",
+      "category": "Teatro",
+      "start": "2027-03-17T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-034",
+      "title": "MIO, SEMPRE, MIO ANDREA",
+      "category": "Teatro",
+      "start": "2027-04-01T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-035",
+      "title": "L’ANGELO DEL FOCOLARE",
+      "category": "Teatro",
+      "start": "2027-04-10T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Umberto Giordano",
+      "city": "Foggia",
+      "province": "Foggia",
+      "lat": 41.46388,
+      "lng": 15.54612,
+      "url": "https://www.pugliaculture.it/rassegna/foggia-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-036",
+      "title": "BREAKING BRECHT",
+      "category": "Teatro",
+      "start": "2026-12-02T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-037",
+      "title": "FALSTAFF",
+      "category": "Teatro",
+      "start": "2026-12-17T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-038",
+      "title": "A CASA TUTTI BENE",
+      "category": "Teatro",
+      "start": "2027-01-13T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-039",
+      "title": "LE ULTIME LUNE",
+      "category": "Teatro",
+      "start": "2027-01-20T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-040",
+      "title": "IL SINDACO DEL RIONE SANITÀ",
+      "category": "Teatro",
+      "start": "2027-02-10T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-041",
+      "title": "GIULIETTA E ROMEO - IL CORPO DI SHAKESPEARE",
+      "category": "Teatro",
+      "start": "2027-02-19T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-042",
+      "title": "LA RIGENERAZIONE",
+      "category": "Teatro",
+      "start": "2027-03-12T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-043",
+      "title": "LO ZAR",
+      "category": "Teatro",
+      "start": "2027-04-02T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Comunale Fusco",
+      "city": "Taranto",
+      "province": "Taranto",
+      "lat": 40.47138,
+      "lng": 17.24,
+      "url": "https://www.pugliaculture.it/rassegna/taranto-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-044",
+      "title": "FIGLI",
+      "category": "Teatro",
+      "start": "2026-11-30T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-045",
+      "title": "TI LASCIO UNA CANZONE",
+      "category": "Teatro",
+      "start": "2026-12-15T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-046",
+      "title": "LISISTRATA",
+      "category": "Teatro",
+      "start": "2027-01-12T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-047",
+      "title": "VANZETTI & SACCO",
+      "category": "Teatro",
+      "start": "2027-01-28T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-048",
+      "title": "BABY REINDEER / PICCOLA RENNA",
+      "category": "Teatro",
+      "start": "2027-02-03T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-049",
+      "title": "UNO NESSUNO CENTOMILA",
+      "category": "Teatro",
+      "start": "2027-02-24T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-050",
+      "title": "BUONGIORNO, MINISTRO!",
+      "category": "Teatro",
+      "start": "2027-03-09T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-051",
+      "title": "TI HO SPOSATO PER ALLEGRIA",
+      "category": "Teatro",
+      "start": "2027-04-14T21:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Cinema Teatro Italia",
+      "city": "Francavilla Fontana",
+      "province": "Brindisi",
+      "lat": 40.53167,
+      "lng": 17.58015,
+      "url": "https://www.pugliaculture.it/rassegna/francavilla-fontana-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-052",
+      "title": "PEOPLE, PLACES AND THINGS",
+      "category": "Teatro",
+      "start": "2026-11-27T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-053",
+      "title": "MALINCONICO",
+      "category": "Teatro",
+      "start": "2026-12-11T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-054",
+      "title": "IL LAGO DEI CIGNI E L’INCANTESIMO DELLE PIUME",
+      "category": "Teatro",
+      "start": "2026-12-16T09:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-055",
+      "title": "ERO L’UOMO DELLA GUERRA",
+      "category": "Teatro",
+      "start": "2026-12-18T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-056",
+      "title": "IL RIPETENTE / MEZZANOTTE D’AUTORE",
+      "category": "Teatro",
+      "start": "2026-12-31T22:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-057",
+      "title": "THE FINAL MATCH POINT",
+      "category": "Teatro",
+      "start": "2027-01-06T18:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-058",
+      "title": "FULMINATA",
+      "category": "Teatro",
+      "start": "2027-01-12T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Curci",
+      "city": "Barletta",
+      "province": "Barletta-Andria-Trani",
+      "lat": 41.31964,
+      "lng": 16.27949,
+      "url": "https://www.pugliaculture.it/rassegna/barletta-stagione-teatrale-2026-27/",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-059",
+      "title": "Finché giudice non ci separi",
+      "category": "Teatro",
+      "start": "2026-12-15T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-060",
+      "title": "I fratelli De Filippo",
+      "category": "Teatro",
+      "start": "2026-12-21T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-061",
+      "title": "Natale in frac '26",
+      "category": "Musica",
+      "start": "2026-12-23T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-062",
+      "title": "Marylin",
+      "category": "Teatro",
+      "start": "2027-01-08T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-063",
+      "title": "Lo schiaccianoci",
+      "category": "Teatro",
+      "start": "2027-01-10T18:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-064",
+      "title": "L’attrice",
+      "category": "Teatro",
+      "start": "2027-01-19T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-065",
+      "title": "Belle e la Bestia Il Musical",
+      "category": "Teatro",
+      "start": "2027-01-24T17:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-066",
+      "title": "Fratello Sole, Sorella Luna",
+      "category": "Teatro",
+      "start": "2027-01-28T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-067",
+      "title": "Capitol'ho",
+      "category": "Teatro",
+      "start": "2027-02-06T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-068",
+      "title": "Il lago dei cigni",
+      "category": "Teatro",
+      "start": "2027-02-07T17:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-069",
+      "title": "L'esorcismo di Don Tonino",
+      "category": "Teatro",
+      "start": "2027-02-15T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-070",
+      "title": "Sul lastrico",
+      "category": "Teatro",
+      "start": "2027-02-26T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-071",
+      "title": "Flusso",
+      "category": "Teatro",
+      "start": "2027-03-03T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-072",
+      "title": "La bella addormentata",
+      "category": "Teatro",
+      "start": "2027-03-07T19:00:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-073",
+      "title": "Quel che resta di me. Storia di un’infiltrata",
+      "category": "Teatro",
+      "start": "2027-03-11T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-074",
+      "title": "Le fuggitive",
+      "category": "Teatro",
+      "start": "2027-03-12T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-075",
+      "title": "Io, Charles (omaggio a Bukowski)",
+      "category": "Teatro",
+      "start": "2027-04-03T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-076",
+      "title": "Minchia signor Tenente",
+      "category": "Teatro",
+      "start": "2027-04-09T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-077",
+      "title": "Viaggio al centro della fisica",
+      "category": "Teatro",
+      "start": "2027-04-10T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-078",
+      "title": "Contrazioni pericolose",
+      "category": "Teatro",
+      "start": "2027-04-16T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-079",
+      "title": "Oltre il giardino",
+      "category": "Teatro",
+      "start": "2027-05-04T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    },
+    {
+      "id": "turentu-live-20261120-080",
+      "title": "Intimacy Vol. 2 World Tour 2026/27",
+      "category": "Musica",
+      "start": "2027-05-07T20:30:00",
+      "timezone": "Europe/Rome",
+      "end": null,
+      "venue": "Teatro Politeama Greco",
+      "city": "Lecce",
+      "province": "Lecce",
+      "lat": 40.35313,
+      "lng": 18.17481,
+      "url": "https://www.politeamagreco.it/scheda.asp?id=1119",
+      "verified_on": "2026-11-20",
+      "verification": {
+        "title_date_time_venue": "official_calendar_checked",
+        "coordinates": "secondary_feed_venue_match",
+        "coordinates_source": "https://andiamoinpuglia.it/dati/eventi.json",
+        "coordinates_license": "CC BY 4.0"
+      },
+      "publication_ready": false,
+      "publication_blockers": [
+        "database_deduplication_pending",
+        "territory_review_pending",
+        "production_approval_required"
+      ]
+    }
+  ]
+}
+

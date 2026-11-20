@@ -67,6 +67,7 @@ router.get('/search', async (req, res) => {
             ) AS distanza_km
           FROM public.eventi
           WHERE lat IS NOT NULL AND lng IS NOT NULL
+            AND stato = 'approvato' AND COALESCE(data_fine, data_inizio) >= now()
         ) sub
         WHERE distanza_km <= $${paramIndex}
       `;
@@ -80,7 +81,7 @@ router.get('/search', async (req, res) => {
           luogo_nome, indirizzo, citta, lat, lng, creato_da, created_at, immagine_url,
           0 AS distanza_km
         FROM public.eventi
-        WHERE 1=1
+        WHERE stato = 'approvato' AND COALESCE(data_fine, data_inizio) >= now()
       `;
     }
 
@@ -107,7 +108,7 @@ router.get('/search', async (req, res) => {
       }
     }
 
-    query += ` ORDER BY data_inizio ASC LIMIT 50;`;
+    query += ` ORDER BY data_inizio ASC, id ASC LIMIT 100;`;
 
     console.log("🛠️ [API /events/search] Query SQL generata:\n", query);
     console.log("📦 [API /events/search] Parametri passati alla query:", queryParams);

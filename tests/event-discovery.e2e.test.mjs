@@ -40,9 +40,15 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
     CREATE TABLE richieste_pop_bus (id serial PRIMARY KEY, evento_id int REFERENCES eventi ON DELETE RESTRICT);
     CREATE TABLE nodi_territoriali (id bigint PRIMARY KEY, nome varchar, posizione geography(Point,4326), attivo boolean);
     CREATE TABLE pixel_fermate (id bigint PRIMARY KEY, nodo_territoriale_id bigint REFERENCES nodi_territoriali,
-      posizione geography(Point,4326), attiva boolean, verificata boolean);
+      posizione geography(Point,4326), attiva boolean, verificata boolean, nome text);
+    CREATE TABLE pixel_fermate_test_metadata (fermata_id bigint REFERENCES pixel_fermate);
+    CREATE TABLE pixel_fermate_fonti (fermata_id bigint REFERENCES pixel_fermate, stato_verifica text);
     INSERT INTO nodi_territoriali VALUES (1,'Lecce',ST_SetSRID(ST_MakePoint(18.17,40.35),4326),true);
-    INSERT INTO pixel_fermate VALUES (2,1,ST_SetSRID(ST_MakePoint(18.17,40.35),4326),true,true);
+    INSERT INTO pixel_fermate VALUES (2,1,ST_SetSRID(ST_MakePoint(18.17,40.35),4326),true,false,'Lecce');
+    INSERT INTO pixel_fermate VALUES (3,1,ST_SetSRID(ST_MakePoint(18.17,40.35),4326),true,false,'Fixture');
+    INSERT INTO pixel_fermate VALUES (4,1,ST_SetSRID(ST_MakePoint(18.17,40.35),4326),true,false,'Fonte negativa');
+    INSERT INTO pixel_fermate_test_metadata VALUES (3);
+    INSERT INTO pixel_fermate_fonti VALUES (4,'non_ammessa');
   `);
   await pool.query(await readFile(new URL('../migrations/006_event_discovery.sql', import.meta.url), 'utf8'));
 
@@ -167,6 +173,8 @@ test('workflow Admin, PostgreSQL e PostGIS con fonti simulate', { skip: !process
   assert.deepEqual(publishedRows.rows, [{ stato: 'approvato', creato_da: 7 }]);
   const suggestions = await api(`/events/${eventId}/territory`);
   assert.deepEqual(suggestions.suggestions[0].stops.map(String), ['2']);
+  await api(`/events/${eventId}/territory`, { method: 'PUT', body: { nodeId: '1', stopId: '3' }, status: 409 });
+  await api(`/events/${eventId}/territory`, { method: 'PUT', body: { nodeId: '1', stopId: '4' }, status: 409 });
   await api(`/events/${eventId}/territory`, { method: 'PUT', body: { nodeId: '1', stopId: '2' } });
   assert.equal((await api(`/events/${eventId}/territory`)).confirmed.node_id, '1');
 

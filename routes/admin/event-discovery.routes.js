@@ -2,6 +2,7 @@ import express from 'express';
 import { pool } from '../../db/db.js';
 import { audit, automaticPublisher, canWrite, createDiscovery, enabled, fail, filters, mobility, number, transaction, webSearchStatus } from '../../services/event-discovery/service.js';
 import { publicUrl } from '../../services/event-discovery/network.js';
+import { eventStopEligible } from '../../services/event-discovery/territory-policy.js';
 
 const table = 'public.event_discovery_';
 const actions = ['read', 'sources', 'acquire', 'review', 'publish', 'configure'];
@@ -148,7 +149,7 @@ export function createEventDiscoveryRouter(database = pool, service = createDisc
       AND EXISTS (SELECT 1 FROM ${table}candidates WHERE event_id=$1)
     ) SELECT n.id,n.nome,round(ST_Distance(n.posizione::geography,e.point)) AS metres,
       ARRAY(SELECT p.id FROM public.pixel_fermate p
-        WHERE p.nodo_territoriale_id=n.id AND p.attiva AND p.verificata AND p.posizione IS NOT NULL
+          WHERE p.nodo_territoriale_id=n.id AND ${eventStopEligible('p')}
         AND ST_DWithin(p.posizione::geography,e.point,$2)
         ORDER BY ST_Distance(p.posizione::geography,e.point),p.id LIMIT 5) AS stops
       FROM event e CROSS JOIN public.nodi_territoriali n WHERE n.attivo AND ST_DWithin(n.posizione::geography,e.point,$2)
@@ -166,7 +167,7 @@ export function createEventDiscoveryRouter(database = pool, service = createDisc
       SELECT $1,n.id,$3 FROM public.nodi_territoriali n WHERE n.id=$2 AND n.attivo
         AND EXISTS (SELECT 1 FROM ${table}candidates WHERE event_id=$1 AND state='published')
         AND ($3::bigint IS NULL OR EXISTS (SELECT 1 FROM public.pixel_fermate p WHERE p.id=$3
-          AND p.nodo_territoriale_id=n.id AND p.attiva AND p.verificata))
+            AND p.nodo_territoriale_id=n.id AND ${eventStopEligible('p')}))
       ON CONFLICT (event_id) DO UPDATE SET node_id=excluded.node_id, stop_id=excluded.stop_id RETURNING *`, [eventId, nodeId, stopId ?? null]);
     if (!result.rowCount) fail('Evento, nodo o fermata incompatibili', 409);
     return result.rows[0];

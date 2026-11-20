@@ -788,25 +788,43 @@ router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res
     const group = await getArGroupForUpdate(client, groupId, req.user.id);
     if (group.stato === 'autorizzato') {
       await client.query('COMMIT'); transaction = false;
-      return res.json({ ar_group_id: groupId, stato: 'autorizzato', confermata: false });
+      return res.json({
+        ar_group_id: groupId,
+        stato: 'autorizzato',
+        tratte: ['andata', 'ritorno'].map(ar_tratta => ({ ar_tratta, autorizzata: true })),
+        confermata: false,
+        cattura_abilitata: false
+      });
     }
     if (group.stato !== 'in_autorizzazione' || new Date(group.expires_at).getTime() <= Date.now()) {
       throw Object.assign(new Error('Gruppo A/R non autorizzabile o scaduto'), { status: 409 });
     }
-    const result = await client.query(
-      `SELECT ar_tratta, payment_intent_id, prezzo FROM public.pending
-       WHERE ar_group_id=$1 AND cliente_id=$2 AND ar_vincolata=TRUE FOR UPDATE`,
+    const pending = await client.query(
+      `SELECT ar_tratta, payment_intent_id, prezzo AS importo
+       FROM public.pending
+       WHERE ar_group_id=$1 AND cliente_id=$2 AND ar_vincolata=TRUE
+       ORDER BY id FOR UPDATE`,
       [groupId, req.user.id]
     );
-    const legs = result.rows;
-    if (legs.length !== 2 || legs[0].ar_tratta === legs[1].ar_tratta ||
+    const popbus = await client.query(
+      `SELECT ar_tratta, payment_intent_id, prezzo_massimo_autorizzato AS importo
+       FROM public.richieste_pop_bus
+       WHERE ar_group_id=$1 AND cliente_id=$2 AND ar_vincolata=TRUE
+       ORDER BY id FOR UPDATE`,
+      [groupId, req.user.id]
+    );
+    const legs = [...pending.rows, ...popbus.rows];
+    if ((pending.rows.length && popbus.rows.length) || legs.length !== 2 ||
+        new Set(legs.map(leg => leg.payment_intent_id)).size !== 2 ||
+        legs.some(leg => !leg.payment_intent_id ||
+          !Number.isSafeInteger(Math.round(Number(leg.importo) * 100)) || Number(leg.importo) <= 0) ||
         !legs.some(x => x.ar_tratta === 'andata') || !legs.some(x => x.ar_tratta === 'ritorno')) {
-      throw Object.assign(new Error('Coppia A/R incompleta'), { status: 409 });
+      throw Object.assign(new Error('Coppia A/R incompleta o incoerente'), { status: 409 });
     }
     const statuses = [];
     for (const leg of legs) {
       const intent = await stripe.paymentIntents.retrieve(leg.payment_intent_id);
-      const cents = Math.round(Number(leg.prezzo) * 100);
+      const cents = Math.round(Number(leg.importo) * 100);
       const valid = intent.status === 'requires_capture' && intent.capture_method === 'manual' &&
         intent.currency === 'eur' && intent.amount_capturable >= cents &&
         intent.amount === cents && intent.metadata?.ar_group_id === groupId &&

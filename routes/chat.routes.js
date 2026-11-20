@@ -1,6 +1,7 @@
 import { accountExists } from '../middleware/account-exists.js';
 // ======================= routes/chat.routes.js =======================
 import express from "express";
+import { registerSupportChat } from "../services/chat/support-chat.js";
 import { requireChatAccess } from "../services/chat/chat-auth.middleware.js";
 import multer from "multer";
 import { pool } from "../db/db.js";
@@ -40,6 +41,8 @@ const authMiddleware = async (req, res, next) => {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
+
+registerSupportChat(chatRouter, authMiddleware, pool);
 
 /* ================= HELPER ================= */
 async function getDriverIdByCorsa(corsa_id) {

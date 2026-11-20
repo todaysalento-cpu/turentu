@@ -1,4 +1,5 @@
 import { cercaSlotUltra } from '../services/search/search.service.js';
+import { catalogoBookingEnabled, isCatalogoSlot } from '../services/search/search-catalogo-territoriale.service.js';
 import express from 'express';
 import Stripe from 'stripe';
 import { authMiddleware } from '../middleware/auth.js';
@@ -69,7 +70,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Coordinate di ricerca non valide' });
     }
     if(!o||!d||!Number.isInteger(count)||count<=0||!when||!Number.isFinite(new Date(when).getTime())||new Date(when)<=new Date())return res.status(400).json({error:'Coordinate, passeggeri e data futura obbligatori'});
-    const fresh=await cercaSlotUltra({coord:o,coordDest:d,posti_richiesti:count,start_datetime:when});
+    const fresh=await cercaSlotUltra({coord:o,coordDest:d,posti_richiesti:count,start_datetime:when}, {
+      prenotazioneCatalogo: catalogoBookingEnabled() && isCatalogoSlot(selected.id)
+    });
     // La stessa corsa può avere più tratte: l'ID corsa da solo non basta.
     const quotation=fresh.find(x =>
       String(x.id) === String(selected.id) &&
@@ -126,7 +129,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if (massimoPopbus > prezzoConcordato && usaWallet) {
       return res.status(409).json({ error: 'Per il tetto PopBus è richiesta una preautorizzazione su carta' });
     }
-    const importoAutorizzato = massimoPopbus ?? prezzoConcordato;
+    const importoAutorizzato = prezzoConcordato;
     const slot = { ...selected, ...quotation, start_datetime: when, posti_richiesti: count };
     const popbusDeadline = isPopbusSlot(slot) ? resolveConfirmationDeadline(slot.start_datetime, req.body.scadenza_conferma_ore ?? 24) : null;
     // Non permettere che il tipo dichiarato dal client cambi il tipo della quotazione.
@@ -236,7 +239,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
       console.log(`[PIXEL-NODES:${requestId}] Nodi territoriali validati: ${startNodeId} -> ${endNodeId}`);
 
       const raccolta = pixelValidated.raccolta_popbus;
-      const salita = raccolta && !pixelValidated.raccolta_google ? raccolta : finalOrigine;
+      const puntiCatalogo = pixelValidated.fermate_catalogo;
+      const salita = puntiCatalogo?.salita ?? (raccolta && !pixelValidated.raccolta_google ? raccolta : finalOrigine);
+      const discesa = puntiCatalogo?.discesa ?? finalDestinazione;
       const result = await client.query(
         `INSERT INTO richieste_pop_bus (
           cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
@@ -253,14 +258,14 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
         [
           clienteId,
           salita.lon, salita.lat,
-          finalDestinazione.lon, finalDestinazione.lat,
+          discesa.lon, discesa.lat,
           slot.start_datetime,
           slot.posti_richiesti || 1,
           startNodeId,
           endNodeId,
           slot.classe || 'STANDARD',
-          raccolta?.nome ?? origineAddress,
-          destinazioneAddress,
+          puntiCatalogo?.salita.nome ?? raccolta?.nome ?? origineAddress,
+          puntiCatalogo?.discesa.nome ?? destinazioneAddress,
           prezzoConcordato,
           pagatoConWallet ? `wallet_${requestId}` : paymentIntent.id,
           requestId,
@@ -270,8 +275,8 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
           pixelValidated.destinazione_fermata_id,
           popbusDeadline.hours,
           popbusDeadline.deadline,
-          massimoPopbus,
-          raccolta ? JSON.stringify({
+          pagatoConWallet ? null : importoAutorizzato,
+          (raccolta || puntiCatalogo) ? JSON.stringify({
             ...finalOrigine, indirizzo: origineAddress,
             ...(pixelValidated.raccolta_google && { raccolta_google: true })
           }) : null
@@ -486,7 +491,7 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     if(transaction&&!committed){try{await client.query('ROLLBACK');}catch(rollbackError){console.error('[PAYMENT ROLLBACK]',rollbackError);}}
     if(!committed&&paymentIntent){try{await stripe.paymentIntents.cancel(paymentIntent.id);}catch(e){console.error('[PAYMENT CANCEL]',e.message);}}
     console.error(`❌ [PAYMENT:${requestId}] Errore critico intercettato. Rollback eseguito. Dettagli:`, err);
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message, ...(err.code === "POPBUS_DEADLINE_TOO_CLOSE" && { code: err.code }) });
   } finally {
     client.release();
     console.log(`🔌 [PAYMENT:${requestId}] Connessione al database rilasciata.`);

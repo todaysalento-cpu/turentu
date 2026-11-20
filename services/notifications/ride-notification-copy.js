@@ -30,29 +30,24 @@ function details(ride, { priceLabel = 'Prezzo', popbus = false } = {}) {
   ];
 }
 
-function requestKind(ride, popbus) {
-  if (popbus) return 'Richiesta PopBus';
-  if (joining(ride)) return `Richiesta di aggiungersi alla corsa condivisa #${ride.corsa_id}`;
-  return shared(ride) ? 'Richiesta di nuova corsa condivisa' : 'Richiesta di corsa privata';
-}
-
 export function driverRequestCopy(ride, { popbus = false } = {}) {
   const title = joining(ride) ? 'Nuovi passeggeri per una corsa condivisa' : popbus ? 'Nuova richiesta PopBus' : shared(ride) ? 'Nuova richiesta di corsa condivisa' : 'Nuova richiesta di corsa privata';
   return {
     title,
-    message: [requestKind(ride, popbus) + '.', ...details(ride, { priceLabel: 'Prezzo richiesto', popbus }), joining(ride) ? 'Apri la richiesta per valutare e accettare l’aggiunta dei passeggeri alla corsa esistente.' : 'Apri la richiesta per controllare i dettagli e accettarla.'].join('\n'),
+    message: [...details(ride, { priceLabel: 'Prezzo proposto', popbus }), 'Apri la richiesta nell’app per controllare i dettagli e rispondere.'].join('\n'),
   };
 }
 
 export function clientRequestCreatedCopy(ride, { popbus = false, paidWithWallet = false } = {}) {
-  const confirmation = popbus
-    ? 'La corsa sarà confermata solo dopo la formazione del servizio e l’accettazione dell’autista. Riceverai una notifica di conferma con i dettagli operativi; i punti richiesti non sono ancora fermate confermate.'
-    : joining(ride)
-      ? 'I posti sulla corsa esistente saranno confermati solo dopo l’accettazione dell’autista. Riceverai una notifica con i dettagli della prenotazione.'
-      : 'La corsa sarà confermata solo dopo l’accettazione dell’autista. Riceverai una notifica con i dettagli della corsa.';
+  const next = popbus
+    ? 'Il PopBus è in formazione. Ti avviseremo quando raggiunge la soglia e l’autista conferma la corsa.'
+    : 'L’autista deve ancora accettare. Ti avviseremo quando la richiesta sarà confermata.';
   return {
-    title: 'Richiesta inviata · in attesa di conferma',
-    message: [requestKind(ride, popbus) + ' inviata.', ...details(ride, { priceLabel: 'Prezzo della richiesta', popbus }), `Stato: ${popbus ? 'in attesa di formazione del servizio' : 'in attesa di accettazione dell’autista'}. La corsa non è ancora confermata.`, ...(!paidWithWallet ? ['Se non l’hai già fatto, completa l’autorizzazione del pagamento nell’app.'] : []), 'Conferma: ' + confirmation, ...(popbus && ride.conferma_entro ? ['Conferma entro: ' + when(ride.conferma_entro) + '. Dopo questo termine la richiesta non può più essere confermata.'] : [])].join('\n'),
+    title: popbus ? 'Richiesta PopBus ricevuta' : 'Richiesta di corsa inviata',
+    message: [next, ...details(ride, { priceLabel: 'Prezzo della richiesta', popbus }),
+      ...(popbus && ride.conferma_entro ? ['La richiesta scade il ' + when(ride.conferma_entro) + '.'] : []),
+      ...(!paidWithWallet ? ['Per completare la richiesta, autorizza il pagamento nell’app se non l’hai già fatto.'] : []),
+    ].join('\n'),
   };
 }
 
@@ -60,8 +55,14 @@ export function clientRideAcceptedCopy(ride, { driverName, rideId, confirmedPric
   const name = text(driverName);
   const actor = name && name !== 'Autista N/D' ? name : 'L’autista';
   const joined = joining(ride);
+  const popbus = String(ride.tipo_corsa).toLowerCase() === "popbus";
   return {
-    title: joined ? 'Posti confermati sulla corsa condivisa' : 'Corsa confermata dall’autista',
-    message: [joined ? `${actor} ha accettato la tua richiesta di aggiungerti alla corsa condivisa${positiveId(rideId) ? ` #${rideId}` : ''}.` : `${actor} ha accettato la tua richiesta${positiveId(rideId) ? ` · corsa #${rideId}` : ''}.`, ...details({ ...ride, prezzo: confirmedPrice }, { priceLabel: shared(ride) ? 'Quota attuale' : 'Prezzo confermato' }), `Stato: ${joined ? 'prenotazione confermata' : 'corsa confermata'}.`, 'Apri le tue prenotazioni per consultare i dettagli della corsa.'].join('\n'),
+    title: popbus ? 'PopBus confermato' : joined ? 'Posti confermati sulla corsa condivisa' : 'Corsa confermata',
+    message: [
+      popbus ? 'Il PopBus è confermato. Controlla orario e fermate nei dettagli della prenotazione.' :
+        joined ? actor + ' ha confermato i tuoi posti sulla corsa condivisa.' : actor + ' ha accettato la tua richiesta di corsa.',
+      ...details({ ...ride, prezzo: confirmedPrice }, { priceLabel: shared(ride) ? 'Quota attuale' : 'Prezzo confermato' }),
+      positiveId(rideId) ? 'Trovi la corsa #' + rideId + ' nelle tue prenotazioni.' : 'Apri le tue prenotazioni per vedere i dettagli.',
+    ].join('\n'),
   };
 }

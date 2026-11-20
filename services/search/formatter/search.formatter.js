@@ -516,6 +516,9 @@ export async function formatResults(
                                         ...(item.fermate_formazione_popbus && {
                                             fermate_formazione_popbus: item.fermate_formazione_popbus
                                         }),
+                                        ...(item.fermate_selezionabili && {
+                                            fermate_selezionabili: item.fermate_selezionabili
+                                        }),
 
                                         colore_ui:
                                             UI_CONFIG['pop-bus'].colore,

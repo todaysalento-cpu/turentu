@@ -1211,7 +1211,39 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
             console.warn('[POPBUS SEARCH] Fermate formazione non disponibili:', err.message);
         }
 
+        // Opzioni di salita/discesa: solo coppie già filtrate dal catalogo autorizzato.
+        // Non trasformare mai una candidata stradale in una prenotazione abilitata.
+        // La scelta effettiva resta soggetta alla riquotazione e validazione booking.
         if (coppieCatalogo.length) {
+            const salite = new Map();
+            const discese = new Map();
+            const coppie = [];
+            for (const pair of coppieCatalogo) {
+                const salita = pair.salita;
+                const discesa = pair.discesa;
+                if (!salita?.fermata_id || !discesa?.fermata_id) continue;
+                const pickupId = String(salita.fermata_id);
+                const dropoffId = String(discesa.fermata_id);
+                const visualizza = fermata => ({
+                    fermata_id: String(fermata.fermata_id),
+                    nodo_territoriale_id: fermata.nodo_territoriale_id,
+                    nome: fermata.nome,
+                    // L'ordine dei suggerimenti privilegia i poli strategici.
+                    priorita: /aeroporto|stazione|ospedal|universit|terminal|porto|autostazion/i.test(fermata.nome ?? '') ? 0 : 1
+                });
+                salite.set(pickupId, visualizza(salita));
+                discese.set(dropoffId, visualizza(discesa));
+                coppie.push({ origine_fermata_id: pickupId, destinazione_fermata_id: dropoffId });
+            }
+            const ordina = (a, b) => a.priorita - b.priorita ||
+                String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'it');
+            virtualPopSlot.fermate_selezionabili = {
+                salita: [...salite.values()].sort(ordina),
+                discesa: [...discese.values()].sort(ordina),
+                coppie,
+                // Indicatore descrittivo: NON è un'autorizzazione al pagamento.
+                validazione_booking_richiesta: true
+            };
             for (const pair of coppieCatalogo) {
                 const { salita, discesa } = pair;
                 const key = createHash('sha256').update(JSON.stringify([

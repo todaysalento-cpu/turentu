@@ -158,6 +158,8 @@ router.post("/", async (req, res) => {
     }
 
     // 4. INVIO RISPOSTA
+    // Le coppie di fermate sono trasmesse nei risultati POPBUS, non come
+    // ulteriori corse. Il backend booking deve comunque riquotare ogni scelta.
     const risultatiPubblici = (risultati || []).map(item => {
       const fermate = item.fermate_pixel_popbus;
       const raccolta = item.raccolta_popbus;

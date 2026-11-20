@@ -191,16 +191,29 @@ router.post('/register', async (req, res) => {
 
 // ===================== LOGIN GOOGLE =====================
 router.post('/google', async (req, res) => {
-  const { token } = req.body;
-  if (!token) return res.status(400).json({ message: 'Token Google richiesto' });
+  const { token } = req.body ?? {};
+  const audience = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (typeof token !== 'string' || !token) return res.status(400).json({ message: 'Token Google richiesto' });
 
-  const client = await pool.connect();
+  if (!audience) {
+    console.error('[GOOGLE LOGIN] GOOGLE_CLIENT_ID is missing');
+    return res.status(503).json({ message: 'Accesso Google temporaneamente non disponibile' });
+  }
+  let payload;
   try {
-    const ticket = await googleClient.verifyIdToken({ idToken: token, audience: process.env.GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
+    const ticket = await googleClient.verifyIdToken({ idToken: token, audience });
+    payload = ticket.getPayload();
+  } catch {
+    return res.status(401).json({ message: 'Sessione Google non verificata. Riprova ad accedere.' });
+  }
+  if (payload?.email_verified !== true || typeof payload.email !== 'string' || !payload.email.trim()) {
+    return res.status(401).json({ message: 'Verifica il tuo indirizzo email su Google e riprova.' });
+  }
+  let client;
+  try {
+    client = await pool.connect();
     const email = payload.email;
-    const nome = payload.name;
-    console.log(`🔍 [POST /google] Verifica Google riuscita per email: ${email}`);
+    const nome = payload.name || email.split("@")[0];
 
     let userRes = await client.query('SELECT id, tipo, email, nome FROM utente WHERE eliminato_il IS NULL AND email=$1', [email]);
     let user;
@@ -223,7 +236,7 @@ router.post('/google', async (req, res) => {
     console.error('❌ [POST /google] Errore login Google:', err.message);
     res.status(500).json({ message: 'Login Google fallito' });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 

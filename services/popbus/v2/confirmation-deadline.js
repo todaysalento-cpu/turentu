@@ -7,7 +7,8 @@ export function resolveConfirmationDeadline(start, hours = 24, now = Date.now())
   const departure = start == null || start === '' ? NaN : new Date(start).getTime();
   const deadline = departure - hours * 3600000;
   if (!Number.isFinite(deadline) || deadline <= now) {
-    throw Object.assign(new Error('Il termine di conferma PopBus è già trascorso. Scegli una scadenza disponibile o una partenza successiva.'), { status: 409 });
+    const message = 'Mancano meno di ' + hours + ' ore alla partenza, oppure il termine è appena scaduto. Scegli una scadenza disponibile o una partenza successiva.';
+    throw Object.assign(new Error(message), { status: 409, code: 'POPBUS_DEADLINE_TOO_CLOSE' });
   }
   return { hours, deadline: new Date(deadline).toISOString() };
 }

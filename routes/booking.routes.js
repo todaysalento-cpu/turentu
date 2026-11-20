@@ -143,6 +143,30 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     await client.query('BEGIN');transaction=true;
     await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE',[req.user.id]);
     const pixelValidated = isPopbusSlot(slot) ? await validatePixelStops(client, slot, quotation) : null;
+    // Fase 3: gli ID ricevuti dal client sono SOLO una richiesta di selezione.
+    // Non consentire di sostituire le fermate della quotazione fresca con una
+    // coppia diversa senza una nuova quotazione server e validazione PIXEL.
+    // La coppia del preventivo e' gia' stata verificata da validatePixelStops.
+    const requestedStopIds = [req.body.origine_fermata_id, req.body.destinazione_fermata_id];
+    if (requestedStopIds.some(v => v !== undefined && v !== null)) {
+      if (!isPopbusSlot(quotation) || requestedStopIds.some(v => v === undefined || v === null)) {
+        throw Object.assign(new Error('Selezione fermate incompleta o non applicabile'), { status: 409 });
+      }
+      const validId = value => {
+        if (typeof value !== 'string' && typeof value !== 'number') return null;
+        const text = String(value).trim();
+        return /^[1-9]\d*$/.test(text) && Number.isSafeInteger(Number(text)) ? text : null;
+      };
+      const pickupId = validId(requestedStopIds[0]);
+      const dropoffId = validId(requestedStopIds[1]);
+      if (!pickupId || !dropoffId || pickupId === dropoffId ||
+          pickupId !== String(pixelValidated?.origine_fermata_id ?? '') ||
+          dropoffId !== String(pixelValidated?.destinazione_fermata_id ?? '')) {
+        throw Object.assign(new Error('La coppia selezionata non corrisponde alla quotazione valida: ripetere la ricerca'), {
+          status: 409, code: 'STOP_PAIR_REQUOTE_REQUIRED'
+        });
+      }
+    }
     // 🔒 Sanitizzazione sicura del tipo corsa per rispettare il vincolo CHECK ('privata', 'condivisa', 'riempimento')
     const sanitizedType = sanitizedRequestedType(type);
      // Non permettere di convertire un risultato privato in una nuova condivisa
@@ -211,6 +235,19 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     // Il frontend deve inviare origineDesiderata/destinazioneDesiderata per i punti Google Places.
     const origineRichiesta = puntoDesiderato(req.body.origineDesiderata, o, 'origine desiderata');
     const destinazioneRichiesta = puntoDesiderato(req.body.destinazioneDesiderata, d, 'destinazione desiderata');
+    // Per il catalogo le coordinate visualizzate devono coincidere con quelle
+    // delle fermate verificate dal server, anche quando il client omette gli ID.
+    if (isPopbusSlot(quotation) && quotation.fermate_catalogo_prenotabili === true) {
+      const pair = pixelValidated?.fermate_catalogo;
+      const matches = (point, stop) => !!stop &&
+        Math.abs(Number(point.lat) - Number(stop.lat)) < 0.000001 &&
+        Math.abs(Number(point.lon) - Number(stop.lon)) < 0.000001;
+      if (!matches(origineRichiesta, pair?.salita) || !matches(destinazioneRichiesta, pair?.discesa)) {
+        throw Object.assign(new Error('Punti diversi dalle fermate quotate: ripetere la ricerca'), {
+          status: 409, code: 'STOP_PAIR_REQUOTE_REQUIRED'
+        });
+      }
+    }
     const finalOrigine = { lat: origineRichiesta.lat, lon: origineRichiesta.lon };
     const finalDestinazione = { lat: destinazioneRichiesta.lat, lon: destinazioneRichiesta.lon };
 

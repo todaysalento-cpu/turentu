@@ -772,7 +772,162 @@ router.post('/ar/payment-intents', authMiddleware, async (req, res) => {
   }
 });
 
-// Verifica esplicita: non modifica prenotazioni o cattura fondi.
+
+function popbusArCheckoutEnabled() {
+  return process.env.POPBUS_AR_CHECKOUT_ENABLED === 'true' &&
+    process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') === true;
+}
+
+router.post('/ar/popbus/payment-intents', authMiddleware, async (req, res) => {
+  if (!popbusArCheckoutEnabled()) return res.status(503).json({ code: 'AR_CHECKOUT_DISABLED' });
+  const input = req.body?.tratte;
+  if (!Array.isArray(input) || input.length !== 2 ||
+      input[0]?.ar_tratta !== 'andata' || input[1]?.ar_tratta !== 'ritorno') {
+    return res.status(400).json({ error: 'Servono andata e ritorno in ordine' });
+  }
+  const groupId = uuidv4();
+  const intents = [];
+  let client;
+  try {
+    const legs = [];
+    for (const leg of input) {
+      const slot = leg.slot;
+      const count = slot?.posti_richiesti;
+      const when = slot?.start_datetime;
+      if (!Number.isSafeInteger(count) || count <= 0 || !String(slot?.id).startsWith('virtual_pop_')) {
+        throw Object.assign(new Error('Seleziona un PopBus in formazione per entrambe le tratte'), { status: 400 });
+      }
+      const deadline = resolveConfirmationDeadline(when, leg.scadenza_conferma_ore);
+      const o = puntoDesiderato(slot.origine, null, 'origine della ricerca');
+      const d = puntoDesiderato(slot.destinazione, null, 'destinazione della ricerca');
+      const results = await cercaSlotUltra({
+        coord: { lat: o.lat, lon: o.lon }, coordDest: { lat: d.lat, lon: d.lon },
+        start_datetime: when, posti_richiesti: count
+      });
+      const quote = results.find(item => item.id === slot.id && isPopbusSlot(item));
+      const cents = Math.round(Number(quote?.prezzo) * 100);
+      if (!quote || quote.corsa_id != null || !Number.isSafeInteger(cents) || cents < 50 ||
+          leg.prezzo_cents !== cents) {
+        throw Object.assign(new Error('La quotazione PopBus è cambiata: ripeti la ricerca'), { status: 409 });
+      }
+      legs.push({ leg, quote, when, count, deadline, cents });
+    }
+    if (legs[0].count !== legs[1].count || new Date(legs[0].when) >= new Date(legs[1].when)) {
+      throw Object.assign(new Error('Verifica l’ordine delle partenze e il numero dei passeggeri'), { status: 400 });
+    }
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const staged = [];
+    for (const { leg, quote, when, count, deadline, cents } of legs) {
+      const pixel = await validatePixelStops(client, quote, quote);
+      const pair = pixel.fermate_catalogo;
+      if (pair && (String(leg.origine_fermata_id) !== String(pair.salita.id) ||
+                   String(leg.destinazione_fermata_id) !== String(pair.discesa.id))) {
+        throw Object.assign(new Error('Le fermate quotate sono cambiate: ripeti la ricerca'), { status: 409 });
+      }
+      const pickup = puntoDesiderato(pair?.salita ?? pixel.raccolta_popbus ?? leg.origineDesiderata, null, 'salita');
+      const dropoff = puntoDesiderato(pair?.discesa ?? leg.destinazioneDesiderata, null, 'discesa');
+      if (pickup.lat === dropoff.lat && pickup.lon === dropoff.lon) {
+        throw Object.assign(new Error('Salita e discesa devono essere distinte'), { status: 400 });
+      }
+      staged.push({
+        ar_tratta: leg.ar_tratta, pickup, dropoff, when, count, deadline, cents,
+        classe: quote.classe || 'STANDARD', pixel, requestId: uuidv4()
+      });
+    }
+    const expiresAt = new Date(Math.min(Date.now() + 30 * 60000, ...legs.map(x => Date.parse(x.deadline.deadline))));
+    for (const leg of staged) {
+      const intent = await stripe.paymentIntents.create({
+        amount: leg.cents, currency: 'eur', capture_method: 'manual',
+        metadata: { tipo: 'popbus', requestId: leg.requestId, clienteId: String(req.user.id),
+          ar_group_id: groupId, ar_tratta: leg.ar_tratta, ar_vincolata: 'true' }
+      }, { idempotencyKey: `turentu-ar-${groupId}-${leg.ar_tratta}` });
+      intents.push(intent);
+      leg.payment_intent_id = intent.id;
+    }
+    await client.query(
+      `INSERT INTO public.ar_gruppi
+       (id, cliente_id, stato, expires_at, andata_tipo, ritorno_tipo, prezzo_andata_cents,
+        prezzo_ritorno_cents, payment_intent_andata, payment_intent_ritorno, popbus_checkout)
+       VALUES ($1,$2,'in_autorizzazione',$3,'popbus','popbus',$4,$5,$6,$7,$8::jsonb)`,
+      [groupId, req.user.id, expiresAt, staged[0].cents, staged[1].cents,
+        intents[0].id, intents[1].id, JSON.stringify(staged)]
+    );
+    await client.query('COMMIT');
+    return res.json({ ar_group_id: groupId, stato: 'in_autorizzazione', expires_at: expiresAt,
+      confermata: false, cattura_abilitata: false, tratte: staged.map((leg, i) => ({
+        ar_tratta: leg.ar_tratta, requestId: leg.requestId, prezzo: leg.cents / 100,
+        clientSecret: intents[i].client_secret
+      })) });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(console.error);
+    for (const intent of intents) {
+      await stripe.paymentIntents.cancel(intent.id).catch(console.error);
+    }
+    return res.status(err.status || 500).json({ error: err.status ? err.message : 'Preparazione PopBus A/R non riuscita' });
+  } finally {
+    client?.release();
+  }
+});
+
+async function publishPopbusAr(client, group, groupId) {
+  for (const leg of group.popbus_checkout) {
+    const { pickup, dropoff, pixel, deadline } = leg;
+    await client.query(
+      `INSERT INTO public.richieste_pop_bus
+       (cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
+        start_node_id, end_node_id, classe, origine_address, destinazione_address, prezzo,
+        payment_intent_id, request_id, origine_nodo_territoriale_id, destinazione_nodo_territoriale_id,
+        origine_fermata_id, destinazione_fermata_id, scadenza_conferma_ore, conferma_entro,
+        prezzo_massimo_autorizzato, ar_group_id, ar_tratta, ar_vincolata)
+       VALUES ($1, ST_SetSRID(ST_MakePoint($2,$3),4326), ST_SetSRID(ST_MakePoint($4,$5),4326),
+        $6,$7,'in_attesa',$8,$9,$10,$11,$12,$13,$14,$15,$8,$9,$16,$17,$18,$19,$13,$20,$21,TRUE)`,
+      [group.cliente_id, pickup.lon, pickup.lat, dropoff.lon, dropoff.lat, leg.when, leg.count,
+        pixel.origine_nodo_territoriale_id, pixel.destinazione_nodo_territoriale_id, leg.classe,
+        pixel.fermate_catalogo?.salita.nome ?? pixel.raccolta_popbus?.nome ?? pickup.indirizzo,
+        pixel.fermate_catalogo?.discesa.nome ?? dropoff.indirizzo, leg.cents / 100,
+        leg.payment_intent_id, leg.requestId, pixel.origine_fermata_id, pixel.destinazione_fermata_id,
+        deadline.hours, deadline.deadline, groupId, leg.ar_tratta]
+    );
+  }
+  await client.query('UPDATE public.ar_gruppi SET expires_at = $2, popbus_checkout = NULL WHERE id = $1',
+    [groupId, new Date(Math.min(...group.popbus_checkout.map(leg => Date.parse(leg.deadline.deadline))))]);
+}
+
+router.post('/ar/:groupId/cancel-popbus', authMiddleware, async (req, res) => {
+  const groupId = req.params.groupId;
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(groupId)) return res.sendStatus(400);
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const { getArGroupForUpdate, transitionArGroup } = await import('../services/booking/ar-coordinator.service.js');
+    const group = await getArGroupForUpdate(client, groupId, req.user.id);
+    if (group.stato === 'annullato' && group.andata_tipo === 'popbus') {
+      await client.query('COMMIT');
+      return res.json({ stato: 'annullato' });
+    }
+    if (group.stato !== 'in_autorizzazione' || !Array.isArray(group.popbus_checkout)) {
+      throw Object.assign(new Error('Questo checkout non è più annullabile'), { status: 409 });
+    }
+    await transitionArGroup(client, groupId, 'in_autorizzazione', 'annullamento_richiesto', req.user.id);
+    for (const leg of group.popbus_checkout) {
+      const intent = await stripe.paymentIntents.retrieve(leg.payment_intent_id);
+      if (intent.status !== 'canceled') await stripe.paymentIntents.cancel(intent.id);
+    }
+    await transitionArGroup(client, groupId, 'annullamento_richiesto', 'annullato', req.user.id);
+    await client.query('UPDATE public.ar_gruppi SET popbus_checkout = NULL WHERE id = $1', [groupId]);
+    await client.query('COMMIT');
+    return res.json({ stato: 'annullato' });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(console.error);
+    return res.status(err.status || 502).json({ error: err.status ? err.message : 'Annullamento non completato: riprova' });
+  } finally {
+    client?.release();
+  }
+});
+
+// Verifica coordinata delle preautorizzazioni.
 router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res) => {
   const groupId = req.params.groupId;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
@@ -813,8 +968,11 @@ router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res
        ORDER BY id FOR UPDATE`,
       [groupId, req.user.id]
     );
-    const legs = [...pending.rows, ...popbus.rows];
-    if ((pending.rows.length && popbus.rows.length) || legs.length !== 2 ||
+    const staged = group.popbus_checkout;
+    const legs = staged ? staged.map(leg => ({ ...leg, importo: leg.cents / 100 })) :
+      [...pending.rows, ...popbus.rows];
+    if ((pending.rows.length && popbus.rows.length) ||
+        (staged && (pending.rows.length || popbus.rows.length)) || legs.length !== 2 ||
         new Set(legs.map(leg => leg.payment_intent_id)).size !== 2 ||
         legs.some(leg => !leg.payment_intent_id ||
           !Number.isSafeInteger(Math.round(Number(leg.importo) * 100)) || Number(leg.importo) <= 0) ||
@@ -834,6 +992,7 @@ router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res
     }
     if (statuses.every(x => x.autorizzata)) {
       await transitionArGroup(client, groupId, 'in_autorizzazione', 'autorizzato', req.user.id);
+      if (staged) await publishPopbusAr(client, group, groupId);
     }
     await client.query('COMMIT'); transaction = false;
     return res.json({ ar_group_id: groupId,

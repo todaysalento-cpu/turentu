@@ -6,7 +6,6 @@ import { catalogoBookingEnabled } from "../services/search/search-catalogo-terri
 
 import { coordinatePolo, suggerimentiPoli } from "../services/search/search-poli-pubblici.service.js";
 
-import { coordinatePolo, suggerimentiPoli } from "../services/search/search-poli-pubblici.service.js";
 
 const router = express.Router();
 

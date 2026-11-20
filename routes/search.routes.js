@@ -3,6 +3,8 @@ import { performance } from "node:perf_hooks";
 // Importazione standard: se nel file di servizio usi 'export async function cercaSlotUltra'
 import { cercaSlotUltra } from "../services/search/search.service.js";
 
+import { coordinatePolo, suggerimentiPoli } from "../services/search/search-poli-pubblici.service.js";
+
 const router = express.Router();
 
 async function richiestaGooglePlaces(path, fieldMask, body) {
@@ -30,6 +32,10 @@ router.get("/suggerimenti", async (req, res) => {
   if (testo.length < 2 || testo.length > 180) {
     return res.status(400).json({ error: "Inserisci un nome o un indirizzo valido." });
   }
+  const poli = await suggerimentiPoli(testo).catch(errore => {
+    console.warn("[SEARCH] Catalogo luoghi non disponibile:", errore.code ?? errore.name);
+    return [];
+  });
   try {
     const { suggestions = [] } = await richiestaGooglePlaces(
       "places:autocomplete",
@@ -42,9 +48,10 @@ router.get("/suggerimenti", async (req, res) => {
       const description = placePrediction?.text?.text;
       return place_id && description ? [{ place_id, description }] : [];
     });
-    return res.set("Cache-Control", "no-store").json(luoghi);
+    return res.set("Cache-Control", "no-store").json([...poli, ...luoghi]);
   } catch (errore) {
     console.warn("[SEARCH] Suggerimenti Google non disponibili:", errore.http ?? errore.name);
+    if (poli.length) return res.set("Cache-Control", "no-store").json(poli);
     return res.status(502).json({ error: "Suggerimenti non disponibili. Riprova." });
   }
 });
@@ -53,6 +60,16 @@ router.get("/luoghi/:placeId", async (req, res) => {
   const { placeId } = req.params;
   if (!/^[A-Za-z0-9._~-]{1,512}$/.test(placeId)) {
     return res.status(400).json({ error: "Località non valida." });
+  }
+  if (placeId.startsWith("turentu_")) {
+    try {
+      const coordinate = await coordinatePolo(placeId);
+      if (!coordinate) return res.status(404).json({ error: "Località non più disponibile." });
+      return res.set("Cache-Control", "no-store").json(coordinate);
+    } catch (errore) {
+      console.warn("[SEARCH] Dettagli del polo non disponibili:", errore.code ?? errore.name);
+      return res.status(502).json({ error: "Impossibile aprire la località. Riprova." });
+    }
   }
   try {
     const { location } = await richiestaGooglePlaces(`places/${encodeURIComponent(placeId)}`, "location");

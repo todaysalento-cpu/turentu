@@ -148,6 +148,10 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     // coppia diversa senza una nuova quotazione server e validazione PIXEL.
     // La coppia del preventivo e' gia' stata verificata da validatePixelStops.
     const requestedStopIds = [req.body.origine_fermata_id, req.body.destinazione_fermata_id];
+    if (isPopbusSlot(quotation) && quotation.fermate_catalogo_prenotabili === true &&
+        requestedStopIds.some(v => v === undefined || v === null)) {
+      throw Object.assign(new Error('Conferma esplicitamente le fermate della coppia quotata'), { status: 409, code: 'STOP_PAIR_SELECTION_REQUIRED' });
+    }
     if (requestedStopIds.some(v => v !== undefined && v !== null)) {
       if (!isPopbusSlot(quotation) || requestedStopIds.some(v => v === undefined || v === null)) {
         throw Object.assign(new Error('Selezione fermate incompleta o non applicabile'), { status: 409 });

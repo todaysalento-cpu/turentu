@@ -632,7 +632,12 @@ router.post('/ar/preview', authMiddleware, async (req, res) => {
 
 // A/R NCC STEP 4: preparazione atomica dei due pending e due PI manuali.
 // Il checkout A/R non abilita accettazione o cattura individuale.
-router.post('/ar/payment-intents', authMiddleware, async (req, res) => {
+router.post(['/ar/payment-intents', '/ar/private-test/payment-intents'], authMiddleware, async (req, res) => {
+  if (req.path === '/ar/private-test/payment-intents' &&
+      (process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED !== 'true' ||
+       process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') !== true)) {
+    return res.status(503).json({ error: 'Checkout Privata A/R TEST disabilitato sul server', code: 'PRIVATE_AR_TEST_DISABLED' });
+  }
   const tratte = req.body?.tratte;
   if (!Array.isArray(tratte) || tratte.length !== 2 ||
       tratte[0]?.ar_tratta !== 'andata' || tratte[1]?.ar_tratta !== 'ritorno') {
@@ -698,9 +703,10 @@ router.post('/ar/payment-intents', authMiddleware, async (req, res) => {
     const owner = await client.query('SELECT id FROM utente WHERE id=$1 FOR UPDATE', [req.user.id]);
     if (owner.rowCount !== 1) throw Object.assign(new Error('Cliente non trovato'), { status: 404 });
     await client.query(
-      `INSERT INTO public.ar_gruppi (id, cliente_id, stato, expires_at)
-       VALUES ($1, $2, 'preparazione', $3)`,
-      [groupId, req.user.id, expiresAt]
+      `INSERT INTO public.ar_gruppi
+       (id, cliente_id, stato, expires_at, andata_tipo, ritorno_tipo, prezzo_andata_cents, prezzo_ritorno_cents)
+       VALUES ($1, $2, 'preparazione', $3, 'privata', 'privata', $4, $5)`,
+      [groupId, req.user.id, expiresAt, prepared[0].cents, prepared[1].cents]
     );
 
     const rows = [];
@@ -894,7 +900,7 @@ async function publishPopbusAr(client, group, groupId) {
     [groupId, new Date(Math.min(...group.popbus_checkout.map(leg => Date.parse(leg.deadline.deadline))))]);
 }
 
-router.post('/ar/:groupId/cancel-popbus', authMiddleware, async (req, res) => {
+router.post(['/ar/:groupId/cancel-popbus', '/ar/:groupId/cancel-private'], authMiddleware, async (req, res) => {
   const groupId = req.params.groupId;
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(groupId)) return res.sendStatus(400);
   let client;
@@ -903,16 +909,36 @@ router.post('/ar/:groupId/cancel-popbus', authMiddleware, async (req, res) => {
     await client.query('BEGIN');
     const { getArGroupForUpdate, transitionArGroup } = await import('../services/booking/ar-coordinator.service.js');
     const group = await getArGroupForUpdate(client, groupId, req.user.id);
-    if (group.stato === 'annullato' && group.andata_tipo === 'popbus') {
+    const tipo = req.path.endsWith('/cancel-private') ? 'privata' : 'popbus';
+    if (group.andata_tipo !== tipo || group.ritorno_tipo !== tipo) {
+      throw Object.assign(new Error('Tipo di checkout A/R non compatibile'), { status: 409 });
+    }
+    if (group.stato === 'annullato') {
       await client.query('COMMIT');
       return res.json({ stato: 'annullato' });
     }
-    if (group.stato !== 'in_autorizzazione' || !Array.isArray(group.popbus_checkout)) {
+    const annullabile = group.stato === 'in_autorizzazione' ||
+      (tipo === 'privata' && group.stato === 'autorizzato');
+    if (!annullabile || (tipo === 'popbus' && !Array.isArray(group.popbus_checkout))) {
       throw Object.assign(new Error('Questo checkout non è più annullabile'), { status: 409 });
     }
-    await transitionArGroup(client, groupId, 'in_autorizzazione', 'annullamento_richiesto', req.user.id);
-    for (const leg of group.popbus_checkout) {
-      const intent = await stripe.paymentIntents.retrieve(leg.payment_intent_id);
+    const legs = tipo === 'popbus' ? group.popbus_checkout : (await client.query(
+      `SELECT ar_tratta, payment_intent_id FROM public.pending
+       WHERE ar_group_id = $1 AND cliente_id = $2 AND ar_vincolata IS TRUE
+       ORDER BY id FOR UPDATE`, [groupId, req.user.id]
+    )).rows;
+    if (legs.length !== 2 || new Set(legs.map(leg => leg.payment_intent_id)).size !== 2 ||
+        !legs.some(leg => leg.ar_tratta === 'andata') || !legs.some(leg => leg.ar_tratta === 'ritorno')) {
+      throw Object.assign(new Error('Coppia A/R incompleta'), { status: 409 });
+    }
+    const intents = await Promise.all(legs.map(leg => stripe.paymentIntents.retrieve(leg.payment_intent_id)));
+    if (intents.some((intent, index) => intent.capture_method !== 'manual' ||
+        intent.metadata?.ar_group_id !== groupId || intent.metadata?.ar_tratta !== legs[index].ar_tratta ||
+        intent.metadata?.clienteId !== String(req.user.id) || intent.status === 'succeeded')) {
+      throw Object.assign(new Error('Preautorizzazioni A/R non annullabili'), { status: 409 });
+    }
+    await transitionArGroup(client, groupId, group.stato, 'annullamento_richiesto', req.user.id);
+    for (const intent of intents) {
       if (intent.status !== 'canceled') await stripe.paymentIntents.cancel(intent.id);
     }
     await transitionArGroup(client, groupId, 'annullamento_richiesto', 'annullato', req.user.id);
@@ -1008,8 +1034,7 @@ router.post('/ar/:groupId/verify-authorization', authMiddleware, async (req, res
   } finally { if (client) client.release(); }
 });
 
-// Diagnostica NCC A/R: NON persiste accettazioni e NON conferma corse.
-// Non utilizzare questa rotta come accettazione operativa in produzione.
+// Accettazione NCC provvisoria. Di default esegue soltanto la diagnostica.
 router.post('/ar/:groupId/accept', authMiddleware, async (req, res) => {
   const groupId = req.params.groupId;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
@@ -1019,28 +1044,26 @@ router.post('/ar/:groupId/accept', authMiddleware, async (req, res) => {
   if (!Number.isSafeInteger(operatoreId) || operatoreId <= 0) {
     return res.status(403).json({ code: 'AR_OPERATOR_UNAUTHORIZED' });
   }
+  const rollbackOnly = process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED !== 'true' ||
+    process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') !== true;
   try {
     const { coordinaAccettazioneProvvisoriaNccAR } =
       await import('../services/booking/ar-ncc-acceptance-coordinator.service.js');
     const risultato = await coordinaAccettazioneProvvisoriaNccAR({
       arGroupId: groupId,
       operatoreId,
-      rollbackOnly: true
+      rollbackOnly
     });
-    return res.json({
+    return res.status(rollbackOnly ? 200 : 202).json({
       ...risultato,
-      diagnostica: true,
-      rollbackOnly: true,
-      statoPersistito: false,
-      confermata: false,
-      catturaStripeAbilitata: false
+      diagnostica: rollbackOnly
     });
   } catch (err) {
-    console.error('[AR NCC ACCEPT DIAGNOSTIC]', groupId, err);
+    console.error('[AR NCC ACCEPT]', groupId, err);
     return res.status(409).json({
-      code: 'AR_NCC_ACCEPT_DIAGNOSTIC_FAILED',
-      diagnostica: true,
-      rollbackOnly: true,
+      code: rollbackOnly ? 'AR_NCC_ACCEPT_DIAGNOSTIC_FAILED' : 'AR_NCC_PROVISIONAL_ACCEPT_FAILED',
+      diagnostica: rollbackOnly,
+      rollbackOnly,
       statoPersistito: false,
       confermata: false,
       catturaStripeAbilitata: false

@@ -75,6 +75,7 @@ router.post('/:id/accetta', async (req, res) => {
   console.log(`🔍 [ACCETTA] Ricevuta richiesta per accettare il pending ID: ${id}`);
 
   let committed=false;
+  let clientReleased = false;
   try {
     await client.query('BEGIN');
 
@@ -127,6 +128,27 @@ router.post('/:id/accetta', async (req, res) => {
     // Questa protezione non modifica il comportamento delle corse singole.
     if (p.ar_vincolata === true) {
       await client.query('ROLLBACK');
+      if (p.tipo_corsa === 'privata' &&
+          process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED === 'true' &&
+          process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')) {
+        // Il coordinatore riapre la transazione con lock gruppo, poi veicoli.
+        client.release();
+        clientReleased = true;
+        try {
+          const { coordinaAccettazioneProvvisoriaNccAR } =
+            await import('../services/booking/ar-ncc-acceptance-coordinator.service.js');
+          const risultato = await coordinaAccettazioneProvvisoriaNccAR({
+            arGroupId: p.ar_group_id, operatoreId: req.user.id, rollbackOnly: false
+          });
+          return res.status(202).json({ ...risultato, accettazione_provvisoria: true });
+        } catch (error) {
+          console.error('[ACCETTA NCC A/R]', p.ar_group_id, error.code);
+          return res.status(error.status || 500).json({
+            code: error.code || 'AR_NCC_PROVISIONAL_ACCEPT_FAILED',
+            error: 'Accettazione provvisoria A/R non riuscita'
+          });
+        }
+      }
       return res.status(409).json({
         error: 'Prenotazione A/R vincolata: accettazione coordinata non ancora disponibile',
         code: 'AR_COORDINATED_ACCEPTANCE_REQUIRED',
@@ -738,7 +760,7 @@ router.post('/:id/accetta', async (req, res) => {
       ...(err.code ? { code: err.code } : {})
     });
   } finally {
-    client.release();
+    if (!clientReleased) client.release();
   }
 });
 

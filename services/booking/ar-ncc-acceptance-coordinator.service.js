@@ -39,7 +39,11 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
   if (!oid) fail('AR_OPERATOR_ID_INVALID');
   // Questo modulo non e' abilitato al COMMIT finche' lock protocol,
   // verifica del ciclo operativo e test concorrenti non saranno completati.
-  if (rollbackOnly !== true) fail('AR_NCC_COORDINATOR_COMMIT_DISABLED');
+  if (rollbackOnly !== true && (rollbackOnly !== false || externalClient || movement || routing ||
+      process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED !== 'true' ||
+      !process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_'))) {
+    fail('AR_NCC_COORDINATOR_COMMIT_DISABLED');
+  }
 
   const ownClient = !externalClient;
   const client = externalClient ?? await pool.connect();
@@ -142,8 +146,12 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
       }
     }
 
+    if (!rollbackOnly && pair.completa && preliminary?.verificato !== true) {
+      fail('AR_NCC_PAIR_PREFLIGHT_FAILED');
+    }
+
     if (ownClient) {
-      await client.query('ROLLBACK');
+      await client.query(rollbackOnly ? 'ROLLBACK' : 'COMMIT');
       tx = false;
     } else {
       await client.query('ROLLBACK TO SAVEPOINT ar_ncc_coordinator_test');
@@ -151,14 +159,14 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
       savepoint = false;
     }
     return {
-      rollbackOnly: true,
+      rollbackOnly,
       gruppoId: arGroupId,
       operatoreId: oid,
       stessoOperatore: sameOperator,
       tratteAccettate: accepted.map(x => ({ pendingId: x.pendingId, veicoloId: x.veicoloId, creata: x.creata })),
       coppiaCompletaNelTest: pair.completa,
       verificaPreliminare: preliminary,
-      statoPersistito: false,
+      statoPersistito: !rollbackOnly,
       confermata: false,
       catturaStripeAbilitata: false
     };

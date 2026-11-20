@@ -6,6 +6,7 @@ import { upsertPrenotazione } from '../services/search/search.cache.js';
 import { notifyUser } from '../services/notifications/notification.service.js'; 
 import Stripe from 'stripe';
 import { cercaSlotUltra } from '../services/search/search.service.js';
+import { catalogoBookingEnabled, isCatalogoSlot } from '../services/search/search-catalogo-territoriale.service.js';
 import { isPopbusSlot, validatePixelStops } from '../services/pixel/pixel.validation.service.js';
 
 const router = express.Router();
@@ -195,13 +196,28 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       const o = req.body.searchOrigine ?? slot.origine;
       const d = req.body.searchDestinazione ?? slot.destinazione;
       const fresh = await cercaSlotUltra({ coord: o, coordDest: d,
-        posti_richiesti: Number(slot.posti_richiesti), start_datetime: slot.start_datetime });
+        posti_richiesti: Number(slot.posti_richiesti), start_datetime: slot.start_datetime }, {
+          prenotazioneCatalogo: catalogoBookingEnabled() && isCatalogoSlot(slot.id)
+        });
       const quotation = fresh.find(x => String(x.id) === String(slot.id));
       if (!quotation || Math.round(Number(quotation.prezzo) * 100) !== Math.round(Number(prezzo) * 100) || !isPopbusSlot(quotation)) {
         return res.status(409).json({ error: 'POPBUS: opzione o prezzo cambiati; ripetere la ricerca' });
       }
       if (quotation.prezzo_massimo_popbus != null) {
         return res.status(409).json({ error: 'Per il tetto PopBus è richiesta una preautorizzazione su carta' });
+      }
+      // Gli ID operativi del client, quando presenti, devono corrispondere alla
+      // coppia associata all'ID della quotazione fresca. Mai sostituirli.
+      const selectedPickup = req.body.origine_fermata_id ?? slot.origine_fermata_id;
+      const selectedDropoff = req.body.destinazione_fermata_id ?? slot.destinazione_fermata_id;
+      if (selectedPickup != null || selectedDropoff != null) {
+        const pair = quotation.fermate_pixel_popbus;
+        if (selectedPickup == null || selectedDropoff == null ||
+            String(selectedPickup) !== String(pair?.salita?.fermata_id ?? '') ||
+            String(selectedDropoff) !== String(pair?.discesa?.fermata_id ?? '')) {
+          return res.status(409).json({ code: 'STOP_PAIR_REQUOTE_REQUIRED',
+            error: 'Coppia fermate cambiata: ripetere la ricerca' });
+        }
       }
       pixelBySlot.set(slot, quotation);
     }
@@ -253,14 +269,18 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
 
       if (isPopBus) {
         const pixel = validatedPixel.get(slot);
+        const quotation = pixelBySlot.get(slot);
         const raccolta = pixel.raccolta_popbus;
-        const salita = raccolta && !pixel.raccolta_google ? raccolta : origin;
+        const pair = pixel.fermate_catalogo;
+        const salita = pair?.salita ?? (raccolta && !pixel.raccolta_google ? raccolta : origin);
+        const discesa = pair?.discesa ?? destination;
         const origineAddress = slot.origine_address || slot.localitaOrigine || 'Partenza';
-        const nodeRes = await client.query(
-          `SELECT get_or_create_node($1, $2) as start, get_or_create_node($3, $4) as end`, 
-          [Number(salita.lat), Number(salita.lon), Number(destination.lat), Number(destination.lon)]
-        );
-
+        const startNodeId = Number(pixel.origine_nodo_territoriale_id);
+        const endNodeId = Number(pixel.destinazione_nodo_territoriale_id);
+        if (!Number.isSafeInteger(startNodeId) || !Number.isSafeInteger(endNodeId) ||
+            startNodeId <= 0 || endNodeId <= 0 || startNodeId === endNodeId) {
+          throw Object.assign(new Error('Nodi territoriali PIXEL non validi'), { status: 409 });
+        }
         const result = await client.query(
           `INSERT INTO richieste_pop_bus (
             cliente_id, origine, destinazione, start_datetime, posti_richiesti, stato,
@@ -277,18 +297,18 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
           [
             clienteId,
             Number(salita.lon), Number(salita.lat),
-            Number(destination.lon), Number(destination.lat),
+            Number(discesa.lon), Number(discesa.lat),
             slot.start_datetime, slot.posti_richiesti,
-            nodeRes.rows[0].start, nodeRes.rows[0].end,
+            startNodeId, endNodeId,
             slot.classe || 'STANDARD',
-            raccolta?.nome ?? origineAddress,
-            slot.destinazione_address || slot.localitaDestinazione || 'Arrivo',
+            pair?.salita?.nome ?? raccolta?.nome ?? origineAddress,
+            pair?.discesa?.nome ?? slot.destinazione_address ?? slot.localitaDestinazione ?? 'Arrivo',
             Number(prezzo), `wallet_${requestId}`, requestId,
             pixel.origine_nodo_territoriale_id,
             pixel.destinazione_nodo_territoriale_id,
             pixel.origine_fermata_id,
             pixel.destinazione_fermata_id,
-            raccolta ? JSON.stringify({
+            (raccolta || pair) ? JSON.stringify({
               lat: Number(origin.lat), lon: Number(origin.lon), indirizzo: origineAddress,
               ...(pixel.raccolta_google && { raccolta_google: true })
             }) : null
@@ -366,7 +386,7 @@ router.post('/payment-wallet', authMiddleware, async (req, res) => {
       } catch (error) { console.error('[WALLET NOTIFY ADMIN POSTCOMMIT]', error); }
       try {
         await notifyUser(Number(clienteId), {
-          type: 'REQUEST_CREATED', message: 'La tua prenotazione è stata pagata e confermata con il wallet',
+          type: 'REQUEST_CREATED', message: isPopbusSlot(slot) ? 'Richiesta PopBus ricevuta: in attesa di attivazione' : 'La tua prenotazione è stata pagata e confermata con il wallet',
           role: 'cliente', data: { requestId, rowId: savedRow.id, type, start_datetime: slot.start_datetime }
         });
       } catch (error) { console.error('[WALLET NOTIFY CLIENT POSTCOMMIT]', error); }

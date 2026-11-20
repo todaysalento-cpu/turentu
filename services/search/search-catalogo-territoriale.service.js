@@ -97,7 +97,7 @@ export async function cercaCatalogoPrenotabile({ pool, origine, destinazione, di
                 pool, origine, destinazione, origineNodoId: start.node.dbId, destinazioneNodoId: end.node.dbId,
                 startDatetime: partenza, maxDeviazionePct: QUALITA_PERCORRENZA[classe].maxDeviazionePct,
                 fermateCatalogoIds: [...salita, ...discesa].map(s => s.dbId),
-                soloVerificate: true, maxCoppie: 8, ...(route && { route })
+                soloVerificate: false, maxCoppie: 8, ...(route && { route })
             });
             for (const coppia of esito.coppie) {
                 const chiave = `${coppia.origine_fermata_id}:${coppia.destinazione_fermata_id}`;

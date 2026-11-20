@@ -1252,6 +1252,8 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
                 risultatiFinali.push({
                     ...virtualPopSlot,
                     id: `virtual_pop_catalogo_${key}`,
+                    origine_nodo_territoriale_id: salita.nodo_territoriale_id,
+                    destinazione_nodo_territoriale_id: discesa.nodo_territoriale_id,
                     fermate_pixel_popbus: { salita, discesa },
                     fermate_catalogo_prenotabili: true,
                     tratta_catalogo_km: pair.distanza_tratta_km,

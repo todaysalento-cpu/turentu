@@ -132,7 +132,8 @@ export async function generaCoppieFermatePopbus({
         accesso_discesa_minuti: Math.ceil(uscita.durataMs / 60000),
         distanza_totale_km: Math.round(distanzaTotaleKm * 100) / 100,
         durata_totale_minuti: Math.ceil(durataTotaleMinuti),
-        ...(soloVerificate && { distanza_tratta_km: tratta.distanzaKm, durata_tratta_minuti: tratta.durataMs / 60000 }),
+        distanza_tratta_km: Math.round(tratta.distanzaKm * 100) / 100,
+        durata_tratta_minuti: tratta.durataMs / 60000,
         stato: 'candidata_stradale', prenotabile: false
       });
     }

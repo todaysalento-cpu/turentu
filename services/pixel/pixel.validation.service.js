@@ -71,8 +71,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
              f.google_place_id, f.google_geo_scade_il
       FROM public.pixel_fermate f
       WHERE f.id = $1 AND f.nodo_territoriale_id = $2 AND f.attiva
-        AND (NOT $3::boolean OR f.verificata IS TRUE)
-        AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
+                AND upper(ltrim(f.nome)) NOT LIKE 'TEST PIXEL%'
         AND upper(ltrim(f.nome)) NOT LIKE '[TEST PIXEL]%'
         AND NOT EXISTS (
           SELECT 1 FROM public.pixel_fermate_test_metadata t WHERE t.fermata_id = f.id
@@ -82,7 +81,7 @@ export async function validatePixelStops(client, slot, quotation = null) {
           WHERE ff.fermata_id = f.id AND ff.stato_verifica = 'non_ammessa'
         )
       FOR SHARE OF f
-    `, [id, nodo, quotation.fermate_catalogo_prenotabili === true]);
+    `, [id, nodo]);
     const corrente = rows[0];
     if (!corrente || corrente.lat !== fermata.lat || corrente.lon !== fermata.lon) {
       throw pixelError('POPBUS: fermata cambiata, ripetere la ricerca', 409);

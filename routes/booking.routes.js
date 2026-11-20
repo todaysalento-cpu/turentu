@@ -235,19 +235,9 @@ router.post('/payment-intent', authMiddleware, async (req, res) => {
     // Il frontend deve inviare origineDesiderata/destinazioneDesiderata per i punti Google Places.
     const origineRichiesta = puntoDesiderato(req.body.origineDesiderata, o, 'origine desiderata');
     const destinazioneRichiesta = puntoDesiderato(req.body.destinazioneDesiderata, d, 'destinazione desiderata');
-    // Per il catalogo le coordinate visualizzate devono coincidere con quelle
-    // delle fermate verificate dal server, anche quando il client omette gli ID.
-    if (isPopbusSlot(quotation) && quotation.fermate_catalogo_prenotabili === true) {
-      const pair = pixelValidated?.fermate_catalogo;
-      const matches = (point, stop) => !!stop &&
-        Math.abs(Number(point.lat) - Number(stop.lat)) < 0.000001 &&
-        Math.abs(Number(point.lon) - Number(stop.lon)) < 0.000001;
-      if (!matches(origineRichiesta, pair?.salita) || !matches(destinazioneRichiesta, pair?.discesa)) {
-        throw Object.assign(new Error('Punti diversi dalle fermate quotate: ripetere la ricerca'), {
-          status: 409, code: 'STOP_PAIR_REQUOTE_REQUIRED'
-        });
-      }
-    }
+    // I punti desiderati descrivono la ricerca del passeggero.
+    // Le fermate operative sono quelle validate dal preventivo server-side,
+    // e vengono salvate separatamente nel ramo POPBUS sottostante.
     const finalOrigine = { lat: origineRichiesta.lat, lon: origineRichiesta.lon };
     const finalDestinazione = { lat: destinazioneRichiesta.lat, lon: destinazioneRichiesta.lon };
 

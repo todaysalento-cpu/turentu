@@ -780,8 +780,12 @@ router.post(['/ar/payment-intents', '/ar/private-test/payment-intents'], authMid
 
 
 function popbusArCheckoutEnabled() {
-  return process.env.POPBUS_AR_CHECKOUT_ENABLED === 'true' &&
-    process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') === true;
+  if (process.env.POPBUS_AR_CHECKOUT_ENABLED !== 'true') return false;
+  const key = process.env.STRIPE_SECRET_KEY ?? '';
+  if (key.startsWith('sk_test_')) return true;
+  return key.startsWith('sk_live_') &&
+    process.env.POPBUS_AR_LIVE_CHECKOUT_ENABLED === 'true' &&
+    process.env.POPBUS_AR_FINALIZATION_ENABLED === 'true';
 }
 
 router.post('/ar/popbus/payment-intents', authMiddleware, async (req, res) => {
@@ -831,7 +835,12 @@ router.post('/ar/popbus/payment-intents', authMiddleware, async (req, res) => {
                    String(leg.destinazione_fermata_id) !== String(pair.discesa.id))) {
         throw Object.assign(new Error('Le fermate quotate sono cambiate: ripeti la ricerca'), { status: 409 });
       }
-      const pickup = puntoDesiderato(pair?.salita ?? pixel.raccolta_popbus ?? leg.origineDesiderata, null, 'salita');
+      const pickup = puntoDesiderato(pair?.salita ?? leg.origineDesiderata ?? pixel.raccolta_popbus, null, 'salita');
+      const raccolta = pixel.raccolta_popbus;
+      if (!pair && leg.origineDesiderata && raccolta && (pickup.lat !== raccolta.lat || pickup.lon !== raccolta.lon)) {
+        pixel.origine_fermata_id = null;
+        delete pixel.raccolta_popbus;
+      }
       const dropoff = puntoDesiderato(pair?.discesa ?? leg.destinazioneDesiderata, null, 'discesa');
       if (pickup.lat === dropoff.lat && pickup.lon === dropoff.lon) {
         throw Object.assign(new Error('Salita e discesa devono essere distinte'), { status: 400 });

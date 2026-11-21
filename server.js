@@ -76,7 +76,7 @@ const port = process.env.PORT || 3001;
 // ======================= CORS AGGIORNATO E PERMISSIVO =======================
 const isAllowedOrigin = (origin, callback) => {
   if (!origin) return callback(null, true);
-  const allowed = ['http://localhost:3000', 'https://turentumi.vercel.app', 'https://turentu.onrender.com', 'https://admin.turentu.com', 'https://turentu-admin.pages.dev', 'https://turentu-web-preview.pages.dev'];
+  const allowed = ['http://localhost:3000', 'https://turentumi.vercel.app', 'https://turentu.onrender.com', 'https://admin.turentu.com', 'https://turentu-admin.pages.dev', 'https://turentu-web-preview.pages.dev', 'https://www.turentu.com', 'https://turentu.com'];
   if (allowed.includes(origin) || origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) {
     return callback(null, true);
   }

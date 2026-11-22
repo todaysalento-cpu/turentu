@@ -1079,17 +1079,41 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
                 const ritorno = versoEvento === 'ritorno';
                 const ordinario = await resolveOrCreateTerritorialNode(ritorno ? { lat: destLat, lon: destLon } : { lat, lon });
                 if (!ordinario?.id || Number(ordinario.id) === Number(nodoEvento)) throw new Error('PIXEL_EVENT_NODE_INVALID');
-                const origineNodoId = ritorno ? nodoEvento : ordinario.id;
-                const destinazioneNodoId = ritorno ? ordinario.id : nodoEvento;
                 const scadenzaMinima = scadenzaUtileGoogle(orarioAndataUtente);
-                const [salita, discesa] = await Promise.all([
-                    cercaFermataLocalePixel({ client: pool, nodoId: origineNodoId, punto: { lat, lon }, scadenzaMinima }),
-                    cercaFermataLocalePixel({ client: pool, nodoId: destinazioneNodoId, punto: { lat: destLat, lon: destLon }, scadenzaMinima })
-                ]);
+                const puntoEvento = ritorno ? { lat, lon } : { lat: destLat, lon: destLon };
+                const puntoTerritoriale = ritorno ? { lat: destLat, lon: destLon } : { lat, lon };
+                const fermataEvento = await cercaFermataLocalePixel({
+                    client: pool, nodoId: nodoEvento, punto: puntoEvento, scadenzaMinima
+                });
+                let fermataTerritoriale = fermataEvento && await cercaFermataLocalePixel({
+                    client: pool, nodoId: ordinario.id, punto: puntoTerritoriale, scadenzaMinima
+                });
+                if (fermataEvento && !fermataTerritoriale) {
+                    // La raccolta ordinaria vale solo sul lato del comune del passeggero.
+                    const contesto = await getPixelTerritorialContext(
+                        puntoTerritoriale.lat, puntoTerritoriale.lon, puntoEvento.lat, puntoEvento.lon,
+                        info.distanzaKm, orarioAndataUtente
+                    );
+                    const candidata = contesto.fermate_pixel_popbus?.salita ?? contesto.raccolta_popbus;
+                    const nodoCandidato = candidata?.nodo_territoriale_id ?? candidata?.nodo_id;
+                    if (nodoCandidato && Number(nodoCandidato) !== Number(nodoEvento)) {
+                        const { rows } = await pool.query(
+                            'SELECT id FROM nodi_territoriali WHERE id = $1 AND attivo AND evento_id IS NULL',
+                            [nodoCandidato]
+                        );
+                        if (rows.length) fermataTerritoriale = { ...candidata, nodo_territoriale_id: nodoCandidato };
+                    }
+                }
                 coppieCatalogo = [];
-                if (salita && discesa) {
+                if (fermataEvento && fermataTerritoriale) {
+                    const salita = ritorno ? fermataEvento : fermataTerritoriale;
+                    const discesa = ritorno ? fermataTerritoriale : fermataEvento;
                     coppieCatalogo.push({ salita, discesa });
-                    pixelContext = { origine_nodo_territoriale_id: origineNodoId, destinazione_nodo_territoriale_id: destinazioneNodoId, pixel_fermate_disponibili: true, pixel_stato: 'catalogo_disponibile' };
+                    pixelContext = {
+                        origine_nodo_territoriale_id: salita.nodo_territoriale_id,
+                        destinazione_nodo_territoriale_id: discesa.nodo_territoriale_id,
+                        pixel_fermate_disponibili: true, pixel_stato: 'catalogo_disponibile'
+                    };
                 }
             } else if (coppieCatalogo.length) {
                 const { salita, discesa } = coppieCatalogo[0];

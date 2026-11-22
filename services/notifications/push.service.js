@@ -66,13 +66,29 @@ export async function sendPush(token, title, body, data = {}) {
       throw new Error("Firebase non è inizializzato. Controlla i log di avvio.");
     }
 
+    const isEvent = data.type === "event";
+    const eventId = String(data.eventId ?? "");
+    if (isEvent && !/^[1-9]\d{0,18}$/.test(eventId)) {
+      throw new Error("eventId non valido per la notifica evento.");
+    }
+
     const message = {
       token,
       notification: { title, body },
       data: Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, String(v)])
       ),
-      android: { priority: "high" },
+      android: {
+        priority: "high",
+        notification: {
+          sound: "default",
+          ...(data.imageUrl ? { imageUrl: String(data.imageUrl) } : {}),
+          ...(isEvent ? {
+            channelId: "turentu-events",
+            tag: `turentu-event-${data.notificationId ?? eventId}`,
+          } : {}),
+        },
+      },
       apns: { payload: { aps: { sound: "default" } } },
     };
 

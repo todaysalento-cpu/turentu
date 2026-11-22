@@ -309,4 +309,28 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// Consulta direttamente l'evento anche quando non rientra nei risultati della ricerca.
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[1-9]\d{0,18}$/.test(id) || (id.length === 19 && id > "9223372036854775807")) {
+    return res.status(400).json({ success: false, error: "ID evento non valido" });
+  }
+
+  try {
+    const { rows: [evento] } = await pool.query(
+      `SELECT id, titolo, categoria, descrizione, data_inizio, data_fine,
+              luogo_nome, indirizzo, citta, lat, lng, immagine_url
+       FROM public.eventi WHERE id = $1::bigint`,
+      [id],
+    );
+    if (!evento) {
+      return res.status(404).json({ success: false, error: "Evento non trovato" });
+    }
+    return res.json({ success: true, data: evento });
+  } catch (error) {
+    console.error('[API GET /eventi/:id]', error.message);
+    return res.status(500).json({ success: false, error: "Errore server" });
+  }
+});
+
 export { router as eventiRouter };

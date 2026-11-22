@@ -632,7 +632,10 @@ router.post('/ar/preview', authMiddleware, async (req, res) => {
 
 // A/R NCC STEP 4: preparazione atomica dei due pending e due PI manuali.
 // Il checkout A/R non abilita accettazione o cattura individuale.
-router.post(['/ar/payment-intents', '/ar/private-test/payment-intents'], authMiddleware, async (req, res) => {
+router.post(['/ar/payment-intents', '/ar/private-test/payment-intents', '/ar/private/payment-intents'], authMiddleware, async (req, res) => {
+  if (req.path === '/ar/private/payment-intents' && !(process.env.PRIVATE_AR_LIVE_ENABLED === 'true' && process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_'))) {
+    return res.status(503).json({ code: 'PRIVATE_AR_LIVE_DISABLED', error: 'Checkout Privata A/R non disponibile' });
+  }
   if (req.path === '/ar/private-test/payment-intents' &&
       (process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED !== 'true' ||
        process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_') !== true)) {

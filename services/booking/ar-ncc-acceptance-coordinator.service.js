@@ -3,6 +3,8 @@
  * Nessuna creazione corse, conferma, notifica o cattura Stripe.
  * Il default ROLLBACK_ONLY impedisce modifiche persistenti durante il collaudo.
  */
+import Stripe from 'stripe';
+import { finalizzaPrivataAR } from './private-ar-finalization.service.js';
 import { pool } from '../../db/db.js';
 import { accettaTrattaARAtomica } from './ar-atomic-acceptance.service.js';
 import { verificaCoppiaAR } from './ar-acceptance.service.js';
@@ -30,18 +32,18 @@ function positiveInt(value) {
  * @param {object} [input.client] Connessione esterna gia in transazione, SOLO test
  */
 export async function coordinaAccettazioneProvvisoriaNccAR({
-  arGroupId, operatoreId, rollbackOnly = true, movement, routing, client: externalClient = null
+  arGroupId, operatoreId, pendingId, sceltaConducente, rollbackOnly = true, movement, routing, client: externalClient = null
 } = {}) {
   if (typeof arGroupId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arGroupId)) {
     fail('AR_GROUP_ID_INVALID');
   }
   const oid = positiveInt(operatoreId);
   if (!oid) fail('AR_OPERATOR_ID_INVALID');
-  // Questo modulo non e' abilitato al COMMIT finche' lock protocol,
-  // verifica del ciclo operativo e test concorrenti non saranno completati.
+  const live = (process.env.PRIVATE_AR_LIVE_ENABLED === 'true' && process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) === true;
+  const test = process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED === 'true' &&
+    process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_');
   if (rollbackOnly !== true && (rollbackOnly !== false || externalClient || movement || routing ||
-      process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED !== 'true' ||
-      !process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_'))) {
+      (!live && !test))) {
     fail('AR_NCC_COORDINATOR_COMMIT_DISABLED');
   }
 
@@ -122,8 +124,13 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
       Number(a.veicolo_id) !== Number(legs.find(l => Number(l.id) === Number(a.pending_id))?.veicolo_id)
     )) fail('AR_EXISTING_ACCEPTANCE_INVALID');
 
+    const selected = live && !rollbackOnly ? mine.filter(leg => Number(leg.id) === positiveInt(pendingId)) : mine;
+    if (!selected.length) fail('AR_OPERATOR_NOT_AUTHORIZED');
+    if (live && !rollbackOnly && !['automatica', 'manuale', 'titolare'].includes(sceltaConducente?.modalita)) {
+      fail('CONDUCENTE_SCELTA_RICHIESTA');
+    }
     const accepted = [];
-    for (const leg of [...mine].sort((a, b) => Number(a.id) - Number(b.id))) {
+    for (const leg of [...selected].sort((a, b) => Number(a.id) - Number(b.id))) {
       const old = byPending.get(Number(leg.id));
       if (old) {
         accepted.push({ pendingId: Number(leg.id), veicoloId: Number(leg.veicolo_id), creata: false });
@@ -132,12 +139,29 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
           pendingId: Number(leg.id), operatoreId: oid, client, movement, routing
         }));
       }
+      if (live && !rollbackOnly) {
+        await client.query(`UPDATE ar_accettazioni SET scelta_conducente = $2::jsonb
+          WHERE pending_id = $1 AND ar_group_id = $3 AND stato = 'provvisoria'`,
+        [leg.id, JSON.stringify(sceltaConducente), arGroupId]);
+      }
     }
 
     // Lettura orientativa: non certifica il ciclo completo e non abilita 'pronto'.
     const pair = await verificaCoppiaAR(client, arGroupId);
     let preliminary = null;
-    if (pair.completa) {
+    let corseConfermate = [];
+    const finalizza = !rollbackOnly && pair.completa &&
+      (live || process.env.PRIVATE_AR_FINALIZATION_TEST_ENABLED === 'true');
+    if (finalizza) {
+      // L'accettazione coordinata non registra ancora le scelte dei conducenti.
+      if (!live && process.env.NCC_CONDUCENTI_ENABLED === 'true') {
+        fail('AR_NCC_DRIVER_ASSIGNMENT_NOT_READY');
+      }
+      corseConfermate = await finalizzaPrivataAR(
+        client, arGroupId, new Stripe(process.env.STRIPE_SECRET_KEY), { assegna: live }
+      );
+    }
+    if (pair.completa && !finalizza) {
       // Il verificatore richiede 'in_attesa'/'pronto': non transizioniamo
       // nel test ROLLBACK_ONLY; restituiamo la coppia senza falsa certificazione.
       preliminary = { eseguibile: false, motivo: 'AR_GROUP_REMAINS_AUTHORIZED_IN_ROLLBACK_TEST' };
@@ -146,7 +170,7 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
       }
     }
 
-    if (!rollbackOnly && pair.completa && preliminary?.verificato !== true) {
+    if (!rollbackOnly && pair.completa && !finalizza && preliminary?.verificato !== true) {
       fail('AR_NCC_PAIR_PREFLIGHT_FAILED');
     }
 
@@ -167,7 +191,8 @@ export async function coordinaAccettazioneProvvisoriaNccAR({
       coppiaCompletaNelTest: pair.completa,
       verificaPreliminare: preliminary,
       statoPersistito: !rollbackOnly,
-      confermata: false,
+      confermata: corseConfermate.length === 2,
+      corseConfermate,
       catturaStripeAbilitata: false
     };
   } catch (error) {

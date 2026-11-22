@@ -129,8 +129,9 @@ router.post('/:id/accetta', async (req, res) => {
     if (p.ar_vincolata === true) {
       await client.query('ROLLBACK');
       if (p.tipo_corsa === 'privata' &&
-          process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED === 'true' &&
-          process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')) {
+          ((process.env.PRIVATE_AR_LIVE_ENABLED === 'true' && process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) ||
+           (process.env.PRIVATE_AR_PROVISIONAL_TEST_ENABLED === 'true' &&
+            process.env.STRIPE_SECRET_KEY?.startsWith('sk_test_')))) {
         // Il coordinatore riapre la transazione con lock gruppo, poi veicoli.
         client.release();
         clientReleased = true;
@@ -138,9 +139,13 @@ router.post('/:id/accetta', async (req, res) => {
           const { coordinaAccettazioneProvvisoriaNccAR } =
             await import('../services/booking/ar-ncc-acceptance-coordinator.service.js');
           const risultato = await coordinaAccettazioneProvvisoriaNccAR({
-            arGroupId: p.ar_group_id, operatoreId: req.user.id, rollbackOnly: false
+            arGroupId: p.ar_group_id, operatoreId: req.user.id, rollbackOnly: false,
+            pendingId: p.id, sceltaConducente: req.body?.conducente
           });
-          return res.status(202).json({ ...risultato, accettazione_provvisoria: true });
+          return res.status(risultato.confermata ? 200 : 202).json({
+            ...risultato,
+            accettazione_provvisoria: !risultato.confermata
+          });
         } catch (error) {
           console.error('[ACCETTA NCC A/R]', p.ar_group_id, error.code);
           return res.status(error.status || 500).json({

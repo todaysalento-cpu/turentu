@@ -499,6 +499,29 @@ export async function toggleCorsa(corsa_id, action, utenteId) {
           throw new Error(`PaymentIntent ${pi.id}: valuta diversa da EUR`);
         }
 
+        if (pi.metadata?.ar_vincolata === 'true' && pi.metadata?.tipo === 'privata') {
+          const linked = await client.query(`
+            SELECT 1 FROM prenotazioni pr
+            JOIN ar_gruppi g ON g.id = pr.ar_group_id
+            JOIN pending p ON p.ar_group_id = g.id AND p.ar_tratta = pr.ar_tratta
+            WHERE pr.id = $1 AND pr.corsa_id = $2 AND g.id::text = $3
+              AND pr.ar_tratta = $4 AND g.cliente_id::text = $5
+              AND g.stato = 'confermato' AND g.andata_tipo = 'privata' AND g.ritorno_tipo = 'privata'
+              AND p.corsa_id = pr.corsa_id AND p.payment_intent_id = $6
+              AND p.stato = 'accettata'
+              AND EXISTS (
+                SELECT 1 FROM pending other
+                WHERE other.ar_group_id = g.id AND other.ar_tratta <> p.ar_tratta
+                  AND other.stato = 'accettata' AND other.corsa_id IS NOT NULL
+              )
+          `, [pren.prenotazione_id, corsa_id, pi.metadata.ar_group_id,
+            pi.metadata.ar_tratta, pi.metadata.clienteId, pi.id]);
+          if (linked.rowCount !== 1 || pi.capture_method !== 'manual' ||
+              Number(pi.amount) !== Math.round(importoFinale * 100)) {
+            throw new Error('PRIVATE_AR_CAPTURE_NOT_READY');
+          }
+        }
+
         // Fallback e limite storico restano esclusivamente nel pricing legacy.
         if (!modelloA && importoFinale <= 0 && Number(pi.amount) > 0) {
           importoFinale = Number(pi.amount) / 100;

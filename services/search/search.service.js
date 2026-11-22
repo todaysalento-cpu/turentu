@@ -10,7 +10,7 @@ import { getDurataDistanza } from '../../utils/maps.util.js';
 import { calcolaPrezzo } from '../../utils/pricing.util.js';
 import { anteprimaFormazionePopbus } from '../popbus/v2/formation-preview.js';
 import { cercaPopbusAttivate } from './popbus-active-search.service.js';
-import { assegnaFermatePixel } from '../popbus/v2/popbus-stop-candidates.service.js';
+import { assegnaFermatePixel, cercaFermataLocalePixel } from '../popbus/v2/popbus-stop-candidates.service.js';
 import { cercaFermateFormazionePopbus } from './popbus-formation-stops.service.js';
 import { comuniRaccolta, percorrenzaConRaccolta, scegliRaccoltaPopbus, usaSalitaLocalePrimaDellAlternativa } from './popbus-raccolta.service.js';
 import { pixelCollaudoEnabled } from '../pixel/pixel-collaudo-mode.js';
@@ -377,21 +377,46 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
         diffMinuti >= -5 &&
         diffMinuti <= 30;
 
+    let nodoEvento = null;
+    const versoEvento = richiesta.evento_tratta ?? 'andata';
     let orarioEventoAndata = null;
     let orarioEventoRitorno = null;
 
     if (richiesta.evento_id) {
         const { rows: eventoRows } = await pool.query(`
-            SELECT lat, lng, data_inizio, data_fine
-            FROM eventi
-            WHERE id = $1
+            SELECT e.lat, e.lng, e.data_inizio, e.data_fine, n.id AS nodo_id
+            FROM eventi e
+            LEFT JOIN nodi_territoriali n ON n.evento_id = e.id AND n.attivo
+            WHERE e.id = $1
         `, [richiesta.evento_id]);
 
         if (eventoRows.length > 0) {
             const ev = eventoRows[0];
 
-            destLat = destLat || ev.lat;
-            destLon = destLon || ev.lng;
+            if (versoEvento === 'ritorno') {
+                lat = Number(ev.lat);
+                lon = Number(ev.lng);
+            } else {
+                destLat = Number(ev.lat);
+                destLon = Number(ev.lng);
+            }
+            nodoEvento = ev.nodo_id;
+            if (!nodoEvento) {
+                try {
+                    const created = await pool.query(`
+                        SELECT id FROM nodi_territoriali
+                        WHERE evento_id = $1 AND attivo
+                    `, [richiesta.evento_id]);
+                    nodoEvento = created.rows[0]?.id;
+                    if (!nodoEvento) {
+                        await pool.query('SELECT public.assicura_nodo_pixel_evento($1)', [richiesta.evento_id]);
+                        const fresh = await pool.query('SELECT id FROM nodi_territoriali WHERE evento_id = $1 AND attivo', [richiesta.evento_id]);
+                        nodoEvento = fresh.rows[0]?.id;
+                    }
+                } catch (error) {
+                    console.warn('[PIXEL EVENT NODE]', error.code ?? error.name);
+                }
+            }
 
             orarioEventoAndata = new Date(ev.data_inizio);
 
@@ -886,7 +911,7 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
     const popbusActiveSearchEnabled =
         process.env.POPBUS_ACTIVE_SEARCH_ENABLED === '1';
 
-    if (popbusActiveSearchEnabled) {
+    if (popbusActiveSearchEnabled && !richiesta.evento_id) {
         try {
             const popbusConfermate = await cercaPopbusAttivate({
                 pool,
@@ -1038,7 +1063,7 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
             pixel_stato: 'non_verificato'
         };
         let coppieCatalogo = [];
-        if (prenotazioneCatalogo) {
+        if (prenotazioneCatalogo && !richiesta.evento_id) {
             try {
                 coppieCatalogo = await cercaCatalogoPrenotabile({
                     pool, origine: { lat, lon }, destinazione: { lat: destLat, lon: destLon },
@@ -1049,7 +1074,24 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
             }
         }
         try {
-            if (coppieCatalogo.length) {
+            if (richiesta.evento_id) {
+                if (!nodoEvento) throw new Error('PIXEL_EVENT_NODE_MISSING');
+                const ritorno = versoEvento === 'ritorno';
+                const ordinario = await resolveOrCreateTerritorialNode(ritorno ? { lat: destLat, lon: destLon } : { lat, lon });
+                if (!ordinario?.id || Number(ordinario.id) === Number(nodoEvento)) throw new Error('PIXEL_EVENT_NODE_INVALID');
+                const origineNodoId = ritorno ? nodoEvento : ordinario.id;
+                const destinazioneNodoId = ritorno ? ordinario.id : nodoEvento;
+                const scadenzaMinima = scadenzaUtileGoogle(orarioAndataUtente);
+                const [salita, discesa] = await Promise.all([
+                    cercaFermataLocalePixel({ client: pool, nodoId: origineNodoId, punto: { lat, lon }, scadenzaMinima }),
+                    cercaFermataLocalePixel({ client: pool, nodoId: destinazioneNodoId, punto: { lat: destLat, lon: destLon }, scadenzaMinima })
+                ]);
+                coppieCatalogo = [];
+                if (salita && discesa) {
+                    coppieCatalogo.push({ salita, discesa });
+                    pixelContext = { origine_nodo_territoriale_id: origineNodoId, destinazione_nodo_territoriale_id: destinazioneNodoId, pixel_fermate_disponibili: true, pixel_stato: 'catalogo_disponibile' };
+                }
+            } else if (coppieCatalogo.length) {
                 const { salita, discesa } = coppieCatalogo[0];
                 pixelContext = {
                     origine_nodo_territoriale_id: salita.nodo_territoriale_id,
@@ -1261,7 +1303,7 @@ export async function cercaSlotUltra(richiesta, { collaudoCatalogoTerritoriale =
                     fermate_formazione_popbus: null
                 });
             }
-        } else {
+        } else if (!richiesta.evento_id) {
             risultatiFinali.push(virtualPopSlot);
         }
     }

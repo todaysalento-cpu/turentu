@@ -815,7 +815,8 @@ router.post('/ar/popbus/payment-intents', authMiddleware, async (req, res) => {
       const d = puntoDesiderato(slot.destinazione, null, 'destinazione della ricerca');
       const results = await cercaSlotUltra({
         coord: { lat: o.lat, lon: o.lon }, coordDest: { lat: d.lat, lon: d.lon },
-        start_datetime: when, posti_richiesti: count
+        start_datetime: when, posti_richiesti: count,
+        evento_id: req.body?.evento_id, evento_tratta: leg.ar_tratta
       });
       const quote = results.find(item => item.id === slot.id && isPopbusSlot(item));
       const cents = Math.round(Number(quote?.prezzo) * 100);

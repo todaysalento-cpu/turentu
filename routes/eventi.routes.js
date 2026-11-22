@@ -310,6 +310,44 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // Consulta direttamente l'evento anche quando non rientra nei risultati della ricerca.
+router.get('/:id/fermate', async (req, res, next) => {
+  if (!/^[1-9]\d*$/.test(req.params.id)) return res.sendStatus(400);
+  try {
+    const { rows } = await pool.query(`
+      SELECT f.id, f.nome, f.indirizzo, f.attiva, f.verificata,
+             ST_Y(f.posizione::geometry) AS lat, ST_X(f.posizione::geometry) AS lng
+      FROM pixel_fermate f JOIN nodi_territoriali n ON n.id = f.nodo_territoriale_id
+      WHERE n.evento_id = $1 AND n.attivo ORDER BY f.id
+    `, [req.params.id]);
+    return res.json({ success: true, data: rows });
+  } catch (error) { return next(error); }
+});
+
+router.put('/:id/fermate/:fermataId', authMiddleware, async (req, res, next) => {
+  if (![req.params.id, req.params.fermataId].every(id => /^[1-9]\d*$/.test(id))) return res.sendStatus(400);
+  const { nome, indirizzo, lat, lng, attiva } = req.body ?? {};
+  if (typeof nome !== 'string' || !nome.trim() || nome.length > 180 ||
+      (indirizzo != null && (typeof indirizzo !== 'string' || indirizzo.length > 250)) ||
+      !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180 || (lat === 0 && lng === 0) || typeof attiva !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'Dati fermata non validi' });
+  }
+  try {
+    const { rows } = await pool.query(`
+      UPDATE pixel_fermate f SET nome = $3, indirizzo = $4,
+        verificata = f.verificata AND ST_Equals(f.posizione::geometry, ST_SetSRID(ST_MakePoint($5, $6), 4326)),
+        posizione = ST_SetSRID(ST_MakePoint($5, $6), 4326)::geography, attiva = $7
+      FROM nodi_territoriali n JOIN eventi e ON e.id = n.evento_id
+      WHERE e.id = $1 AND f.id = $2 AND f.nodo_territoriale_id = n.id AND n.attivo
+        AND (e.creato_da = $8 OR $9)
+      RETURNING f.id, f.nome, f.indirizzo, f.attiva, f.verificata
+    `, [req.params.id, req.params.fermataId, nome.trim(), indirizzo?.trim() || null,
+      lng, lat, attiva, req.user.id, req.user.role === 'admin']);
+    if (!rows.length) return res.sendStatus(404);
+    return res.json({ success: true, data: rows[0] });
+  } catch (error) { return next(error); }
+});
+
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   if (!/^[1-9]\d{0,18}$/.test(id) || (id.length === 19 && id > "9223372036854775807")) {

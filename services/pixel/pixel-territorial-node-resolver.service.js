@@ -128,7 +128,7 @@ async function findExistingNode(database, codiceIstat, localita) {
            ST_Y(posizione::geometry) AS lat,
            ST_X(posizione::geometry) AS lon
     FROM public.nodi_territoriali
-    WHERE codice_istat_comune = $1
+    WHERE codice_istat_comune = $1 AND evento_id IS NULL
       AND LOWER(BTRIM(SPLIT_PART(nome, ',', 1))) = LOWER($2)
     ORDER BY id
     LIMIT 1

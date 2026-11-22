@@ -9,6 +9,7 @@ import gestioneRoutes from './gestione.routes.js'; // Mantenuto
 import reportRoutes from './report.routes.js';
 import impostazioniRoutes from './impostazioni.routes.js';
 import adminNotificationsRoutes from './notifications.routes.js';
+import notificationCampaignsRoutes from './notification-campaigns.routes.js';
 
 // Nuove route
 import veicoliRoutes from './veicoli.routes.js';     
@@ -35,6 +36,7 @@ router.use('/pending', pendingRoutes);
 router.use('/pagamenti', pagamentiRoutes);
 router.use('/impostazioni', impostazioniRoutes);
 router.use('/notifications', adminNotificationsRoutes);
+router.use('/notification-campaigns', notificationCampaignsRoutes);
 router.use('/pixel-worker', pixelWorkerRoutes);
 
 // --- CRM Procaccio Navette ---

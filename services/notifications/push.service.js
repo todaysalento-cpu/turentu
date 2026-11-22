@@ -54,7 +54,7 @@ try {
 // =========================
 // SEND PUSH
 // =========================
-export async function sendPush(token, title, body, data = {}) {
+export async function sendPush(token, title, body, data = {}, options = {}) {
   if (!token) {
     console.warn("⚠️ [FCM] Token mancante.");
     return null;
@@ -79,7 +79,7 @@ export async function sendPush(token, title, body, data = {}) {
         Object.entries(data).map(([k, v]) => [k, String(v)])
       ),
       android: {
-        priority: "high",
+        priority: options.priority ?? "high",
         notification: {
           sound: "default",
           ...(data.imageUrl ? { imageUrl: String(data.imageUrl) } : {}),
@@ -92,16 +92,16 @@ export async function sendPush(token, title, body, data = {}) {
       apns: { payload: { aps: { sound: "default" } } },
     };
 
-    console.log(`📨 [FCM] Tentativo invio a token: ${token.substring(0, 10)}...`);
+    if (!data.campaignId) console.log("[FCM] Tentativo invio");
 
     // Utilizziamo getMessaging() per ottenere l'istanza del servizio
     const response = await getMessaging().send(message);
 
-    console.log("✅ [FCM] Notifica inviata con ID:", response);
+    if (!data.campaignId) console.log("[FCM] Notifica inviata con ID:", response);
     return { success: true, id: response };
     
   } catch (err) {
-    console.error("❌ [FCM] Errore invio:", err.message);
-    return { success: false, error: err.message };
+    if (!data.campaignId) console.error("[FCM] Errore invio:", err.message);
+    return { success: false, error: err.message, code: err.code };
   }
 }

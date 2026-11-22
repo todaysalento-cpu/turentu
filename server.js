@@ -1,4 +1,6 @@
 import { startAccountRemovals } from './services/auth/account-removals.service.js';
+import { startCampaignWorker } from './services/notifications/campaign-worker.service.js';
+import notificationPreferences from './routes/notification-preferences.routes.js';
 import { startNccOnboardingNotifications } from './services/notifications/ncc-onboarding.service.js';
 // --- DEBUG FATALE: Intercetta crash all'avvio su Render ---
 process.on('uncaughtException', (err) => {
@@ -120,6 +122,7 @@ app.use('/api/veicolo', (req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/gmail-test', gmailTestRouter);
+app.use('/api/notifications', notificationPreferences);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/booking', bookingClienteRouter);
@@ -182,6 +185,7 @@ const startServer = async () => {
     setupSocket(io);
     startAccountRemovals();
     startNccOnboardingNotifications();
+    startCampaignWorker();
 
     flowRegistry.register(onboardingFlow);
     

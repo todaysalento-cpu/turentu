@@ -104,13 +104,17 @@ export async function createDisponibilita(turno) {
     [veicolo_id, start, fine, manual, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
   );
 
-  const nuovoTurno = res.rows[0];
+  return aggiornaCacheDisponibilita(res.rows[0]);
+}
+
+async function aggiornaCacheDisponibilita(turno) {
+  const veicolo_id = turno.veicolo_id;
   // RECUPERO TIPO ORIGINALE PER NON SOVRASCRIVERLO
   const veicoloRes = await pool.query('SELECT driver_id, servizi FROM veicolo WHERE id = $1', [veicolo_id]);
   const veicoloInfo = veicoloRes.rows[0];
   
   const finalTurno = {
-    ...nuovoTurno,
+    ...turno,
     driver_id: veicoloInfo?.driver_id,
     tipo: veicoloInfo?.servizi || 'privata', // MANTENIAMO IL TIPO CORRETTO
     is_slot: true
@@ -137,4 +141,21 @@ function parseTimeString(timeStr) {
   }
   if (timeStr.includes('T')) return new Date(timeStr).toISOString();
   return timeStr;
+}
+
+export async function updateDisponibilita(id, operatoreId, {
+  start, fine, giorni_esclusi = [], inattivita = []
+}) {
+  start = parseTimeString(start);
+  fine = parseTimeString(fine);
+  if (!start || !fine) throw new Error('Orario non valido');
+  const { rows } = await pool.query(
+    `UPDATE disponibilita_veicolo AS d
+       SET start = $3, fine = $4, giorni_esclusi = $5, inattivita = $6::jsonb
+       FROM veicolo AS v
+       WHERE d.id = $1 AND d.veicolo_id = v.id AND v.driver_id = $2
+       RETURNING d.*`,
+    [id, operatoreId, start, fine, giorni_esclusi.map(Number), JSON.stringify(inattivita)]
+  );
+  return rows.length ? aggiornaCacheDisponibilita(rows[0]) : null;
 }

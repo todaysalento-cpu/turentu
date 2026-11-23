@@ -77,24 +77,13 @@ router.put('/:id', async (req, res) => {
     const id = req.params.id;
     const { start, fine, giorni_esclusi = [], inattivita = [] } = req.body;
 
-    const turno = await pool.query(
-      `SELECT d.id 
-       FROM disponibilita_veicolo d
-       JOIN veicolo v ON v.id = d.veicolo_id
-       WHERE d.id=$1 AND v.driver_id=$2`,
-      [id, utente_id]
-    );
-
-    if (!turno.rows.length) {
-      return res.status(403).json({ message: 'Non autorizzato' });
-    }
-
-    const updated = await disponibilitaService.updateDisponibilita(id, {
+    const updated = await disponibilitaService.updateDisponibilita(id, utente_id, {
       start,
       fine,
       giorni_esclusi,
       inattivita,
     });
+    if (!updated) return res.status(403).json({ message: 'Non autorizzato' });
 
     console.log('✅ Disponibilità aggiornata:', updated);
     res.json(updated);

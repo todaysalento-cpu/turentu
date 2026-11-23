@@ -17,7 +17,7 @@ export async function stimaGruppo(proposta, rows, costi, tratta) {
   return { ...proposta, inizio, fine, economia: margine(ricavi, km, costi[proposta.veicoloId]) };
 }
 
-export async function accorpaPerGiornata(proposte, tratta, veicoli, costi, occupati = new Set()) {
+export async function accorpaPerGiornata(proposte, tratta, veicoli, costi, occupati = new Set(), attesaMassimaMinuti = null) {
   const chains = [];
   for (const group of [...proposte].sort((a, b) => Date.parse(a.inizio) - Date.parse(b.inizio))) {
     if (!group.fine || group.economia.km == null) continue;
@@ -31,8 +31,10 @@ export async function accorpaPerGiornata(proposte, tratta, veicoli, costi, occup
       const nextOrigin = group.itinerario?.fermate[0]?.localita ?? group.origine;
       const reposition = await tratta(previous.destinazione, nextOrigin);
       if (!reposition || Date.parse(previous.fine) + reposition.durataMs > Date.parse(group.inizio)) continue;
+      const attesaMs = Date.parse(group.inizio) - Date.parse(previous.fine) - reposition.durataMs;
+      if (attesaMassimaMinuti != null && attesaMs > attesaMassimaMinuti * 60000) continue;
       chain.kmTrasferimenti += reposition.distanzaKm;
-      chain.attesaMs += Date.parse(group.inizio) - Date.parse(previous.fine) - reposition.durataMs;
+      chain.attesaMs += attesaMs;
       match = chain;
       break;
     }

@@ -60,9 +60,9 @@ const sameFlight = (a, b) => Boolean(a.volo_numero && a.volo_numero === b.volo_n
   a.volo_aeroporto === b.volo_aeroporto && a.volo_direzione === b.volo_direzione &&
   Date.parse(a.volo_programmato_il) === Date.parse(b.volo_programmato_il));
 
-const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true, costiVeicoli: {} };
+const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true, costiVeicoli: {}, attesaMassimaMinuti: null };
 const paramColumns = `tolleranza_minuti AS "tolleranzaMinuti",
-  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo", costi_veicoli AS "costiVeicoli"`;
+  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo", costi_veicoli AS "costiVeicoli", attesa_massima_minuti AS "attesaMassimaMinuti"`;
 
 async function parametriPianificatore(client, operatore) {
   const { rows } = await client.query(
@@ -72,7 +72,10 @@ async function parametriPianificatore(client, operatore) {
 }
 
 export async function salvaParametriPianificatore(pool, operatore, body) {
-  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli } = body ?? {};
+  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli, attesaMassimaMinuti } = body ?? {};
+  if (attesaMassimaMinuti != null && (!Number.isInteger(attesaMassimaMinuti) || attesaMassimaMinuti < 0 || attesaMassimaMinuti > 1440)) {
+    throw invalid('L’attesa massima deve essere tra 0 e 1440 minuti.');
+  }
   if (costiVeicoli !== undefined) {
     const own = new Set((await veicoliOperatore(pool, operatore)).map(vehicle => String(vehicle.id)));
     if (!costiVeicoli || typeof costiVeicoli !== 'object' || Array.isArray(costiVeicoli) ||
@@ -87,14 +90,17 @@ export async function salvaParametriPianificatore(pool, operatore, body) {
   }
   const { rows } = await pool.query(
     `INSERT INTO public.ncc_parametri_pianificatore
-       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo, costi_veicoli)
-     VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)) ON CONFLICT (operatore_id) DO UPDATE SET
+       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo, costi_veicoli, attesa_massima_minuti)
+     VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb), $6) ON CONFLICT (operatore_id) DO UPDATE SET
        tolleranza_minuti = EXCLUDED.tolleranza_minuti,
        obiettivo_riempimento = EXCLUDED.obiettivo_riempimento,
        priorita_volo = EXCLUDED.priorita_volo,
-       costi_veicoli = COALESCE($5::jsonb, ncc_parametri_pianificatore.costi_veicoli)
+       costi_veicoli = COALESCE($5::jsonb, ncc_parametri_pianificatore.costi_veicoli),
+       attesa_massima_minuti = CASE WHEN $7::boolean THEN EXCLUDED.attesa_massima_minuti
+         ELSE ncc_parametri_pianificatore.attesa_massima_minuti END
      RETURNING ${paramColumns}`,
-    [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli === undefined ? null : JSON.stringify(costiVeicoli)]
+    [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli === undefined ? null : JSON.stringify(costiVeicoli),
+      attesaMassimaMinuti ?? null, attesaMassimaMinuti !== undefined]
   );
   return rows[0];
 }
@@ -240,7 +246,7 @@ export async function pianificatore(pool, operatore) {
        AND dettaglio->'missione'->>'giorno' >= (now() AT TIME ZONE 'Europe/Rome')::date::text`, [operatore]
   );
   const occupati = new Set(missioniSalvate.map(missione => missione.giorno + '/' + missione.veicolo));
-  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati),
+  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati, parametri.attesaMassimaMinuti),
     approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
       ...group,
       dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),

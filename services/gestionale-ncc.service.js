@@ -39,7 +39,7 @@ function numeroVolo(value) {
   return numero;
 }
 
-function datiPrenotazione(body) {
+export function datiPrenotazione(body) {
   const dati = body ?? {};
   const volo = dati.volo;
   let campiVolo = [null, null, null, null];
@@ -89,16 +89,17 @@ export async function elencaPrenotazioniEsterne(pool, operatore, query) {
   return { prenotazioni: rows.slice(0, 100), prossimoOffset: rows.length > 100 ? offset + 100 : null };
 }
 
-export async function creaPrenotazioneEsterna(pool, operatore, body) {
+export async function creaPrenotazioneEsterna(pool, operatore, body, importHash = null) {
   const { rows } = await pool.query(
     `INSERT INTO public.ncc_prenotazioni_esterne
        (operatore_id, cliente, recapito, origine, destinazione, prelievo_il, passeggeri,
         bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
-        volo_programmato_il, volo_aggiornato_il)
+        volo_programmato_il, volo_aggiornato_il${importHash ? ", import_hash" : ""})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar, $11, $12, $13,
-       CASE WHEN $10::varchar IS NOT NULL THEN now() END)
+       CASE WHEN $10::varchar IS NOT NULL THEN now() END${importHash ? ", $14" : ""})
+     ${importHash ? "ON CONFLICT (operatore_id, import_hash) WHERE import_hash IS NOT NULL DO NOTHING" : ""}
      RETURNING ${campi}`,
-    [operatore, ...datiPrenotazione(body)]
+    [operatore, ...datiPrenotazione(body), ...(importHash ? [importHash] : [])]
   );
   return rows[0];
 }

@@ -34,20 +34,22 @@ router.get("/suggerimenti", async (req, res) => {
   if (testo.length < 2 || testo.length > 180) {
     return res.status(400).json({ error: "Inserisci un nome o un indirizzo valido." });
   }
-  const poli = await suggerimentiPoli(testo).catch(errore => {
+  const soloLocalita = req.query.tipo === 'localita';
+  const poli = soloLocalita ? [] : await suggerimentiPoli(testo).catch(errore => {
     console.warn("[SEARCH] Catalogo luoghi non disponibile:", errore.code ?? errore.name);
     return [];
   });
   try {
     const { suggestions = [] } = await richiestaGooglePlaces(
       "places:autocomplete",
-      "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
+      "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat.mainText",
       { input: testo, languageCode: "it", regionCode: "it",
+        ...(soloLocalita && { includedPrimaryTypes: ["(cities)"] }),
         locationBias: { circle: { center: { latitude: 40.35, longitude: 18.17 }, radius: 50000 } } }
     );
     const luoghi = suggestions.flatMap(({ placePrediction }) => {
       const place_id = placePrediction?.placeId;
-      const description = placePrediction?.text?.text;
+      const description = soloLocalita ? placePrediction?.structuredFormat?.mainText?.text : placePrediction?.text?.text;
       return place_id && description ? [{ place_id, description }] : [];
     });
     return res.set("Cache-Control", "no-store").json([...poli, ...luoghi]);

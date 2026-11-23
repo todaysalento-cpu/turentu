@@ -123,9 +123,14 @@ function creaTratte() {
       cache.set(id, new Promise(resolve => {
         const timer = setTimeout(() => resolve(null), remaining);
         Promise.all([locate(from), locate(to)])
-          .then(([origin, destination]) => getDurataDistanza(origin, destination))
-          .then(route => resolve(Number.isFinite(route?.distanzaKm) && route.distanzaKm > 0 &&
-            Number.isFinite(route?.durataMs) && route.durataMs > 0 ? route : null), () => resolve(null))
+          .then(([origin, destination]) => {
+            if (origin.lat === destination.lat && origin.lon === destination.lon) {
+              return { distanzaKm: 0, durataMs: 0 };
+            }
+            return getDurataDistanza(origin, destination).then(route => route?.distanzaKm > 0 && route?.durataMs > 0 ? route : null);
+          })
+          .then(route => resolve(Number.isFinite(route?.distanzaKm) && route.distanzaKm >= 0 &&
+            Number.isFinite(route?.durataMs) && route.durataMs >= 0 ? route : null), () => resolve(null))
           .finally(() => clearTimeout(timer));
       }));
     }
@@ -146,7 +151,8 @@ async function valutaGruppo(rows, parametri, verifica) {
 
 async function veicoliOperatore(client, operatore) {
   return (await client.query(
-    `SELECT id, posti_totali, marca, modello, targa FROM public.veicolo
+    `SELECT id, posti_totali, marca, modello, targa, localita,
+       ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM public.veicolo
      WHERE driver_id = $1 AND stato IS DISTINCT FROM 'eliminato' AND posti_totali > 0
      ORDER BY posti_totali, id`, [operatore]
   )).rows;
@@ -228,7 +234,13 @@ export async function pianificatore(pool, operatore) {
   proposte.sort((a, b) => (parametri.prioritaVolo ? Number(Boolean(b.volo)) - Number(Boolean(a.volo)) : 0) ||
     Number(b.riempimento >= parametri.obiettivoRiempimento) - Number(a.riempimento >= parametri.obiettivoRiempimento) ||
     Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal));
-  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli),
+  const { rows: missioniSalvate } = await pool.query(
+    `SELECT dettaglio->'missione'->>'giorno' AS giorno, dettaglio->'missione'->>'veicoloId' AS veicolo
+     FROM public.ncc_gruppi_approvati WHERE operatore_id = $1
+       AND dettaglio->'missione'->>'giorno' >= (now() AT TIME ZONE 'Europe/Rome')::date::text`, [operatore]
+  );
+  const occupati = new Set(missioniSalvate.map(missione => missione.giorno + '/' + missione.veicolo));
+  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati),
     approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
       ...group,
       dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),
@@ -261,6 +273,44 @@ export async function approvaGruppo(pool, operatore, ids) {
     const { rows: [result] } = await client.query(
       'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni, dettaglio) VALUES ($1, $2, $3::jsonb) RETURNING id',
       [operatore, rows.map(row => row.id), JSON.stringify(snapshot)]
+    );
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function approvaMissione(pool, operatore, body) {
+  const { giorno, veicoloId, gruppi } = body ?? {};
+  if (typeof giorno !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(giorno) ||
+      !Number.isSafeInteger(veicoloId) || veicoloId < 1 || !Array.isArray(gruppi) ||
+      !gruppi.length || gruppi.length > 100 ||
+      gruppi.some(group => !Array.isArray(group) || group.length < 2 || group.length > 200)) {
+    throw invalid('Missione non valida.');
+  }
+  const ids = gruppi.flat();
+  if (ids.length > 200 || new Set(ids).size !== ids.length ||
+      !ids.every(id => typeof id === 'string' && /^[1-9]\d{0,18}$/.test(id) && BigInt(id) <= 9223372036854775807n)) {
+    throw invalid('Prenotazioni della missione non valide.');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(22022, $1::integer)', [operatore]);
+    const rows = await candidati(client, operatore, ids, true);
+    if (rows.length !== ids.length) throw invalid('Missione cambiata. Ricalcola le proposte.', 409);
+    const { accorpamenti } = await pianificatore(client, operatore);
+    const requested = JSON.stringify(gruppi);
+    const missione = accorpamenti.find(item => item.giorno === giorno && Number(item.veicoloId) === veicoloId &&
+      JSON.stringify(item.gruppi.map(group => group.prenotazioni)) === requested);
+    if (!missione) throw invalid('Missione cambiata. Ricalcola le proposte.', 409);
+    const { rows: [result] } = await client.query(
+      'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni, dettaglio) VALUES ($1, $2, $3::jsonb) RETURNING id',
+      [operatore, ids, JSON.stringify({ missione })]
     );
     await client.query('COMMIT');
     return result;

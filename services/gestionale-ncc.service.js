@@ -137,8 +137,14 @@ export async function annullaPrenotazioneEsterna(pool, operatore, id) {
 }
 
 export async function eliminaPrenotazioneEsterna(pool, operatore, id) {
-  if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
-    throw errore(400, 'ID prenotazione non valido.');
+  await eliminaPrenotazioniEsterne(pool, operatore, [id]);
+  return { id };
+}
+
+export async function eliminaPrenotazioniEsterne(pool, operatore, ids) {
+  if (!Array.isArray(ids) || !ids.length || ids.length > 100 || new Set(ids).size !== ids.length ||
+      !ids.every(id => typeof id === 'string' && /^[1-9]\d{0,18}$/.test(id) && BigInt(id) <= 9223372036854775807n)) {
+    throw errore(400, 'Seleziona da 1 a 100 prenotazioni valide.');
   }
   const client = await pool.connect();
   try {
@@ -150,13 +156,21 @@ export async function eliminaPrenotazioneEsterna(pool, operatore, id) {
          WHERE g.operatore_id = p.operatore_id AND p.id = ANY(g.prenotazioni)
        ) AS approvata
        FROM public.ncc_prenotazioni_esterne p
-       WHERE p.operatore_id = $1 AND p.id = $2 FOR UPDATE OF p`, [operatore, id]
+       WHERE p.operatore_id = $1 AND p.id = ANY($2::bigint[])
+       ORDER BY p.id FOR UPDATE OF p`, [operatore, ids]
     );
-    if (!rows.length) throw errore(404, 'Prenotazione non trovata.');
-    if (rows[0].approvata) throw errore(409, 'Elimina prima il gruppo approvato dal Pianificatore.');
-    await client.query('DELETE FROM public.ncc_prenotazioni_esterne WHERE operatore_id = $1 AND id = $2', [operatore, id]);
+    if (rows.length !== ids.length) throw errore(404, 'Una o più prenotazioni non sono disponibili. Aggiorna la lista.');
+    const bloccate = rows.filter(row => row.approvata);
+    if (bloccate.length) {
+      throw errore(409, 'Rimuovi prima i gruppi approvati delle prenotazioni ' + bloccate.map(row => '#' + row.id).join(', ') + '.');
+    }
+    const { rowCount } = await client.query(
+      'DELETE FROM public.ncc_prenotazioni_esterne WHERE operatore_id = $1 AND id = ANY($2::bigint[])',
+      [operatore, ids]
+    );
+    if (rowCount !== ids.length) throw errore(409, 'Le prenotazioni sono cambiate. Aggiorna la lista.');
     await client.query('COMMIT');
-    return { id };
+    return { eliminate: rowCount };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

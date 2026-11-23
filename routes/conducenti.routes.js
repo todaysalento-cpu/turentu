@@ -1,10 +1,10 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
-import { importaPrenotazioni, pianificatore, approvaGruppo, salvaParametriPianificatore, eliminaGruppo } from '../services/ncc-import-planner.service.js';
+import { importaPrenotazioni, pianificatore, approvaGruppo, approvaMissione, salvaParametriPianificatore, eliminaGruppo } from '../services/ncc-import-planner.service.js';
 import {
   elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
-  modificaPrenotazioneEsterna, annullaPrenotazioneEsterna, eliminaPrenotazioneEsterna
+  modificaPrenotazioneEsterna, annullaPrenotazioneEsterna, eliminaPrenotazioneEsterna, eliminaPrenotazioniEsterne
 } from '../services/gestionale-ncc.service.js';
 import { preparaInvitoAnagrafica, accettaInvitoAnagrafica } from '../services/conducenti/inviti-anagrafica.service.js';
 import {
@@ -135,6 +135,8 @@ export function creaRouterConducenti({ pool, authenticate }) {
     salvaParametriPianificatore(pool, op(req), req.body)));
   router.delete(prenotazioniEsterne + '/pianificatore/gruppi/:gruppoId', route(req =>
     eliminaGruppo(pool, op(req), req.params.gruppoId)));
+  router.post(prenotazioniEsterne + '/pianificatore/missioni/approva', route(req =>
+    approvaMissione(pool, op(req), req.body), 201));
   router.post(prenotazioniEsterne + '/pianificatore/approva', route(req =>
     approvaGruppo(pool, op(req), req.body?.prenotazioni), 201));
   router.get(prenotazioniEsterne, route(req =>
@@ -143,6 +145,8 @@ export function creaRouterConducenti({ pool, authenticate }) {
     creaPrenotazioneEsterna(pool, op(req), req.body), 201));
   router.put(prenotazioniEsterne + '/:id', route(req =>
     modificaPrenotazioneEsterna(pool, op(req), id(req.params.id, 'Prenotazione'), req.body)));
+  router.post(prenotazioniEsterne + '/elimina-multiple', route(req =>
+    eliminaPrenotazioniEsterne(pool, op(req), req.body?.ids)));
   router.delete(prenotazioniEsterne + '/:id', route(req =>
     eliminaPrenotazioneEsterna(pool, op(req), req.params.id)));
   router.post(prenotazioniEsterne + '/:id/annulla', route(req =>

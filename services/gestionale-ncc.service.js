@@ -95,8 +95,8 @@ export async function creaPrenotazioneEsterna(pool, operatore, body) {
        (operatore_id, cliente, recapito, origine, destinazione, prelievo_il, passeggeri,
         bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
         volo_programmato_il, volo_aggiornato_il)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-       CASE WHEN $10 IS NOT NULL THEN now() END)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar, $11, $12, $13,
+       CASE WHEN $10::varchar IS NOT NULL THEN now() END)
      RETURNING ${campi}`,
     [operatore, ...datiPrenotazione(body)]
   );
@@ -107,9 +107,9 @@ export async function modificaPrenotazioneEsterna(pool, operatore, id, body) {
   const { rows } = await pool.query(
     `UPDATE public.ncc_prenotazioni_esterne
      SET cliente = $3, recapito = $4, origine = $5, destinazione = $6, prelievo_il = $7,
-       passeggeri = $8, bagagli = $9, prezzo_centesimi = $10, volo_numero = $11,
+       passeggeri = $8, bagagli = $9, prezzo_centesimi = $10, volo_numero = $11::varchar,
        volo_aeroporto = $12, volo_direzione = $13, volo_programmato_il = $14,
-       volo_aggiornato_il = CASE WHEN $11 IS NULL THEN NULL
+       volo_aggiornato_il = CASE WHEN $11::varchar IS NULL THEN NULL
          WHEN ROW(volo_numero, volo_aeroporto, volo_direzione, volo_programmato_il)
            IS DISTINCT FROM ROW($11::varchar, $12::varchar, $13::varchar, $14::timestamptz)
          THEN now() ELSE volo_aggiornato_il END,

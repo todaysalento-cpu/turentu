@@ -1,6 +1,10 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
+import {
+  elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
+  modificaPrenotazioneEsterna, annullaPrenotazioneEsterna
+} from '../services/gestionale-ncc.service.js';
 import { preparaInvitoAnagrafica, accettaInvitoAnagrafica } from '../services/conducenti/inviti-anagrafica.service.js';
 import {
   elencoConducenti, invitaConducente, accettaInvitoConducente,
@@ -44,8 +48,8 @@ export function creaRouterConducenti({ pool, authenticate }) {
     next();
   });
 
-  const route = (fn) => async (req, res) => {
-    try { const result = await fn(req); res.json({ ok: true, data: result }); }
+  const route = (fn, successStatus = 200) => async (req, res) => {
+    try { const result = await fn(req); res.status(successStatus).json({ ok: true, data: result }); }
     catch (err) {
       // Errori applicativi noti e vincoli DB, senza esporre query/stack al client.
       if (Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
@@ -120,6 +124,16 @@ export function creaRouterConducenti({ pool, authenticate }) {
   };
 
   router.use('/operatori', requireOperatoreNcc);
+
+  const prenotazioniEsterne = '/operatori/me/prenotazioni-esterne';
+  router.get(prenotazioniEsterne, route(req =>
+    elencaPrenotazioniEsterne(pool, op(req), req.query)));
+  router.post(prenotazioniEsterne, route(req =>
+    creaPrenotazioneEsterna(pool, op(req), req.body), 201));
+  router.put(prenotazioniEsterne + '/:id', route(req =>
+    modificaPrenotazioneEsterna(pool, op(req), id(req.params.id, 'Prenotazione'), req.body)));
+  router.post(prenotazioniEsterne + '/:id/annulla', route(req =>
+    annullaPrenotazioneEsterna(pool, op(req), id(req.params.id, 'Prenotazione'))));
 
   // Preferenza generale dell'operatore, indipendente dai singoli conducenti.
   router.get('/operatori/me/impostazioni-assegnazione', route(req =>

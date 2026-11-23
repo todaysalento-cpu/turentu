@@ -6,6 +6,7 @@ export const interests = ['eventi','popbus','aeroporti','condivisa','fuori_sede'
 const list = z.array(z.string().trim().min(1).max(100)).max(20).optional();
 export const id = z.string().regex(/^[1-9]\d{0,18}$/).refine(value => BigInt(value)<=9223372036854775807n);
 export const filters = z.object({
+  contactId:id.optional(),
   role: z.enum(['cliente','autista','conducente','admin']).optional(),
   newDays: z.number().int().min(1).max(365).optional(),
   booking: z.enum(['ever','popbus','no_recent']).optional(),

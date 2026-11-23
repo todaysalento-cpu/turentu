@@ -5,6 +5,7 @@ export function audienceQuery(filters, purpose, scope = {}) {
   const params = [];
   const arg = value => { params.push(value); return '$' + params.length; };
   const conditions = ['u.eliminato_il IS NULL'];
+  if (filters.contactId) conditions.push('u.id=' + arg(filters.contactId) + '::bigint');
   if (scope.userId) conditions.push('u.id=' + arg(scope.userId) + '::bigint');
   if (scope.excludeRideId) conditions.push('NOT EXISTS (SELECT 1 FROM prenotazioni p0 WHERE p0.cliente_id=u.id AND p0.corsa_id=' + arg(scope.excludeRideId) + '::bigint)');
   if (filters.role === 'conducente') {

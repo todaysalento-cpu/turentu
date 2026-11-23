@@ -204,20 +204,37 @@ router.post('/:id/cancel',wrap(async (req,res) => {
     return item;
   }));
 }));
+
+router.get('/contacts',wrap(async (req,res) => {
+  const query = z.string().trim().min(1).max(120).parse(req.query.q);
+  const {rows} = await pool.query(`SELECT id::text AS id,nome,email,tipo
+    FROM utente WHERE eliminato_il IS NULL AND
+      (id::text=$1 OR (length($1)>=2 AND (strpos(lower(coalesce(nome,'')),lower($1))>0
+        OR strpos(lower(coalesce(email,'')),lower($1))>0)))
+    ORDER BY (id::text=$1) DESC,nome NULLS LAST,id LIMIT 12`,[query]);
+  res.json(rows);
+}));
 router.post('/test',wrap(async (req,res) => {
   if (process.env.NOTIFICATION_CAMPAIGNS_TEST!=='1') reject(403,'Invii di test disabilitati.');
-  const item = draft.parse(req.body);
+  const {recipientId,...content} = z.object({recipientId:id.optional()}).passthrough().parse(req.body);
+  const item = draft.parse(content);
   if (!item.title || !item.body || !(await eventIsCurrent(pool,item.action))) reject(400,'Completa il messaggio o scegli un evento futuro.');
   const allowed = new Set((process.env.NOTIFICATION_TEST_USER_IDS ?? '').split(',').map(value=>value.trim()));
   if (!allowed.has(String(req.user.id))) reject(403,'Account di test non autorizzato.');
+  const targetId = recipientId ?? String(req.user.id);
+  const testContacts = new Set((process.env.NOTIFICATION_TEST_RECIPIENT_IDS ?? '').split(',').map(value=>value.trim()));
+  if (targetId !== String(req.user.id) && !testContacts.has(targetId)) {
+    reject(403,'Contatto non autorizzato a ricevere notifiche di test.');
+  }
   const {rows:[dest]} = await pool.query(`SELECT t.push_token FROM utente_push_tokens t
-    WHERE user_id=$1 AND push_token ~ '^[A-Za-z0-9_:-]{40,}$'
+    WHERE t.user_id=$1 AND t.push_token ~ '^[A-Za-z0-9_:-]{40,}$'
     AND NOT EXISTS (SELECT 1 FROM utente_push_tokens x WHERE x.push_token=t.push_token AND x.user_id<>t.user_id)
-    ORDER BY created_at DESC NULLS LAST LIMIT 1`,[req.user.id]);
+    AND EXISTS (SELECT 1 FROM utente u WHERE u.id=t.user_id AND u.eliminato_il IS NULL)
+    ORDER BY t.created_at DESC NULLS LAST LIMIT 1`,[targetId]);
   if (!dest) reject(400,'Nessun token FCM per questo account.');
-  await audit(pool,req.user.id,null,'test_attempt');
+  await audit(pool,req.user.id,null,'test_attempt',{recipientId:targetId});
   const result = await sendCampaignPush({...item,id:'test'},dest.push_token,'test-' + Date.now());
-  await audit(pool,req.user.id,null,'test_result',{accepted:!!result?.success});
+  await audit(pool,req.user.id,null,'test_result',{accepted:!!result?.success,recipientId:targetId});
   if (!result?.success) reject(502,'Firebase non ha confermato l’invio di test.');
   res.json({accepted:true});
 }));

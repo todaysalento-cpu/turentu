@@ -135,3 +135,32 @@ export async function annullaPrenotazioneEsterna(pool, operatore, id) {
   if (!rows[0]) throw errore(404, 'Prenotazione non trovata');
   return rows[0];
 }
+
+export async function eliminaPrenotazioneEsterna(pool, operatore, id) {
+  if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
+    throw errore(400, 'ID prenotazione non valido.');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(22022, $1::integer)', [operatore]);
+    const { rows } = await client.query(
+      `SELECT p.id, EXISTS (
+         SELECT 1 FROM public.ncc_gruppi_approvati g
+         WHERE g.operatore_id = p.operatore_id AND p.id = ANY(g.prenotazioni)
+       ) AS approvata
+       FROM public.ncc_prenotazioni_esterne p
+       WHERE p.operatore_id = $1 AND p.id = $2 FOR UPDATE OF p`, [operatore, id]
+    );
+    if (!rows.length) throw errore(404, 'Prenotazione non trovata.');
+    if (rows[0].approvata) throw errore(409, 'Elimina prima il gruppo approvato dal Pianificatore.');
+    await client.query('DELETE FROM public.ncc_prenotazioni_esterne WHERE operatore_id = $1 AND id = $2', [operatore, id]);
+    await client.query('COMMIT');
+    return { id };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}

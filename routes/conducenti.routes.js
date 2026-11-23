@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { importaPrenotazioni, pianificatore, approvaGruppo, salvaParametriPianificatore, eliminaGruppo } from '../services/ncc-import-planner.service.js';
 import {
   elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
-  modificaPrenotazioneEsterna, annullaPrenotazioneEsterna
+  modificaPrenotazioneEsterna, annullaPrenotazioneEsterna, eliminaPrenotazioneEsterna
 } from '../services/gestionale-ncc.service.js';
 import { preparaInvitoAnagrafica, accettaInvitoAnagrafica } from '../services/conducenti/inviti-anagrafica.service.js';
 import {
@@ -143,6 +143,8 @@ export function creaRouterConducenti({ pool, authenticate }) {
     creaPrenotazioneEsterna(pool, op(req), req.body), 201));
   router.put(prenotazioniEsterne + '/:id', route(req =>
     modificaPrenotazioneEsterna(pool, op(req), id(req.params.id, 'Prenotazione'), req.body)));
+  router.delete(prenotazioniEsterne + '/:id', route(req =>
+    eliminaPrenotazioneEsterna(pool, op(req), req.params.id)));
   router.post(prenotazioniEsterne + '/:id/annulla', route(req =>
     annullaPrenotazioneEsterna(pool, op(req), id(req.params.id, 'Prenotazione'))));
 

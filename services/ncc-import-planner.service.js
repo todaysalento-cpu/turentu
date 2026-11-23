@@ -204,3 +204,15 @@ export async function approvaGruppo(pool, operatore, ids) {
     client.release();
   }
 }
+
+export async function eliminaGruppo(pool, operatore, id) {
+  if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) {
+    throw invalid('ID gruppo non valido.');
+  }
+  const { rows } = await pool.query(
+    'DELETE FROM public.ncc_gruppi_approvati WHERE operatore_id = $1 AND id = $2 RETURNING id',
+    [operatore, id]
+  );
+  if (!rows.length) throw invalid('Gruppo approvato non trovato.', 404);
+  return rows[0];
+}

@@ -1,7 +1,7 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
-import { importaPrenotazioni, pianificatore, approvaGruppo, salvaParametriPianificatore } from '../services/ncc-import-planner.service.js';
+import { importaPrenotazioni, pianificatore, approvaGruppo, salvaParametriPianificatore, eliminaGruppo } from '../services/ncc-import-planner.service.js';
 import {
   elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
   modificaPrenotazioneEsterna, annullaPrenotazioneEsterna
@@ -133,6 +133,8 @@ export function creaRouterConducenti({ pool, authenticate }) {
     pianificatore(pool, op(req))));
   router.put(prenotazioniEsterne + '/pianificatore/parametri', route(req =>
     salvaParametriPianificatore(pool, op(req), req.body)));
+  router.delete(prenotazioniEsterne + '/pianificatore/gruppi/:gruppoId', route(req =>
+    eliminaGruppo(pool, op(req), req.params.gruppoId)));
   router.post(prenotazioniEsterne + '/pianificatore/approva', route(req =>
     approvaGruppo(pool, op(req), req.body?.prenotazioni), 201));
   router.get(prenotazioniEsterne, route(req =>

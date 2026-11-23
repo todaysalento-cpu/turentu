@@ -60,9 +60,10 @@ const sameFlight = (a, b) => Boolean(a.volo_numero && a.volo_numero === b.volo_n
   a.volo_aeroporto === b.volo_aeroporto && a.volo_direzione === b.volo_direzione &&
   Date.parse(a.volo_programmato_il) === Date.parse(b.volo_programmato_il));
 
-const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true, costiVeicoli: {}, attesaMassimaMinuti: null };
+const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true, costiVeicoli: {}, attesaMassimaMinuti: null, durataMassimaMissioneMinuti: null };
 const paramColumns = `tolleranza_minuti AS "tolleranzaMinuti",
-  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo", costi_veicoli AS "costiVeicoli", attesa_massima_minuti AS "attesaMassimaMinuti"`;
+  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo", costi_veicoli AS "costiVeicoli", attesa_massima_minuti AS "attesaMassimaMinuti",
+  durata_massima_missione_minuti AS "durataMassimaMissioneMinuti"`;
 
 async function parametriPianificatore(client, operatore) {
   const { rows } = await client.query(
@@ -72,7 +73,11 @@ async function parametriPianificatore(client, operatore) {
 }
 
 export async function salvaParametriPianificatore(pool, operatore, body) {
-  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli, attesaMassimaMinuti } = body ?? {};
+  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli, attesaMassimaMinuti, durataMassimaMissioneMinuti } = body ?? {};
+  if (durataMassimaMissioneMinuti != null &&
+      (!Number.isInteger(durataMassimaMissioneMinuti) || durataMassimaMissioneMinuti < 1 || durataMassimaMissioneMinuti > 1440)) {
+    throw invalid('La durata massima della missione deve essere tra 1 e 1440 minuti.');
+  }
   if (attesaMassimaMinuti != null && (!Number.isInteger(attesaMassimaMinuti) || attesaMassimaMinuti < 0 || attesaMassimaMinuti > 1440)) {
     throw invalid('L’attesa massima deve essere tra 0 e 1440 minuti.');
   }
@@ -90,17 +95,19 @@ export async function salvaParametriPianificatore(pool, operatore, body) {
   }
   const { rows } = await pool.query(
     `INSERT INTO public.ncc_parametri_pianificatore
-       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo, costi_veicoli, attesa_massima_minuti)
-     VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb), $6) ON CONFLICT (operatore_id) DO UPDATE SET
+       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo, costi_veicoli, attesa_massima_minuti, durata_massima_missione_minuti)
+     VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb), $6, $8) ON CONFLICT (operatore_id) DO UPDATE SET
        tolleranza_minuti = EXCLUDED.tolleranza_minuti,
        obiettivo_riempimento = EXCLUDED.obiettivo_riempimento,
        priorita_volo = EXCLUDED.priorita_volo,
        costi_veicoli = COALESCE($5::jsonb, ncc_parametri_pianificatore.costi_veicoli),
        attesa_massima_minuti = CASE WHEN $7::boolean THEN EXCLUDED.attesa_massima_minuti
-         ELSE ncc_parametri_pianificatore.attesa_massima_minuti END
+         ELSE ncc_parametri_pianificatore.attesa_massima_minuti END,
+       durata_massima_missione_minuti = CASE WHEN $9::boolean THEN EXCLUDED.durata_massima_missione_minuti
+         ELSE ncc_parametri_pianificatore.durata_massima_missione_minuti END
      RETURNING ${paramColumns}`,
     [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli === undefined ? null : JSON.stringify(costiVeicoli),
-      attesaMassimaMinuti ?? null, attesaMassimaMinuti !== undefined]
+      attesaMassimaMinuti ?? null, attesaMassimaMinuti !== undefined, durataMassimaMissioneMinuti ?? null, durataMassimaMissioneMinuti !== undefined]
   );
   return rows[0];
 }
@@ -246,7 +253,7 @@ export async function pianificatore(pool, operatore) {
        AND dettaglio->'missione'->>'giorno' >= (now() AT TIME ZONE 'Europe/Rome')::date::text`, [operatore]
   );
   const occupati = new Set(missioniSalvate.map(missione => missione.giorno + '/' + missione.veicolo));
-  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati, parametri.attesaMassimaMinuti),
+  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati, parametri.attesaMassimaMinuti, parametri.durataMassimaMissioneMinuti),
     approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
       ...group,
       dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),

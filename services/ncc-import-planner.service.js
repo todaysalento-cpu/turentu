@@ -1,3 +1,4 @@
+import { stimaGruppo, accorpaPerGiornata } from './ncc-economia.service.js';
 import { createHash } from 'node:crypto';
 import { resolveLocation } from '../routes/distanza.route.js';
 import { getDurataDistanza } from '../utils/maps.util.js';
@@ -59,9 +60,9 @@ const sameFlight = (a, b) => Boolean(a.volo_numero && a.volo_numero === b.volo_n
   a.volo_aeroporto === b.volo_aeroporto && a.volo_direzione === b.volo_direzione &&
   Date.parse(a.volo_programmato_il) === Date.parse(b.volo_programmato_il));
 
-const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true };
+const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true, costiVeicoli: {} };
 const paramColumns = `tolleranza_minuti AS "tolleranzaMinuti",
-  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo"`;
+  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo", costi_veicoli AS "costiVeicoli"`;
 
 async function parametriPianificatore(client, operatore) {
   const { rows } = await client.query(
@@ -71,7 +72,14 @@ async function parametriPianificatore(client, operatore) {
 }
 
 export async function salvaParametriPianificatore(pool, operatore, body) {
-  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo } = body ?? {};
+  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli } = body ?? {};
+  if (costiVeicoli !== undefined) {
+    const own = new Set((await veicoliOperatore(pool, operatore)).map(vehicle => String(vehicle.id)));
+    if (!costiVeicoli || typeof costiVeicoli !== 'object' || Array.isArray(costiVeicoli) ||
+        Object.entries(costiVeicoli).some(([id, value]) => !own.has(id) || !Number.isFinite(value) || value < 0 || value > 1000)) {
+      throw invalid('Costo al km o veicolo non valido.');
+    }
+  }
   if (!Number.isInteger(tolleranzaMinuti) || tolleranzaMinuti < 0 || tolleranzaMinuti > 1440 ||
       !Number.isInteger(obiettivoRiempimento) || obiettivoRiempimento < 0 || obiettivoRiempimento > 100 ||
       typeof prioritaVolo !== 'boolean') {
@@ -79,13 +87,14 @@ export async function salvaParametriPianificatore(pool, operatore, body) {
   }
   const { rows } = await pool.query(
     `INSERT INTO public.ncc_parametri_pianificatore
-       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo)
-     VALUES ($1, $2, $3, $4) ON CONFLICT (operatore_id) DO UPDATE SET
+       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo, costi_veicoli)
+     VALUES ($1, $2, $3, $4, COALESCE($5::jsonb, '{}'::jsonb)) ON CONFLICT (operatore_id) DO UPDATE SET
        tolleranza_minuti = EXCLUDED.tolleranza_minuti,
        obiettivo_riempimento = EXCLUDED.obiettivo_riempimento,
-       priorita_volo = EXCLUDED.priorita_volo
+       priorita_volo = EXCLUDED.priorita_volo,
+       costi_veicoli = COALESCE($5::jsonb, ncc_parametri_pianificatore.costi_veicoli)
      RETURNING ${paramColumns}`,
-    [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo]
+    [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo, costiVeicoli === undefined ? null : JSON.stringify(costiVeicoli)]
   );
   return rows[0];
 }
@@ -96,17 +105,32 @@ function compatible(a, b, tolleranzaMinuti) {
     ((!a.volo_numero && !b.volo_numero) || sameFlight(a, b));
 }
 
-function verificaItinerari() {
+function creaTratte() {
   const coordinates = new Map();
   const locate = name => {
     const id = key(name);
     if (!coordinates.has(id)) coordinates.set(id, resolveLocation(name));
     return coordinates.get(id);
   };
-  return creaVerificaMultisalita(async (from, to) => {
-    const [origin, destination] = await Promise.all([locate(from), locate(to)]);
-    return getDurataDistanza(origin, destination);
-  });
+  const cache = new Map();
+  const deadline = Date.now() + 12000;
+  return (from, to) => {
+    if (key(from) === key(to)) return Promise.resolve({ distanzaKm: 0, durataMs: 0 });
+    const id = JSON.stringify([key(from), key(to)]);
+    if (!cache.has(id)) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0 || cache.size >= 64) return Promise.resolve(null);
+      cache.set(id, new Promise(resolve => {
+        const timer = setTimeout(() => resolve(null), remaining);
+        Promise.all([locate(from), locate(to)])
+          .then(([origin, destination]) => getDurataDistanza(origin, destination))
+          .then(route => resolve(Number.isFinite(route?.distanzaKm) && route.distanzaKm > 0 &&
+            Number.isFinite(route?.durataMs) && route.durataMs > 0 ? route : null), () => resolve(null))
+          .finally(() => clearTimeout(timer));
+      }));
+    }
+    return cache.get(id);
+  };
 }
 
 async function valutaGruppo(rows, parametri, verifica) {
@@ -122,7 +146,7 @@ async function valutaGruppo(rows, parametri, verifica) {
 
 async function veicoliOperatore(client, operatore) {
   return (await client.query(
-    `SELECT id, posti_totali FROM public.veicolo
+    `SELECT id, posti_totali, marca, modello, targa FROM public.veicolo
      WHERE driver_id = $1 AND stato IS DISTINCT FROM 'eliminato' AND posti_totali > 0
      ORDER BY posti_totali, id`, [operatore]
   )).rows;
@@ -145,7 +169,7 @@ function dettaglioGruppo(rows, veicoli) {
 
 async function candidati(client, operatore, ids = null, lock = false) {
   return (await client.query(
-    `SELECT p.id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.volo_numero,
+    `SELECT p.id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.prezzo_centesimi, p.volo_numero,
         p.volo_direzione, p.volo_aeroporto, p.volo_programmato_il
      FROM public.ncc_prenotazioni_esterne p
      WHERE p.operatore_id = $1 AND p.annullata_il IS NULL AND p.prelievo_il > now()
@@ -164,7 +188,8 @@ export async function pianificatore(pool, operatore) {
   const veicoli = await veicoliOperatore(pool, operatore);
   const capienza = veicoli.at(-1)?.posti_totali ?? 0;
   const groups = [];
-  const verifica = verificaItinerari();
+  const tratta = creaTratte();
+  const verifica = creaVerificaMultisalita(tratta);
   for (const row of rows) {
     if (row.passeggeri > capienza) continue;
     let added = false;
@@ -197,11 +222,13 @@ export async function pianificatore(pool, operatore) {
      FROM public.ncc_gruppi_approvati g
      WHERE g.operatore_id = $1 ORDER BY g.id DESC LIMIT 100`, [operatore]
   )).rows;
-  return { parametri, proposte: groups.filter(group => group.rows.length > 1).map(({ rows, detail }) => ({
-    prenotazioni: rows.map(row => row.id), ...dettaglioGruppo(rows, veicoli), ...detail
-  })).sort((a, b) => (parametri.prioritaVolo ? Number(Boolean(b.volo)) - Number(Boolean(a.volo)) : 0) ||
+  const proposte = await Promise.all(groups.filter(group => group.rows.length > 1).map(({ rows, detail }) =>
+    stimaGruppo({ prenotazioni: rows.map(row => row.id), ...dettaglioGruppo(rows, veicoli), ...detail },
+      rows, parametri.costiVeicoli, tratta)));
+  proposte.sort((a, b) => (parametri.prioritaVolo ? Number(Boolean(b.volo)) - Number(Boolean(a.volo)) : 0) ||
     Number(b.riempimento >= parametri.obiettivoRiempimento) - Number(a.riempimento >= parametri.obiettivoRiempimento) ||
-    Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal)),
+    Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal));
+  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli),
     approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
       ...group,
       dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),
@@ -227,11 +254,13 @@ export async function approvaGruppo(pool, operatore, ids) {
         !veicoli.some(veicolo => veicolo.posti_totali >= totalePasseggeri(rows))) {
       throw invalid('Il gruppo non è più disponibile. Aggiorna le proposte.', 409);
     }
-    const detail = await valutaGruppo(rows, parametri, verificaItinerari());
+    const tratta = creaTratte();
+    const detail = await valutaGruppo(rows, parametri, creaVerificaMultisalita(tratta));
     if (!detail) throw invalid('Itinerario non disponibile o fuori dai vincoli. Aggiorna le proposte.', 409);
+    const snapshot = await stimaGruppo({ ...dettaglioGruppo(rows, veicoli), ...detail }, rows, parametri.costiVeicoli, tratta);
     const { rows: [result] } = await client.query(
       'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni, dettaglio) VALUES ($1, $2, $3::jsonb) RETURNING id',
-      [operatore, rows.map(row => row.id), JSON.stringify({ ...dettaglioGruppo(rows, veicoli), ...detail })]
+      [operatore, rows.map(row => row.id), JSON.stringify(snapshot)]
     );
     await client.query('COMMIT');
     return result;

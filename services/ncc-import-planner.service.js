@@ -56,9 +56,40 @@ const sameFlight = (a, b) => Boolean(a.volo_numero && a.volo_numero === b.volo_n
   a.volo_aeroporto === b.volo_aeroporto && a.volo_direzione === b.volo_direzione &&
   +a.volo_programmato_il === +b.volo_programmato_il);
 
-function compatible(a, b) {
+const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true };
+const paramColumns = `tolleranza_minuti AS "tolleranzaMinuti",
+  obiettivo_riempimento AS "obiettivoRiempimento", priorita_volo AS "prioritaVolo"`;
+
+async function parametriPianificatore(client, operatore) {
+  const { rows } = await client.query(
+    `SELECT ${paramColumns} FROM public.ncc_parametri_pianificatore WHERE operatore_id = $1`, [operatore]
+  );
+  return rows[0] ?? defaultParams;
+}
+
+export async function salvaParametriPianificatore(pool, operatore, body) {
+  const { tolleranzaMinuti, obiettivoRiempimento, prioritaVolo } = body ?? {};
+  if (!Number.isInteger(tolleranzaMinuti) || tolleranzaMinuti < 0 || tolleranzaMinuti > 1440 ||
+      !Number.isInteger(obiettivoRiempimento) || obiettivoRiempimento < 0 || obiettivoRiempimento > 100 ||
+      typeof prioritaVolo !== 'boolean') {
+    throw invalid('Inserisci una tolleranza tra 0 e 1440 minuti e un obiettivo tra 0 e 100%.');
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO public.ncc_parametri_pianificatore
+       (operatore_id, tolleranza_minuti, obiettivo_riempimento, priorita_volo)
+     VALUES ($1, $2, $3, $4) ON CONFLICT (operatore_id) DO UPDATE SET
+       tolleranza_minuti = EXCLUDED.tolleranza_minuti,
+       obiettivo_riempimento = EXCLUDED.obiettivo_riempimento,
+       priorita_volo = EXCLUDED.priorita_volo
+     RETURNING ${paramColumns}`,
+    [operatore, tolleranzaMinuti, obiettivoRiempimento, prioritaVolo]
+  );
+  return rows[0];
+}
+
+function compatible(a, b, tolleranzaMinuti) {
   return key(a.origine) === key(b.origine) && key(a.destinazione) === key(b.destinazione) &&
-    Math.abs(+a.prelievo_il - +b.prelievo_il) <= 20 * 60 * 1000 &&
+    Math.abs(+a.prelievo_il - +b.prelievo_il) <= tolleranzaMinuti * 60 * 1000 &&
     ((!a.volo_numero && !b.volo_numero) || sameFlight(a, b));
 }
 
@@ -71,6 +102,19 @@ async function veicoliOperatore(client, operatore) {
 }
 
 const totalePasseggeri = rows => rows.reduce((total, row) => total + row.passeggeri, 0);
+
+function dettaglioGruppo(rows, veicoli) {
+  if (!rows.length) return null;
+  const passeggeri = totalePasseggeri(rows);
+  const veicolo = veicoli.find(candidate => candidate.posti_totali >= passeggeri);
+  return {
+    passeggeri, origine: rows[0].origine, destinazione: rows[0].destinazione,
+    prelievoDal: rows[0].prelievo_il, prelievoAl: rows.at(-1).prelievo_il,
+    volo: rows[0].volo_numero,
+    veicoloId: veicolo?.id ?? null, posti: veicolo?.posti_totali ?? null,
+    riempimento: veicolo ? Math.round(100 * passeggeri / veicolo.posti_totali) : null
+  };
+}
 
 async function candidati(client, operatore, ids = null, lock = false) {
   return (await client.query(
@@ -88,33 +132,46 @@ async function candidati(client, operatore, ids = null, lock = false) {
 }
 
 export async function pianificatore(pool, operatore) {
+  const parametri = await parametriPianificatore(pool, operatore);
   const rows = await candidati(pool, operatore);
   const veicoli = await veicoliOperatore(pool, operatore);
   const capienza = veicoli.at(-1)?.posti_totali ?? 0;
   const groups = [];
   for (const row of rows) {
     if (row.passeggeri > capienza) continue;
-    const group = groups.find(item => compatible(item[0], row) && totalePasseggeri(item) + row.passeggeri <= capienza);
+    const group = groups.find(item => compatible(item[0], row, parametri.tolleranzaMinuti) &&
+      totalePasseggeri(item) + row.passeggeri <= capienza);
     if (group) group.push(row);
     else groups.push([row]);
   }
   const approvati = (await pool.query(
-    `SELECT id, prenotazioni, approvato_il FROM public.ncc_gruppi_approvati
-     WHERE operatore_id = $1 ORDER BY id DESC LIMIT 100`, [operatore]
+    `SELECT g.id, g.prenotazioni, g.approvato_il, g.dettaglio,
+       ARRAY(SELECT p.id::text FROM public.ncc_prenotazioni_esterne p
+         WHERE p.operatore_id = g.operatore_id AND p.id = ANY(g.prenotazioni)
+           AND p.annullata_il IS NOT NULL ORDER BY p.id) AS annullate,
+       CASE WHEN g.dettaglio IS NULL THEN (
+         SELECT jsonb_agg(jsonb_build_object(
+           'origine', p.origine, 'destinazione', p.destinazione,
+           'prelievo_il', p.prelievo_il, 'passeggeri', p.passeggeri,
+           'volo_numero', p.volo_numero
+         ) ORDER BY p.prelievo_il, p.id)
+         FROM public.ncc_prenotazioni_esterne p
+         WHERE p.operatore_id = g.operatore_id AND p.id = ANY(g.prenotazioni)
+       ) END AS dati_storici
+     FROM public.ncc_gruppi_approvati g
+     WHERE g.operatore_id = $1 ORDER BY g.id DESC LIMIT 100`, [operatore]
   )).rows;
-  return { proposte: groups.filter(group => group.length > 1).map(group => {
-    const passeggeri = totalePasseggeri(group);
-    const veicolo = veicoli.find(candidate => candidate.posti_totali >= passeggeri);
-    return {
-      prenotazioni: group.map(row => row.id), passeggeri,
-      origine: group[0].origine, destinazione: group[0].destinazione,
-      prelievoDal: group[0].prelievo_il, prelievoAl: group.at(-1).prelievo_il, volo: group[0].volo_numero,
-      veicoloId: veicolo.id, posti: veicolo.posti_totali,
-      riempimento: Math.round(100 * passeggeri / veicolo.posti_totali)
-    };
-  }).sort((a, b) => Number(Boolean(b.volo)) - Number(Boolean(a.volo)) ||
-    Number(b.riempimento >= 75) - Number(a.riempimento >= 75) ||
-    Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal)), approvati };
+  return { parametri, proposte: groups.filter(group => group.length > 1).map(group => ({
+    prenotazioni: group.map(row => row.id), ...dettaglioGruppo(group, veicoli)
+  })).sort((a, b) => (parametri.prioritaVolo ? Number(Boolean(b.volo)) - Number(Boolean(a.volo)) : 0) ||
+    Number(b.riempimento >= parametri.obiettivoRiempimento) - Number(a.riempimento >= parametri.obiettivoRiempimento) ||
+    Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal)),
+    approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
+      ...group,
+      dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),
+      storico: dettaglio == null
+    }))
+  };
 }
 
 export async function approvaGruppo(pool, operatore, ids) {
@@ -127,15 +184,16 @@ export async function approvaGruppo(pool, operatore, ids) {
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock(22022, $1::integer)', [operatore]);
+    const parametri = await parametriPianificatore(client, operatore);
     const rows = await candidati(client, operatore, ids, true);
     const veicoli = await veicoliOperatore(client, operatore);
-    if (rows.length !== ids.length || !rows.every(row => compatible(rows[0], row)) ||
+    if (rows.length !== ids.length || !rows.every(row => compatible(rows[0], row, parametri.tolleranzaMinuti)) ||
         !veicoli.some(veicolo => veicolo.posti_totali >= totalePasseggeri(rows))) {
       throw invalid('Il gruppo non è più disponibile. Aggiorna le proposte.', 409);
     }
     const { rows: [result] } = await client.query(
-      'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni) VALUES ($1, $2) RETURNING id',
-      [operatore, rows.map(row => row.id)]
+      'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni, dettaglio) VALUES ($1, $2, $3::jsonb) RETURNING id',
+      [operatore, rows.map(row => row.id), JSON.stringify(dettaglioGruppo(rows, veicoli))]
     );
     await client.query('COMMIT');
     return result;

@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { resolveLocation } from '../routes/distanza.route.js';
+import { getDurataDistanza } from '../utils/maps.util.js';
+import { creaVerificaMultisalita } from './ncc-multisalita.service.js';
 import { datiPrenotazione, creaPrenotazioneEsterna } from './gestionale-ncc.service.js';
 
 function invalid(message, status = 400) {
@@ -54,7 +57,7 @@ export async function importaPrenotazioni(pool, operatore, body) {
 const key = value => value.trim().replace(/\s+/g, ' ').toLowerCase();
 const sameFlight = (a, b) => Boolean(a.volo_numero && a.volo_numero === b.volo_numero &&
   a.volo_aeroporto === b.volo_aeroporto && a.volo_direzione === b.volo_direzione &&
-  +a.volo_programmato_il === +b.volo_programmato_il);
+  Date.parse(a.volo_programmato_il) === Date.parse(b.volo_programmato_il));
 
 const defaultParams = { tolleranzaMinuti: 20, obiettivoRiempimento: 75, prioritaVolo: true };
 const paramColumns = `tolleranza_minuti AS "tolleranzaMinuti",
@@ -91,6 +94,30 @@ function compatible(a, b, tolleranzaMinuti) {
   return key(a.origine) === key(b.origine) && key(a.destinazione) === key(b.destinazione) &&
     Math.abs(+a.prelievo_il - +b.prelievo_il) <= tolleranzaMinuti * 60 * 1000 &&
     ((!a.volo_numero && !b.volo_numero) || sameFlight(a, b));
+}
+
+function verificaItinerari() {
+  const coordinates = new Map();
+  const locate = name => {
+    const id = key(name);
+    if (!coordinates.has(id)) coordinates.set(id, resolveLocation(name));
+    return coordinates.get(id);
+  };
+  return creaVerificaMultisalita(async (from, to) => {
+    const [origin, destination] = await Promise.all([locate(from), locate(to)]);
+    return getDurataDistanza(origin, destination);
+  });
+}
+
+async function valutaGruppo(rows, parametri, verifica) {
+  const first = rows[0];
+  if (rows.every(row => key(row.origine) === key(first.origine))) {
+    return rows.every(row => compatible(first, row, parametri.tolleranzaMinuti)) ? {} : null;
+  }
+  if (first.volo_direzione !== 'partenza' ||
+      !rows.every(row => sameFlight(first, row) && key(row.destinazione) === key(first.destinazione))) return null;
+  const itinerary = await verifica(rows, parametri.tolleranzaMinuti);
+  return itinerary ? { itinerario: itinerary } : null;
 }
 
 async function veicoliOperatore(client, operatore) {
@@ -137,12 +164,21 @@ export async function pianificatore(pool, operatore) {
   const veicoli = await veicoliOperatore(pool, operatore);
   const capienza = veicoli.at(-1)?.posti_totali ?? 0;
   const groups = [];
+  const verifica = verificaItinerari();
   for (const row of rows) {
     if (row.passeggeri > capienza) continue;
-    const group = groups.find(item => compatible(item[0], row, parametri.tolleranzaMinuti) &&
-      totalePasseggeri(item) + row.passeggeri <= capienza);
-    if (group) group.push(row);
-    else groups.push([row]);
+    let added = false;
+    for (const group of groups) {
+      if (totalePasseggeri(group.rows) + row.passeggeri > capienza) continue;
+      const next = [...group.rows, row];
+      const detail = await valutaGruppo(next, parametri, verifica);
+      if (!detail) continue;
+      group.rows = next;
+      group.detail = detail;
+      added = true;
+      break;
+    }
+    if (!added) groups.push({ rows: [row], detail: {} });
   }
   const approvati = (await pool.query(
     `SELECT g.id, g.prenotazioni, g.approvato_il, g.dettaglio,
@@ -161,8 +197,8 @@ export async function pianificatore(pool, operatore) {
      FROM public.ncc_gruppi_approvati g
      WHERE g.operatore_id = $1 ORDER BY g.id DESC LIMIT 100`, [operatore]
   )).rows;
-  return { parametri, proposte: groups.filter(group => group.length > 1).map(group => ({
-    prenotazioni: group.map(row => row.id), ...dettaglioGruppo(group, veicoli)
+  return { parametri, proposte: groups.filter(group => group.rows.length > 1).map(({ rows, detail }) => ({
+    prenotazioni: rows.map(row => row.id), ...dettaglioGruppo(rows, veicoli), ...detail
   })).sort((a, b) => (parametri.prioritaVolo ? Number(Boolean(b.volo)) - Number(Boolean(a.volo)) : 0) ||
     Number(b.riempimento >= parametri.obiettivoRiempimento) - Number(a.riempimento >= parametri.obiettivoRiempimento) ||
     Date.parse(a.prelievoDal) - Date.parse(b.prelievoDal)),
@@ -187,13 +223,15 @@ export async function approvaGruppo(pool, operatore, ids) {
     const parametri = await parametriPianificatore(client, operatore);
     const rows = await candidati(client, operatore, ids, true);
     const veicoli = await veicoliOperatore(client, operatore);
-    if (rows.length !== ids.length || !rows.every(row => compatible(rows[0], row, parametri.tolleranzaMinuti)) ||
+    if (rows.length !== ids.length ||
         !veicoli.some(veicolo => veicolo.posti_totali >= totalePasseggeri(rows))) {
       throw invalid('Il gruppo non è più disponibile. Aggiorna le proposte.', 409);
     }
+    const detail = await valutaGruppo(rows, parametri, verificaItinerari());
+    if (!detail) throw invalid('Itinerario non disponibile o fuori dai vincoli. Aggiorna le proposte.', 409);
     const { rows: [result] } = await client.query(
       'INSERT INTO public.ncc_gruppi_approvati (operatore_id, prenotazioni, dettaglio) VALUES ($1, $2, $3::jsonb) RETURNING id',
-      [operatore, rows.map(row => row.id), JSON.stringify(dettaglioGruppo(rows, veicoli))]
+      [operatore, rows.map(row => row.id), JSON.stringify({ ...dettaglioGruppo(rows, veicoli), ...detail })]
     );
     await client.query('COMMIT');
     return result;

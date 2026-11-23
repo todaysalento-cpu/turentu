@@ -154,7 +154,7 @@ async function geocodeGoogle(address) {
 // RISOLUZIONE INDIRIZZO O COORDINATE
 // ==========================================
 
-async function resolveLocation(value) {
+export async function resolveLocation(value) {
   if (typeof value !== 'string') {
     const error = new Error(
       'Formato località non valido'

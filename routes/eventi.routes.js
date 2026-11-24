@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { pool } from '../db/db.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -347,6 +348,22 @@ router.put('/:id/fermate/:fermataId', authMiddleware, async (req, res, next) => 
     if (!rows.length) return res.sendStatus(404);
     return res.json({ success: true, data: rows[0] });
   } catch (error) { return next(error); }
+});
+
+// Copertine WebP statiche pubbliche, senza elaborazione dinamica.
+router.get('/copertine/:filename', (req, res) => {
+  const { filename } = req.params;
+  if (!['lecce-casa.webp', 'lecce-trasferta.webp'].includes(filename)) {
+    return res.sendStatus(404);
+  }
+  return res.sendFile(filename, {
+    root: fileURLToPath(new URL('../assets/eventi/', import.meta.url)),
+    maxAge: '30d',
+    headers: {
+      'Content-Type': 'image/webp',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });
 
 // Copertina PNG pubblica, esclusivamente per gli eventi importati da US Lecce.

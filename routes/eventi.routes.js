@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getIO } from '../socket.js';
 import { notifyUser } from '../services/notifications/notification.service.js';
 import { v2 as cloudinary } from 'cloudinary';
+import { generaCopertinaPartita } from '../services/eventi/copertina-partita.service.js';
 
 const router = express.Router();
 
@@ -346,6 +347,37 @@ router.put('/:id/fermate/:fermataId', authMiddleware, async (req, res, next) => 
     if (!rows.length) return res.sendStatus(404);
     return res.json({ success: true, data: rows[0] });
   } catch (error) { return next(error); }
+});
+
+// Copertina PNG pubblica, esclusivamente per gli eventi importati da US Lecce.
+router.get('/:id/copertina.png', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[1-9]\d{0,9}$/.test(id) || Number(id) > 2147483647) {
+    return res.status(400).json({ success: false, error: 'ID evento non valido' });
+  }
+
+  try {
+    const { rows: [evento] } = await pool.query(
+      `SELECT e.id, e.titolo, e.descrizione, e.data_inizio
+         FROM public.eventi e
+         JOIN public.eventi_sorgenti_esterne s ON s.evento_id = e.id
+        WHERE e.id = $1 AND s.sorgente = 'us-lecce'
+        LIMIT 1`,
+      [id]
+    );
+    if (!evento) return res.status(404).json({ success: false, error: 'Copertina non disponibile' });
+
+    const image = await generaCopertinaPartita(evento);
+    res.set({
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=300',
+      'X-Content-Type-Options': 'nosniff'
+    });
+    return res.send(image);
+  } catch (error) {
+    console.error('[EVENTI COPERTINA]', error);
+    return res.status(500).json({ success: false, error: 'Errore generazione copertina' });
+  }
 });
 
 router.get('/:id', async (req, res) => {

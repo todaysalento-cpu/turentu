@@ -1,3 +1,4 @@
+import { publishManualEventImage } from '../../services/eventi/event-image-manual.service.js';
 import express from 'express';
 import { pool } from '../../db/db.js';
 
@@ -446,5 +447,16 @@ router.post('/:id/publish', handle(async (req, res) => {
     result
   });
 }));
+
+router.post('/manual', async (req, res) => {
+  try {
+    const result = await publishManualEventImage(req.body || {});
+    res.json({ success: true, result });
+  } catch (error) {
+    console.error('[EVENT IMAGE MANUAL]', error.message);
+    const status = [400,404,409,413].includes(error.status) ? error.status : 500;
+    res.status(status).json({ success: false, error: status === 500 ? 'Caricamento immagine non riuscito' : error.message });
+  }
+});
 
 export default router;

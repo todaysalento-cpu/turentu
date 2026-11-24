@@ -1,3 +1,4 @@
+import eventImageJobsRoutes from "./event-image-jobs.routes.js";
 import express from 'express';
 import pixelWorkerRoutes from './pixel-worker.routes.js';
 import { authMiddleware, requireRole } from '../../middleware/auth.js';
@@ -45,5 +46,7 @@ router.use('/pixel-worker', pixelWorkerRoutes);
 router.use('/procaccio', procaccioRoutes);
 
 router.use('/event-images', eventImagesRoutes);
+
+router.use("/event-image-jobs", eventImageJobsRoutes);
 
 export default router;

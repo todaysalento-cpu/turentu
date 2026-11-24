@@ -278,3 +278,7 @@ const startServer = async () => {
 startServer();
 
 export { io, server };
+
+
+import { startEventImagePublicationWorker } from "./workers/event-image-publication.worker.js";
+startEventImagePublicationWorker();

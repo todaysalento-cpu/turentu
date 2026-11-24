@@ -1,3 +1,4 @@
+import { createEventImageNetwork } from "./event-image-network.service.js";
 import https from 'node:https';
 import dns from 'node:dns/promises';
 import ipaddr from 'ipaddr.js';
@@ -22,6 +23,8 @@ function isPublicIP(address) {
   }
 }
 
+const network = createEventImageNetwork();
+
 async function downloadImage(url, domain) {
   const parsed = new URL(url);
 
@@ -35,9 +38,8 @@ async function downloadImage(url, domain) {
     throw new Error('URL immagine non consentito');
   }
 
-  const addresses = await dns.resolve4(
-    parsed.hostname
-  );
+  const resolver = new dns.Resolver({ timeout: 5000, tries: 1 });
+  const addresses = await resolver.resolve4(parsed.hostname);
 
   if (
     !addresses.length ||
@@ -186,6 +188,8 @@ export async function downloadCandidateImage(
       'Candidata non autorizzata'
     );
   }
+
+  await network.checkImageAccess(candidate.immagine_originale_url, "Turentu-EventImages/1.0");
 
   return downloadImage(
     candidate.immagine_originale_url,

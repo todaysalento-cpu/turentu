@@ -18,6 +18,8 @@ import pendingRoutes from './pending.routes.js';
 import liveRoutes from './live.routes.js';
 import procaccioRoutes from './procaccio.routes.js';
 
+import eventImagesRoutes from './event-images.routes.js';
+
 const router = express.Router();
 router.use(authMiddleware, requireRole('Admin', 'admin'));
 
@@ -41,5 +43,7 @@ router.use('/pixel-worker', pixelWorkerRoutes);
 
 // --- CRM Procaccio Navette ---
 router.use('/procaccio', procaccioRoutes);
+
+router.use('/event-images', eventImagesRoutes);
 
 export default router;

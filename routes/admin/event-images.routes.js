@@ -279,15 +279,6 @@ router.patch('/sources/:id', handle(async (req, res) => {
     });
   }
 
-  // Blocco temporaneo dell'acquisizione remota.
-
-  if (ricerca_abilitata || download_abilitato) {
-    return res.status(409).json({
-      success: false,
-      error: 'Acquisizione remota non ancora disponibile'
-    });
-  }
-
   const { rows } = await pool.query(`
     UPDATE public.event_image_sources
     SET

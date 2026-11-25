@@ -1,3 +1,5 @@
+import { getEventRoadDistances } from '../services/eventi/event-road-distance.service.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 import express from 'express';
 import fetch from 'node-fetch';
@@ -291,6 +293,18 @@ router.get('/', async (req, res) => {
           ? err.message
           : 'Errore calcolo distanza'
     });
+  }
+});
+
+router.post('/matrix', authMiddleware, async (req, res) => {
+  try {
+    const { origine, destinazioni } = req.body ?? {};
+    const risultati = await getEventRoadDistances(origine, destinazioni, req.user.id);
+    return res.json({ risultati });
+  } catch (error) {
+    const code = error.message;
+    const status = code === 'EVENT_ROUTING_INVALID_INPUT' ? 400 : code === 'EVENT_ROUTING_LIMIT_REACHED' ? 429 : code === 'EVENT_ROUTING_GOOGLE_ERROR' ? 502 : 503;
+    return res.status(status).json({ error: 'Distanze stradali non disponibili', code: code.startsWith('EVENT_ROUTING_') ? code : 'EVENT_ROUTING_UNAVAILABLE' });
   }
 });
 

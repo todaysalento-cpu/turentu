@@ -86,6 +86,8 @@ router.get('/search', async (req, res) => {
       `;
     }
 
+    query += ` AND COALESCE(data_fine, data_inizio) > NOW()`;
+
     if (categoria && categoria !== 'all' && categoria !== 'Tutti') {
       query += ` AND LOWER(categoria) = LOWER($${paramIndex})`;
       queryParams.push(categoria);
@@ -353,7 +355,7 @@ router.put('/:id/fermate/:fermataId', authMiddleware, async (req, res, next) => 
 // Copertine WebP statiche pubbliche, senza elaborazione dinamica.
 router.get('/copertine/:filename', (req, res) => {
   const { filename } = req.params;
-  if (!['lecce-casa.webp', 'lecce-trasferta.webp'].includes(filename)) {
+  if (!/^[a-z0-9][a-z0-9_-]{0,119}\.webp$/.test(filename)) {
     return res.sendStatus(404);
   }
   return res.sendFile(filename, {

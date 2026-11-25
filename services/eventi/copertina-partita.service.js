@@ -59,10 +59,9 @@ async function lecceCoverFor(home, away) {
     return await sharp(filepath)
       .rotate()
       .resize({
-        width: 1200,
-        height: 1200,
-        fit: 'inside',
-        withoutEnlargement: true,
+        width: W,
+        height: H,
+        fit: 'cover',
       })
       .png()
       .toBuffer();

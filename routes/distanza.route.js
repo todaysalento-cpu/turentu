@@ -57,7 +57,11 @@ function normalizeCoordinates(value) {
 // GOOGLE GEOCODING
 // ==========================================
 
-async function geocodeGoogle(address) {
+// NCC_GEOCODING_ABORT_V25
+
+async function geocodeGoogle(address, { signal } = {}) {
+
+  signal?.throwIfAborted();
   if (!GOOGLE_MAPS_API_KEY) {
     throw new Error('GOOGLE_MAPS_API_KEY mancante');
   }
@@ -77,6 +81,13 @@ async function geocodeGoogle(address) {
 
   const controller = new AbortController();
 
+  const signalHttp = signal
+    ? AbortSignal.any([
+        signal,
+        controller.signal
+      ])
+    : controller.signal;
+
   const timeout = setTimeout(() => {
     controller.abort();
   }, 12000);
@@ -84,7 +95,7 @@ async function geocodeGoogle(address) {
   try {
     const response = await fetch(
       `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`,
-      { signal: controller.signal }
+      { signal: signalHttp }
     );
 
     if (!response.ok) {
@@ -94,6 +105,8 @@ async function geocodeGoogle(address) {
     }
 
     const data = await response.json();
+
+    signalHttp.throwIfAborted();
 
     if (
       data.status === 'ZERO_RESULTS' ||
@@ -156,7 +169,12 @@ async function geocodeGoogle(address) {
 // RISOLUZIONE INDIRIZZO O COORDINATE
 // ==========================================
 
-export async function resolveLocation(value) {
+export async function resolveLocation(
+  value,
+  { signal } = {}
+) {
+
+  signal?.throwIfAborted();
   if (typeof value !== 'string') {
     const error = new Error(
       'Formato località non valido'
@@ -201,7 +219,7 @@ export async function resolveLocation(value) {
     return coordinates;
   }
 
-  return geocodeGoogle(input);
+  return geocodeGoogle(input, { signal });
 }
 
 // ==========================================

@@ -8,7 +8,7 @@ const normalize = value => value.trim().replace(/\s+/g, ' ').toLowerCase();
 
 export function creaVerificaMultisalita(calcolaTratta, now = Date.now()) {
   const legs = new Map();
-  const deadline = now + 12000;
+  const deadline = Date.now() + 12000;
   async function leg(from, to) {
     const key = JSON.stringify([normalize(from), normalize(to)]);
     if (!legs.has(key)) {

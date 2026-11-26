@@ -1,7 +1,7 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
-import { importaPrenotazioni, pianificatore, approvaGruppo, approvaMissione, salvaParametriPianificatore, eliminaGruppo } from '../services/ncc-import-planner.service.js';
+import { importaPrenotazioni, pianificatore, approvaGruppo, approvaMissione, salvaParametriPianificatore, eliminaGruppo, simulazioneNccV26 } from '../services/ncc-import-planner.service.js';
 import {
   elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
   modificaPrenotazioneEsterna, annullaPrenotazioneEsterna, eliminaPrenotazioneEsterna, eliminaPrenotazioniEsterne
@@ -37,7 +37,13 @@ const bool = (v) => typeof v === 'boolean';
  * authenticate DEVE rifiutare JWT mancanti/non validi e impostare req.user.id.
  * In questa fase ogni operatore agisce SOLO sul proprio account (utente.id).
  */
-export function creaRouterConducenti({ pool, authenticate }) {
+// NCC_API_TESTABILITY_V26
+export function creaRouterConducenti({
+  pool,
+  authenticate,
+  motoreV1 = pianificatore,
+  motoreV26 = simulazioneNccV26
+}) {
   if (!pool?.query || typeof authenticate !== 'function') {
     throw new Error('Router conducenti: pool e authenticate obbligatori');
   }
@@ -53,8 +59,39 @@ export function creaRouterConducenti({ pool, authenticate }) {
     try { const result = await fn(req); res.status(successStatus).json({ ok: true, data: result }); }
     catch (err) {
       // Errori applicativi noti e vincoli DB, senza esporre query/stack al client.
+      if (
+        err.status === 500 &&
+        err.code === 'NCC_ERRORE_PIANIFICAZIONE'
+      ) {
+
+        return res.status(500).json({
+          ok: false,
+          error: 'Errore interno durante la pianificazione.',
+          code: 'NCC_ERRORE_PIANIFICAZIONE'
+        });
+      }
+
+      if (err.status === 503) {
+
+        return res.status(503).json({
+          ok: false,
+          error: 'Servizio temporaneamente non disponibile. Riprovare.',
+          code: 'NCC_SERVIZIO_NON_DISPONIBILE'
+        });
+      }
+
       if (Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
-        return res.status(err.status).json({ ok: false, error: err.message });
+
+        const risposta = {
+          ok: false,
+          error: err.message
+        };
+
+        if (err.status === 429) {
+          risposta.code = 'NCC_SIMULAZIONE_NON_DISPONIBILE';
+        }
+
+        return res.status(err.status).json(risposta);
       }
       if (err.code === '23P01' || err.code === '23505') {
         return res.status(409).json({ error: 'Conflitto di assegnazione o duplicato' });
@@ -129,8 +166,122 @@ export function creaRouterConducenti({ pool, authenticate }) {
   const prenotazioniEsterne = '/operatori/me/prenotazioni-esterne';
   router.post(prenotazioniEsterne + '/importa', route(req =>
     importaPrenotazioni(pool, op(req), req.body)));
-  router.get(prenotazioniEsterne + '/pianificatore', route(req =>
-    pianificatore(pool, op(req))));
+  // NCC_API_ORCHESTRATORE_V26
+
+  router.get(
+    prenotazioniEsterne + '/pianificatore',
+    route(async req => {
+
+      if (req.query.motore === 'V2') {
+
+        if (req.query.modalita !== 'simulazione') {
+
+          throw Object.assign(
+            new Error(
+              'Il motore V2 e disponibile solo in simulazione.'
+            ),
+            { status: 400 }
+          );
+        }
+
+        // NCC_API_HARDENING_V26
+
+        try {
+
+          // NCC_API_CPSAT_V286G4
+
+          const cpsatAttivo =
+            process.env.NCC_CPSAT_ADATTIVO_ENABLED === 'true';
+
+          return await motoreV26(
+            pool,
+            op(req),
+            req.query.giorno,
+
+            ...(cpsatAttivo
+              ? [{
+                  schedulazioneTemporale: true,
+                  reinserimentoDinamico: true,
+                  aggregazioneAdattiva: true,
+                  cpsatAdattivo: true
+                }]
+              : [])
+          );
+
+        } catch (err) {
+
+          if (err?.status === 400) {
+
+            throw Object.assign(
+              new Error('Giornata simulazione non valida.'),
+              { status: 400 }
+            );
+          }
+
+          if (err?.status === 429) {
+
+            throw Object.assign(
+              new Error(
+                'Pianificatore temporaneamente non disponibile.'
+              ),
+              { status: 429 }
+            );
+          }
+
+          if (
+            err?.status === 503 ||
+            [
+              'NCC_LEASE_PERSO',
+              'NCC_SESSION_TIMEOUT',
+              'NCC_ROUTING_INTERROTTO'
+            ].includes(err?.message)
+          ) {
+
+            console.warn(
+              '[NCC V26] Sessione interrotta:',
+              op(req),
+              err?.message
+            );
+
+            throw Object.assign(
+              new Error('Servizio temporaneamente non disponibile.'),
+              { status: 503 }
+            );
+          }
+
+          console.error(
+            '[NCC V26] Errore pianificazione:',
+            {
+              operatore: op(req),
+              giorno: req.query.giorno,
+              errore: err?.name,
+              codice: err?.code,
+              messaggio: err?.message
+            }
+          );
+
+          throw Object.assign(
+            new Error(
+              'Errore interno durante la pianificazione.'
+            ),
+            {
+              status: 500,
+              code: 'NCC_ERRORE_PIANIFICAZIONE'
+            }
+          );
+        }
+      }
+
+      return motoreV1(
+        pool,
+        op(req),
+        {
+          modalita: req.query.modalita,
+          giorno: req.query.giorno
+        }
+      );
+    })
+  );
   router.put(prenotazioniEsterne + '/pianificatore/parametri', route(req =>
     salvaParametriPianificatore(pool, op(req), req.body)));
   router.delete(prenotazioniEsterne + '/pianificatore/gruppi/:gruppoId', route(req =>

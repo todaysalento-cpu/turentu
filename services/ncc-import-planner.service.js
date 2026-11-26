@@ -1,3 +1,8 @@
+
+import {
+  ottimizzaIbridoNcc
+} from './ncc-ottimizzazione-ibrida.service.js';
+
 import { stimaGruppo, accorpaPerGiornata } from './ncc-economia.service.js';
 import { createHash } from 'node:crypto';
 import { resolveLocation } from '../routes/distanza.route.js';
@@ -186,29 +191,33 @@ function dettaglioGruppo(rows, veicoli) {
   };
 }
 
-async function candidati(client, operatore, ids = null, lock = false) {
+async function candidati(client, operatore, ids = null, lock = false, giornoSimulazione = null) {
   return (await client.query(
     `SELECT p.id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.prezzo_centesimi, p.volo_numero,
-        p.volo_direzione, p.volo_aeroporto, p.volo_programmato_il
+        p.volo_direzione, p.volo_aeroporto, p.volo_programmato_il, p.volo_aggiornato_il, p.bagagli
      FROM public.ncc_prenotazioni_esterne p
-     WHERE p.operatore_id = $1 AND p.annullata_il IS NULL AND p.prelievo_il > now()
+     WHERE p.operatore_id = $1 AND p.annullata_il IS NULL AND (($3::date IS NULL AND p.prelievo_il > now()) OR ($3::date IS NOT NULL AND (p.prelievo_il AT TIME ZONE 'Europe/Rome')::date = $3::date))
        AND ($2::bigint[] IS NULL OR p.id = ANY($2))
        AND NOT EXISTS (SELECT 1 FROM public.ncc_gruppi_approvati g
          WHERE g.operatore_id = $1 AND p.id = ANY(g.prenotazioni))
      ORDER BY p.prelievo_il, p.id LIMIT 200
      ${lock ? 'FOR UPDATE OF p' : ''}`,
-    [operatore, ids]
+    [operatore, ids, giornoSimulazione]
   )).rows;
 }
 
-export async function pianificatore(pool, operatore) {
+export async function pianificatore(pool, operatore, opzioni = {}) {
   const parametri = await parametriPianificatore(pool, operatore);
-  const rows = await candidati(pool, operatore);
+  const giorno = opzioni.giorno ?? null;
+  const simulazione = opzioni.modalita === 'simulazione';
+  if (simulazione && (typeof giorno !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(giorno) || !Number.isFinite(Date.parse(giorno)) || new Date(giorno).toISOString().slice(0, 10) !== giorno)) throw invalid('Giornata simulazione non valida.');
+  const rows = await candidati(pool, operatore, null, false, simulazione ? giorno : null);
   const veicoli = await veicoliOperatore(pool, operatore);
   const capienza = veicoli.at(-1)?.posti_totali ?? 0;
   const groups = [];
   const tratta = creaTratte();
-  const verifica = creaVerificaMultisalita(tratta);
+  const riferimento = simulazione ? Number((await pool.query("SELECT EXTRACT(EPOCH FROM ($1::date::timestamp AT TIME ZONE 'Europe/Rome')) * 1000 AS ms", [giorno])).rows[0].ms) : Date.now();
+  const verifica = creaVerificaMultisalita(tratta, riferimento);
   for (const row of rows) {
     if (row.passeggeri > capienza) continue;
     let added = false;
@@ -250,10 +259,10 @@ export async function pianificatore(pool, operatore) {
   const { rows: missioniSalvate } = await pool.query(
     `SELECT dettaglio->'missione'->>'giorno' AS giorno, dettaglio->'missione'->>'veicoloId' AS veicolo
      FROM public.ncc_gruppi_approvati WHERE operatore_id = $1
-       AND dettaglio->'missione'->>'giorno' >= (now() AT TIME ZONE 'Europe/Rome')::date::text`, [operatore]
+       AND (($2::date IS NULL AND dettaglio->'missione'->>'giorno' >= (now() AT TIME ZONE 'Europe/Rome')::date::text) OR ($2::date IS NOT NULL AND dettaglio->'missione'->>'giorno' = $2::date::text))`, [operatore, simulazione ? giorno : null]
   );
   const occupati = new Set(missioniSalvate.map(missione => missione.giorno + '/' + missione.veicolo));
-  return { parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati, parametri.attesaMassimaMinuti, parametri.durataMassimaMissioneMinuti),
+  return { modalita: simulazione ? 'simulazione' : 'operativa', giorno: simulazione ? giorno : null, approvabile: !simulazione, totalePrenotazioni: rows.length, totalePasseggeri: totalePasseggeri(rows), parametri, proposte, veicoli, accorpamenti: await accorpaPerGiornata(proposte, tratta, veicoli, parametri.costiVeicoli, occupati, parametri.attesaMassimaMinuti, parametri.durataMassimaMissioneMinuti),
     approvati: approvati.map(({ dettaglio, dati_storici, ...group }) => ({
       ...group,
       dettaglio: dettaglio ?? dettaglioGruppo(dati_storici ?? [], veicoli),
@@ -345,4 +354,709 @@ export async function eliminaGruppo(pool, operatore, id) {
   );
   if (!rows.length) throw invalid('Gruppo approvato non trovato.', 404);
   return rows[0];
+}
+
+
+export async function simulazioneNccV2(pool, operatore, giorno, routing) {
+  if (typeof giorno !== 'string' || !Number.isFinite(Date.parse(giorno)) || new Date(giorno).toISOString().slice(0,10) !== giorno) throw invalid('Giornata simulazione non valida.');
+  const { aggregaPrenotazioniNcc } = await import('./ncc-aggregazione.service.js');
+  const parametri = await parametriPianificatore(pool, operatore);
+  const rows = await candidati(pool, operatore, null, false, giorno);
+  const veicoli = await veicoliOperatore(pool, operatore);
+  const riferimento = Number((await pool.query("SELECT EXTRACT(EPOCH FROM ($1::date::timestamp AT TIME ZONE 'Europe/Rome')) * 1000 AS ms", [giorno])).rows[0].ms);
+  const { creaGeografiaSimulazioneNcc } = await import('./ncc-geografia-simulazione.service.js');
+  const geografia = creaGeografiaSimulazioneNcc(pool);
+  const utilizzabili = [];
+  const escluseGeografia = [];
+  const indicative = new Set();
+  const registrate = new Map();
+  const cacheGeo = new Map();
+  async function valida(indirizzo, ruolo) {
+    const k = JSON.stringify([indirizzo, ruolo]);
+    if (!cacheGeo.has(k)) cacheGeo.set(k, geografia.validaPunto(indirizzo, ruolo));
+    return cacheGeo.get(k);
+  }
+  for (const row of rows) {
+    const origine = await valida(row.origine, 'origine');
+    const destinazione = await valida(row.destinazione, 'destinazione');
+    if (!origine.utilizzabileSimulazione || !destinazione.utilizzabileSimulazione) {
+      escluseGeografia.push({ id: row.id, passeggeri: row.passeggeri, motivo: 'GEOGRAFIA_DA_VERIFICARE', origine: origine.stato, destinazione: destinazione.stato });
+      continue;
+    }
+    const punti = [[row.origine, origine], [row.destinazione, destinazione]];
+    const verifica = new Map(registrate);
+    let conflitto = false;
+    for (const [nome, geo] of punti) {
+      const k = key(nome);
+      const c = JSON.stringify([geo.lat, geo.lon]);
+      if (verifica.has(k) && verifica.get(k) !== c) conflitto = true;
+      verifica.set(k, c);
+    }
+    if (conflitto) {
+      escluseGeografia.push({ id: row.id, passeggeri: row.passeggeri, motivo: 'CONFLITTO_COORDINATE' });
+      continue;
+    }
+    for (const [nome, geo] of punti) {
+      const k = key(nome);
+      if (!registrate.has(k)) {
+        routing.registraCoordinate(nome, geo);
+        registrate.set(k, JSON.stringify([geo.lat, geo.lon]));
+      }
+    }
+    if (origine.indicativo || destinazione.indicativo) indicative.add(String(row.id));
+    utilizzabili.push(row);
+  }
+  const risultato = await aggregaPrenotazioniNcc(utilizzabili, routing, veicoli, parametri, riferimento);
+  for (const proposta of risultato.proposte) {
+    proposta.prenotazioniIndicative = proposta.prenotazioni.filter(id => indicative.has(String(id)));
+    proposta.geografiaIndicativa = proposta.prenotazioniIndicative.length > 0;
+    proposta.approvabile = false;
+  }
+  risultato.nonAssegnate = [...risultato.nonAssegnate, ...escluseGeografia];
+  risultato.riepilogo.prenotazioniTotali = rows.length;
+  risultato.riepilogo.prenotazioniNonAssegnate = risultato.nonAssegnate.length;
+  risultato.riepilogo.prenotazioniEscluseGeografia = escluseGeografia.length;
+  risultato.riepilogo.prenotazioniIndicative = indicative.size;
+  risultato.riepilogo.proposteIndicative = risultato.proposte.filter(p => p.geografiaIndicativa).length;
+  return { motore: 'V2', modalita: 'simulazione', approvabile: false, giorno, parametri, totalePrenotazioni: rows.length, totalePasseggeri: totalePasseggeri(rows), veicoli, ...risultato, geografia: { utilizzabili: utilizzabili.length, escluse: escluseGeografia.length, passeggeriUtilizzabili: totalePasseggeri(utilizzabili), passeggeriEsclusi: totalePasseggeri(escluseGeografia), dettaglioEscluse: escluseGeografia, diagnostica: geografia.diagnostica() }, routing: routing.diagnostica?.() ?? null };
+}
+
+
+// NCC_ORCHESTRATORE_V26
+
+export async function simulazioneNccV26(
+  pool,
+  operatore,
+  giorno,
+  dipendenze = {}
+) {
+
+  if (
+    typeof giorno !== 'string' ||
+    !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(giorno) ||
+    !Number.isFinite(Date.parse(giorno)) ||
+    new Date(giorno).toISOString().slice(0, 10) !== giorno
+  ) {
+    throw invalid('Giornata simulazione non valida.');
+  }
+
+  const {
+    creaSessionManagerNcc
+  } = await import('./ncc-planner-session.service.js');
+
+  const {
+    creaRoutingNcc
+  } = await import('./ncc-routing-matrix.service.js');
+
+  const {
+    creaGeografiaGuardNcc
+  } = await import('./ncc-geografia-guard.service.js');
+
+  const {
+    creaGeografiaSimulazioneNcc
+  } = await import('./ncc-geografia-simulazione.service.js');
+
+  const {
+    aggregaPrenotazioniNcc
+  } = await import('./ncc-aggregazione.service.js');
+
+  const {
+    ottimizzaMissioniNcc
+  } = await import('./ncc-ottimizzatore.service.js');
+
+  const manager =
+    dipendenze.manager ?? creaSessionManagerNcc();
+
+  const esito = await manager.esegui(
+    operatore,
+    async sessione => {
+
+      const verificaAttiva = sessione.verificaAttiva;
+
+      verificaAttiva();
+
+      async function protetto(fn) {
+        verificaAttiva();
+        const risultato = await fn();
+        verificaAttiva();
+        return risultato;
+      }
+
+      const parametri = await protetto(
+        () => parametriPianificatore(pool, operatore)
+      );
+
+      const rows = await protetto(
+        () => candidati(pool, operatore, null, false, giorno)
+      );
+
+      const flotta = await protetto(
+        () => veicoliOperatore(pool, operatore)
+      );
+
+      const dataRiferimento = await protetto(
+        () => pool.query(
+          "SELECT EXTRACT(EPOCH FROM ($1::date::timestamp AT TIME ZONE 'Europe/Rome')) * 1000 AS ms",
+          [giorno]
+        )
+      );
+
+      const riferimento =
+        Number(dataRiferimento.rows[0].ms);
+
+      if (!Number.isFinite(riferimento)) {
+        throw invalid('Riferimento temporale non valido.', 500);
+      }
+
+      const impegni = await protetto(
+        () => pool.query(
+          "SELECT dettaglio->'missione'->>'giorno' AS giorno, dettaglio->'missione'->>'veicoloId' AS veicolo FROM public.ncc_gruppi_approvati WHERE operatore_id = $1 AND dettaglio->'missione'->>'giorno' = $2::date::text",
+          [operatore, giorno]
+        )
+      );
+
+      const occupati = new Set(
+        impegni.rows.map(
+          m => m.giorno + '/' + m.veicolo
+        )
+      );
+
+      const veicoli = [];
+      const veicoliEsclusi = [];
+
+      function coordinateValide(c) {
+        return (
+          Number.isFinite(c?.lat) &&
+          Number.isFinite(c?.lon) &&
+          Math.abs(c.lat) <= 90 &&
+          Math.abs(c.lon) <= 180 &&
+          (c.lat !== 0 || c.lon !== 0)
+        );
+      }
+
+      for (const v of flotta) {
+
+        verificaAttiva();
+
+        if (!coordinateValide(v)) {
+          veicoliEsclusi.push({
+            id: v.id,
+            motivo: 'BASE_NON_VALIDA'
+          });
+          continue;
+        }
+
+        if (occupati.has(giorno + '/' + v.id)) {
+          veicoliEsclusi.push({
+            id: v.id,
+            motivo: 'VEICOLO_GIA_IMPEGNATO'
+          });
+          continue;
+        }
+
+        veicoli.push(v);
+      }
+
+      const guard = creaGeografiaGuardNcc({
+        signal: sessione.signal,
+        verificaAttiva,
+        autorizzaDistribuita: sessione.autorizzaGeografia,
+        autorizzazioneRigorosa: true
+      });
+
+      const geografia = (
+        dipendenze.creaGeografia ??
+        creaGeografiaSimulazioneNcc
+      )(pool, { guard });
+
+      if (geografia.guard !== guard) {
+        throw new Error('NCC_GUARD_NON_CONDIVISO');
+      }
+
+      const utilizzabili = [];
+      const escluseGeografia = [];
+      const indicative = new Set();
+      const registrate = new Map();
+      const cacheGeo = new Map();
+
+      async function valida(indirizzo, ruolo) {
+
+        verificaAttiva();
+
+        const k = JSON.stringify([indirizzo, ruolo]);
+
+        if (!cacheGeo.has(k)) {
+          cacheGeo.set(
+            k,
+            geografia.validaPunto(indirizzo, ruolo)
+          );
+        }
+
+        const risultato = await cacheGeo.get(k);
+
+        verificaAttiva();
+
+        return risultato;
+      }
+
+      for (const row of rows) {
+
+        verificaAttiva();
+
+        const origine = await valida(
+          row.origine,
+          'origine'
+        );
+
+        const destinazione = await valida(
+          row.destinazione,
+          'destinazione'
+        );
+
+        if (
+          !origine.utilizzabileSimulazione ||
+          !destinazione.utilizzabileSimulazione ||
+          !coordinateValide(origine) ||
+          !coordinateValide(destinazione)
+        ) {
+
+          escluseGeografia.push({
+            id: String(row.id),
+            passeggeri: row.passeggeri,
+            motivo: 'GEOGRAFIA_DA_VERIFICARE',
+            origine: origine.stato,
+            destinazione: destinazione.stato
+          });
+
+          continue;
+        }
+
+        const punti = [
+          [row.origine, origine],
+          [row.destinazione, destinazione]
+        ];
+
+        const verifica = new Map(registrate);
+
+        let conflitto = false;
+
+        for (const [nome, geo] of punti) {
+
+          const k = key(nome);
+
+          const precedente = verifica.get(k);
+
+          if (
+            precedente &&
+            (
+              precedente.lat !== geo.lat ||
+              precedente.lon !== geo.lon
+            )
+          ) {
+            conflitto = true;
+          }
+
+          verifica.set(k, {
+            nome,
+            lat: geo.lat,
+            lon: geo.lon
+          });
+        }
+
+        if (conflitto) {
+
+          escluseGeografia.push({
+            id: String(row.id),
+            passeggeri: row.passeggeri,
+            motivo: 'CONFLITTO_COORDINATE'
+          });
+
+          continue;
+        }
+
+        for (const [nome, geo] of punti) {
+
+          const k = key(nome);
+
+          if (!registrate.has(k)) {
+            registrate.set(k, {
+              nome,
+              lat: geo.lat,
+              lon: geo.lon
+            });
+          }
+        }
+
+        if (origine.indicativo || destinazione.indicativo) {
+          indicative.add(String(row.id));
+        }
+
+        utilizzabili.push(row);
+      }
+
+      const diagnosticaGeografia =
+        geografia.diagnostica();
+
+      guard.interrompi('NCC_FASE_GEOGRAFICA_COMPLETATA');
+
+      verificaAttiva();
+
+      // Il deadline Routing parte dopo la geografia.
+
+      const routing = (
+        dipendenze.creaRouting ?? creaRoutingNcc
+      )({
+        signal: sessione.signal,
+        verificaAttiva,
+        autorizzaRouting: sessione.autorizzaRouting,
+        autorizzazioneRigorosa: true,
+        richiediAutorizzazione: true
+      });
+
+      for (const punto of registrate.values()) {
+
+        verificaAttiva();
+
+        routing.registraCoordinate(
+          punto.nome,
+          punto
+        );
+      }
+
+      for (const v of veicoli) {
+
+        verificaAttiva();
+
+        const nome =
+          '__BASE_NCC__' + v.lat + ',' + v.lon;
+
+        const precedente = registrate.get(key(nome));
+
+        // NCC_BASE_REGISTRATION_V26
+        // Identificativo riservato alle basi.
+        // La registrazione effettiva compete
+        // esclusivamente all'ottimizzatore.
+
+        if (precedente) {
+          throw new Error('NCC_CONFLITTO_BASE');
+        }
+      }
+
+      const aggregazione = await protetto(
+        () => aggregaPrenotazioniNcc(
+          veicoli.length ? utilizzabili : [],
+          routing,
+          veicoli,
+          parametri,
+          riferimento,
+          {
+            verificaAttiva,
+
+            // NCC_ORCHESTRATORE_TEMPORALE_V27
+            finestreTemporali:
+              dipendenze.schedulazioneTemporale === true
+          }
+        )
+      );
+
+      if (!veicoli.length) {
+
+        aggregazione.nonAssegnate =
+          utilizzabili.map(row => ({
+            id: String(row.id),
+            motivo: 'NESSUN_VEICOLO_IDONEO'
+          }));
+      }
+
+      for (const proposta of aggregazione.proposte) {
+
+        verificaAttiva();
+
+        proposta.prenotazioniIndicative =
+          proposta.prenotazioni.filter(
+            id => indicative.has(String(id))
+          );
+
+        proposta.geografiaIndicativa =
+          proposta.prenotazioniIndicative.length > 0;
+
+        proposta.approvabile = false;
+      }
+
+      const pianoOriginale = await protetto(
+        () => ottimizzaMissioniNcc(
+          aggregazione.proposte,
+          veicoli,
+          routing,
+          parametri,
+          occupati,
+          {
+            verificaAttiva,
+            prefetch: false,
+            schedulazioneTemporale:
+              dipendenze.schedulazioneTemporale === true,
+
+            // NCC_ORCHESTRATORE_V273
+            reinserimentoDinamico:
+              dipendenze.schedulazioneTemporale === true &&
+              dipendenze.reinserimentoDinamico === true,
+
+            // NCC_ORCHESTRATORE_V280
+            aggregazioneAdattiva:
+              dipendenze.schedulazioneTemporale === true &&
+              dipendenze.aggregazioneAdattiva === true
+          }
+        )
+      );
+
+
+      // NCC_ORCHESTRATORE_V286G3
+
+      let piano = pianoOriginale;
+
+      let diagnosticaIbrida = null;
+
+      if (
+        dipendenze.cpsatAdattivo === true &&
+        dipendenze.schedulazioneTemporale === true &&
+        dipendenze.aggregazioneAdattiva === true
+      ) {
+
+        verificaAttiva();
+
+        const esitoIbrido = await protetto(
+          () => ottimizzaIbridoNcc({
+
+            abilitato: true,
+
+            pianoOriginale,
+            aggregazione,
+
+            prenotazioni: utilizzabili,
+
+            veicoli,
+            routing,
+            parametri,
+            riferimento,
+            giorno,
+
+            prenotazioniIndicative:
+              [...indicative],
+
+            signal: sessione.signal,
+
+            verificaAttiva
+          })
+        );
+
+        verificaAttiva();
+
+        piano = esitoIbrido.piano;
+
+        diagnosticaIbrida =
+          esitoIbrido.diagnostica;
+      }
+
+      const idsInput = new Set(
+        rows.map(row => String(row.id))
+      );
+
+      if (idsInput.size !== rows.length) {
+        throw new Error('NCC_INPUT_DUPLICATO');
+      }
+
+      const idsAggregati = new Set();
+
+      for (const proposta of aggregazione.proposte) {
+
+        for (const id of proposta.prenotazioni) {
+
+          const k = String(id);
+
+          if (!idsInput.has(k) || idsAggregati.has(k)) {
+            throw new Error('NCC_AGGREGAZIONE_NON_UNIVOCA');
+          }
+
+          idsAggregati.add(k);
+        }
+      }
+
+      const idsPianificati = new Set();
+
+      for (const missione of piano.missioni) {
+
+        verificaAttiva();
+
+        missione.approvabile = false;
+
+        for (const gruppo of missione.gruppi) {
+
+          for (const id of gruppo.prenotazioni) {
+
+            const k = String(id);
+
+            if (
+              !idsAggregati.has(k) ||
+              idsPianificati.has(k)
+            ) {
+              throw new Error('NCC_MISSIONI_NON_UNIVOCHE');
+            }
+
+            idsPianificati.add(k);
+          }
+        }
+      }
+
+      const esclusioni = new Map();
+
+      for (const e of [
+        ...escluseGeografia,
+        ...aggregazione.nonAssegnate
+      ]) {
+
+        const k = String(e.id);
+
+        if (
+          !idsInput.has(k) ||
+          idsAggregati.has(k) ||
+          esclusioni.has(k)
+        ) {
+          throw new Error('NCC_ESCLUSIONI_INCOERENTI');
+        }
+
+        esclusioni.set(k, { ...e, id: k });
+      }
+
+      for (const id of idsInput) {
+
+        if (idsPianificati.has(id)) continue;
+
+        if (esclusioni.has(id)) continue;
+
+        if (!idsAggregati.has(id)) {
+          throw new Error('NCC_PRENOTAZIONE_DISPERSA');
+        }
+
+        esclusioni.set(id, {
+          id,
+          motivo: 'MISSIONE_NON_COMPATIBILE'
+        });
+      }
+
+      if (
+        idsPianificati.size + esclusioni.size !==
+        idsInput.size
+      ) {
+        throw new Error('NCC_AUDIT_CONTEGGI_FALLITO');
+      }
+
+      verificaAttiva();
+
+      const diagnosticaRouting =
+        routing.diagnostica();
+
+      if (diagnosticaRouting.interrotta) {
+        throw new Error('NCC_ROUTING_INTERROTTO');
+      }
+
+      return {
+
+        motore: 'V2',
+        versioneOrchestratore: '2.6',
+        modalita: 'simulazione',
+        approvabile: false,
+
+        giorno,
+        parametri,
+
+        totalePrenotazioni: rows.length,
+        totalePasseggeri: totalePasseggeri(rows),
+
+        veicoli,
+        veicoliEsclusi,
+
+        proposte: aggregazione.proposte,
+
+        missioni: piano.missioni,
+
+        ottimizzazione: piano.ottimizzazione,
+
+        nonAssegnate: [...esclusioni.values()],
+
+        riepilogo: {
+
+          prenotazioniTotali: rows.length,
+
+          prenotazioniAggregate:
+            idsAggregati.size,
+
+          prenotazioniPianificate:
+            idsPianificati.size,
+
+          prenotazioniNonAssegnate:
+            esclusioni.size,
+
+          prenotazioniEscluseGeografia:
+            escluseGeografia.length,
+
+          prenotazioniIndicative:
+            indicative.size,
+
+          missioni: piano.missioni.length
+        },
+
+        riepilogoAggregazione:
+          aggregazione.riepilogo,
+
+        riepilogoMissioni:
+          piano.riepilogo,
+
+        ...(piano.diagnosticaAdattiva
+          ? {
+              diagnosticaAdattiva:
+                piano.diagnosticaAdattiva
+            }
+          : {}),
+
+        ...(diagnosticaIbrida
+          ? { diagnosticaIbrida }
+          : {}),
+
+        geografia: {
+          utilizzabili: utilizzabili.length,
+          escluse: escluseGeografia.length,
+          dettaglioEscluse: escluseGeografia,
+          diagnostica: diagnosticaGeografia
+        },
+
+        routing: diagnosticaRouting,
+
+        audit: {
+          univocitaPrenotazioni: true,
+          conteggiCoerenti: true,
+          bagagliVerificati: false,
+          disponibilitaOrariaVerificata: false,
+          disponibilitaConducentiVerificata: false
+        }
+      };
+    }
+  );
+
+  if (!esito.consentito) {
+
+    const errore = invalid(
+      'Pianificatore temporaneamente non disponibile.',
+      429
+    );
+
+    errore.code = esito.motivo;
+
+    throw errore;
+  }
+
+  return {
+    ...esito.risultato,
+    simulazioneId: esito.simulazioneId,
+    sessione: esito.sessione
+  };
 }

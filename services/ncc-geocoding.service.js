@@ -1,0 +1,701 @@
+// NCC_GEO_DISTRIBUTED_V26
+// NCC_GEO_INTEGRATION_V25
+import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
+
+
+import fetch from 'node-fetch';
+import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
+import { classificaCandidatiNcc } from './ncc-classificazione-geografica.service.js';
+
+import {
+  analizzaIndirizzoNcc
+} from './ncc-normalizzazione-indirizzi.service.js';
+
+import {
+  verificaComuneNcc,
+  verificaLocalitaIstatNcc
+} from './ncc-validazione-territoriale.service.js';
+
+import {
+  riconosciLocalita
+} from './ncc-locality-resolver.service.js';
+
+export const NCC_GEO_LIMITS = Object.freeze({
+  maxGeocoding: 100,
+  maxPlaces: 20,
+  timeoutMs: 12000
+});
+
+function chiave(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function componente(result, tipo) {
+  return result.address_components?.find(
+    c => c.types?.includes(tipo)
+  )?.long_name ?? null;
+}
+
+function comuneDaIndirizzo(indirizzo) {
+  const parti = indirizzo.split(',')
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  if (
+    parti.length >= 3 &&
+    chiave(parti.at(-1)) === 'italia'
+  ) {
+    return parti.at(-2);
+  }
+
+  return null;
+}
+
+export function creaGeocodingNcc(
+  db,
+  {
+    apiKey = process.env.GOOGLE_MAPS_API_KEY,
+    limits = NCC_GEO_LIMITS,
+    fetchImpl = fetch,
+    signal = null,
+    verificaAttiva = null,
+    guard: guardEsterno = null
+  } = {}
+) {
+  const guard = guardEsterno ??
+    creaGeografiaGuardNcc({
+      signal,
+      verificaAttiva,
+      limits
+    });
+
+  const cache = new Map();
+
+  const stats = {
+    geocoding: 0,
+    places: 0,
+    validati: 0,
+    daVerificare: 0,
+    fuoriComune: 0,
+    nonTrovati: 0,
+    erroriApi: 0,
+    budgetEsaurito: false,
+    richiesteInterrotte: 0
+  };
+
+  // NCC_GEO_HTTP_TIMEOUT_V26
+
+  async function richiesta(url, options = {}) {
+
+    guard.verifica();
+
+    const controller = new AbortController();
+
+    const signalHttp = AbortSignal.any([
+      controller.signal,
+      guard.signal
+    ]);
+
+    const timeoutMs = Math.min(
+      limits.timeoutMs,
+      guard.residuoMs()
+    );
+
+    const deadlineHttp =
+      performance.now() + timeoutMs;
+
+    let timer;
+    let listener;
+
+    function verificaHttp() {
+
+      guard.verifica();
+
+      if (
+        performance.now() >= deadlineHttp &&
+        !controller.signal.aborted
+      ) {
+        controller.abort(
+          new Error('NCC_GEO_HTTP_TIMEOUT')
+        );
+      }
+
+      signalHttp.throwIfAborted();
+    }
+
+    const annullamento = new Promise(
+      (_, reject) => {
+
+        listener = () => reject(
+          signalHttp.reason ??
+          new Error('NCC_GEO_HTTP_ABORT')
+        );
+
+        signalHttp.addEventListener(
+          'abort',
+          listener,
+          { once: true }
+        );
+
+        if (signalHttp.aborted) {
+          listener();
+        }
+      }
+    );
+
+    timer = setTimeout(() => {
+
+      controller.abort(
+        new Error('NCC_GEO_HTTP_TIMEOUT')
+      );
+
+    }, timeoutMs);
+
+    try {
+
+      const lavoro = Promise.resolve().then(
+        async () => {
+
+          verificaHttp();
+
+          const response = await fetchImpl(
+            url,
+            {
+              ...options,
+              signal: signalHttp
+            }
+          );
+
+          verificaHttp();
+
+          if (!response.ok) {
+            throw new Error(
+              'HTTP_' + response.status
+            );
+          }
+
+          const data = await response.json();
+
+          verificaHttp();
+
+          return data;
+        }
+      );
+
+      const data = await Promise.race([
+        lavoro,
+        annullamento
+      ]);
+
+      verificaHttp();
+
+      return data;
+
+    } catch (error) {
+
+      if (guard.signal.aborted) {
+
+        stats.richiesteInterrotte++;
+
+        throw guard.signal.reason;
+      }
+
+      guard.verifica();
+
+      throw error;
+
+    } finally {
+
+      clearTimeout(timer);
+
+      signalHttp.removeEventListener(
+        'abort',
+        listener
+      );
+    }
+  }
+
+  async function geocoding(indirizzo) {
+
+    guard.verifica();
+
+    if (
+      stats.geocoding >= limits.maxGeocoding ||
+      !(await guard.autorizza('GEOCODING'))
+    ) {
+      stats.budgetEsaurito = true;
+      return null;
+    }
+
+    stats.geocoding++;
+
+    const url = new URL(
+      'https://maps.googleapis.com/maps/api/geocode/json'
+    );
+
+    url.searchParams.set('address', indirizzo);
+    url.searchParams.set('components', 'country:IT');
+    url.searchParams.set('language', 'it');
+    url.searchParams.set('key', apiKey);
+
+    const data = await richiesta(url.toString());
+
+    if (data.status === 'ZERO_RESULTS') return [];
+
+    if (data.status !== 'OK') {
+      throw new Error(`GEOCODING_${data.status}`);
+    }
+
+    return data.results ?? [];
+  }
+
+  async function places(indirizzo) {
+
+    guard.verifica();
+
+    if (
+      stats.places >= limits.maxPlaces ||
+      !(await guard.autorizza('PLACES'))
+    ) {
+      stats.budgetEsaurito = true;
+      return null;
+    }
+
+    stats.places++;
+
+    const data = await richiesta(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': [
+            'places.id',
+            'places.displayName',
+            'places.formattedAddress',
+            'places.location'
+          ].join(',')
+        },
+        body: JSON.stringify({
+          textQuery: indirizzo,
+          languageCode: 'it',
+          regionCode: 'IT',
+          maxResultCount: 3
+        })
+      }
+    );
+
+    return data.places ?? [];
+  }
+
+  async function valutaGeocoding(
+    result,
+    comuneAtteso,
+    indirizzo,
+    localitaGid = null
+  ) {
+    const lat = result.geometry?.location?.lat;
+    const lon = result.geometry?.location?.lng;
+
+    const territorio = await guard.attendi(
+      () => verificaComuneNcc(db, {
+        lat,
+        lon,
+        comuneAtteso
+      })
+    );
+
+    guard.verifica();
+
+    const localitaTerritoriale = localitaGid
+      ? await guard.attendi(
+          () => verificaLocalitaIstatNcc(db, {
+            gid: localitaGid,
+            lat,
+            lon
+          })
+        )
+      : null;
+
+    guard.verifica();
+
+    const precisione = result.geometry?.location_type;
+
+    const civico = componente(result, 'street_number');
+    const strada = componente(result, 'route');
+    const paese = componente(result, 'country');
+
+    const analisiStrada = analizzaIndirizzoNcc(indirizzo);
+    const civicoRichiesto = analisiStrada.civico;
+    const stradaRichiesta = civicoRichiesto
+      ? analisiStrada.indirizzo.slice(0, -civicoRichiesto.length).replace(/[\s,]+$/, '')
+      : analisiStrada.indirizzo;
+
+    const civicoCoerente = Boolean(
+      civicoRichiesto &&
+      civico &&
+      chiave(civicoRichiesto) === chiave(civico)
+    );
+
+    const stradaCoerente = Boolean(
+      strada &&
+      chiave(stradaRichiesta) === chiave(strada)
+    );
+
+    const confrontoStrada = confrontaStradeNcc(stradaRichiesta, strada);
+
+    const affidabile =
+      territorio.valido &&
+      (!localitaGid || localitaTerritoriale?.valido === true) &&
+      result.partial_match !== true &&
+      precisione === 'ROOFTOP' &&
+      chiave(paese) === 'italia' &&
+      civicoCoerente &&
+      stradaCoerente;
+
+    return {
+      fonte: 'GOOGLE_GEOCODING',
+      placeId: result.place_id ?? null,
+      indirizzo: result.formatted_address ?? null,
+      lat,
+      lon,
+      precisione,
+      civico,
+      strada,
+      civicoCoerente,
+      stradaCoerente,
+      stradaCompatibile: confrontoStrada.compatibile,
+      motivoConfrontoStrada: confrontoStrada.motivo,
+      partialMatch: result.partial_match === true,
+      territorio,
+      localitaTerritoriale,
+      affidabile
+    };
+  }
+
+  async function valutaPlaces(
+    result,
+    comuneAtteso,
+    localitaGid = null
+  ) {
+    const lat = result.location?.latitude;
+    const lon = result.location?.longitude;
+
+    const territorio = await guard.attendi(
+      () => verificaComuneNcc(db, {
+        lat,
+        lon,
+        comuneAtteso
+      })
+    );
+
+    guard.verifica();
+
+    const localitaTerritoriale = localitaGid
+      ? await guard.attendi(
+          () => verificaLocalitaIstatNcc(db, {
+            gid: localitaGid,
+            lat,
+            lon
+          })
+        )
+      : null;
+
+    guard.verifica();
+
+    return {
+      fonte: 'GOOGLE_PLACES',
+      placeId: result.id ?? null,
+      nome: result.displayName?.text ?? null,
+      indirizzo: result.formattedAddress ?? null,
+      lat,
+      lon,
+      territorio,
+      localitaTerritoriale,
+
+      // I risultati Places richiedono conferma.
+      affidabile: false
+    };
+  }
+
+  async function elabora(
+    originale,
+    comuneEsplicito
+  ) {
+    guard.verifica();
+
+    const analisi = analizzaIndirizzoNcc(originale);
+    const normalizzato = analisi.normalizzato;
+
+    const comuneAtteso =
+      comuneEsplicito ??
+      analisi.comune ??
+      comuneDaIndirizzo(normalizzato);
+
+    const risoluzioneLocalita = await guard.attendi(
+      () => riconosciLocalita(
+        db,
+        originale,
+        { comune: comuneAtteso }
+      )
+    );
+
+    guard.verifica();
+
+    const localitaGid =
+      risoluzioneLocalita.stato === 'RICONOSCIUTO'
+        ? risoluzioneLocalita.localita?.gid ?? null
+        : null;
+
+    const localitaAmbigua =
+      risoluzioneLocalita.stato === 'AMBIGUA';
+
+    const base = {
+      originale,
+      normalizzato,
+      comuneAtteso,
+      analisi,
+      risoluzioneLocalita,
+      valido: false
+    };
+
+    if (!apiKey) {
+      stats.erroriApi++;
+
+      return {
+        ...base,
+        stato: 'ERRORE_API',
+        motivo: 'API_KEY_MANCANTE'
+      };
+    }
+
+    try {
+      const risultati = await geocoding(normalizzato);
+
+      guard.verifica();
+
+      if (risultati === null) {
+        return {
+          ...base,
+          stato: 'DA_ELABORARE',
+          motivo: 'BUDGET_GEOCODING'
+        };
+      }
+
+      const candidati = await Promise.all(
+        risultati.slice(0, 5).map(
+          r => valutaGeocoding(
+            r,
+            comuneAtteso,
+            normalizzato,
+            localitaGid
+          )
+        )
+      );
+
+      // Una normalizzazione che modifica il significato
+      // dell'indirizzo non deve essere approvata da sola.
+      guard.verifica();
+
+      const contieneAmbiguita = analisi.ambiguo;
+
+      if (
+        risultati.length === 1 &&
+        candidati[0]?.affidabile &&
+        !contieneAmbiguita &&
+        !localitaAmbigua &&
+        !analisi.puntoInteresse
+      ) {
+        stats.validati++;
+
+        return {
+          ...base,
+          valido: true,
+          stato: 'VALIDATO_AUTO',
+          punto: candidati[0]
+        };
+      }
+
+      // Fallback Places: ricerca candidati alternativi.
+      guard.verifica();
+
+      const alternativi = await places(
+        analisi.queryPlaces || normalizzato
+      );
+
+      guard.verifica();
+
+      if (alternativi) {
+        const valutati = await Promise.all(
+          alternativi.map(
+            r => valutaPlaces(r, comuneAtteso, localitaGid)
+          )
+        );
+
+        guard.verifica();
+
+        candidati.push(...valutati);
+      }
+
+      for (const alternativa of analisi.alternative.slice(1,3)) {
+
+        guard.verifica();
+        const query = [alternativa, comuneAtteso, 'Italia'].filter(Boolean).join(', ');
+        const altri = await geocoding(query);
+        if (altri) {
+          for (const r of altri.slice(0,3)) {
+            candidati.push(await valutaGeocoding(
+              r,
+              comuneAtteso,
+              query,
+              localitaGid
+            ));
+          }
+        }
+      }
+
+      guard.verifica();
+
+      const perIdentita = new Map();
+
+      for (const candidato of candidati) {
+        const id = candidato.placeId ?? JSON.stringify([candidato.lat, candidato.lon]);
+        const precedente = perIdentita.get(id);
+
+        if (!precedente) {
+          perIdentita.set(id, candidato);
+          continue;
+        }
+
+        const geo = precedente.fonte === 'GOOGLE_GEOCODING'
+          ? precedente
+          : candidato.fonte === 'GOOGLE_GEOCODING'
+            ? candidato
+            : null;
+
+        const poi = precedente.fonte === 'GOOGLE_PLACES'
+          ? precedente
+          : candidato.fonte === 'GOOGLE_PLACES'
+            ? candidato
+            : null;
+
+        if (geo && poi) {
+          perIdentita.set(id, {
+            ...geo,
+            nome: poi.nome ?? geo.nome,
+            fonti: ['GOOGLE_GEOCODING', 'GOOGLE_PLACES']
+          });
+        }
+      }
+
+      const unici = [...perIdentita.values()];
+
+      if (!unici.length) {
+        if (stats.budgetEsaurito) {
+          return {
+            ...base,
+            stato: 'DA_ELABORARE',
+            motivo: 'BUDGET_PLACES'
+          };
+        }
+
+        stats.nonTrovati++;
+
+        return {
+          ...base,
+          stato: 'NON_TROVATO',
+          candidati: []
+        };
+      }
+
+      if (
+        unici.every(
+          c => c.territorio.stato === 'FUORI_COMUNE'
+        )
+      ) {
+        stats.fuoriComune++;
+
+        return {
+          ...base,
+          stato: 'FUORI_COMUNE',
+          ...classificaCandidatiNcc(unici, analisi)
+        };
+      }
+
+      const classificazione = classificaCandidatiNcc(unici, analisi);
+      stats.daVerificare++;
+
+      return {
+        ...base,
+        stato: classificazione.candidati.length > 1 || contieneAmbiguita
+          ? 'AMBIGUO'
+          : 'DA_VERIFICARE',
+        ...classificazione
+      };
+
+    } catch (error) {
+
+      guard.verifica();
+
+      stats.erroriApi++;
+
+      return {
+        ...base,
+        stato: 'ERRORE_API'
+      };
+    }
+  }
+
+  async function validaPunto(
+    indirizzo,
+    comuneAtteso = null
+  ) {
+
+    guard.verifica();
+    if (
+      typeof indirizzo !== 'string' ||
+      !indirizzo.trim()
+    ) {
+      return Promise.resolve({
+        valido: false,
+        stato: 'NON_TROVATO'
+      });
+    }
+
+    const id = JSON.stringify([
+      indirizzo.trim(),
+      comuneAtteso
+    ]);
+
+    if (!cache.has(id)) {
+      cache.set(
+        id,
+        elabora(indirizzo, comuneAtteso)
+      );
+    }
+
+    const risultato = await guard.attendi(
+      () => cache.get(id)
+    );
+
+    guard.verifica();
+
+    return risultato;
+  }
+
+  return {
+    validaPunto,
+    guard,
+    diagnostica: () => ({
+      ...stats,
+      cache: cache.size,
+      guard: guard.diagnostica()
+    })
+  };
+}

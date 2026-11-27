@@ -52,12 +52,15 @@ export function creaAutorizzazioneGeografiaNcc({
     ? { ...limits.GEOCODING, elementiOperatore: limits.GEOCODING.elementiGlobali }
     : limits.GEOCODING;
 
+  const derogaTest = process.env.NCC_GEO_TEST_BYPASS_ENABLED === 'true' && String(operatoreId) === '2';
+  const estendiTest = limiti => derogaTest ? { ...limiti, elementiSimulazione: limiti.elementiGlobali, elementiOperatore: limiti.elementiGlobali } : limiti;
+
   const geocoding =
     creaAutorizzazioneRoutingNcc({
 
       ...comune,
 
-      limits: limitiGeocoding,
+      limits: estendiTest(limitiGeocoding),
 
       budgetNamespace: geocodingNamespace
     });
@@ -67,7 +70,7 @@ export function creaAutorizzazioneGeografiaNcc({
 
       ...comune,
 
-      limits: limits.PLACES,
+      limits: estendiTest(limits.PLACES),
 
       budgetNamespace: placesNamespace
     });

@@ -326,7 +326,8 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
     throw errore(400, 'Seleziona un indirizzo Google valido.');
   }
   const sessione = await (dipendenze.manager ?? manager).esegui(operatore, async sessione => {
-    const guard = creaGeografiaGuardNcc({ signal: sessione.signal, verificaAttiva: sessione.verificaAttiva,
+    const guard = creaGeografiaGuardNcc({
+          limits: process.env.NCC_GEO_TEST_BYPASS_ENABLED === 'true' && String(operatore) === '2' ? { maxGeocoding: 3000, maxPlaces: 600 } : undefined, signal: sessione.signal, verificaAttiva: sessione.verificaAttiva,
       autorizzaDistribuita: sessione.autorizzaGeografia, autorizzazioneRigorosa: true });
     try {
       const { rows } = await pool.query(
@@ -428,6 +429,7 @@ export async function validaGeografiaPrenotazioniNcc(
     operatore,
     async sessione => {
       const guard = creaGeografiaGuardNcc({
+          limits: process.env.NCC_GEO_TEST_BYPASS_ENABLED === 'true' && String(operatore) === '2' ? { maxGeocoding: 3000, maxPlaces: 600 } : undefined,
         signal: sessione.signal,
         verificaAttiva: sessione.verificaAttiva,
         autorizzaDistribuita:

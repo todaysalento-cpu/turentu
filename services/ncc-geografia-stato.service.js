@@ -273,6 +273,10 @@ export async function calcolaRiepilogoGeograficoNcc(
       p.destinazione_geo_scade_il,
       p.origine_punto_operativo_id,
       p.destinazione_punto_operativo_id,
+      p.origine_fonte_geo,
+      p.destinazione_fonte_geo,
+      p.origine_dettaglio_geo,
+      p.destinazione_dettaglio_geo,
       EXISTS (
         SELECT 1
         FROM public.ncc_gruppi_approvati g
@@ -292,7 +296,10 @@ export async function calcolaRiepilogoGeograficoNcc(
 
   const adesso = Date.now();
 
+  // NCC_PRECISIONE_STRADA_V2
   let puntiValidi = 0;
+  let puntiIndicativiAccettati = 0;
+  let prenotazioniConPuntiIndicativi = 0;
   let puntiApprovati = 0;
 
   async function resolver(db, indirizzo, ruolo) {
@@ -359,6 +366,8 @@ export async function calcolaRiepilogoGeograficoNcc(
         { adesso, risolviCatalogo: resolver }
       );
 
+    let contieneIndicativi = false;
+
     for (const punto of [origine, destinazione]) {
       const stato = punto.statoEffettivo;
 
@@ -367,7 +376,24 @@ export async function calcolaRiepilogoGeograficoNcc(
 
       if (punto.utilizzabile) {
         puntiValidi++;
+
+        const dettaglio =
+          row[punto.ruolo + '_dettaglio_geo'] ?? {};
+
+        if (
+          punto.statoMemorizzato === 'VALIDATO_MANUALE' &&
+          dettaglio.precisione === 'STRADA' &&
+          dettaglio.posizioneIndicativa === true &&
+          dettaglio.confermatoDaOperatore === true
+        ) {
+          puntiIndicativiAccettati++;
+          contieneIndicativi = true;
+        }
       }
+    }
+
+    if (contieneIndicativi) {
+      prenotazioniConPuntiIndicativi++;
     }
 
     const classe =
@@ -406,6 +432,13 @@ export async function calcolaRiepilogoGeograficoNcc(
     puntiApprovati,
     puntiDaValutare,
     puntiValidi,
+
+    puntiIndicativiAccettati,
+
+    puntiValidiSenzaAvvisoStradale:
+      puntiValidi - puntiIndicativiAccettati,
+
+    prenotazioniConPuntiIndicativi,
 
     puntiNonValidi:
       puntiDaValutare - puntiValidi,

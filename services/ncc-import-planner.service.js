@@ -218,7 +218,9 @@ async function candidati(client, operatore, ids = null, lock = false, giornoSimu
           'geo_scade_il',
           'punto_operativo_id',
           'fonte_geo',
-          'place_id'
+          'place_id',
+          // NCC_PRECISIONE_STRADA_V2
+          'dettaglio_geo'
         ].map(campo =>
           'p.' + ruolo + '_' + campo
         )

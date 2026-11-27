@@ -95,6 +95,16 @@ export function creaRiutilizzoGeograficoNcc(
 
     if (verifica.utilizzabile) {
 
+      // NCC_PRECISIONE_STRADA_V2
+      const dettaglio =
+        row[ruolo + '_dettaglio_geo'] ?? {};
+
+      const posizioneIndicativa =
+        stato === 'VALIDATO_MANUALE' &&
+        dettaglio.precisione === 'STRADA' &&
+        dettaglio.posizioneIndicativa === true &&
+        dettaglio.confermatoDaOperatore === true;
+
       if (verifica.puntoOperativoId != null) {
         stats.vincoliCatalogoRiutilizzati++;
       }
@@ -116,6 +126,19 @@ export function creaRiutilizzoGeograficoNcc(
         utilizzabileSimulazione: true,
         indicativo: false,
         riutilizzato: true,
+
+        posizioneIndicativa,
+
+        precisione:
+          dettaglio.precisione ?? null,
+
+        numeroCivicoMancante:
+          posizioneIndicativa &&
+          dettaglio.numeroCivicoMancante === true,
+
+        numeroCivicoNonRiconosciuto:
+          posizioneIndicativa &&
+          dettaglio.numeroCivicoNonRiconosciuto === true,
 
         // NCC_GEO_VINCOLI_V2902E2D1
         tipiVeicoloAmmessi:

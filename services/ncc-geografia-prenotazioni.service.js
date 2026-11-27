@@ -321,7 +321,7 @@ async function leggiPuntoGoogleNcc(placeId, guard) {
 }
 
 export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dipendenze = {}) {
-  const { ruolo, placeId, indirizzo } = body;
+  const { ruolo, placeId, indirizzo, accettaPosizioneIndicativa } = body;
   if (!RUOLI.includes(ruolo) || typeof placeId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(placeId) ||
     placeId.startsWith('turentu_') || typeof indirizzo !== 'string' || !indirizzo.trim() || indirizzo.length > 250) {
     throw errore(400, 'Seleziona un indirizzo Google valido.');
@@ -356,10 +356,26 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       const comuneAtteso = (analisi.comune ?? comuneGoogle ?? '').replace(/\s+[A-Z]{2}$/, '');
       const nomeGoogle = normalizzaLocalita(luogo.displayName?.text);
       const nomeRichiesto = normalizzaLocalita(indirizzo.split(',')[0]);
-      const piazza = /^(piazza|piazzetta|piazzale) /.test(nomeRichiesto) && luogo.types?.includes('route');
-      const poiIdentificato = Boolean(nomeGoogle && nomeGoogle === nomeRichiesto && (piazza ||
-        luogo.types?.some(tipo => ['establishment', 'point_of_interest', 'lodging', 'plaza', 'town_square', 'park'].includes(tipo))));
-      const stradaRichiesta = analisi.civico ? analisi.indirizzo.slice(0, -analisi.civico.length).trim().replace(/,$/, '') : '';
+      // NCC_PRECISIONE_STRADA_V2
+      const poiIdentificato = Boolean(
+        nomeGoogle &&
+        nomeGoogle === nomeRichiesto &&
+        !luogo.types?.includes('route') &&
+        luogo.types?.some(tipo =>
+          [
+            'establishment',
+            'point_of_interest',
+            'lodging',
+            'plaza',
+            'town_square',
+            'park'
+          ].includes(tipo)
+        )
+      );
+      // NCC_PRECISIONE_STRADA_V1
+      const stradaRichiesta = analisi.civico
+        ? analisi.indirizzo.slice(0, -analisi.civico.length).trim().replace(/,$/, '')
+        : analisi.indirizzo;
       const stradaGoogle = componente('route')?.longText;
       const strada = confrontaStradeNcc(stradaRichiesta, stradaGoogle);
       const civicoCoerente = analisi.civico &&
@@ -368,18 +384,114 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
         normalizzaLocalita(stradaRichiesta) === normalizzaLocalita(stradaGoogle) ||
         ['NOME_NORMALIZZATO', 'SPAZI_EQUIVALENTI', 'INIZIALI_COMPATIBILI'].includes(strada.motivo)
       ));
-      if (!comuneAtteso || (!poiIdentificato && !(civicoCoerente && viaCoerente))) {
-        throw errore(400, 'Il punto scelto non conferma il nome della struttura oppure via, civico e comune.');
+
+      const civicoGoogle = componente('street_number')?.longText;
+
+      const comuneEsplicito = Boolean(
+        analisi.comune &&
+        comuneGoogle &&
+        normalizzaLocalita(comuneAtteso) ===
+        normalizzaLocalita(comuneGoogle)
+      );
+
+      const riferimentoStradale =
+        /^(via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s/i
+          .test(analisi.indirizzo);
+
+      // NCC_PRECISIONE_HARDENING_V4
+      const viaCoerenteIndicativa = Boolean(
+        viaCoerente &&
+        strada.compatibile === true &&
+        [
+          'NOME_NORMALIZZATO',
+          'SPAZI_EQUIVALENTI'
+        ].includes(strada.motivo)
+      );
+
+      const posizioneIndicativa = Boolean(
+        riferimentoStradale &&
+        comuneEsplicito &&
+        viaCoerenteIndicativa &&
+        !civicoGoogle &&
+        luogo.types?.includes('route') &&
+        !analisi.ambiguo &&
+        !analisi.puntoInteresse &&
+        !poiIdentificato
+      );
+
+      const motivoPrecisione = posizioneIndicativa
+        ? (
+            analisi.civico
+              ? 'CIVICO_NON_RICONOSCIUTO'
+              : 'CIVICO_MANCANTE'
+          )
+        : null;
+
+      if (
+        !comuneAtteso ||
+        (
+          !poiIdentificato &&
+          !(civicoCoerente && viaCoerente) &&
+          !posizioneIndicativa
+        )
+      ) {
+        throw errore(
+          400,
+          'Il punto scelto non conferma il nome della struttura oppure via, civico e comune.'
+        );
       }
+
+      // NCC_PRECISIONE_TERRITORIO_V3
       const territorio = await guard.attendi(() =>
         (dipendenze.verificaComune ?? verificaComuneNcc)(pool, { lat, lon, comuneAtteso }));
       if (!territorio.valido) throw errore(400, 'Il punto scelto è fuori dal comune richiesto o non verificabile.');
+
+      if (
+        posizioneIndicativa &&
+        accettaPosizioneIndicativa !== true
+      ) {
+        throw errore(
+          400,
+          motivoPrecisione === 'CIVICO_MANCANTE'
+            ? 'NCC_CIVICO_MANCANTE: Via e comune riconosciuti. Confermare la posizione indicativa.'
+            : 'NCC_CIVICO_NON_RICONOSCIUTO: Numero civico non verificato. Confermare la posizione indicativa.'
+        );
+      }
       const esito = normalizzaEsito({ stato: 'VALIDATO_MANUALE', valido: true, lat, lon, placeId: luogo.id,
-        fonte: 'GOOGLE_PLACES_CONFERMATO', normalizzato: analisi.normalizzato, comuneAtteso, motivo: 'PUNTO_SCELTO_OPERATORE' });
+        fonte: 'GOOGLE_PLACES_CONFERMATO', normalizzato: analisi.normalizzato, comuneAtteso, motivo: posizioneIndicativa
+          ? motivoPrecisione
+          : 'PUNTO_SCELTO_OPERATORE' });
+
+      esito.dettaglio = {
+        ...esito.dettaglio,
+        precisione: posizioneIndicativa
+          ? 'STRADA'
+          : poiIdentificato
+            ? 'POI'
+            : 'CIVICO',
+        posizioneIndicativa,
+        numeroCivicoMancante:
+          posizioneIndicativa && !analisi.civico,
+        numeroCivicoNonRiconosciuto:
+          posizioneIndicativa && Boolean(analisi.civico),
+        civicoVerificatoDaGoogle:
+          Boolean(civicoCoerente && viaCoerente),
+        confermatoDaOperatore: true,
+        operatoreId: String(operatore)
+      };
       if (!(await salvaEsito(pool, operatore, row, ruolo, esito, guard))) {
         throw errore(409, 'La prenotazione è cambiata. Riaprila e riprova.');
       }
-      return { id: String(id), ruolo, stato: esito.stato, normalizzato: esito.normalizzato };
+      return {
+        id: String(id),
+        ruolo,
+        stato: esito.stato,
+        normalizzato: esito.normalizzato,
+        precisione: esito.dettaglio.precisione,
+        posizioneIndicativa,
+        avviso: motivoPrecisione,
+        dettaglio: esito.dettaglio
+      };
     } finally {
       guard.interrompi('NCC_CONFERMA_PUNTO_TERMINATA');
     }
@@ -732,6 +844,22 @@ export async function validaGeografiaPrenotazioniNcc(
                 stato: 'VALIDATO_MANUALE',
                 riutilizzato: utilizzabile,
                 salvato: false,
+
+                precisione:
+                  row[ruolo + '_dettaglio_geo']
+                    ?.precisione ?? null,
+
+                posizioneIndicativa:
+                  row[ruolo + '_dettaglio_geo']
+                    ?.posizioneIndicativa === true,
+
+                numeroCivicoMancante:
+                  row[ruolo + '_dettaglio_geo']
+                    ?.numeroCivicoMancante === true,
+
+                numeroCivicoNonRiconosciuto:
+                  row[ruolo + '_dettaglio_geo']
+                    ?.numeroCivicoNonRiconosciuto === true,
                 richiedeRiconferma: !utilizzabile,
                 motivo: utilizzabile
                   ? null

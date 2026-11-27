@@ -5,6 +5,7 @@ import { Router } from 'express';
 // NCC_GEOGRAFIA_API_V2902B
 import {
   confermaPuntoGoogleNcc,
+  confermaPuntoManualeNcc,
   riepilogoGeografiaNcc,
   validaGeografiaPrenotazioniNcc
 } from '../services/ncc-geografia-prenotazioni.service.js';
@@ -231,6 +232,32 @@ export function creaRouterConducenti({
     }
     return confermaPuntoGoogleNcc(pool, op(req), bookingId, req.body ?? {});
   }));
+
+
+  // NCC_CONFERMA_MAPPA_V1
+  router.post(
+    prenotazioniEsterne + '/:id/geografia/conferma-manuale',
+    route(req => {
+      const bookingId = String(req.params.id);
+
+      if (
+        !/^[1-9]\d{0,18}$/.test(bookingId) ||
+        BigInt(bookingId) > 9223372036854775807n
+      ) {
+        throw Object.assign(
+          new Error('Prenotazione non valida.'),
+          { status: 400 }
+        );
+      }
+
+      return confermaPuntoManualeNcc(
+        pool,
+        op(req),
+        bookingId,
+        req.body ?? {}
+      );
+    })
+  );
 
   // Validazione singola.
   router.post(

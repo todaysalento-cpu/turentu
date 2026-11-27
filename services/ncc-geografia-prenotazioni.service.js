@@ -1,3 +1,4 @@
+import { riconosciLuogoNcc } from './ncc-catalogo-luoghi.service.js';
 import { analizzaIndirizzoNcc } from './ncc-normalizzazione-indirizzi.service.js';
 import { normalizzaLocalita } from './ncc-locality-resolver.service.js';
 import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
@@ -384,6 +385,214 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
     }
   }, { applicaCooldown: false });
   if (!sessione.consentito) throw errore(429, 'Un’altra verifica è in corso. Riprova al termine.');
+  return sessione.risultato;
+}
+
+
+// NCC_CONFERMA_MAPPA_V1
+export async function confermaPuntoManualeNcc(
+  pool,
+  operatore,
+  id,
+  body = {},
+  dipendenze = {}
+) {
+  const {
+    ruolo,
+    indirizzo,
+    lat,
+    lon,
+    confermato
+  } = body;
+
+  if (
+    !RUOLI.includes(ruolo) ||
+    typeof indirizzo !== 'string' ||
+    !indirizzo.trim() ||
+    indirizzo.length > 250 ||
+    !coordinateValide(lat, lon) ||
+    confermato !== true
+  ) {
+    throw errore(
+      400,
+      'Indirizzo, coordinate e conferma esplicita obbligatori.'
+    );
+  }
+
+  const analisi = analizzaIndirizzoNcc(indirizzo);
+
+  const comuneAtteso = String(
+    analisi.comune ?? ''
+  ).replace(/\s+[A-Z]{2}$/, '').trim();
+
+  if (!comuneAtteso) {
+    throw errore(
+      400,
+      'Specificare il comune nell’indirizzo prima della conferma.'
+    );
+  }
+
+  if (/\b(aeroporto|airport|aerostazione)\b/i.test(indirizzo)) {
+    throw errore(
+      400,
+      'Utilizzare la verifica dedicata ai riferimenti aeroportuali.'
+    );
+  }
+
+  const sessione = await (
+    dipendenze.manager ?? manager
+  ).esegui(
+    operatore,
+    async sessione => {
+
+      const guard = creaGeografiaGuardNcc({
+        signal: sessione.signal,
+        verificaAttiva: sessione.verificaAttiva,
+        autorizzaDistribuita: sessione.autorizzaGeografia,
+        autorizzazioneRigorosa: true
+      });
+
+      try {
+        guard.verifica();
+
+        const { rows } = await guard.attendi(() =>
+          pool.query(
+            'SELECT p.*, ' +
+            'p.aggiornata_il::text AS revisione_geo, ' +
+            'p.origine_verificata_il::text AS origine_revisione_geo, ' +
+            'p.destinazione_verificata_il::text AS destinazione_revisione_geo ' +
+            'FROM public.ncc_prenotazioni_esterne p ' +
+            'WHERE p.operatore_id = $1 ' +
+            'AND p.id = $2::bigint ' +
+            'AND p.annullata_il IS NULL ' +
+            'AND NOT EXISTS (' +
+            'SELECT 1 FROM public.ncc_gruppi_approvati g ' +
+            'WHERE g.operatore_id = p.operatore_id ' +
+            'AND p.id = ANY(g.prenotazioni))',
+            [operatore, id]
+          )
+        );
+
+        const row = rows[0];
+
+        if (!row) {
+          throw errore(
+            404,
+            'Prenotazione attiva e modificabile non trovata.'
+          );
+        }
+
+        if (row[ruolo] !== indirizzo) {
+          throw errore(
+            409,
+            'L’indirizzo è cambiato. Riapri la prenotazione.'
+          );
+        }
+
+        if (
+          row[ruolo + '_stato_geo'] === 'VALIDATO_CATALOGO' ||
+          row[ruolo + '_fonte_geo'] === 'OPENSTREETMAP_TERMINAL' ||
+          row[ruolo + '_punto_operativo_id'] != null
+        ) {
+          throw errore(
+            400,
+            'Questo riferimento segue la verifica dedicata.'
+          );
+        }
+
+
+        // NCC_MAPPA_PROTEZIONE_CATALOGO
+        const catalogo = await guard.attendi(() =>
+          (dipendenze.riconosciLuogo ?? riconosciLuogoNcc)(
+            pool,
+            indirizzo
+          )
+        );
+
+        if (
+          catalogo?.stato !== 'NON_TROVATO' ||
+          analisi.codiceAeroporto
+        ) {
+          throw errore(
+            400,
+            'Utilizzare la verifica dedicata ai riferimenti di catalogo o aeroportuali.'
+          );
+        }
+
+        const territorio = await guard.attendi(() =>
+          (dipendenze.verificaComune ?? verificaComuneNcc)(
+            pool,
+            { lat, lon, comuneAtteso }
+          )
+        );
+
+        if (!territorio.valido) {
+          throw errore(
+            400,
+            'Il punto scelto è fuori dal comune richiesto o non verificabile.'
+          );
+        }
+
+        const esito = normalizzaEsito({
+          stato: 'VALIDATO_MANUALE',
+          valido: true,
+          lat,
+          lon,
+          placeId: null,
+          fonte: 'OPERATORE_MAPPA',
+          normalizzato: analisi.normalizzato,
+          comuneAtteso,
+          motivo: 'COORDINATE_CONFERMATE_OPERATORE'
+        });
+
+        esito.dettaglio = {
+          ...esito.dettaglio,
+          confermatoDaOperatore: true,
+          operatoreId: String(operatore),
+          precisione: 'POSIZIONE_MANUALE',
+          civicoVerificatoDaGoogle: false
+        };
+
+        if (!(await salvaEsito(
+          pool,
+          operatore,
+          row,
+          ruolo,
+          esito,
+          guard
+        ))) {
+          throw errore(
+            409,
+            'La prenotazione è cambiata. Riaprila e riprova.'
+          );
+        }
+
+        return {
+          id: String(id),
+          ruolo,
+          stato: esito.stato,
+          normalizzato: esito.normalizzato,
+          fonte: esito.fonte,
+          lat: esito.lat,
+          lon: esito.lon
+        };
+
+      } finally {
+        guard.interrompi(
+          'NCC_CONFERMA_MAPPA_TERMINATA'
+        );
+      }
+    },
+    { applicaCooldown: false }
+  );
+
+  if (!sessione.consentito) {
+    throw errore(
+      429,
+      'Un’altra verifica è in corso. Riprova al termine.'
+    );
+  }
+
   return sessione.risultato;
 }
 

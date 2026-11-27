@@ -141,7 +141,19 @@ export function classificaCandidatiNcc(
   const strutturaConStrada = Boolean(analisi.puntoInteresse && analisi.civico);
   const suggerimentoSospeso = Boolean(analisi.ambiguo || parita || indirizziAlternativi || strutturaConStrada || !primo || primo.punteggio < 40);
 
+  let motivo = 'CONFERMA_INDIRIZZO_RICHIESTA';
+  if (analisi.ambiguo || indirizziAlternativi) motivo = 'INDIRIZZO_CON_NOTE_O_ALTERNATIVE';
+  else if (validi.length > 1) motivo = 'PIU_CANDIDATI';
+  else if (!primo) motivo = nonVerificabili[0]?.motivoVerifica ?? esclusi[0]?.motivoEsclusione ?? 'NESSUN_CANDIDATO_VERIFICABILE';
+  else if (analisi.puntoInteresse) motivo = 'PUNTO_DI_INTERESSE_DA_CONFERMARE';
+  else if (!analisi.civico) motivo = 'CIVICO_MANCANTE';
+  else if (primo.partialMatch) motivo = 'CORRISPONDENZA_PARZIALE';
+  else if (!primo.civicoCoerente) motivo = 'CIVICO_NON_CONFERMATO';
+  else if (!primo.stradaCoerente) motivo = 'VIA_NON_CONFERMATA';
+  else if (primo.precisione !== 'ROOFTOP') motivo = 'PRECISIONE_INSUFFICIENTE';
+
   return {
+    motivo,
     candidati: validi,
     esclusi,
     nonVerificabili,

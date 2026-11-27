@@ -616,6 +616,7 @@ export function creaGeocodingNcc(
         return {
           ...base,
           stato: 'NON_TROVATO',
+          motivo: 'NESSUN_INDIRIZZO_TROVATO',
           candidati: []
         };
       }
@@ -630,7 +631,8 @@ export function creaGeocodingNcc(
         return {
           ...base,
           stato: 'FUORI_COMUNE',
-          ...classificaCandidatiNcc(unici, analisi)
+          ...classificaCandidatiNcc(unici, analisi),
+          motivo: 'COORDINATE_FUORI_DAL_COMUNE_ATTESO'
         };
       }
 
@@ -642,7 +644,8 @@ export function creaGeocodingNcc(
         stato: classificazione.candidati.length > 1 || contieneAmbiguita
           ? 'AMBIGUO'
           : 'DA_VERIFICARE',
-        ...classificazione
+        ...classificazione,
+        ...(localitaAmbigua && { motivo: 'LOCALITA_AMBIGUA' })
       };
 
     } catch (error) {

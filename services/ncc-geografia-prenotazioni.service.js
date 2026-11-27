@@ -99,6 +99,7 @@ function selezioneRiusoAutomatico(ruolo) {
         AND q.annullata_il IS NULL
         AND lower(btrim(q.${ruolo})) = lower(btrim(p.${ruolo}))
         AND q.${ruolo}_stato_geo = 'VALIDATO_AUTO'
+        AND q.${ruolo}_fonte_geo IS DISTINCT FROM 'OPENSTREETMAP_TERMINAL'
         AND q.${ruolo}_verificata_il IS NOT NULL
         AND q.${ruolo}_geo_scade_il > now()
         AND q.${ruolo}_lat IS NOT NULL
@@ -356,7 +357,7 @@ export async function validaGeografiaPrenotazioniNcc(
           creaValidazioneGeograficaNcc
         )(
           pool,
-          { guard }
+          { guard, soloIndirizzo: true }
         );
 
         const { rows } = await pool.query(
@@ -445,7 +446,16 @@ export async function validaGeografiaPrenotazioniNcc(
               continue;
             }
 
-            if (validaPersistita(row, ruolo)) {
+            const indirizzoOriginale = row[ruolo];
+            const latoVoloBds = row.volo_aeroporto === 'BDS' &&
+              (row.volo_direzione === 'arrivo' ? ruolo === 'origine' : row.volo_direzione === 'partenza' && ruolo === 'destinazione');
+            const soloCitta = indirizzoOriginale.trim().toLowerCase() === 'brindisi';
+            const indirizzo = latoVoloBds && soloCitta
+              ? 'Aeroporto di Brindisi (BDS), Brindisi'
+              : indirizzoOriginale;
+
+            const terminaleSalvato = row[ruolo + '_fonte_geo'] === 'OPENSTREETMAP_TERMINAL';
+            if (validaPersistita(row, ruolo) && (!soloCitta || latoVoloBds === terminaleSalvato)) {
               risultati.push({
                 id: String(row.id),
                 ruolo,
@@ -456,7 +466,10 @@ export async function validaGeografiaPrenotazioniNcc(
               continue;
             }
 
-            const indirizzo = row[ruolo];
+            if (row[ruolo + '_stato_geo'] === 'VALIDATO_CATALOGO') {
+              risultati.push({ id: String(row.id), ruolo, stato: 'VALIDATO_CATALOGO', salvato: false });
+              continue;
+            }
 
             const chiave = JSON.stringify([
               indirizzo.trim(),
@@ -467,7 +480,7 @@ export async function validaGeografiaPrenotazioniNcc(
 
             if (!cache.has(chiave)) {
               const candidati = row[ruolo + "_candidati_riuso"];
-              const candidato = candidati?.length === 1 ? candidati[0] : null;
+              const candidato = indirizzo === indirizzoOriginale && candidati?.length === 1 ? candidati[0] : null;
               const riuso = candidato && coordinateValide(candidato.lat, candidato.lon) &&
                 Date.parse(candidato.geo_scade_il) > Date.now() ? {
                   stato: "VALIDATO_AUTO", valido: true, riutilizzato: true,

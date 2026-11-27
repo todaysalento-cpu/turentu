@@ -42,6 +42,11 @@ export async function statoPuntoGeograficoNcc(
     utilizzabile
   });
 
+  // La coordinata pubblica del terminal identifica l'indirizzo, non un punto di incontro.
+  if (stato === 'VALIDATO_AUTO' && leggi('fonte_geo') === 'OPENSTREETMAP_TERMINAL') {
+    return risultato('DA_VERIFICARE');
+  }
+
   if (stato === 'VALIDATO_CATALOGO') {
     const resolver =
       opzioni.risolviCatalogo ?? risolviCatalogoNcc;

@@ -2,7 +2,10 @@ import { riconosciLuogoNcc } from './ncc-catalogo-luoghi.service.js';
 import { analizzaIndirizzoNcc } from './ncc-normalizzazione-indirizzi.service.js';
 import { normalizzaLocalita } from './ncc-locality-resolver.service.js';
 import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
-import { verificaComuneNcc } from './ncc-validazione-territoriale.service.js';
+import {
+  verificaComuneNcc,
+  verificaTerritorioManualeNcc
+} from './ncc-validazione-territoriale.service.js';
 import {
   calcolaRiepilogoGeograficoNcc
 } from './ncc-geografia-stato.service.js';
@@ -631,17 +634,23 @@ export async function confermaPuntoManualeNcc(
           );
         }
 
+        // NCC_TERRITORIO_MANUALE_V1_6
         const territorio = await guard.attendi(() =>
-          (dipendenze.verificaComune ?? verificaComuneNcc)(
+          (
+            dipendenze.verificaTerritorioManuale ??
+            verificaTerritorioManualeNcc
+          )(
             pool,
-            { lat, lon, comuneAtteso }
+            { indirizzo, lat, lon }
           )
         );
 
         if (!territorio.valido) {
           throw errore(
             400,
-            'Il punto scelto è fuori dal comune richiesto o non verificabile.'
+            territorio.stato === 'FUORI_LOCALITA'
+              ? 'Il punto scelto è fuori dalla località richiesta.'
+              : 'Il punto scelto è fuori dal territorio richiesto o non verificabile.'
           );
         }
 
@@ -662,7 +671,15 @@ export async function confermaPuntoManualeNcc(
           confermatoDaOperatore: true,
           operatoreId: String(operatore),
           precisione: 'POSIZIONE_MANUALE',
-          civicoVerificatoDaGoogle: false
+          civicoVerificatoDaGoogle: false,
+          precisioneTerritoriale:
+            territorio.precisioneTerritoriale,
+          comuneAmministrativo:
+            territorio.comuneAmministrativo,
+          codiceIstatComune:
+            territorio.codiceIstatComune,
+          localita: territorio.localita,
+          localitaGid: territorio.localitaGid
         };
 
         if (!(await salvaEsito(

@@ -1,3 +1,7 @@
+import {
+  risolviTerritorioMappaNcc
+} from './ncc-mappa-contesto.service.js';
+
 
 function normalizzaComune(value) {
   return String(value ?? '')
@@ -118,5 +122,111 @@ export async function verificaComuneNcc(
     ...base,
     valido: false,
     stato: 'FUORI_COMUNE'
+  };
+}
+
+
+// NCC_TERRITORIO_MANUALE_V1_6
+export async function verificaTerritorioManualeNcc(
+  db,
+  { indirizzo, lat, lon }
+) {
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon) ||
+    Math.abs(lat) > 90 ||
+    Math.abs(lon) > 180 ||
+    (lat === 0 && lon === 0)
+  ) {
+    return {
+      valido: false,
+      stato: 'COORDINATE_NON_VALIDE'
+    };
+  }
+
+  const t = await risolviTerritorioMappaNcc(
+    db,
+    indirizzo
+  );
+
+  if (t.stato !== 'DISPONIBILE') {
+    return {
+      valido: false,
+      stato: t.motivo
+    };
+  }
+
+  const codice = t.candidato.codice_istat_comune;
+  const gid = t.localita?.gid ?? null;
+
+  const { rows } = await db.query(`
+    WITH punto AS (
+      SELECT ST_SetSRID(
+        ST_MakePoint($1, $2),
+        4326
+      ) AS geom
+    )
+    SELECT
+      c.codice_istat_comune,
+      ST_Covers(c.geom, p.geom)
+        AS dentro_comune,
+      CASE
+        WHEN $4::integer IS NULL THEN TRUE
+        ELSE (
+          l.gid IS NOT NULL
+          AND ST_Covers(l.geom, p.geom)
+          AND ST_CoveredBy(l.geom, c.geom)
+        )
+      END AS dentro_localita
+    FROM public.pixel_confini_comunali c
+    CROSS JOIN punto p
+    LEFT JOIN public.localita_istat_2021 l
+      ON l.gid = $4::integer
+      AND l.codice_istat_comune =
+          c.codice_istat_comune
+      AND ST_SRID(l.geom) = 4326
+      AND ST_IsValid(l.geom)
+      AND NOT ST_IsEmpty(l.geom)
+    WHERE c.codice_istat_comune = $3
+      AND ST_SRID(c.geom) = 4326
+      AND ST_IsValid(c.geom)
+      AND NOT ST_IsEmpty(c.geom)
+  `, [lon, lat, codice, gid]);
+
+  if (rows.length !== 1) {
+    return {
+      valido: false,
+      stato: 'COPERTURA_NON_DISPONIBILE'
+    };
+  }
+
+  const r = rows[0];
+
+  if (r.dentro_comune !== true) {
+    return {
+      valido: false,
+      stato: 'FUORI_COMUNE'
+    };
+  }
+
+  if (r.dentro_localita !== true) {
+    return {
+      valido: false,
+      stato: 'FUORI_LOCALITA'
+    };
+  }
+
+  return {
+    valido: true,
+    stato: gid === null
+      ? 'COMUNE_COHERENTE'
+      : 'LOCALITA_COMPATIBILE',
+    precisioneTerritoriale: gid === null
+      ? 'COMUNE'
+      : 'LOCALITA',
+    comuneAmministrativo: t.candidato.nome_comune,
+    codiceIstatComune: codice,
+    localita: t.localita?.nome ?? null,
+    localitaGid: gid
   };
 }

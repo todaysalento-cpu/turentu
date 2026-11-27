@@ -1,4 +1,5 @@
-export const NCC_MATRICE_CPSAT_VERSION = '2.8.6d';
+// NCC_MATRICE_SELETTIVA_V2902E2F1C
+export const NCC_MATRICE_CPSAT_VERSION = '2.9.0';
 
 export const NCC_MATRICE_LIMITI = Object.freeze({
   maxServizi: 150,
@@ -56,13 +57,9 @@ export async function creaMatriceCpsatNcc({
     throw new Error('NCC_MATRICE_LIMITE_CATALOGO');
   }
 
-  const elementiLogici =
+  const elementiLogiciTeorici =
     servizi.length * (servizi.length - 1) +
     2 * servizi.length * veicoli.length;
-
-  if (elementiLogici > config.maxElementiLogici) {
-    throw new Error('NCC_MATRICE_LIMITE_ELEMENTI');
-  }
 
   if (
     new Set(servizi.map(s => s.id)).size !==
@@ -76,6 +73,82 @@ export async function creaMatriceCpsatNcc({
     veicoli.length
   ) {
     throw new Error('NCC_MATRICE_VEICOLI_DUPLICATI');
+  }
+
+  const idsVeicoli = new Set(
+    veicoli.map(v => v.id)
+  );
+
+  const compatibilita = new Map();
+
+  for (const servizio of servizi) {
+    verificaAttiva();
+
+    const ammessi = servizio.veicoliCompatibili;
+
+    if (
+      !Array.isArray(ammessi) ||
+      !ammessi.length ||
+      new Set(ammessi).size !== ammessi.length ||
+      ammessi.some(id => !idsVeicoli.has(id))
+    ) {
+      throw new Error(
+        'NCC_MATRICE_COMPATIBILITA_INVALIDA: ' +
+        servizio.id
+      );
+    }
+
+    compatibilita.set(
+      servizio.id,
+      new Set(ammessi)
+    );
+  }
+
+  function veicoloAmmesso(v, servizio) {
+    return compatibilita.get(servizio.id).has(v.id);
+  }
+
+  function arcoAmmesso(a, b) {
+    const aa = compatibilita.get(a.id);
+    const bb = compatibilita.get(b.id);
+
+    for (const id of aa) {
+      if (bb.has(id)) return true;
+    }
+
+    return false;
+  }
+
+  let archiAmmessi = 0;
+  let archiIncompatibili = 0;
+  let combinazioniAmmesse = 0;
+
+  for (const a of servizi) {
+    verificaAttiva();
+
+    combinazioniAmmesse +=
+      compatibilita.get(a.id).size;
+
+    for (const b of servizi) {
+      if (a.id === b.id) continue;
+
+      if (arcoAmmesso(a, b)) {
+        archiAmmessi++;
+      } else {
+        archiIncompatibili++;
+      }
+    }
+  }
+
+  const combinazioniEscluse =
+    servizi.length * veicoli.length -
+    combinazioniAmmesse;
+
+  const elementiLogici =
+    archiAmmessi + 2 * combinazioniAmmesse;
+
+  if (elementiLogici > config.maxElementiLogici) {
+    throw new Error('NCC_MATRICE_LIMITE_ELEMENTI');
   }
 
   const inizio = Date.now();
@@ -118,6 +191,23 @@ export async function creaMatriceCpsatNcc({
     servizi: servizi.length,
     veicoli: veicoli.length,
     elementiLogici,
+    elementiLogiciTeorici,
+    archiAmmessi,
+    archiIncompatibili,
+    combinazioniAmmesse,
+    combinazioniEscluse,
+    posizionamentiEsclusi: combinazioniEscluse,
+    rientriEsclusi: combinazioniEscluse,
+    elementiLogiciRisparmiati:
+      elementiLogiciTeorici - elementiLogici,
+    percentualeRiduzione:
+      elementiLogiciTeorici > 0
+        ? Math.round(
+            10000 *
+            (elementiLogiciTeorici - elementiLogici) /
+            elementiLogiciTeorici
+          ) / 100
+        : 0,
     basiRegistrate: 0,
     basiRiutilizzate: 0,
     tratteUniche: 0,
@@ -252,6 +342,7 @@ export async function creaMatriceCpsatNcc({
     for (const b of servizi) {
 
       if (a.id === b.id) continue;
+      if (!arcoAmmesso(a, b)) continue;
 
       richiediTratta(
         a.destinazione,
@@ -267,6 +358,8 @@ export async function creaMatriceCpsatNcc({
     const base = basi.get(v.id);
 
     for (const s of servizi) {
+
+      if (!veicoloAmmesso(v, s)) continue;
 
       richiediTratta(
         base,
@@ -400,6 +493,7 @@ export async function creaMatriceCpsatNcc({
     for (const b of servizi) {
 
       if (a.id === b.id) continue;
+      if (!arcoAmmesso(a, b)) continue;
 
       const t = leggiTratta(
         a.destinazione,
@@ -457,6 +551,8 @@ export async function creaMatriceCpsatNcc({
 
     for (const s of servizi) {
 
+      if (!veicoloAmmesso(v, s)) continue;
+
       posizionamenti.push({
         veicolo: v.id,
         servizio: s.id,
@@ -496,7 +592,15 @@ export async function creaMatriceCpsatNcc({
     posizionamenti.length +
     rientri.length;
 
-  if (totale !== elementiLogici) {
+  if (
+    trasferimenti.length !== archiAmmessi ||
+    posizionamenti.length !== combinazioniAmmesse ||
+    rientri.length !== combinazioniAmmesse ||
+    totale !== elementiLogici ||
+    elementiLogici +
+      report.elementiLogiciRisparmiati !==
+      elementiLogiciTeorici
+  ) {
     throw new Error(
       'NCC_MATRICE_CONTEGGIO_INCOERENTE'
     );

@@ -1,3 +1,10 @@
+// NCC_PARTIZIONI_COMPATIBILITA_V2902E2F1B2
+
+import {
+  restrizioniGruppoNcc,
+  veicoliCompatibiliNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
 import {
   aggregaPrenotazioniNcc
 } from './ncc-aggregazione.service.js';
@@ -6,7 +13,7 @@ import {
   generaPartizioniNcc
 } from './ncc-partizioni.service.js';
 
-export const NCC_VALIDAZIONE_VERSION = '2.8.2';
+export const NCC_VALIDAZIONE_VERSION = '2.9.0';
 
 export async function validaPartizioniNcc({
   prenotazioni,
@@ -51,6 +58,7 @@ export async function validaPartizioniNcc({
     sottogruppiVerificati: 0,
     sottogruppiValidi: 0,
     sottogruppiRifiutati: 0,
+    sottogruppiVeicoliIncompatibili: 0,
     cacheHit: 0,
     limiteRaggiunto: generazione.limiteRaggiunto,
     catalogo: [],
@@ -85,14 +93,63 @@ export async function validaPartizioniNcc({
         }
 
         const subset = gruppo.prenotazioni.map(
-          id => ({ ...rows.get(String(id)) })
+          id => {
+            const row = rows.get(String(id));
+
+            if (!row) {
+              throw new Error(
+                'NCC_PRENOTAZIONE_PARTIZIONE_INESISTENTE'
+              );
+            }
+
+            return { ...row };
+          }
         );
+
+        const tipiVeicoloAmmessi =
+          restrizioniGruppoNcc(subset);
+
+        const minimoPasseggeri = Math.max(
+          ...subset.map(r => Number(r.passeggeri))
+        );
+
+        const flottaCompatibile =
+          veicoliCompatibiliNcc(
+            veicoli,
+            tipiVeicoloAmmessi,
+            minimoPasseggeri
+          );
+
+        if (!flottaCompatibile.length) {
+          const esito = {
+            valido: false,
+            motivo: 'NESSUN_VEICOLO_COMPATIBILE',
+            dettaglio: {
+              tipiVeicoloAmmessi,
+              minimoPasseggeri
+            }
+          };
+
+          cache.set(key, esito);
+
+          report.sottogruppiVerificati++;
+          report.sottogruppiRifiutati++;
+          report.sottogruppiVeicoliIncompatibili++;
+
+          rifiuti.push({
+            chiave: key,
+            motivo: esito.motivo,
+            dettaglio: esito.dettaglio
+          });
+
+          continue;
+        }
 
         const risultato =
           await aggregaPrenotazioniNcc(
             subset,
             routing,
-            veicoli,
+            flottaCompatibile,
             parametri,
             riferimento,
             {
@@ -114,16 +171,42 @@ export async function validaPartizioniNcc({
           proposta.itinerario?.flessibilitaTemporale != null;
 
         if (valida) {
-          const compatibili = veicoli
-            .filter(v =>
-              Number(v.posti_totali) >=
+          const compatibili =
+            veicoliCompatibiliNcc(
+              flottaCompatibile,
+              tipiVeicoloAmmessi,
               proposta.piccoPasseggeri
-            )
-            .map(v => String(v.id));
+            ).map(v => String(v.id));
+
+          if (!compatibili.length) {
+            const esito = {
+              valido: false,
+              motivo: 'NESSUN_VEICOLO_COMPATIBILE',
+              dettaglio: {
+                tipiVeicoloAmmessi,
+                piccoPasseggeri:
+                  proposta.piccoPasseggeri
+              }
+            };
+
+            cache.set(key, esito);
+
+            report.sottogruppiRifiutati++;
+            report.sottogruppiVeicoliIncompatibili++;
+
+            rifiuti.push({
+              chiave: key,
+              motivo: esito.motivo,
+              dettaglio: esito.dettaglio
+            });
+
+            continue;
+          }
 
           const servizio = {
             chiave: key,
             ...proposta,
+            tipiVeicoloAmmessi,
             veicoliCompatibili: compatibili,
             approvabile: false
           };

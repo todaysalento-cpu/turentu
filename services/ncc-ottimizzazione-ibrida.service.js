@@ -1,3 +1,4 @@
+// NCC_SNAPSHOT_ORIGINALE_V2902E2F1D2A
 import assert from 'node:assert/strict';
 
 import {
@@ -24,7 +25,13 @@ import {
   ricostruisciMissioniCpsatNcc
 } from './ncc-ricostruzione-missioni.service.js';
 
-export const NCC_IBRIDO_VERSION = '2.8.7.5.1';
+// NCC_RICOSTRUZIONE_AUDIT_V2902E2F2B
+
+import {
+  validaMissioniNcc
+} from './ncc-validazione-missioni.service.js';
+
+export const NCC_IBRIDO_VERSION = '2.9.0';
 
 // NCC_CONCORRENZA_V28751
 
@@ -328,6 +335,24 @@ export async function ottimizzaIbridoNcc({
     );
   }
 
+  fase = 'SNAPSHOT_ORIGINALE';
+
+  verificaAttiva();
+
+  const prenotazioniOriginali =
+    structuredClone(prenotazioni);
+
+  const veicoliOriginali =
+    structuredClone(veicoli);
+
+  verificaAttiva();
+
+  diagnostica.snapshotOriginale = {
+    prenotazioni: prenotazioniOriginali.length,
+    veicoli: veicoliOriginali.length,
+    indipendente: true
+  };
+
   fase = 'CATALOGO';
 
   const catalogo =
@@ -423,6 +448,8 @@ export async function ottimizzaIbridoNcc({
 
       catalogo: matrice,
       risultato,
+      prenotazioniOriginali,
+      veicoliOriginali,
       verificaAttiva
     });
 
@@ -436,6 +463,9 @@ export async function ottimizzaIbridoNcc({
       catalogo: matrice,
 
       validazione: logistica,
+
+      prenotazioniOriginali,
+      veicoliOriginali,
 
       routing,
       verificaAttiva
@@ -451,14 +481,69 @@ export async function ottimizzaIbridoNcc({
       catalogo: matrice,
       risultato,
       validazione,
+      prenotazioniOriginali,
+      veicoliOriginali,
       giorno,
       prenotazioniIndicative,
       verificaAttiva
     });
 
+  fase = 'AUDIT_MISSIONI_RICOSTRUITE';
+
+  verificaAttiva();
+
+  assert.ok(
+    candidato.audit
+      ?.compatibilitaRicostruzioneVerificata === true &&
+    candidato.audit
+      ?.identitaVeicoliOriginaliVerificata === true &&
+    candidato.audit
+      ?.restrizioniMissioniRicostruite === true,
+    'NCC_IBRIDO_RICOSTRUZIONE_NON_VERIFICATA'
+  );
+
+  const auditMissioni = validaMissioniNcc({
+    missioni: candidato.missioni,
+    prenotazioni: prenotazioniOriginali,
+    veicoli: veicoliOriginali,
+    verificaAttiva
+  });
+
+  assert.ok(
+    auditMissioni.valido === true &&
+    auditMissioni.caricoRealeVerificato === true &&
+    auditMissioni.capienzaVerificata === true &&
+    auditMissioni.compatibilitaVeicoliVerificata === true &&
+    auditMissioni.restrizioniOriginaliVerificate === true &&
+    auditMissioni.univocitaPrenotazioniVerificata === true &&
+    auditMissioni.sovrapposizioniMissioniVerificate === true,
+    'NCC_IBRIDO_AUDIT_MISSIONI_INCOMPLETO'
+  );
+
+  candidato.audit = {
+    ...candidato.audit,
+    missioniRicostruiteVerificate: true,
+    caricoRealeVerificato: true,
+    capienzaVerificata: true,
+    compatibilitaVeicoliVerificata: true,
+    restrizioniOriginaliVerificate: true,
+    sovrapposizioniMissioniVerificate: true,
+    validazioneMissioni: auditMissioni
+  };
+
+  diagnostica.auditMissioni = auditMissioni;
+
+  verificaAttiva();
+
   fase = 'AUDIT_CANDIDATO';
 
   const nuove = idsPiano(candidato);
+
+  assert.equal(
+    auditMissioni.prenotazioniVerificate,
+    nuove.size,
+    'NCC_IBRIDO_COPERTURA_AUDIT_INCOERENTE'
+  );
 
   diagnostica.prenotazioniCandidato =
     nuove.size;

@@ -4,6 +4,12 @@ import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
 import { risolviCatalogoNcc } from './ncc-catalogo-luoghi.service.js';
 import { creaGeocodingNcc } from './ncc-geocoding.service.js';
 
+import {
+  normalizzaRestrizioniNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
+// NCC_GEO_VINCOLI_V2902E2D1
+
 export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
  const guard =
   opzioni.guard ??
@@ -30,7 +36,7 @@ export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
   guard.verifica();
   if (r.valido && r.stato === 'VALIDATO_CATALOGO') {
    stats.catalogoValidati++;
-   return { stato: 'VALIDATO_CATALOGO', valido: true, fonte: 'CATALOGO_TURENTU', originale: indirizzo, luogo: r.luogo, punto: r.punto, puntoOperativoId: r.punto.id, lat: r.punto.lat, lon: r.punto.lon, placeId: r.punto.google_place_id, geoScadeIl: r.punto.geo_scade_il };
+   return { stato: 'VALIDATO_CATALOGO', valido: true, fonte: 'CATALOGO_TURENTU', originale: indirizzo, luogo: r.luogo, punto: r.punto, puntoOperativoId: r.punto.id, tipiVeicoloAmmessi: normalizzaRestrizioniNcc(r.punto.tipi_veicolo_ammessi), lat: r.punto.lat, lon: r.punto.lon, placeId: r.punto.google_place_id, geoScadeIl: r.punto.geo_scade_il };
   }
   if (r.stato !== 'NON_TROVATO') {
    stats.catalogoDaVerificare++;

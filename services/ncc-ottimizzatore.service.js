@@ -1,3 +1,36 @@
+// NCC_OTTIMIZZATORE_COMPATIBILITA_V2902E2E3
+
+import {
+  veicoloCompatibileNcc,
+  intersecaRestrizioniNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
+function restrizioniServizioNcc(gruppo) {
+  return gruppo.tipiVeicoloAmmessi === undefined
+    ? null
+    : gruppo.tipiVeicoloAmmessi;
+}
+
+function veicoloCompatibileServizioNcc(
+  veicolo,
+  gruppo
+) {
+  return veicoloCompatibileNcc(
+    veicolo,
+    restrizioniServizioNcc(gruppo)
+  );
+}
+
+function restrizioniMissioneNcc(gruppi) {
+  if (!Array.isArray(gruppi) || !gruppi.length) {
+    return [];
+  }
+
+  return intersecaRestrizioniNcc(
+    ...gruppi.map(restrizioniServizioNcc)
+  );
+}
+
 
 import {
   diagnosticaConflittiNcc
@@ -133,6 +166,24 @@ async function ottimizzaSingoloPiano(
 
     verificaAttiva();
 
+    if (!Array.isArray(gruppi) || !gruppi.length) {
+      return rifiuta('MISSIONE_VUOTA');
+    }
+
+    const tipiVeicoloAmmessi =
+      restrizioniMissioneNcc(gruppi);
+
+    if (
+      !veicoloCompatibileNcc(
+        v,
+        tipiVeicoloAmmessi
+      )
+    ) {
+      return rifiuta(
+        'VEICOLO_NON_COMPATIBILE'
+      );
+    }
+
     const temporale =
       opzioni.schedulazioneTemporale === true;
 
@@ -204,6 +255,7 @@ async function ottimizzaSingoloPiano(
     }
 
     let kmServizio = 0;
+    const trasferimentiTimeline = []; // NCC_TIMELINE_V2891
     let kmTrasferimenti = 0;
     let attesaMs = 0;
     let piccoPasseggeri = 0;
@@ -250,6 +302,7 @@ async function ottimizzaSingoloPiano(
 
       kmTrasferimenti += trasferimento.distanzaKm;
       attesaMs += attesa;
+      trasferimentiTimeline.push({ dopoServizio: i - 1, km: trasferimento.distanzaKm, durataMs: trasferimento.durataMs, attesaMs: attesa });
     }
 
     const [andata, ritorno] = await Promise.all([
@@ -296,6 +349,7 @@ async function ottimizzaSingoloPiano(
       giorno,
       veicoloId: v.id,
       posti: v.posti_totali,
+      tipiVeicoloAmmessi,
       gruppi: ordinati.map(p => {
         const costoServizio = costoKm === null
           ? null
@@ -329,6 +383,7 @@ async function ottimizzaSingoloPiano(
       kmTrasferimenti,
       logistica: {
         base: v.localita,
+        trasferimentiTimeline,
         kmServizio,
         kmVuoto,
         posizionamento: {
@@ -401,6 +456,10 @@ async function ottimizzaSingoloPiano(
 
       if (v.posti_totali < picco(p)) continue;
 
+      if (
+        !veicoloCompatibileServizioNcc(v, p)
+      ) continue;
+
       const esistenti = missioni.filter(
         m => String(m.veicoloId) === String(v.id)
       );
@@ -455,7 +514,18 @@ async function ottimizzaSingoloPiano(
       nonAssegnate.push({
         prenotazioni: p.prenotazioni,
         passeggeri: p.passeggeri,
-        motivo: 'NESSUNA_MISSIONE_COMPATIBILE'
+        motivo: (
+          veicoli.some(
+            v => Number(v.posti_totali) >= picco(p)
+          ) &&
+          !veicoli.some(
+            v =>
+              Number(v.posti_totali) >= picco(p) &&
+              veicoloCompatibileServizioNcc(v, p)
+          )
+        )
+          ? 'NESSUN_VEICOLO_COMPATIBILE'
+          : 'NESSUNA_MISSIONE_COMPATIBILE'
       });
       continue;
     }
@@ -489,6 +559,7 @@ async function ottimizzaSingoloPiano(
       spostamentoMissioneNuova: 0
     },
     capienzaInsufficiente: 0,
+    categoriaIncompatibile: 0,
     valutazioni: {
       valide: 0,
       nulle: 0
@@ -675,6 +746,24 @@ async function ottimizzaSingoloPiano(
     const v = veicoliMap.get(String(veicoloId));
 
     if (!v || !gruppi.length) return null;
+
+    // NCC_REINSERIMENTO_COMPATIBILITA_V2902E2E4
+    if (
+      !veicoloCompatibileNcc(
+        v,
+        restrizioniMissioneNcc(gruppi)
+      )
+    ) {
+      if (faseReinserimento) {
+        diagnosticaReinserimento.categoriaIncompatibile++;
+      }
+
+      if (diagnosticaRifiuto) {
+        diagnosticaRifiuto('VEICOLO_NON_COMPATIBILE');
+      }
+
+      return null;
+    }
 
     valutazioni++;
 
@@ -1011,7 +1100,9 @@ async function ottimizzaSingoloPiano(
 
           const compatibili = g =>
             veicoli.filter(
-              v => v.posti_totali >= picco(g)
+              v =>
+                v.posti_totali >= picco(g) &&
+                veicoloCompatibileServizioNcc(v, g)
             ).length;
 
           gruppi.sort((a, b) =>
@@ -1072,6 +1163,14 @@ async function ottimizzaSingoloPiano(
 
               if (v.posti_totali < picco(gruppo)) {
                 diagRedistribuzione.scartiCapienza++;
+                continue;
+              }
+
+              if (
+                !veicoloCompatibileServizioNcc(v, gruppo)
+              ) {
+                diagRedistribuzione.scartiCompatibilita++;
+                diagnosticaReinserimento.categoriaIncompatibile++;
                 continue;
               }
 
@@ -1231,6 +1330,23 @@ async function ottimizzaSingoloPiano(
               )
             ) {
               diagnosticaReinserimento.capienzaInsufficiente++;
+              continue;
+            }
+
+            if (
+              !veicoloCompatibileNcc(
+                v,
+                restrizioniMissioneNcc(gruppi)
+              )
+            ) {
+              diagnosticaReinserimento.categoriaIncompatibile++;
+
+              const rifiuti =
+                diagnosticaReinserimento.ponte.rifiuti;
+
+              rifiuti.VEICOLO_NON_COMPATIBILE =
+                (rifiuti.VEICOLO_NON_COMPATIBILE ?? 0) + 1;
+
               continue;
             }
 
@@ -1723,7 +1839,8 @@ export async function ottimizzaMissioniNcc(
 
   const compatibili = p =>
     veicoli.filter(v =>
-      v.posti_totali >= picco(p)
+      v.posti_totali >= picco(p) &&
+      veicoloCompatibileServizioNcc(v, p)
     ).length;
 
   // NCC_PREFETCH_INTEGRATION_V22

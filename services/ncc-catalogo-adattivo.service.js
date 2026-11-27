@@ -1,3 +1,12 @@
+// NCC_DISAGGREGAZIONE_SELETTIVA_V2902E2F3B2
+// NCC_CATALOGO_COMPATIBILITA_V2902E2F1B
+import {
+  restrizioniGruppoNcc,
+  restrizioniPrenotazioneNcc,
+  veicoloCompatibileNcc,
+  veicoliCompatibiliNcc,
+  normalizzaTipoVeicoloNcc
+} from './ncc-compatibilita-veicoli.service.js';
 import {
   finestraServizioNcc
 } from './ncc-schedulazione-temporale.service.js';
@@ -6,7 +15,7 @@ import {
   validaPartizioniNcc
 } from './ncc-validazione-partizioni.service.js';
 
-export const NCC_CATALOGO_ADATTIVO_VERSION = '2.8.6c';
+export const NCC_CATALOGO_ADATTIVO_VERSION = '2.9.0';
 
 export const NCC_CATALOGO_LIMITI = Object.freeze({
   maxGruppi: 4,
@@ -127,6 +136,7 @@ export async function creaCatalogoAdattivoNcc({
     return {
       id,
       posti,
+      tipo: normalizzaTipoVeicoloNcc(v.tipo),
       base: v.localita,
       lat,
       lon,
@@ -204,8 +214,9 @@ export async function creaCatalogoAdattivoNcc({
       proposta.passeggeri
     );
 
+    const tipiVeicoloAmmessi = restrizioniGruppoNcc(ids.map(id => rows.get(id)));
     const compatibili = flotta
-      .filter(v => v.posti >= picco)
+      .filter(v => v.posti >= picco && veicoloCompatibileNcc(v, tipiVeicoloAmmessi))
       .map(v => v.id);
 
     const distanzaMetri = Math.round(
@@ -285,10 +296,12 @@ export async function creaCatalogoAdattivoNcc({
       distanzaMetri,
       ricaviCentesimi,
 
+      tipiVeicoloAmmessi,
       veicoliCompatibili: compatibili,
 
       proposta: {
         ...structuredClone(proposta),
+        tipiVeicoloAmmessi,
         approvabile: false
       }
     });
@@ -369,6 +382,14 @@ export async function creaCatalogoAdattivoNcc({
 
   report.candidatiIndividuati = candidati.size;
 
+  report.disaggregazioneSelettiva = {
+    gruppiFiltrati: 0,
+    gruppiInteramenteIncompatibili: 0,
+    gruppiRidottiASingolo: 0,
+    prenotazioniEscluse: [],
+    dettaglioGruppi: []
+  };
+
   // FASE 3: validazione selettiva delle alternative.
 
   for (const [key, gruppo] of candidati) {
@@ -396,9 +417,143 @@ export async function creaCatalogoAdattivoNcc({
       continue;
     }
 
-    const subset = gruppo.prenotazioni.map(
-      id => structuredClone(rows.get(String(id)))
+    const subsetOriginale = gruppo.prenotazioni.map(
+      id => {
+        const row = rows.get(String(id));
+
+        if (!row) {
+          throw new Error(
+            'NCC_PRENOTAZIONE_CANDIDATO_INESISTENTE'
+          );
+        }
+
+        return structuredClone(row);
+      }
     );
+
+    const subset = [];
+    const escluse = [];
+
+    for (const row of subsetOriginale) {
+
+      verificaAttiva();
+
+      const passeggeri = Number(row.passeggeri);
+
+      if (
+        !Number.isSafeInteger(passeggeri) ||
+        passeggeri < 1
+      ) {
+        throw new Error(
+          'NCC_PRENOTAZIONE_CANDIDATO_INVALIDA'
+        );
+      }
+
+      const restrizioni =
+        restrizioniPrenotazioneNcc(row);
+
+      const compatibili = veicoliCompatibiliNcc(
+        veicoli,
+        restrizioni,
+        passeggeri
+      );
+
+      if (compatibili.length) {
+
+        subset.push(row);
+
+      } else {
+
+        let motivo = 'NESSUN_VEICOLO_COMPATIBILE';
+
+        if (
+          Array.isArray(restrizioni) &&
+          restrizioni.length === 0
+        ) {
+          motivo = 'RESTRIZIONI_GEOGRAFICHE_INCOMPATIBILI';
+
+        } else if (
+          !veicoliCompatibiliNcc(
+            veicoli,
+            null,
+            passeggeri
+          ).length
+        ) {
+          motivo = 'CAPACITA_INSUFFICIENTE';
+        }
+
+        escluse.push({
+          prenotazione: String(row.id),
+          passeggeri,
+          tipiVeicoloAmmessi:
+            structuredClone(restrizioni),
+          motivo
+        });
+      }
+    }
+
+    if (escluse.length) {
+
+      const diag = report.disaggregazioneSelettiva;
+
+      diag.gruppiFiltrati++;
+
+      if (subset.length === 1) {
+        diag.gruppiRidottiASingolo++;
+      }
+
+      for (const esclusa of escluse) {
+
+        if (
+          !diag.prenotazioniEscluse.includes(
+            esclusa.prenotazione
+          )
+        ) {
+          diag.prenotazioniEscluse.push(
+            esclusa.prenotazione
+          );
+        }
+      }
+
+      diag.dettaglioGruppi.push({
+        chiave: key,
+        prenotazioniOriginali:
+          subsetOriginale.map(r => String(r.id)),
+        prenotazioniCompatibili:
+          subset.map(r => String(r.id)),
+        escluse
+      });
+    }
+
+    verificaAttiva();
+
+    if (!subset.length) {
+
+      report.candidatiElaborati++;
+
+      report.disaggregazioneSelettiva
+        .gruppiInteramenteIncompatibili++;
+
+      report.gruppiSaltati.push({
+        chiave: key,
+        motivo: 'NESSUNA_PRENOTAZIONE_COMPATIBILE'
+      });
+
+      report.validazioni.push({
+        chiave: key,
+        stato: 'NESSUN_VEICOLO_COMPATIBILE',
+        partizioniGenerate: 0,
+        sottogruppiVerificati: 0,
+        sottogruppiValidi: 0,
+        sottogruppiRifiutati: 0,
+        limiteRaggiunto: false,
+        prenotazioniCompatibili: [],
+        prenotazioniEscluse:
+          escluse.map(r => r.prenotazione)
+      });
+
+      continue;
+    }
 
     const risultato = await validaPartizioniNcc({
       prenotazioni: subset,
@@ -424,6 +579,10 @@ export async function creaCatalogoAdattivoNcc({
     report.validazioni.push({
       chiave: key,
       stato: risultato.stato,
+      prenotazioniCompatibili:
+        subset.map(r => String(r.id)),
+      prenotazioniEscluse:
+        escluse.map(r => r.prenotazione),
       partizioniGenerate:
         risultato.partizioniGenerate,
       sottogruppiVerificati:

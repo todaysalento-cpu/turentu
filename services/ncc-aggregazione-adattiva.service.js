@@ -1,8 +1,14 @@
+// NCC_ADATTIVA_COMPATIBILITA_V2902E2E2
+
+import {
+  veicoliCompatibiliNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
 import {
   finestraServizioNcc
 } from './ncc-schedulazione-temporale.service.js';
 
-export const NCC_ADATTIVA_VERSION = '2.8.0';
+export const NCC_ADATTIVA_VERSION = '2.8.1';
 
 export async function diagnosticaConflittiNcc({
   proposte,
@@ -26,11 +32,24 @@ export async function diagnosticaConflittiNcc({
     )
   );
 
+  const restrizioni = g =>
+    g.tipiVeicoloAmmessi === undefined
+      ? null
+      : g.tipiVeicoloAmmessi;
+
   const compatibili = g =>
-    veicoli.filter(v =>
-      Number(v.posti_totali) >=
+    veicoliCompatibiliNcc(
+      veicoli,
+      restrizioni(g),
       Number(g.piccoPasseggeri)
     ).map(v => String(v.id));
+
+  const capienzaSufficiente = g =>
+    veicoliCompatibiliNcc(
+      veicoli,
+      null,
+      Number(g.piccoPasseggeri)
+    ).length > 0;
 
   const origine = g =>
     g.itinerario.fermate[0].localita;
@@ -69,9 +88,13 @@ export async function diagnosticaConflittiNcc({
 
     if (!va.length) {
       report.conflitti.push({
-        codice: 'CAPACITA_ASSOLUTA',
+        codice: capienzaSufficiente(a)
+          ? 'NESSUN_VEICOLO_COMPATIBILE'
+          : 'CAPACITA_ASSOLUTA',
+
         prenotazioni: a.prenotazioni,
-        piccoPasseggeri: a.piccoPasseggeri
+        piccoPasseggeri: a.piccoPasseggeri,
+        tipiVeicoloAmmessi: restrizioni(a)
       });
 
       aggiungiCandidato(a);

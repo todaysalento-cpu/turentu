@@ -1,3 +1,15 @@
+// NCC_AUDIT_MISSIONI_V2902E2E5
+
+import {
+  validaMissioniNcc
+} from './ncc-validazione-missioni.service.js';
+
+// NCC_GEO_RIUTILIZZO_V2902D1
+
+import {
+  creaRiutilizzoGeograficoNcc
+} from './ncc-geografia-riutilizzo.service.js';
+
 
 import {
   ottimizzaIbridoNcc
@@ -169,7 +181,7 @@ async function valutaGruppo(rows, parametri, verifica) {
 
 async function veicoliOperatore(client, operatore) {
   return (await client.query(
-    `SELECT id, posti_totali, marca, modello, targa, localita,
+    `SELECT id, posti_totali, marca, modello, targa, localita, tipo,
        ST_Y(coord::geometry) AS lat, ST_X(coord::geometry) AS lon FROM public.veicolo
      WHERE driver_id = $1 AND stato IS DISTINCT FROM 'eliminato' AND posti_totali > 0
      ORDER BY posti_totali, id`, [operatore]
@@ -191,10 +203,33 @@ function dettaglioGruppo(rows, veicoli) {
   };
 }
 
-async function candidati(client, operatore, ids = null, lock = false, giornoSimulazione = null) {
+async function candidati(client, operatore, ids = null, lock = false, giornoSimulazione = null, includiGeografia = false) {
+
+  const campiGeo = includiGeografia
+    ? [
+        'origine',
+        'destinazione'
+      ].flatMap(ruolo =>
+        [
+          'stato_geo',
+          'lat',
+          'lon',
+          'verificata_il',
+          'geo_scade_il',
+          'punto_operativo_id',
+          'fonte_geo',
+          'place_id'
+        ].map(campo =>
+          'p.' + ruolo + '_' + campo
+        )
+      ).join(', ')
+    : '';
+
+
   return (await client.query(
     `SELECT p.id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.prezzo_centesimi, p.volo_numero,
         p.volo_direzione, p.volo_aeroporto, p.volo_programmato_il, p.volo_aggiornato_il, p.bagagli
+        ${campiGeo ? ", " + campiGeo : ""}
      FROM public.ncc_prenotazioni_esterne p
      WHERE p.operatore_id = $1 AND p.annullata_il IS NULL AND (($3::date IS NULL AND p.prelievo_il > now()) OR ($3::date IS NOT NULL AND (p.prelievo_il AT TIME ZONE 'Europe/Rome')::date = $3::date))
        AND ($2::bigint[] IS NULL OR p.id = ANY($2))
@@ -487,7 +522,7 @@ export async function simulazioneNccV26(
       );
 
       const rows = await protetto(
-        () => candidati(pool, operatore, null, false, giorno)
+        () => candidati(pool, operatore, null, false, giorno, true)
       );
 
       const flotta = await protetto(
@@ -577,22 +612,21 @@ export async function simulazioneNccV26(
       const escluseGeografia = [];
       const indicative = new Set();
       const registrate = new Map();
-      const cacheGeo = new Map();
+      const riutilizzoGeografico =
+        creaRiutilizzoGeograficoNcc(
+          pool,
+          geografia,
+          guard
+        );
 
-      async function valida(indirizzo, ruolo) {
-
+      async function valida(row, ruolo) {
         verificaAttiva();
 
-        const k = JSON.stringify([indirizzo, ruolo]);
-
-        if (!cacheGeo.has(k)) {
-          cacheGeo.set(
-            k,
-            geografia.validaPunto(indirizzo, ruolo)
+        const risultato =
+          await riutilizzoGeografico.valida(
+            row,
+            ruolo
           );
-        }
-
-        const risultato = await cacheGeo.get(k);
 
         verificaAttiva();
 
@@ -604,12 +638,12 @@ export async function simulazioneNccV26(
         verificaAttiva();
 
         const origine = await valida(
-          row.origine,
+          row,
           'origine'
         );
 
         const destinazione = await valida(
-          row.destinazione,
+          row,
           'destinazione'
         );
 
@@ -691,11 +725,46 @@ export async function simulazioneNccV26(
           indicative.add(String(row.id));
         }
 
-        utilizzabili.push(row);
+        // NCC_GEO_VINCOLI_V2902E2D1
+        function vincoliPunto(geo) {
+          if (
+            geo.stato === 'VALIDATO_CATALOGO' ||
+            geo.puntoOperativoId != null
+          ) {
+            // Un vincolo catalogo mancante
+            // non equivale a libero accesso.
+
+            if (geo.tipiVeicoloAmmessi === null) {
+              return null;
+            }
+
+            return Array.isArray(
+              geo.tipiVeicoloAmmessi
+            )
+              ? [...geo.tipiVeicoloAmmessi]
+              : [];
+          }
+
+          return null;
+        }
+
+        utilizzabili.push({
+          ...row,
+
+          origineTipiVeicoloAmmessi:
+            vincoliPunto(origine),
+
+          destinazioneTipiVeicoloAmmessi:
+            vincoliPunto(destinazione)
+        });
       }
 
-      const diagnosticaGeografia =
-        geografia.diagnostica();
+      const diagnosticaGeografia = {
+        ...geografia.diagnostica(),
+
+        riutilizzo:
+          riutilizzoGeografico.diagnostica()
+      };
 
       guard.interrompi('NCC_FASE_GEOGRAFICA_COMPLETATA');
 
@@ -741,6 +810,15 @@ export async function simulazioneNccV26(
           throw new Error('NCC_CONFLITTO_BASE');
         }
       }
+
+      const originaliAuditMissioni =
+        structuredClone(utilizzabili);
+
+      const flottaAuditMissioni =
+        structuredClone(veicoli);
+
+      const occupatiAuditMissioni =
+        new Set(occupati);
 
       const aggregazione = await protetto(
         () => aggregaPrenotazioniNcc(
@@ -812,6 +890,15 @@ export async function simulazioneNccV26(
 
       // NCC_ORCHESTRATORE_V286G3
 
+      const auditPianoOriginale =
+        validaMissioniNcc({
+          missioni: pianoOriginale.missioni,
+          prenotazioni: originaliAuditMissioni,
+          veicoli: flottaAuditMissioni,
+          occupati: occupatiAuditMissioni,
+          verificaAttiva
+        });
+
       let piano = pianoOriginale;
 
       let diagnosticaIbrida = null;
@@ -856,6 +943,15 @@ export async function simulazioneNccV26(
         diagnosticaIbrida =
           esitoIbrido.diagnostica;
       }
+
+      const auditPianoFinale =
+        validaMissioniNcc({
+          missioni: piano.missioni,
+          prenotazioni: originaliAuditMissioni,
+          veicoli: flottaAuditMissioni,
+          occupati: occupatiAuditMissioni,
+          verificaAttiva
+        });
 
       const idsInput = new Set(
         rows.map(row => String(row.id))
@@ -1034,6 +1130,13 @@ export async function simulazioneNccV26(
         audit: {
           univocitaPrenotazioni: true,
           conteggiCoerenti: true,
+
+          compatibilitaVeicoliVerificata: true,
+
+          validazioneMissioni: {
+            pianoOriginale: auditPianoOriginale,
+            pianoFinale: auditPianoFinale
+          },
           bagagliVerificati: false,
           disponibilitaOrariaVerificata: false,
           disponibilitaConducentiVerificata: false

@@ -1,3 +1,11 @@
+// NCC_AGGREGAZIONE_COMPATIBILITA_V2902E2E1
+
+import {
+  restrizioniPrenotazioneNcc,
+  restrizioniGruppoNcc,
+  veicoliCompatibiliNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
 
 export const NCC_V2_PARAMS = Object.freeze({
   raggioKm: 5,
@@ -499,6 +507,23 @@ export async function aggregaPrenotazioniNcc(
     ...flotta.map(v => Number(v.posti_totali))
   );
 
+  function flottaCompatibile(group, passeggeri = 0) {
+    return veicoliCompatibiliNcc(
+      flotta,
+      restrizioniGruppoNcc(group),
+      passeggeri
+    );
+  }
+
+  function capienzaCompatibile(group) {
+    return Math.max(
+      0,
+      ...flottaCompatibile(group).map(
+        v => Number(v.posti_totali)
+      )
+    );
+  }
+
   const disponibili = [...rows].sort(
     (a, b) =>
       Date.parse(a.prelievo_il) -
@@ -514,6 +539,8 @@ export async function aggregaPrenotazioniNcc(
     candidatiVerificati: 0,
     candidatiGeograficiEsclusi: 0,
     candidatiTemporaliEsclusi: 0,
+    candidatiVeicoliIncompatibili: 0,
+    prenotazioniVeicoliIncompatibili: 0,
     itinerariRifiutati: 0,
     gruppiAggregati: 0,
     serviziSingoli: 0
@@ -523,6 +550,15 @@ export async function aggregaPrenotazioniNcc(
   await Promise.all(
     disponibili.map(async row => {
       verificaAttiva();
+
+      if (
+        !flottaCompatibile(
+          [row],
+          Number(row.passeggeri)
+        ).length
+      ) {
+        return;
+      }
 
       const route = await routing.tratta(
         row.origine,
@@ -586,10 +622,19 @@ export async function aggregaPrenotazioniNcc(
   }
 
   function creaProposta(group, itinerario) {
-    const veicolo = flotta.find(
-      v => Number(v.posti_totali) >=
-        itinerario.piccoPasseggeri
-    );
+    const tipiVeicoloAmmessi =
+      restrizioniGruppoNcc(group);
+
+    const veicolo = flottaCompatibile(
+      group,
+      itinerario.piccoPasseggeri
+    )[0];
+
+    if (!veicolo) {
+      throw new Error(
+        'NCC_PROPOSTA_VEICOLO_INCOMPATIBILE'
+      );
+    }
 
     const kmSeparati = kmIndividuali(group);
 
@@ -645,7 +690,9 @@ export async function aggregaPrenotazioniNcc(
         r => r.volo_numero
       )?.volo_numero ?? null,
 
-      veicoloId: veicolo?.id ?? null,
+      tipiVeicoloAmmessi,
+
+      veicoloId: veicolo.id,
       posti: veicolo?.posti_totali ?? null,
 
       riempimento: veicolo
@@ -683,18 +730,40 @@ export async function aggregaPrenotazioniNcc(
 
     if (assegnate.has(id)) continue;
 
-    if (!validRoute(singoli.get(id))) {
-      nonAssegnate.push({
-        id,
-        motivo: 'ROUTING_NON_DISPONIBILE'
-      });
-      continue;
-    }
-
     if (Number(row.passeggeri) > capienza) {
       nonAssegnate.push({
         id,
         motivo: 'CAPIENZA_INSUFFICIENTE'
+      });
+
+      continue;
+    }
+
+    const capienzaSingola =
+      capienzaCompatibile([row]);
+
+    if (
+      !flottaCompatibile(
+        [row],
+        Number(row.passeggeri)
+      ).length
+    ) {
+      diagnostica.prenotazioniVeicoliIncompatibili++;
+
+      nonAssegnate.push({
+        id,
+        motivo: 'NESSUN_VEICOLO_COMPATIBILE',
+        tipiVeicoloAmmessi:
+          restrizioniPrenotazioneNcc(row)
+      });
+
+      continue;
+    }
+
+    if (!validRoute(singoli.get(id))) {
+      nonAssegnate.push({
+        id,
+        motivo: 'ROUTING_NON_DISPONIBILE'
       });
       continue;
     }
@@ -705,7 +774,7 @@ export async function aggregaPrenotazioniNcc(
       await verificaItinerarioNcc(
         group,
         routing,
-        capienza,
+        capienzaSingola,
         { ...p, serviziSingoli: true },
         riferimento,
         opzioni
@@ -739,6 +808,21 @@ export async function aggregaPrenotazioniNcc(
           !validRoute(singoli.get(cid))
         ) continue;
 
+        const next = [...group, candidate];
+
+        const capienzaNext =
+          capienzaCompatibile(next);
+
+        if (
+          capienzaNext <= 0 ||
+          next.some(r =>
+            Number(r.passeggeri) > capienzaNext
+          )
+        ) {
+          diagnostica.candidatiVeicoliIncompatibili++;
+          continue;
+        }
+
         let compatible = true;
 
         for (const member of group) {
@@ -758,15 +842,13 @@ export async function aggregaPrenotazioniNcc(
 
         if (!compatible) continue;
 
-        const next = [...group, candidate];
-
         diagnostica.candidatiVerificati++;
 
         const result =
           await verificaItinerarioNcc(
             next,
             routing,
-            capienza,
+            capienzaNext,
             p,
             riferimento,
             opzioni
@@ -776,6 +858,16 @@ export async function aggregaPrenotazioniNcc(
 
         if (!result) {
           diagnostica.itinerariRifiutati++;
+          continue;
+        }
+
+        if (
+          !flottaCompatibile(
+            next,
+            result.piccoPasseggeri
+          ).length
+        ) {
+          diagnostica.candidatiVeicoliIncompatibili++;
           continue;
         }
 
@@ -812,13 +904,14 @@ export async function aggregaPrenotazioniNcc(
 
     verificaAttiva();
 
+    const proposta =
+      creaProposta(group, itinerario);
+
     for (const member of group) {
       assegnate.add(String(member.id));
     }
 
-    proposte.push(
-      creaProposta(group, itinerario)
-    );
+    proposte.push(proposta);
 
     if (group.length > 1) {
       diagnostica.gruppiAggregati++;

@@ -1,4 +1,13 @@
-export const NCC_PARTIZIONI_VERSION = '2.8.1';
+// NCC_GENERATORE_PARTIZIONI_V2902E2F1B3
+
+import {
+  restrizioniPrenotazioneNcc,
+  intersecaRestrizioniNcc,
+  veicoloCompatibileNcc,
+  normalizzaTipoVeicoloNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
+export const NCC_PARTIZIONI_VERSION = '2.9.0';
 
 export function generaPartizioniNcc({
   prenotazioni,
@@ -22,7 +31,9 @@ export function generaPartizioniNcc({
 
   const rows = prenotazioni.map(p => ({
     id: String(p.id ?? ''),
-    passeggeri: Number(p.passeggeri)
+    passeggeri: Number(p.passeggeri),
+    tipiVeicoloAmmessi:
+      restrizioniPrenotazioneNcc(p)
   }));
 
   if (rows.some(p =>
@@ -39,7 +50,8 @@ export function generaPartizioniNcc({
 
   const flotta = veicoli.map(v => ({
     id: String(v.id ?? ''),
-    posti: Number(v.posti_totali)
+    posti: Number(v.posti_totali),
+    tipo: normalizzaTipoVeicoloNcc(v.tipo)
   }));
 
   if (flotta.some(v =>
@@ -59,6 +71,9 @@ export function generaPartizioniNcc({
     ),
     partizioni: [],
     nodiEsplorati: 0,
+    ramiIncompatibili: 0,
+    prenotazioniIncompatibili: [],
+    capienzaPotenziale: true,
     limiteRaggiunto: false,
     stato: 'COMPLETATO'
   };
@@ -83,6 +98,27 @@ export function generaPartizioniNcc({
     return report;
   }
 
+  function compatibili(restrizioni, minimo) {
+    return flotta.filter(v =>
+      v.posti >= minimo &&
+      veicoloCompatibileNcc(v, restrizioni)
+    );
+  }
+
+  report.prenotazioniIncompatibili = rows
+    .filter(p =>
+      !compatibili(
+        p.tipiVeicoloAmmessi,
+        p.passeggeri
+      ).length
+    )
+    .map(p => p.id);
+
+  if (report.prenotazioniIncompatibili.length) {
+    report.stato = 'NESSUN_VEICOLO_COMPATIBILE';
+    return report;
+  }
+
   const gruppi = [];
 
   function esplora(indice) {
@@ -99,9 +135,13 @@ export function generaPartizioniNcc({
       const sottogruppi = gruppi.map(g => ({
         prenotazioni: g.rows.map(p => p.id),
         passeggeri: g.passeggeri,
-        veicoliCompatibili: flotta
-          .filter(v => v.posti >= g.passeggeri)
-          .map(v => v.id)
+        minimoPasseggeri: g.minimoPasseggeri,
+        tipiVeicoloAmmessi: g.tipiVeicoloAmmessi,
+        capienzaDaVerificare: true,
+        veicoliCompatibili: compatibili(
+          g.tipiVeicoloAmmessi,
+          g.minimoPasseggeri
+        ).map(v => v.id)
       }));
 
       report.partizioni.push({
@@ -119,18 +159,41 @@ export function generaPartizioniNcc({
     for (const g of gruppi) {
       if (report.limiteRaggiunto) return;
 
-      if (
-        g.passeggeri + p.passeggeri >
-        capienzaMassima
-      ) continue;
+      const restrizioni = intersecaRestrizioniNcc(
+        g.tipiVeicoloAmmessi,
+        p.tipiVeicoloAmmessi
+      );
+
+      const minimo = Math.max(
+        g.minimoPasseggeri,
+        p.passeggeri
+      );
+
+      if (!compatibili(restrizioni, minimo).length) {
+        report.ramiIncompatibili++;
+        continue;
+      }
+
+      const precedenti = {
+        minimoPasseggeri: g.minimoPasseggeri,
+        tipiVeicoloAmmessi: g.tipiVeicoloAmmessi
+      };
 
       g.rows.push(p);
       g.passeggeri += p.passeggeri;
+      g.minimoPasseggeri = minimo;
+      g.tipiVeicoloAmmessi = restrizioni;
 
       esplora(indice + 1);
 
       g.rows.pop();
       g.passeggeri -= p.passeggeri;
+
+      g.minimoPasseggeri =
+        precedenti.minimoPasseggeri;
+
+      g.tipiVeicoloAmmessi =
+        precedenti.tipiVeicoloAmmessi;
     }
 
     if (report.limiteRaggiunto) return;
@@ -138,7 +201,9 @@ export function generaPartizioniNcc({
     // Creazione di un nuovo sottogruppo.
     gruppi.push({
       rows: [p],
-      passeggeri: p.passeggeri
+      passeggeri: p.passeggeri,
+      minimoPasseggeri: p.passeggeri,
+      tipiVeicoloAmmessi: p.tipiVeicoloAmmessi
     });
 
     esplora(indice + 1);

@@ -66,7 +66,28 @@ export function datiPrenotazione(body) {
   ];
 }
 
+// NCC_GEOGRAFIA_API_V2902B
 const campi = `id, cliente, recapito, origine, destinazione, prelievo_il, passeggeri,
+  origine_normalizzata,
+  origine_stato_geo,
+  origine_lat,
+  origine_lon,
+  origine_place_id,
+  origine_fonte_geo,
+  origine_verificata_il,
+  origine_geo_scade_il,
+  origine_dettaglio_geo,
+  origine_punto_operativo_id,
+  destinazione_normalizzata,
+  destinazione_stato_geo,
+  destinazione_lat,
+  destinazione_lon,
+  destinazione_place_id,
+  destinazione_fonte_geo,
+  destinazione_verificata_il,
+  destinazione_geo_scade_il,
+  destinazione_dettaglio_geo,
+  destinazione_punto_operativo_id,
   bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
   volo_programmato_il, volo_aggiornato_il, annullata_il, creata_il, aggiornata_il,
   CASE WHEN volo_numero IS NOT NULL THEN 'manuale' END AS volo_fonte`;

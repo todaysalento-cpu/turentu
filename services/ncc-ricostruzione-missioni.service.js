@@ -1,11 +1,24 @@
+// NCC_CONTRATTO_AUDIT_V2902E2F2C2C
+// NCC_RICOSTRUZIONE_AUDIT_V2902E2F2B
 import assert from 'node:assert/strict';
 
-export const NCC_RICOSTRUZIONE_VERSION = '2.8.6f';
+import {
+  intersecaRestrizioniNcc,
+  veicoloCompatibileNcc
+} from './ncc-compatibilita-veicoli.service.js';
+
+import {
+  creaAuditCompatibilitaCpsatNcc
+} from './ncc-audit-compatibilita-cpsat.service.js';
+
+export const NCC_RICOSTRUZIONE_VERSION = '2.9.0';
 
 export function ricostruisciMissioniCpsatNcc({
   catalogo,
   risultato,
   validazione,
+  prenotazioniOriginali,
+  veicoliOriginali,
   giorno,
   prenotazioniIndicative = [],
   verificaAttiva = () => {}
@@ -47,6 +60,39 @@ export function ricostruisciMissioniCpsatNcc({
   verifica(
     /^\d{4}-\d{2}-\d{2}$/.test(giorno),
     'GIORNO_INVALIDO'
+  );
+
+  const auditRigoroso =
+    catalogo.versione === '2.9.0' ||
+    catalogo.versioneCatalogo === '2.9.0' ||
+    prenotazioniOriginali !== undefined ||
+    veicoliOriginali !== undefined;
+
+  if (auditRigoroso) {
+    verifica(
+      validazione.audit
+        ?.compatibilitaPrenotazioniIndipendenteVerificata === true &&
+      validazione.audit
+        ?.restrizioniGeograficheVerificate === true &&
+      validazione.audit
+        ?.compatibilitaProposteTraslateVerificata === true,
+      'AUDIT_COMPATIBILITA_INCOMPLETO'
+    );
+  }
+
+  const auditCompatibilita = auditRigoroso
+    ? creaAuditCompatibilitaCpsatNcc({
+        catalogo,
+        prenotazioniOriginali,
+        veicoliOriginali,
+        verificaAttiva
+      })
+    : null;
+
+  const flottaOriginale = new Map(
+    (veicoliOriginali ?? []).map(
+      v => [String(v.id), v]
+    )
   );
 
   const riferimento = catalogo.riferimento;
@@ -176,7 +222,27 @@ export function ricostruisciMissioniCpsatNcc({
       'MISSIONE_VUOTA'
     );
 
-    const veicoloId = v.veicolo.id;
+    const veicoloOriginale = auditRigoroso
+      ? flottaOriginale.get(String(v.id))
+      : v.veicolo;
+
+    verifica(
+      veicoloOriginale &&
+      v.veicolo &&
+      String(v.veicolo.id) ===
+        String(veicoloOriginale.id),
+      'VEICOLO_ORIGINALE_INCOERENTE'
+    );
+
+    if (auditRigoroso) {
+      assert.deepEqual(
+        v.veicolo,
+        veicoloOriginale,
+        'NCC_RICOSTRUZIONE_VEICOLO_ANNIDATO_ALTERATO'
+      );
+    }
+
+    const veicoloId = veicoloOriginale.id;
 
     verifica(
       String(veicoloId) === String(v.id),
@@ -188,6 +254,7 @@ export function ricostruisciMissioniCpsatNcc({
     let metriServizio = 0;
     let metriTrasferimenti = 0;
     let durataTrasferimenti = 0;
+    const trasferimentiTimeline = []; // NCC_TIMELINE_V2891
     let attesaMs = 0;
     let precedente = null;
 
@@ -214,6 +281,20 @@ export function ricostruisciMissioniCpsatNcc({
       serviziUsati.add(String(sid));
 
       const g = structuredClone(t.proposta);
+
+      if (auditCompatibilita) {
+        const esito =
+          auditCompatibilita.verificaServizio({
+            servizio: c,
+            veicoloId,
+            proposta: g
+          });
+
+        g.tipiVeicoloAmmessi =
+          structuredClone(
+            esito.tipiVeicoloAmmessi
+          );
+      }
 
       verifica(
         firma(g.prenotazioni) ===
@@ -347,6 +428,7 @@ export function ricostruisciMissioniCpsatNcc({
         );
 
         attesaMs += attesa;
+        trasferimentiTimeline.push({ dopoServizio: gruppi.length - 1, km: tr.distanzaMetri / 1000, durataMs: tr.durataMs, attesaMs: attesa });
       }
 
       precedente = s;
@@ -452,10 +534,28 @@ export function ricostruisciMissioniCpsatNcc({
     const costoCentesimi =
       Math.round(costoEuro * 100);
 
+    const tipiVeicoloAmmessi =
+      intersecaRestrizioniNcc(
+        ...gruppi.map(
+          g => g.tipiVeicoloAmmessi ?? null
+        )
+      );
+
+    if (auditRigoroso) {
+      verifica(
+        veicoloCompatibileNcc(
+          veicoloOriginale,
+          tipiVeicoloAmmessi
+        ),
+        'MISSIONE_VEICOLO_INCOMPATIBILE'
+      );
+    }
+
     missioni.push({
       giorno,
       veicoloId,
       posti: v.posti,
+      tipiVeicoloAmmessi,
 
       gruppi,
 
@@ -476,6 +576,7 @@ export function ricostruisciMissioniCpsatNcc({
 
       logistica: {
         base: v.base,
+        trasferimentiTimeline,
 
         kmServizio:
           metriServizio / 1000,
@@ -714,6 +815,15 @@ export function ricostruisciMissioniCpsatNcc({
       ...validazione.audit,
 
       missioniRicostruite: true,
+
+      compatibilitaRicostruzioneVerificata:
+        auditCompatibilita !== null,
+
+      identitaVeicoliOriginaliVerificata:
+        auditCompatibilita !== null,
+
+      restrizioniMissioniRicostruite:
+        auditCompatibilita !== null,
       formatoGestionaleRicostruito: true,
       economiaVeicoliAggiornata: true,
 

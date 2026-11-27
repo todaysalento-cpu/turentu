@@ -1,6 +1,12 @@
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
+
+// NCC_GEOGRAFIA_API_V2902B
+import {
+  riepilogoGeografiaNcc,
+  validaGeografiaPrenotazioniNcc
+} from '../services/ncc-geografia-prenotazioni.service.js';
 import { importaPrenotazioni, pianificatore, approvaGruppo, approvaMissione, salvaParametriPianificatore, eliminaGruppo, simulazioneNccV26 } from '../services/ncc-import-planner.service.js';
 import {
   elencaPrenotazioniEsterne, creaPrenotazioneEsterna,
@@ -164,6 +170,39 @@ export function creaRouterConducenti({
   router.use('/operatori', requireOperatoreNcc);
 
   const prenotazioniEsterne = '/operatori/me/prenotazioni-esterne';
+
+  // Riepilogo geografico operatore.
+  router.get(
+    prenotazioniEsterne + '/geografia/riepilogo',
+    route(req =>
+      riepilogoGeografiaNcc(pool, op(req))
+    )
+  );
+
+  // Validazione massiva: massimo 10 prenotazioni.
+  router.post(
+    prenotazioniEsterne + '/geografia/valida',
+    route(req =>
+      validaGeografiaPrenotazioniNcc(
+        pool,
+        op(req),
+        req.body ?? {}
+      )
+    )
+  );
+
+  // Validazione singola.
+  router.post(
+    prenotazioniEsterne + '/:id/geografia/valida',
+    route(req =>
+      validaGeografiaPrenotazioniNcc(
+        pool,
+        op(req),
+        { ids: [req.params.id] }
+      )
+    )
+  );
+
   router.post(prenotazioniEsterne + '/importa', route(req =>
     importaPrenotazioni(pool, op(req), req.body)));
   // NCC_API_ORCHESTRATORE_V26

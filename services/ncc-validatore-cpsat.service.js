@@ -1,5 +1,10 @@
+// NCC_VALIDATORE_COMPATIBILITA_V2902E2F1D2B
 
 import assert from 'node:assert/strict';
+
+import {
+  creaAuditCompatibilitaCpsatNcc
+} from './ncc-audit-compatibilita-cpsat.service.js';
 
 import {
   finestraServizioNcc,
@@ -7,11 +12,13 @@ import {
 } from './ncc-schedulazione-temporale.service.js';
 
 export const NCC_VALIDATORE_CPSAT_VERSION =
-  '2.8.6e.1';
+  '2.9.0';
 
 export function validaSoluzioneCpsatNcc({
   catalogo: d,
   risultato: r,
+  prenotazioniOriginali,
+  veicoliOriginali,
   verificaAttiva = () => {}
 }) {
 
@@ -19,6 +26,22 @@ export function validaSoluzioneCpsatNcc({
 
   assert.ok(d);
   assert.ok(r);
+
+  const auditRigoroso =
+    d.versione === '2.9.0' ||
+    prenotazioniOriginali !== undefined ||
+    veicoliOriginali !== undefined;
+
+  const auditCompatibilita = auditRigoroso
+    ? creaAuditCompatibilitaCpsatNcc({
+        catalogo: d,
+        prenotazioniOriginali,
+        veicoliOriginali,
+        verificaAttiva
+      })
+    : null;
+
+  let serviziCompatibilitaVerificata = 0;
 
   assert.equal(
     r.stato,
@@ -125,6 +148,15 @@ export function validaSoluzioneCpsatNcc({
 
     const c = servizi.get(s.servizio);
     const v = veicoli.get(s.veicolo);
+
+    if (auditCompatibilita) {
+      auditCompatibilita.verificaServizio({
+        servizio: c,
+        veicoloId: v.id
+      });
+
+      serviziCompatibilitaVerificata++;
+    }
 
     assert.ok(
       c.veicoliCompatibili.includes(v.id)
@@ -492,6 +524,16 @@ export function validaSoluzioneCpsatNcc({
 
   verificaAttiva();
 
+  if (auditCompatibilita) {
+    assert.equal(
+      serviziCompatibilitaVerificata,
+      sol.servizi.length,
+      'NCC_AUDIT_CPSAT_VERIFICA_INCOMPLETA'
+    );
+  }
+
+  verificaAttiva();
+
   return {
     versione: NCC_VALIDATORE_CPSAT_VERSION,
     modalita: 'VALIDAZIONE_LOGISTICA',
@@ -522,6 +564,14 @@ export function validaSoluzioneCpsatNcc({
         : ricavi - costoEuro,
 
     audit: {
+      compatibilitaIndipendenteVerificata:
+        auditCompatibilita !== null,
+
+      datiOriginaliVerificati:
+        auditCompatibilita !== null,
+
+      serviziCompatibilitaVerificata,
+
       univocitaPrenotazioni: true,
       coperturaCoerente: true,
       capienzaCatalogoVerificata: true,

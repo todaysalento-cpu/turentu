@@ -1,11 +1,16 @@
+// NCC_VALIDAZIONE_COMPATIBILITA_V2902E2F1D2C
 import assert from 'node:assert/strict';
+
+import {
+  creaAuditCompatibilitaCpsatNcc
+} from './ncc-audit-compatibilita-cpsat.service.js';
 
 import {
   NCC_V2_PARAMS
 } from './ncc-aggregazione.service.js';
 
 export const NCC_VALIDAZIONE_PRENOTAZIONI_VERSION =
-  '2.8.6e.2';
+  '2.9.0';
 
 const MIN = 60000;
 const EPS = 1e-6;
@@ -31,6 +36,8 @@ export async function validaPrenotazioniCpsatNcc({
   catalogo,
   validazione,
   routing,
+  prenotazioniOriginali,
+  veicoliOriginali,
   verificaAttiva = () => {}
 }) {
 
@@ -40,6 +47,38 @@ export async function validaPrenotazioniCpsatNcc({
     validazione?.valida === true,
     'LOGISTICA_NON_VALIDATA'
   );
+
+  const auditRigoroso =
+    catalogo?.versione === '2.9.0' ||
+    prenotazioniOriginali !== undefined ||
+    veicoliOriginali !== undefined ||
+    validazione.audit?.compatibilitaIndipendenteVerificata === true;
+
+  const auditCompatibilita = auditRigoroso
+    ? creaAuditCompatibilitaCpsatNcc({
+        catalogo,
+        prenotazioniOriginali,
+        veicoliOriginali,
+        verificaAttiva
+      })
+    : null;
+
+  let serviziCompatibilitaPrenotazioniVerificata = 0;
+
+  if (auditRigoroso) {
+    verifica(
+      validazione.audit?.compatibilitaIndipendenteVerificata === true &&
+      validazione.audit?.datiOriginaliVerificati === true,
+      'AUDIT_LOGISTICO_MANCANTE'
+    );
+
+    verifica(
+      Array.isArray(validazione.serviziTraslati) &&
+      validazione.audit.serviziCompatibilitaVerificata ===
+        validazione.serviziTraslati.length,
+      'AUDIT_LOGISTICO_INCOMPLETO'
+    );
+  }
 
   verifica(
     typeof routing?.tratta === 'function' &&
@@ -222,6 +261,16 @@ export async function validaPrenotazioniCpsatNcc({
       c && v && proposta,
       'SERVIZIO_NON_RICONOSCIUTO'
     );
+
+    if (auditCompatibilita) {
+      auditCompatibilita.verificaServizio({
+        servizio: c,
+        veicoloId: v.id,
+        proposta
+      });
+
+      serviziCompatibilitaPrenotazioniVerificata++;
+    }
 
     verifica(
       !serviziValidati.has(servizioId),
@@ -827,6 +876,16 @@ export async function validaPrenotazioniCpsatNcc({
     report.ricaviCentesimi = null;
   }
 
+  if (auditCompatibilita) {
+    verifica(
+      serviziCompatibilitaPrenotazioniVerificata ===
+        validazione.serviziTraslati.length,
+      'AUDIT_COMPATIBILITA_INCOMPLETO'
+    );
+  }
+
+  verificaAttiva();
+
   return {
     ...validazione,
 
@@ -843,12 +902,29 @@ export async function validaPrenotazioniCpsatNcc({
 
     diagnosticaPrenotazioni: {
       ...report,
+
+      auditCompatibilitaRigoroso:
+        auditCompatibilita !== null,
+
+      serviziCompatibilitaPrenotazioniVerificata,
+
       routingPrima,
       routingDopo
     },
 
     audit: {
       ...validazione.audit,
+
+      compatibilitaPrenotazioniIndipendenteVerificata:
+        auditCompatibilita !== null,
+
+      restrizioniGeograficheVerificate:
+        auditCompatibilita !== null,
+
+      compatibilitaProposteTraslateVerificata:
+        auditCompatibilita !== null,
+
+      serviziCompatibilitaPrenotazioniVerificata,
 
       vincoliPrenotazioniOriginaliVerificati: true,
       caricoFermateVerificato: true,

@@ -356,7 +356,7 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       const nomeRichiesto = normalizzaLocalita(indirizzo.split(',')[0]);
       const piazza = /^(piazza|piazzetta|piazzale) /.test(nomeRichiesto) && luogo.types?.includes('route');
       const poiIdentificato = Boolean(nomeGoogle && nomeGoogle === nomeRichiesto && (piazza ||
-        luogo.types?.some(tipo => ['establishment', 'point_of_interest', 'lodging', 'plaza', 'park'].includes(tipo))));
+        luogo.types?.some(tipo => ['establishment', 'point_of_interest', 'lodging', 'plaza', 'town_square', 'park'].includes(tipo))));
       const stradaRichiesta = analisi.civico ? analisi.indirizzo.slice(0, -analisi.civico.length).trim().replace(/,$/, '') : '';
       const stradaGoogle = componente('route')?.longText;
       const strada = confrontaStradeNcc(stradaRichiesta, stradaGoogle);

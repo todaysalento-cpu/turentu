@@ -49,7 +49,7 @@ export function creaAutorizzazioneGeografiaNcc({
     String(operatoreId) === '2' &&
     limits === NCC_GEOGRAFIA_BUDGET_LIMITS;
   const limitiGeocoding = limiteEstesoProduzione
-    ? { ...limits.GEOCODING, elementiOperatore: 750 }
+    ? { ...limits.GEOCODING, elementiOperatore: limits.GEOCODING.elementiGlobali }
     : limits.GEOCODING;
 
   const geocoding =

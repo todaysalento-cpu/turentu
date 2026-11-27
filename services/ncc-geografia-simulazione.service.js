@@ -5,6 +5,7 @@ import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
 import { creaValidazioneGeograficaNcc } from './ncc-validazione-geografica.service.js';
 import { resolveLocation } from '../routes/distanza.route.js';
 import { verificaComuneNcc } from './ncc-validazione-territoriale.service.js';
+import { coordinatePolo } from './search/search-poli-pubblici.service.js';
 
 export function creaGeografiaSimulazioneNcc(db, opzioni = {}) {
  const guard =
@@ -20,6 +21,7 @@ export function creaGeografiaSimulazioneNcc(db, opzioni = {}) {
    guard
   });
  const locate = opzioni.locate ?? resolveLocation;
+ const cercaTerminale = opzioni.cercaTerminale ?? coordinatePolo;
  const verificaComune = opzioni.verificaComune ?? verificaComuneNcc;
  const cache = new Map();
  const stats = { validati: 0, indicativi: 0, esclusi: 0, ricercheAeroporti: 0 };
@@ -30,6 +32,12 @@ export function creaGeografiaSimulazioneNcc(db, opzioni = {}) {
   const key = luogo.codice_iata;
   if (!cache.has(key)) cache.set(key, (async () => {
    guard.verifica();
+
+   const terminale = key === 'BDS' ? await cercaTerminale('turentu_w422355604') : null;
+   guard.verifica();
+   if (terminale && Number.isFinite(terminale.lat) && Number.isFinite(terminale.lng)) {
+    return { lat: terminale.lat, lon: terminale.lng, fonte: 'OPENSTREETMAP_TERMINAL' };
+   }
 
    if (!(await guard.autorizza('AEROPORTO'))) {
     return null;
@@ -100,7 +108,7 @@ export function creaGeografiaSimulazioneNcc(db, opzioni = {}) {
     guard.verifica();
    if (coord) {
     stats.indicativi++;
-    return { ...r, stato: 'DA_VERIFICARE', valido: false, utilizzabileSimulazione: true, indicativo: true, fonteSimulazione: 'GOOGLE_GEOCODING', lat: coord.lat, lon: coord.lon, approvabile: false };
+    return { ...r, stato: 'DA_VERIFICARE', valido: false, utilizzabileSimulazione: true, indicativo: true, fonteSimulazione: coord.fonte ?? 'GOOGLE_GEOCODING', lat: coord.lat, lon: coord.lon, approvabile: false };
    }
   }
   const candidato = r.suggerito;

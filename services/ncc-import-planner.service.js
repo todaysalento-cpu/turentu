@@ -619,8 +619,17 @@ export async function simulazioneNccV26(
           guard
         );
 
-      async function valida(row, ruolo) {
+      const geografiaAeroporto = new Map();
+
+      async function valida(row, ruolo, riferimentoBds) {
         verificaAttiva();
+        if (riferimentoBds) {
+          if (!geografiaAeroporto.has(ruolo)) {
+            geografiaAeroporto.set(ruolo, await geografia.validaPunto(row[ruolo], ruolo));
+          }
+          verificaAttiva();
+          return geografiaAeroporto.get(ruolo);
+        }
 
         const risultato =
           await riutilizzoGeografico.valida(
@@ -633,19 +642,22 @@ export async function simulazioneNccV26(
         return risultato;
       }
 
-      for (const row of rows) {
+      for (const prenotazione of rows) {
 
         verificaAttiva();
 
-        const origine = await valida(
-          row,
-          'origine'
-        );
+        const ruoloAeroporto = prenotazione.volo_aeroporto === 'BDS'
+          ? ({ arrivo: 'origine', partenza: 'destinazione' })[prenotazione.volo_direzione]
+          : null;
+        const riferimentoBds = ruoloAeroporto && key(prenotazione[ruoloAeroporto]) === 'brindisi'
+          ? ruoloAeroporto
+          : null;
+        const row = riferimentoBds
+          ? { ...prenotazione, [riferimentoBds]: 'Aeroporto di Brindisi (BDS), Brindisi' }
+          : prenotazione;
 
-        const destinazione = await valida(
-          row,
-          'destinazione'
-        );
+        const origine = await valida(row, 'origine', riferimentoBds === 'origine');
+        const destinazione = await valida(row, 'destinazione', riferimentoBds === 'destinazione');
 
         if (
           !origine.utilizzabileSimulazione ||

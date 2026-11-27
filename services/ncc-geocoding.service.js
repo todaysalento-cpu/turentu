@@ -17,6 +17,7 @@ import {
 } from './ncc-validazione-territoriale.service.js';
 
 import {
+  normalizzaLocalita,
   riconosciLocalita
 } from './ncc-locality-resolver.service.js';
 
@@ -346,12 +347,11 @@ export function creaGeocodingNcc(
       chiave(civicoRichiesto) === chiave(civico)
     );
 
-    const stradaCoerente = Boolean(
-      strada &&
-      chiave(stradaRichiesta) === chiave(strada)
-    );
-
     const confrontoStrada = confrontaStradeNcc(stradaRichiesta, strada);
+    const stradaCoerente = Boolean(strada && (
+      chiave(stradaRichiesta) === chiave(strada) ||
+      ['NOME_NORMALIZZATO', 'SPAZI_EQUIVALENTI', 'INIZIALI_COMPATIBILI'].includes(confrontoStrada.motivo)
+    ));
 
     const affidabile =
       territorio.valido &&
@@ -436,7 +436,7 @@ export function creaGeocodingNcc(
     const analisi = analizzaIndirizzoNcc(originale);
     const normalizzato = analisi.normalizzato;
 
-    const comuneAtteso =
+    const comuneInput =
       comuneEsplicito ??
       analisi.comune ??
       comuneDaIndirizzo(normalizzato);
@@ -445,19 +445,22 @@ export function creaGeocodingNcc(
       () => riconosciLocalita(
         db,
         originale,
-        { comune: comuneAtteso }
+        { comune: comuneInput }
       )
     );
 
     guard.verifica();
 
-    const localitaGid =
-      risoluzioneLocalita.stato === 'RICONOSCIUTO'
-        ? risoluzioneLocalita.localita?.gid ?? null
-        : null;
+    const frazioni = !comuneEsplicito && comuneInput && risoluzioneLocalita.stato === 'COMUNE_NON_COMPATIBILE'
+      ? (risoluzioneLocalita.candidati ?? []).filter(candidato => candidato.comune?.nome &&
+        normalizzaLocalita(candidato.nome) === normalizzaLocalita(comuneInput))
+      : [];
+    const frazione = frazioni.length === 1 ? frazioni[0] : null;
+    const comuneAtteso = frazione?.comune.nome ?? comuneInput;
+    const localitaGid = frazione?.gid ?? risoluzioneLocalita.localita?.gid ?? null;
 
     const localitaAmbigua =
-      risoluzioneLocalita.stato === 'AMBIGUA';
+      risoluzioneLocalita.stato === 'AMBIGUA' || frazioni.length > 1;
 
     const base = {
       originale,

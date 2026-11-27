@@ -3,6 +3,7 @@ const TIPI = {
   via: 'via',
   viale: 'viale',
   piazza: 'piazza',
+  piazzetta: 'piazzetta',
   piazzale: 'piazzale',
   corso: 'corso',
   largo: 'largo',
@@ -59,6 +60,11 @@ export function confrontaStradeNcc(a, b) {
 
   if (x.parole.join(' ') === y.parole.join(' ')) {
     return risultato(true, 'NOME_NORMALIZZATO');
+  }
+
+  if ([...x.parole, ...y.parole].every(parola => /^\p{L}+$/u.test(parola)) &&
+    x.parole.join('') === y.parole.join('')) {
+    return risultato(true, 'SPAZI_EQUIVALENTI');
   }
 
   const ultimoX = x.parole.at(-1);

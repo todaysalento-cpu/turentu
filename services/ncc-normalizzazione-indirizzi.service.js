@@ -25,14 +25,17 @@ export function analizzaIndirizzoNcc(value) {
     /^([\p{L} .'-]+?)\s+-\s+(.+)$/u
   );
 
-  const senzaPaese = originale.replace(/,\s*Italia$/i, '');
+  const comuneRipetuto = originale.match(/^(.+,\s*(?:\d{5}\s+)?([^,]+)),\s*(?:Italia|Italy),\s*([^,]+)$/i);
+  const compatto = comuneRipetuto && pulisci(comuneRipetuto[2]).toLowerCase() === pulisci(comuneRipetuto[3]).toLowerCase()
+    ? comuneRipetuto[1] + ', Italia' : originale;
+  const senzaPaese = compatto.replace(/,\s*(?:Italia|Italy)$/i, '');
   const senzaProvincia = senzaPaese.replace(/(?:,\s*[A-Z]{2}|\s*\([A-Z]{2}\))$/, '');
   const standard = senzaProvincia !== originale
     ? senzaProvincia.match(/^(.+),\s*([^,]+)$/)
     : null;
 
-  const viaConComune = senzaProvincia.match(
-    /^((?:via|viale|piazza|piazzale|corso|vicolo|vico|largo|contrada|strada)\s+.+),\s*([\p{L}][\p{L} .\u2019\u0027-]*)$/iu
+  const indirizzoConComune = senzaProvincia.match(
+    /^(.+),\s*((?:\d{5}\s+)?[\p{L}][\p{L} .\u2019\u0027-]*)$/iu
   );
   const localitaConRiferimento = /^(vicino|di fronte|davanti|presso|angolo|ang\.)\s/i;
 
@@ -67,15 +70,17 @@ export function analizzaIndirizzoNcc(value) {
   } else if (standard) {
     comune = pulisci(standard[2]);
     indirizzo = pulisci(standard[1]);
-  } else if (viaConComune && !localitaConRiferimento.test(viaConComune[2])) {
-    comune = pulisci(viaConComune[2]);
-    indirizzo = pulisci(viaConComune[1]);
+  } else if (indirizzoConComune && !localitaConRiferimento.test(indirizzoConComune[2])) {
+    comune = pulisci(indirizzoConComune[2]);
+    indirizzo = pulisci(indirizzoConComune[1]);
   }
 
   if (comune) comune = comune.replace(/^\d{5}\s+/, '');
 
   indirizzo = indirizzo
     .replace(/^DA\s+/i, '')
+    .replace(/^(\d+[a-z]?)\s+((?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s+.+)$/i, '$2 $1')
+    .replace(/\bP\.?\s*TTA\b/gi, 'Piazzetta')
     .replace(/,\s*(?=\d+[a-z]?(?:\/[a-z0-9]+)?(?:$|\s*[-–—]?\s+(?:vicino|di fronte|davanti|presso)\b))/i, ' ')
     .replace(/\bP\.?\s*ZZA\b/gi, 'Piazza')
     .replace(/\bP\.?\s*LE\b/gi, 'Piazzale')
@@ -111,7 +116,7 @@ export function analizzaIndirizzoNcc(value) {
 
   // Indirizzi alternativi o incroci.
   const secondoIndirizzo = indirizzo.match(
-    /^(.+?)\s*(?:-|\/|\bANGOLO\b|\bANG\.)\s*((?:VIALE|VIA|PIAZZALE|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\s+.+)$/i
+    /^(.+?)\s*(?:-|\/|\bANGOLO\b|\bANG\.)\s*((?:VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\s+.+)$/i
   );
 
   if (secondoIndirizzo) {
@@ -126,13 +131,13 @@ export function analizzaIndirizzoNcc(value) {
   }
 
   const riferimento = indirizzo.match(
-    /^(.+?)\s*(?:-\s*)?\b(VICINO|DI FRONTE|DAVANTI|PRESSO|ANGOLO|ANG\.)\s+(.+)$/i
+    /^(.+?)\s*(?:-\s*)?\b(VICINO|DI FRONTE|DAVANTI|PRESSO|ANGOLO|ANG\.)(?:\s+(.+))?$/i
   );
 
   if (riferimento) {
     indirizzo = pulisci(riferimento[1]);
     note.push(
-      `${riferimento[2]} ${riferimento[3]}`
+      [riferimento[2], riferimento[3]].filter(Boolean).join(' ')
     );
     ambiguo = true;
   }
@@ -144,7 +149,7 @@ export function analizzaIndirizzoNcc(value) {
 
 if (
   struttura &&
-  /^(VIALE|VIA|PIAZZALE|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\b/i
+  /^(VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\b/i
     .test(indirizzo)
 ) {
   puntoInteresse ??= pulisci(
@@ -155,7 +160,7 @@ if (
 }
   // Nome struttura prima dell'indirizzo.
   const strutturaIniziale = indirizzo.match(
-    /^((?:MASSERIA|HOTEL|ALBERGO|RESIDENCE|VILLA|CONSERVATORIO|RISTORANTE|OSPEDALE|B&B)\b.+?)\s+((?:VIALE|VIA|PIAZZALE|PIAZZA|CORSO|CONTRADA|STRADA)\s+.+)$/i
+    /^((?:[\p{L}\d.\u0027-]+\s+){0,3}(?:MASSERIA|HOTEL|ALBERGO|RESIDENCE|VILLA|CONSERVATORIO|RISTORANTE|OSPEDALE|B&B)\b.*?)\s+((?:VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|CONTRADA|STRADA)\s+.+)$/iu
   );
 
   if (strutturaIniziale) {
@@ -169,7 +174,7 @@ if (
   }
 
   const stradale =
-    /^(VIALE|VIA|PIAZZALE|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\b/i
+    /^(VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\b/i
       .test(indirizzo);
 
   if (stradale) {

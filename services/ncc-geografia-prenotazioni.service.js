@@ -346,7 +346,7 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       const lat = luogo?.location?.latitude;
       const lon = luogo?.location?.longitude;
       const componente = tipo => luogo?.addressComponents?.find(part => part.types?.includes(tipo));
-      if (luogo?.id !== placeId || !coordinateValide(lat, lon) || componente('country')?.shortText !== 'IT' ||
+      if (typeof luogo?.id !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(luogo.id) || !coordinateValide(lat, lon) || componente('country')?.shortText !== 'IT' ||
         luogo.types?.includes('airport')) {
         throw errore(400, 'La selezione Google non identifica un punto utilizzabile.');
       }
@@ -373,7 +373,7 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       const territorio = await guard.attendi(() =>
         (dipendenze.verificaComune ?? verificaComuneNcc)(pool, { lat, lon, comuneAtteso }));
       if (!territorio.valido) throw errore(400, 'Il punto scelto è fuori dal comune richiesto o non verificabile.');
-      const esito = normalizzaEsito({ stato: 'VALIDATO_MANUALE', valido: true, lat, lon, placeId,
+      const esito = normalizzaEsito({ stato: 'VALIDATO_MANUALE', valido: true, lat, lon, placeId: luogo.id,
         fonte: 'GOOGLE_PLACES_CONFERMATO', normalizzato: analisi.normalizzato, comuneAtteso, motivo: 'PUNTO_SCELTO_OPERATORE' });
       if (!(await salvaEsito(pool, operatore, row, ruolo, esito, guard))) {
         throw errore(409, 'La prenotazione è cambiata. Riaprila e riprova.');

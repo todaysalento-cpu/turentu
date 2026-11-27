@@ -1,3 +1,4 @@
+import { ottieniContestoMappaNcc } from '../services/ncc-mappa-contesto.service.js';
 // Turentu: API autonoma conducenti. Montare con middleware JWT esistente.
 // Il router NON importa PIXEL, POPBUS o il pool; riceve le dipendenze dal chiamante.
 import { Router } from 'express';
@@ -172,6 +173,31 @@ export function creaRouterConducenti({
   router.use('/operatori', requireOperatoreNcc);
 
   const prenotazioniEsterne = '/operatori/me/prenotazioni-esterne';
+
+
+  // NCC_MAPPA_CONTESTO_V1
+  router.post(
+    prenotazioniEsterne + '/geografia/contesto-mappa',
+    route(req => {
+      const indirizzo = req.body?.indirizzo;
+
+      if (
+        typeof indirizzo !== 'string' ||
+        !indirizzo.trim() ||
+        indirizzo.length > 250
+      ) {
+        throw Object.assign(
+          new Error('Indirizzo non valido.'),
+          { status: 400 }
+        );
+      }
+
+      return ottieniContestoMappaNcc(
+        pool,
+        indirizzo.trim()
+      );
+    })
+  );
 
   // Riepilogo geografico operatore.
   router.get(

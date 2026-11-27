@@ -44,12 +44,20 @@ export function creaAutorizzazioneGeografiaNcc({
     plannerNamespace
   };
 
+  const limiteEstesoProduzione =
+    process.env.RENDER_SERVICE_ID === 'srv-d6smvunafjfc73f2vmd0' &&
+    String(operatoreId) === '2' &&
+    limits === NCC_GEOGRAFIA_BUDGET_LIMITS;
+  const limitiGeocoding = limiteEstesoProduzione
+    ? { ...limits.GEOCODING, elementiOperatore: 750 }
+    : limits.GEOCODING;
+
   const geocoding =
     creaAutorizzazioneRoutingNcc({
 
       ...comune,
 
-      limits: limits.GEOCODING,
+      limits: limitiGeocoding,
 
       budgetNamespace: geocodingNamespace
     });

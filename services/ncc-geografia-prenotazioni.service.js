@@ -318,11 +318,12 @@ export async function validaGeografiaPrenotazioniNcc(
   dipendenze = {}
 ) {
   const ids = body.ids;
+  const massimo = dipendenze.massiva === true ? 100 : 10;
 
   if (
     !Array.isArray(ids) ||
     ids.length < 1 ||
-    ids.length > 10 ||
+    ids.length > massimo ||
     !ids.every(id =>
       typeof id === 'string' &&
       /^[1-9]\d{0,18}$/.test(id) &&
@@ -332,7 +333,7 @@ export async function validaGeografiaPrenotazioniNcc(
   ) {
     throw errore(
       400,
-      'Selezionare da 1 a 10 prenotazioni valide.'
+      `Selezionare da 1 a ${massimo} prenotazioni valide.`
     );
   }
 
@@ -395,7 +396,10 @@ export async function validaGeografiaPrenotazioniNcc(
 
         try {
 
-        elaborazione: for (const row of rows) {
+        elaborazione: for (const [index, row] of rows.entries()) {
+          if (index > 0 && index % 10 === 0) {
+            dipendenze.avanzamento?.(index, rows.length);
+          }
           if (row.gruppo_approvato) {
             risultati.push({
               id: String(row.id),

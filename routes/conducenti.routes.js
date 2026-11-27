@@ -191,6 +191,38 @@ export function creaRouterConducenti({
     )
   );
 
+  router.post(prenotazioniEsterne + '/geografia/valida-massiva', async (req, res) => {
+    const invia = evento => {
+      if (res.destroyed) return;
+      if (!res.headersSent) {
+        res.type('application/x-ndjson');
+        res.set('Cache-Control', 'no-store, no-transform');
+        res.set('X-Accel-Buffering', 'no');
+      }
+      res.write(JSON.stringify(evento) + '\n');
+      res.flush?.();
+    };
+    try {
+      const data = await validaGeografiaPrenotazioniNcc(pool, op(req), req.body ?? {}, {
+        massiva: true,
+        avanzamento: (esaminate, totale) => invia({ tipo: 'avanzamento', esaminate, totale })
+      });
+      invia({ tipo: 'esito', data });
+      res.end();
+    } catch (error) {
+      const status = [400, 404, 429, 503].includes(error.status) ? error.status : 500;
+      const message = status === 500 ? 'Errore durante la validazione geografica.' : error.message;
+      if (status === 500) console.error('[NCC validazione massiva]', error.code || error.name);
+      if (res.destroyed) return;
+      if (res.headersSent) {
+        invia({ tipo: 'errore', status, error: message });
+        res.end();
+      } else {
+        res.status(status).json({ ok: false, error: message });
+      }
+    }
+  });
+
   // Validazione singola.
   router.post(
     prenotazioniEsterne + '/:id/geografia/valida',

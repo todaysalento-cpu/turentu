@@ -187,7 +187,7 @@ function ambiente(rows, opzioni = {}) {
         pool,
         999,
         { ids },
-        { manager, creaValidazione }
+        { manager, creaValidazione, massiva: opzioni.massiva, avanzamento: opzioni.avanzamento }
       );
     }
   };
@@ -579,5 +579,17 @@ await test('Riuso automatico tra lotti conserva la scadenza', async () => {
   assert.ok(a.sql[0].includes("q.origine_stato_geo = 'VALIDATO_AUTO'"));
 });
 
-console.log('\nTEST SUPERATI:', superati, '/ 22');
+
+await test('Validazione di 96 prenotazioni in una sessione con avanzamento', async () => {
+  const righe = Array.from({ length: 96 }, (_, index) => prenotazione(index + 1));
+  const avanzamenti = [];
+  const a = ambiente(righe, { massiva: true, avanzamento: (done, total) => avanzamenti.push([done, total]) });
+  const r = await a.esegui();
+  assert.equal(r.prenotazioni, 96);
+  assert.equal(r.puntiEsaminati, 192);
+  assert.equal(a.chiamate.length, 2);
+  assert.deepEqual(avanzamenti, [10, 20, 30, 40, 50, 60, 70, 80, 90].map(done => [done, 96]));
+});
+
+console.log('\nTEST SUPERATI:', superati, '/ 23');
 console.log('V290.2E.1B TEST COMPLETATI');

@@ -1,3 +1,7 @@
+import { analizzaIndirizzoNcc } from './ncc-normalizzazione-indirizzi.service.js';
+import { normalizzaLocalita } from './ncc-locality-resolver.service.js';
+import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
+import { verificaComuneNcc } from './ncc-validazione-territoriale.service.js';
 import {
   calcolaRiepilogoGeograficoNcc
 } from './ncc-geografia-stato.service.js';
@@ -242,7 +246,8 @@ async function salvaEsito(
        AND id = $2
        AND ${ruolo} = $3
        AND annullata_il IS NULL
-       AND ${ruolo}_stato_geo <> 'VALIDATO_MANUALE'
+       AND ($8 = 'VALIDATO_MANUALE' OR ${ruolo}_stato_geo <> 'VALIDATO_MANUALE')
+       AND ($8 <> 'VALIDATO_MANUALE' OR ${ruolo}_stato_geo <> 'VALIDATO_CATALOGO')
        AND NOT EXISTS (
          SELECT 1
          FROM public.ncc_gruppi_approvati g
@@ -300,6 +305,85 @@ async function salvaEsito(
     // Il rilascio avviene una sola volta.
     client.release(erroreRollback ?? undefined);
   }
+}
+
+async function leggiPuntoGoogleNcc(placeId, guard) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) throw errore(503, 'Google Maps non disponibile.');
+  if (!(await guard.autorizza('PLACES'))) throw errore(429, 'Budget Google Places esaurito.');
+  const response = await fetch('https://places.googleapis.com/v1/places/' + encodeURIComponent(placeId) + '?languageCode=it', {
+    headers: { 'X-Goog-Api-Key': apiKey, 'X-Goog-FieldMask': 'id,location,addressComponents,displayName,types' },
+    signal: AbortSignal.any([guard.signal, AbortSignal.timeout(6000)])
+  });
+  if (!response.ok) throw errore(response.status === 404 ? 400 : 503, 'Impossibile leggere il punto Google selezionato.');
+  return response.json();
+}
+
+export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dipendenze = {}) {
+  const { ruolo, placeId, indirizzo } = body;
+  if (!RUOLI.includes(ruolo) || typeof placeId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(placeId) ||
+    placeId.startsWith('turentu_') || typeof indirizzo !== 'string' || !indirizzo.trim() || indirizzo.length > 250) {
+    throw errore(400, 'Seleziona un indirizzo Google valido.');
+  }
+  const sessione = await (dipendenze.manager ?? manager).esegui(operatore, async sessione => {
+    const guard = creaGeografiaGuardNcc({ signal: sessione.signal, verificaAttiva: sessione.verificaAttiva,
+      autorizzaDistribuita: sessione.autorizzaGeografia, autorizzazioneRigorosa: true });
+    try {
+      const { rows } = await pool.query(
+        'SELECT p.*, p.aggiornata_il::text AS revisione_geo, p.origine_verificata_il::text AS origine_revisione_geo, p.destinazione_verificata_il::text AS destinazione_revisione_geo ' +
+        'FROM public.ncc_prenotazioni_esterne p WHERE p.operatore_id = $1 AND p.id = $2::bigint AND p.annullata_il IS NULL ' +
+        'AND NOT EXISTS (SELECT 1 FROM public.ncc_gruppi_approvati g WHERE g.operatore_id = p.operatore_id AND p.id = ANY(g.prenotazioni))',
+        [operatore, id]
+      );
+      const row = rows[0];
+      if (!row) throw errore(404, 'Prenotazione attiva e modificabile non trovata.');
+      if (row[ruolo] !== indirizzo) throw errore(409, 'L’indirizzo è cambiato. Riapri la prenotazione.');
+      if (row[ruolo + '_stato_geo'] === 'VALIDATO_CATALOGO' || row[ruolo + '_fonte_geo'] === 'OPENSTREETMAP_TERMINAL') {
+        throw errore(400, 'Questo riferimento aeroportuale o di catalogo segue la sua verifica dedicata.');
+      }
+      const luogo = await guard.attendi(() => (dipendenze.leggiPunto ?? leggiPuntoGoogleNcc)(placeId, guard));
+      const lat = luogo?.location?.latitude;
+      const lon = luogo?.location?.longitude;
+      const componente = tipo => luogo?.addressComponents?.find(part => part.types?.includes(tipo));
+      if (luogo?.id !== placeId || !coordinateValide(lat, lon) || componente('country')?.shortText !== 'IT' ||
+        luogo.types?.includes('airport')) {
+        throw errore(400, 'La selezione Google non identifica un punto utilizzabile.');
+      }
+      const analisi = analizzaIndirizzoNcc(indirizzo);
+      const comuneGoogle = componente('administrative_area_level_3')?.longText ?? componente('locality')?.longText;
+      const comuneAtteso = (analisi.comune ?? comuneGoogle ?? '').replace(/\s+[A-Z]{2}$/, '');
+      const nomeGoogle = normalizzaLocalita(luogo.displayName?.text);
+      const nomeRichiesto = normalizzaLocalita(indirizzo.split(',')[0]);
+      const piazza = /^(piazza|piazzetta|piazzale) /.test(nomeRichiesto) && luogo.types?.includes('route');
+      const poiIdentificato = Boolean(nomeGoogle && nomeGoogle === nomeRichiesto && (piazza ||
+        luogo.types?.some(tipo => ['establishment', 'point_of_interest', 'lodging', 'plaza', 'park'].includes(tipo))));
+      const stradaRichiesta = analisi.civico ? analisi.indirizzo.slice(0, -analisi.civico.length).trim().replace(/,$/, '') : '';
+      const stradaGoogle = componente('route')?.longText;
+      const strada = confrontaStradeNcc(stradaRichiesta, stradaGoogle);
+      const civicoCoerente = analisi.civico &&
+        normalizzaLocalita(analisi.civico) === normalizzaLocalita(componente('street_number')?.longText);
+      const viaCoerente = Boolean(stradaGoogle && (
+        normalizzaLocalita(stradaRichiesta) === normalizzaLocalita(stradaGoogle) ||
+        ['NOME_NORMALIZZATO', 'SPAZI_EQUIVALENTI', 'INIZIALI_COMPATIBILI'].includes(strada.motivo)
+      ));
+      if (!comuneAtteso || (!poiIdentificato && !(civicoCoerente && viaCoerente))) {
+        throw errore(400, 'Il punto scelto non conferma il nome della struttura oppure via, civico e comune.');
+      }
+      const territorio = await guard.attendi(() =>
+        (dipendenze.verificaComune ?? verificaComuneNcc)(pool, { lat, lon, comuneAtteso }));
+      if (!territorio.valido) throw errore(400, 'Il punto scelto è fuori dal comune richiesto o non verificabile.');
+      const esito = normalizzaEsito({ stato: 'VALIDATO_MANUALE', valido: true, lat, lon, placeId,
+        fonte: 'GOOGLE_PLACES_CONFERMATO', normalizzato: analisi.normalizzato, comuneAtteso, motivo: 'PUNTO_SCELTO_OPERATORE' });
+      if (!(await salvaEsito(pool, operatore, row, ruolo, esito, guard))) {
+        throw errore(409, 'La prenotazione è cambiata. Riaprila e riprova.');
+      }
+      return { id: String(id), ruolo, stato: esito.stato, normalizzato: esito.normalizzato };
+    } finally {
+      guard.interrompi('NCC_CONFERMA_PUNTO_TERMINATA');
+    }
+  }, { applicaCooldown: false });
+  if (!sessione.consentito) throw errore(429, 'Un’altra verifica è in corso. Riprova al termine.');
+  return sessione.risultato;
 }
 
 export async function riepilogoGeografiaNcc(

@@ -31,7 +31,7 @@ if redis.call('EXISTS', KEYS[1]) == 1 then
   }
 end
 
-if redis.call('EXISTS', KEYS[3]) == 1 then
+if cooldown > 0 and redis.call('EXISTS', KEYS[3]) == 1 then
   return {
     0,
     'COOLDOWN',
@@ -157,7 +157,7 @@ export function creaPlannerLockNcc({
     }
   }
 
-  async function acquisisci(operatoreId) {
+  async function acquisisci(operatoreId, { applicaCooldown = true } = {}) {
 
     const op = String(operatoreId ?? '');
 
@@ -177,7 +177,7 @@ export function creaPlannerLockNcc({
       [
         token,
         limits.leaseMs,
-        limits.cooldownMs,
+        applicaCooldown ? limits.cooldownMs : 0,
         limits.maxGlobali
       ]
     );

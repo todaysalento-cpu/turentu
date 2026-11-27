@@ -130,7 +130,7 @@ export function creaSessionManagerNcc({
     }
   }
 
-  async function esegui(operatoreId, lavoro) {
+  async function esegui(operatoreId, lavoro, opzioniAcquisizione) {
 
     if (typeof lavoro !== 'function') {
       throw new Error('NCC_LAVORO_NON_VALIDO');
@@ -351,7 +351,7 @@ export function creaSessionManagerNcc({
     try {
 
       const acquisizione = Promise.resolve()
-        .then(() => planner.acquisisci(op))
+        .then(() => planner.acquisisci(op, opzioniAcquisizione))
         .then(async risultato => {
 
           if (acquisizioneScaduta) {

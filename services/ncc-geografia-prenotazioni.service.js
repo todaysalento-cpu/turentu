@@ -637,13 +637,16 @@ export async function validaGeografiaPrenotazioniNcc(
       } finally {
         guard.interrompi('NCC_VALIDAZIONE_TERMINATA');
       }
-    }
+    },
+    { applicaCooldown: false }
   );
 
   if (!sessione.consentito) {
     throw errore(
       429,
-      'Validazione temporaneamente non disponibile. Riprovare.'
+      sessione.motivo === 'OPERATORE_OCCUPATO'
+        ? 'Un’altra verifica o simulazione è in corso per questo operatore.'
+        : 'Validazione temporaneamente non disponibile. Riprovare.'
     );
   }
 

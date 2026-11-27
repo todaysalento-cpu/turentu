@@ -25,21 +25,23 @@ export function analizzaIndirizzoNcc(value) {
     /^([\p{L} .'-]+?)\s+-\s+(.+)$/u
   );
 
-  const standard = originale.match(
-    /^(.+),\s*([^,]+),\s*Italia$/i
-  );
+  const senzaPaese = originale.replace(/,\s*Italia$/i, '');
+  const senzaProvincia = senzaPaese.replace(/(?:,\s*[A-Z]{2}|\s*\([A-Z]{2}\))$/, '');
+  const standard = senzaProvincia !== originale
+    ? senzaProvincia.match(/^(.+),\s*([^,]+)$/)
+    : null;
 
-  const viaConComune = originale.match(
+  const viaConComune = senzaProvincia.match(
     /^((?:via|viale|piazza|piazzale|corso|vicolo|vico|largo|contrada|strada)\s+.+),\s*([\p{L}][\p{L} .\u2019\u0027-]*)$/iu
   );
   const localitaConRiferimento = /^(vicino|di fronte|davanti|presso|angolo|ang\.)\s/i;
 
-  const aeroporto = originale.match(
+  const aeroporto = senzaProvincia.match(
     /^(Aeroporto di .+?)\s*\(([A-Z]{3})\)\s*,\s*(.+)$/i
   );
 
   if (aeroporto) {
-    comune = pulisci(aeroporto[3]);
+    comune = pulisci(aeroporto[3].split(',').at(-1)).replace(/^\d{5}\s+/, '');
 
     return {
       originale,
@@ -47,7 +49,7 @@ export function analizzaIndirizzoNcc(value) {
       indirizzo: aeroporto[1],
       civico: null,
       puntoInteresse: aeroporto[1],
-      codiceAeroporto: aeroporto[2],
+      codiceAeroporto: aeroporto[2].toUpperCase(),
       ambiguo: false,
       alternative: [],
       note: [],
@@ -69,6 +71,8 @@ export function analizzaIndirizzoNcc(value) {
     comune = pulisci(viaConComune[2]);
     indirizzo = pulisci(viaConComune[1]);
   }
+
+  if (comune) comune = comune.replace(/^\d{5}\s+/, '');
 
   indirizzo = indirizzo
     .replace(/^DA\s+/i, '')

@@ -1,9 +1,15 @@
+import { analizzaIndirizzoNcc } from './ncc-normalizzazione-indirizzi.service.js';
+
 export function normalizzaAliasNcc(value) {
  return String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 export async function riconosciLuogoNcc(db, indirizzo) {
- const alias = normalizzaAliasNcc(indirizzo);
+ const analisi = analizzaIndirizzoNcc(indirizzo);
+ const aeroportoBds = analisi.codiceAeroporto === 'BDS' &&
+  normalizzaAliasNcc(analisi.indirizzo) === 'aeroporto di brindisi' &&
+  normalizzaAliasNcc(analisi.comune) === 'brindisi';
+ const alias = aeroportoBds ? 'bds' : normalizzaAliasNcc(indirizzo);
  if (!alias) return { stato: 'NON_TROVATO', luogo: null };
  const { rows } = await db.query(
   'SELECT DISTINCT l.id,l.codice,l.nome,l.categoria,l.codice_iata,l.comune,l.codice_istat_comune,l.attivo FROM public.catalogo_luoghi l JOIN public.catalogo_luoghi_alias a ON a.luogo_id=l.id WHERE a.attivo AND a.alias_normalizzato=$1 ORDER BY l.id',

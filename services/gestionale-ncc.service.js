@@ -49,7 +49,7 @@ export function datiPrenotazione(body) {
       throw errore(400, 'Aeroporto o direzione del volo non validi');
     }
     campiVolo = [
-      numeroVolo(volo.numero), aeroporto, volo.direzione,
+      volo.numero == null || volo.numero === '' ? null : numeroVolo(volo.numero), aeroporto, volo.direzione,
       orario(volo.programmatoIl, 'Orario programmato del volo')
     ];
   }
@@ -90,7 +90,7 @@ const campi = `id, cliente, recapito, origine, destinazione, prelievo_il, passeg
   destinazione_punto_operativo_id,
   bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
   volo_programmato_il, volo_aggiornato_il, annullata_il, creata_il, aggiornata_il,
-  CASE WHEN volo_numero IS NOT NULL THEN 'manuale' END AS volo_fonte`;
+  CASE WHEN volo_programmato_il IS NOT NULL THEN 'manuale' END AS volo_fonte`;
 
 export async function elencaPrenotazioniEsterne(pool, operatore, query) {
   const dal = query.dal == null ? null : orario(query.dal, 'Inizio intervallo');
@@ -117,7 +117,7 @@ export async function creaPrenotazioneEsterna(pool, operatore, body, importHash 
         bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
         volo_programmato_il, volo_aggiornato_il${importHash ? ", import_hash" : ""})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar, $11, $12, $13,
-       CASE WHEN $10::varchar IS NOT NULL THEN now() END${importHash ? ", $14" : ""})
+       CASE WHEN $13::timestamptz IS NOT NULL THEN now() END${importHash ? ", $14" : ""})
      ${importHash ? "ON CONFLICT (operatore_id, import_hash) WHERE import_hash IS NOT NULL DO NOTHING" : ""}
      RETURNING ${campi}`,
     [operatore, ...datiPrenotazione(body), ...(importHash ? [importHash] : [])]
@@ -131,7 +131,7 @@ export async function modificaPrenotazioneEsterna(pool, operatore, id, body) {
      SET cliente = $3, recapito = $4, origine = $5, destinazione = $6, prelievo_il = $7,
        passeggeri = $8, bagagli = $9, prezzo_centesimi = $10, volo_numero = $11::varchar,
        volo_aeroporto = $12, volo_direzione = $13, volo_programmato_il = $14,
-       volo_aggiornato_il = CASE WHEN $11::varchar IS NULL THEN NULL
+       volo_aggiornato_il = CASE WHEN $14::timestamptz IS NULL THEN NULL
          WHEN ROW(volo_numero, volo_aeroporto, volo_direzione, volo_programmato_il)
            IS DISTINCT FROM ROW($11::varchar, $12::varchar, $13::varchar, $14::timestamptz)
          THEN now() ELSE volo_aggiornato_il END,

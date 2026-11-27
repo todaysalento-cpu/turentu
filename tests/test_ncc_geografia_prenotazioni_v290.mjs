@@ -149,7 +149,8 @@ function ambiente(rows, opzioni = {}) {
   const creaValidazione = (db, { guard }) => ({
     guard,
 
-    async validaPunto(indirizzo, ruolo) {
+    async validaPunto(indirizzo, ruolo, comuneAtteso, riuso) {
+      if (riuso) return riuso;
       chiamate.push({ indirizzo, ruolo });
 
       interrompi('RESOLVER');
@@ -561,5 +562,22 @@ await test(
   }
 );
 
-console.log('\nTEST SUPERATI:', superati, '/ 21');
+
+await test('Riuso automatico tra lotti conserva la scadenza', async () => {
+  const scadenza = new Date(Date.now() + 60000).toISOString();
+  const a = ambiente([prenotazione(1, {
+    origine_candidati_riuso: [{
+      lat: 40.35, lon: 18.17, normalizzata: 'Via Roma 10, Lecce',
+      place_id: 'PLACE_TEST', geo_scade_il: scadenza, fonte_geo: 'GOOGLE_GEOCODING'
+    }]
+  })]);
+  const r = await a.esegui();
+  assert.deepEqual(a.chiamate.map(call => call.ruolo), ['destinazione']);
+  assert.equal(r.risultati.find(point => point.ruolo === 'origine').riutilizzato, true);
+  assert.equal(a.scritture[0].params[10], scadenza);
+  assert.ok(a.sql[0].includes('q.operatore_id = p.operatore_id'));
+  assert.ok(a.sql[0].includes("q.origine_stato_geo = 'VALIDATO_AUTO'"));
+});
+
+console.log('\nTEST SUPERATI:', superati, '/ 22');
 console.log('V290.2E.1B TEST COMPLETATI');

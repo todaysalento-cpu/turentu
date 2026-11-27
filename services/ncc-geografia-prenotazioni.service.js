@@ -81,6 +81,34 @@ function validaPersistita(row, ruolo) {
     Date.parse(scadenza) > Date.now();
 }
 
+
+function selezioneRiusoAutomatico(ruolo) {
+  return `ARRAY(
+    SELECT to_jsonb(candidato)
+    FROM (
+      SELECT DISTINCT ON (q.${ruolo}_lat, q.${ruolo}_lon)
+        q.${ruolo}_lat AS lat,
+        q.${ruolo}_lon AS lon,
+        q.${ruolo}_normalizzata AS normalizzata,
+        q.${ruolo}_place_id AS place_id,
+        q.${ruolo}_geo_scade_il AS geo_scade_il,
+        q.${ruolo}_fonte_geo AS fonte_geo
+      FROM ${TABELLA} q
+      WHERE q.operatore_id = p.operatore_id
+        AND q.id <> p.id
+        AND q.annullata_il IS NULL
+        AND lower(btrim(q.${ruolo})) = lower(btrim(p.${ruolo}))
+        AND q.${ruolo}_stato_geo = 'VALIDATO_AUTO'
+        AND q.${ruolo}_verificata_il IS NOT NULL
+        AND q.${ruolo}_geo_scade_il > now()
+        AND q.${ruolo}_lat IS NOT NULL
+        AND q.${ruolo}_lon IS NOT NULL
+      ORDER BY q.${ruolo}_lat, q.${ruolo}_lon, q.${ruolo}_verificata_il DESC, q.id
+      LIMIT 2
+    ) candidato
+  ) AS ${ruolo}_candidati_riuso`;
+}
+
 function normalizzaEsito(r) {
   let stato = STATI.has(r?.stato)
     ? r.stato
@@ -107,7 +135,7 @@ function normalizzaEsito(r) {
     ? (
         stato === 'VALIDATO_CATALOGO'
           ? r.geoScadeIl ?? null
-          : new Date(
+          : r?.riutilizzato === true ? r.geoScadeIl : new Date(
               Date.now() + 24 * 60 * 60 * 1000
             ).toISOString()
       )
@@ -337,6 +365,7 @@ export async function validaGeografiaPrenotazioniNcc(
                     AS origine_revisione_geo,
                   p.destinazione_verificata_il::text
                     AS destinazione_revisione_geo,
+                  ${RUOLI.map(selezioneRiusoAutomatico).join(", ")},
                   EXISTS (
                     SELECT 1
                     FROM public.ncc_gruppi_approvati g
@@ -433,10 +462,21 @@ export async function validaGeografiaPrenotazioniNcc(
             guard.verifica();
 
             if (!cache.has(chiave)) {
+              const candidati = row[ruolo + "_candidati_riuso"];
+              const candidato = candidati?.length === 1 ? candidati[0] : null;
+              const riuso = candidato && coordinateValide(candidato.lat, candidato.lon) &&
+                Date.parse(candidato.geo_scade_il) > Date.now() ? {
+                  stato: "VALIDATO_AUTO", valido: true, riutilizzato: true,
+                  lat: candidato.lat, lon: candidato.lon, fonte: candidato.fonte_geo,
+                  normalizzato: candidato.normalizzata, placeId: candidato.place_id,
+                  geoScadeIl: candidato.geo_scade_il
+                } : null;
               const risultato = await guard.attendi(
                 () => motore.validaPunto(
                   indirizzo,
-                  ruolo
+                  ruolo,
+                  null,
+                  riuso
                 )
               );
 
@@ -481,6 +521,7 @@ export async function validaGeografiaPrenotazioniNcc(
               id: String(row.id),
               ruolo,
               stato: esito.stato,
+              riutilizzato: salvato && r?.riutilizzato === true,
               salvato,
               motivo: salvato
                 ? esito.dettaglio.motivo

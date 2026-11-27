@@ -220,14 +220,17 @@ export function creaGeocodingNcc(
     }
   }
 
-  async function geocoding(indirizzo) {
+  async function geocoding(indirizzo, suRifiuto) {
 
     guard.verifica();
 
-    if (
-      stats.geocoding >= limits.maxGeocoding ||
-      !(await guard.autorizza('GEOCODING'))
-    ) {
+    if (stats.geocoding >= limits.maxGeocoding) {
+      suRifiuto?.('SESSIONE_LOCALE');
+      stats.budgetEsaurito = true;
+      return null;
+    }
+
+    if (!(await guard.autorizza('GEOCODING', suRifiuto))) {
       stats.budgetEsaurito = true;
       return null;
     }
@@ -476,7 +479,8 @@ export function creaGeocodingNcc(
     }
 
     try {
-      const risultati = await geocoding(normalizzato);
+      let motivoBudget;
+      const risultati = await geocoding(normalizzato, motivo => { motivoBudget = motivo; });
 
       guard.verifica();
 
@@ -484,7 +488,9 @@ export function creaGeocodingNcc(
         return {
           ...base,
           stato: 'DA_ELABORARE',
-          motivo: 'BUDGET_GEOCODING'
+          motivo: ['OPERATORE', 'GLOBALE', 'SIMULAZIONE', 'SESSIONE_LOCALE'].includes(motivoBudget)
+            ? 'BUDGET_GEOCODING_' + motivoBudget
+            : 'BUDGET_GEOCODING'
         };
       }
 

@@ -29,6 +29,11 @@ export function analizzaIndirizzoNcc(value) {
     /^(.+),\s*([^,]+),\s*Italia$/i
   );
 
+  const viaConComune = originale.match(
+    /^((?:via|viale|piazza|piazzale|corso|vicolo|vico|largo|contrada|strada)\s+.+),\s*([\p{L}][\p{L} .\u2019\u0027-]*)$/iu
+  );
+  const localitaConRiferimento = /^(vicino|di fronte|davanti|presso|angolo|ang\.)\s/i;
+
   const aeroporto = originale.match(
     /^(Aeroporto di .+?)\s*\(([A-Z]{3})\)\s*,\s*(.+)$/i
   );
@@ -60,10 +65,14 @@ export function analizzaIndirizzoNcc(value) {
   } else if (standard) {
     comune = pulisci(standard[2]);
     indirizzo = pulisci(standard[1]);
+  } else if (viaConComune && !localitaConRiferimento.test(viaConComune[2])) {
+    comune = pulisci(viaConComune[2]);
+    indirizzo = pulisci(viaConComune[1]);
   }
 
   indirizzo = indirizzo
     .replace(/^DA\s+/i, '')
+    .replace(/,\s*(?=\d+[a-z]?(?:\/[a-z0-9]+)?(?:$|\s*[-–—]?\s+(?:vicino|di fronte|davanti|presso)\b))/i, ' ')
     .replace(/\bP\.?\s*ZZA\b/gi, 'Piazza')
     .replace(/\bP\.?\s*LE\b/gi, 'Piazzale')
     .replace(/\bV\.?\s*LE\b/gi, 'Viale');

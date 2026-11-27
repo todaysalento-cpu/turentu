@@ -264,12 +264,13 @@ export function creaGeografiaGuardNcc({
     return riservaLocale(tipo);
   }
 
-  async function autorizza(tipo) {
+  async function autorizza(tipo, suRifiuto) {
 
     verifica();
 
     // Prenotazione locale prima di qualsiasi await.
     if (!riservaLocale(tipo)) {
+      suRifiuto?.('SESSIONE_LOCALE');
       return false;
     }
 
@@ -334,6 +335,7 @@ export function creaGeografiaGuardNcc({
         verifica();
       }
 
+      suRifiuto?.(risultato.motivo);
       return false;
     }
 

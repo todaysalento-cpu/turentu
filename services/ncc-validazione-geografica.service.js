@@ -3,6 +3,7 @@ import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
 
 import { risolviCatalogoNcc } from './ncc-catalogo-luoghi.service.js';
 import { creaGeocodingNcc } from './ncc-geocoding.service.js';
+import { creaGeocoderOsmNcc } from './ncc-geocoding-osm.service.js';
 
 import {
   normalizzaRestrizioniNcc
@@ -23,9 +24,10 @@ export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
    guard
   });
  const catalogo = opzioni.catalogo ?? risolviCatalogoNcc;
+ const osm = opzioni.osm ?? creaGeocoderOsmNcc({ guard });
  const stats = { catalogoValidati: 0, catalogoDaVerificare: 0, geocoder: 0 };
 
- async function validaPunto(indirizzo, ruolo, comuneAtteso = null) {
+ async function validaPunto(indirizzo, ruolo, comuneAtteso = null, riuso = null) {
   if (!['origine', 'destinazione'].includes(ruolo)) throw new Error('Ruolo non valido');
   guard.verifica();
 
@@ -42,6 +44,12 @@ export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
    stats.catalogoDaVerificare++;
    return { stato: r.stato === 'AMBIGUO' ? 'AMBIGUO' : 'DA_VERIFICARE', valido: false, fonte: 'CATALOGO_TURENTU', originale: indirizzo, motivo: r.stato, luogo: r.luogo ?? null, candidati: r.candidati ?? r.punti ?? [] };
   }
+  if (riuso && Date.parse(riuso.geoScadeIl) > Date.now()) return riuso;
+
+  const risultatoOsm = await osm.validaPunto(indirizzo, comuneAtteso);
+  guard.verifica();
+  if (risultatoOsm) return risultatoOsm;
+
   stats.geocoder++;
   const risultato = await guard.attendi(
    () => geocoder.validaPunto(
@@ -55,5 +63,5 @@ export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
   return risultato;
  }
 
- return { validaPunto, guard, diagnostica: () => ({ ...stats, geocoding: geocoder.diagnostica?.() ?? null }) };
+ return { validaPunto, guard, diagnostica: () => ({ ...stats, osm: osm.diagnostica?.() ?? null, geocoding: geocoder.diagnostica?.() ?? null }) };
 }

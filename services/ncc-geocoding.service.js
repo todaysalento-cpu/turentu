@@ -566,7 +566,8 @@ export function creaGeocodingNcc(
 
       const candidatoStrada = candidati[0];
       if (risultati.length === 1 && candidatoStrada?.puntoStradale &&
-        !contieneAmbiguita && !localitaAmbigua && !analisi.puntoInteresse) {
+        !contieneAmbiguita && !localitaAmbigua &&
+        (!analisi.puntoInteresse || (analisi.riferimentoStradaleSeparato && !analisi.civico))) {
         stats.validati++;
         return {
           ...base, valido: true, stato: 'VALIDATO_AUTO',

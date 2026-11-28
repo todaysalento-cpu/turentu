@@ -164,9 +164,11 @@ export function analizzaIndirizzoNcc(value) {
   const strutturaSeparata = indirizzo.match(
     /^((?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s+.+?)\s*[-–—]\s*(.+)$/i
   );
+  let riferimentoStradaleSeparato = false;
   if (strutturaSeparata &&
       /\b(?:boutique|hotel|albergo|masseria|residence|ristorante)\b/i.test(strutturaSeparata[2]) &&
       !/^(?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\b/i.test(strutturaSeparata[2])) {
+    riferimentoStradaleSeparato = !puntoInteresse;
     puntoInteresse ??= pulisci(strutturaSeparata[2]);
     indirizzo = pulisci(strutturaSeparata[1]);
   }
@@ -243,6 +245,7 @@ if (
     indirizzo,
     civico,
     puntoInteresse,
+    riferimentoStradaleSeparato,
     ambiguo,
     alternative,
     note: [...note, ...riferimentiCivico],

@@ -333,6 +333,18 @@ async function leggiPuntoGoogleNcc(placeId, guard) {
   return response.json();
 }
 
+function coincideNomePoiNcc(richiesto, google, comune, tipi) {
+  if (!google || !richiesto) return false;
+  if (google === richiesto) return true;
+  if (!tipi?.some(tipo => ['lodging', 'hotel'].includes(tipo))) return false;
+  const citta = normalizzaLocalita(comune);
+  const senzaCitta = nome => citta && nome.endsWith(' ' + citta)
+    ? nome.slice(0, -citta.length - 1) : nome;
+  const nome = senzaCitta(richiesto);
+  if (!/^(?:hotel|albergo) [a-z0-9]{3,}/.test(nome)) return false;
+  return (' ' + senzaCitta(google) + ' ').includes(' ' + nome + ' ');
+}
+
 export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dipendenze = {}) {
   const { ruolo, placeId, indirizzo, accettaPosizioneIndicativa, riusaPunto } = body;
   if (!RUOLI.includes(ruolo) || typeof placeId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(placeId) ||
@@ -377,7 +389,7 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       // NCC_PRECISIONE_STRADA_V2
       const poiIdentificato = Boolean(
         nomeGoogle &&
-        nomeGoogle === nomeRichiesto &&
+        coincideNomePoiNcc(nomeRichiesto, nomeGoogle, comuneAtteso, luogo.types) &&
         !luogo.types?.includes('route') &&
         luogo.types?.some(tipo =>
           [

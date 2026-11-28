@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 import { resolveLocation } from '../routes/distanza.route.js';
 import { getDurataDistanza } from '../utils/maps.util.js';
 import { creaVerificaMultisalita } from './ncc-multisalita.service.js';
-import { datiPrenotazione, creaPrenotazioneEsterna } from './gestionale-ncc.service.js';
+import { datiPrenotazione, notePrenotazione, creaPrenotazioneEsterna } from './gestionale-ncc.service.js';
 
 function invalid(message, status = 400) {
   return Object.assign(new Error(message), { status });
@@ -40,6 +40,7 @@ export async function importaPrenotazioni(pool, operatore, body) {
       const riga = index + 2;
       let hash;
       try {
+        notePrenotazione(row);
         hash = createHash('sha256').update(JSON.stringify(datiPrenotazione(row))).digest('hex');
       } catch (error) {
         if (error.status !== 400) throw error;
@@ -53,7 +54,7 @@ export async function importaPrenotazioni(pool, operatore, body) {
       hashes.add(hash);
       if (conferma) {
         const result = await creaPrenotazioneEsterna(client, operatore, row, hash);
-        records.push({ riga, stato: result ? 'importata' : 'duplicata' });
+        records.push({ riga, stato: result ? 'importata' : 'duplicata', ...(result && { id: String(result.id) }) });
       } else {
         const { rowCount } = await client.query(
           'SELECT 1 FROM public.ncc_prenotazioni_esterne WHERE operatore_id = $1 AND import_hash = $2',

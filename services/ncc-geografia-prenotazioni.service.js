@@ -107,6 +107,7 @@ function selezioneRiusoAutomatico(ruolo) {
         AND q.annullata_il IS NULL
         AND lower(btrim(q.${ruolo})) = lower(btrim(p.${ruolo}))
         AND q.${ruolo}_stato_geo = 'VALIDATO_AUTO'
+        AND COALESCE(q.${ruolo}_dettaglio_geo->>'posizioneIndicativa', 'false') <> 'true'
         AND q.${ruolo}_fonte_geo IS DISTINCT FROM 'OPENSTREETMAP_TERMINAL'
         AND q.${ruolo}_verificata_il IS NOT NULL
         AND q.${ruolo}_geo_scade_il > now()
@@ -178,6 +179,8 @@ function normalizzaEsito(r) {
     dettaglio: {
       motivo: r?.motivo ?? null,
       comuneAtteso: r?.comuneAtteso ?? null,
+      precisione: p.precisione ?? null,
+      posizioneIndicativa: p.posizioneIndicativa === true,
       richiedeVerifica: !valido
     }
   };
@@ -899,7 +902,10 @@ export async function validaGeografiaPrenotazioniNcc(
                 id: String(row.id),
                 ruolo,
                 stato: row[ruolo + '_stato_geo'],
-                riutilizzato: true
+                riutilizzato: true,
+                lat: row[ruolo + '_lat'], lon: row[ruolo + '_lon'],
+                fonte: row[ruolo + '_fonte_geo'],
+                ...row[ruolo + '_dettaglio_geo']
               });
 
               continue;
@@ -979,6 +985,7 @@ export async function validaGeografiaPrenotazioniNcc(
               stato: esito.stato,
               riutilizzato: salvato && r?.riutilizzato === true,
               salvato,
+              ...(salvato && { lat: esito.lat, lon: esito.lon, fonte: esito.fonte, ...esito.dettaglio }),
               motivo: salvato
                 ? esito.dettaglio.motivo
                 : 'PRENOTAZIONE_MODIFICATA'
@@ -1089,5 +1096,51 @@ export async function validaGeografiaPrenotazioniNcc(
     );
   }
 
+  return sessione.risultato;
+}
+
+export async function anteprimaGeografiaImportNcc(pool, operatore, body, dipendenze = {}) {
+  const righe = body?.righe;
+  if (!Array.isArray(righe) || righe.length < 1 || righe.length > 100 ||
+    new Set(righe.map(row => row?.riga)).size !== righe.length ||
+    righe.some(row => !Number.isInteger(row?.riga) || row.riga < 2 || row.riga > 101 ||
+      RUOLI.some(ruolo => typeof row[ruolo] !== 'string' || !row[ruolo].trim() || row[ruolo].length > 250))) {
+    throw errore(400, 'Righe di anteprima geografica non valide.');
+  }
+  const sessione = await (dipendenze.manager ?? manager).esegui(operatore, async sessione => {
+    const guard = creaGeografiaGuardNcc({
+      signal: sessione.signal, verificaAttiva: sessione.verificaAttiva,
+      autorizzaDistribuita: sessione.autorizzaGeografia, autorizzazioneRigorosa: true
+    });
+    const motore = (dipendenze.creaValidazione ?? creaValidazioneGeograficaNcc)(pool, { guard, soloIndirizzo: true });
+    const cache = new Map();
+    const risultati = [];
+    const scadenza = performance.now() + FINESTRA_OPERATIVA_MS;
+    try {
+      for (const row of righe) {
+        for (const ruolo of RUOLI) {
+          const indirizzo = row[ruolo].trim();
+          const chiave = JSON.stringify([ruolo, indirizzo]);
+          if (!cache.has(chiave) && performance.now() < scadenza) {
+            try {
+              cache.set(chiave, await guard.attendi(() => motore.validaPunto(indirizzo, ruolo)));
+            } catch (error) {
+              if (error?.message !== 'NCC_GEOGRAFIA_DEADLINE' || sessione.signal?.aborted) throw error;
+              cache.set(chiave, { stato: 'DA_ELABORARE', motivo: 'FINESTRA_OPERATIVA_TERMINATA' });
+            }
+          }
+          const esito = normalizzaEsito(cache.get(chiave) ?? {
+            stato: 'DA_ELABORARE', motivo: 'FINESTRA_OPERATIVA_TERMINATA'
+          });
+          risultati.push({ riga: row.riga, ruolo, stato: esito.stato, valido: esito.valido,
+            lat: esito.lat, lon: esito.lon, fonte: esito.fonte, ...esito.dettaglio });
+        }
+      }
+      return risultati;
+    } finally {
+      guard.interrompi('NCC_VALIDAZIONE_TERMINATA');
+    }
+  }, { applicaCooldown: false });
+  if (!sessione.consentito) throw errore(429, 'Validazione temporaneamente non disponibile. Riprovare.');
   return sessione.risultato;
 }

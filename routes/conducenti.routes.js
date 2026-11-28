@@ -8,6 +8,7 @@ import {
   confermaPuntoGoogleNcc,
   confermaPuntoManualeNcc,
   riepilogoGeografiaNcc,
+  anteprimaGeografiaImportNcc,
   validaGeografiaPrenotazioniNcc
 } from '../services/ncc-geografia-prenotazioni.service.js';
 import { importaPrenotazioni, pianificatore, approvaGruppo, approvaMissione, salvaParametriPianificatore, eliminaGruppo, simulazioneNccV26 } from '../services/ncc-import-planner.service.js';
@@ -206,6 +207,9 @@ export function creaRouterConducenti({
       riepilogoGeografiaNcc(pool, op(req))
     )
   );
+
+  router.post(prenotazioniEsterne + '/geografia/anteprima-import',
+    route(req => anteprimaGeografiaImportNcc(pool, op(req), req.body)));
 
   // Validazione massiva: massimo 10 prenotazioni.
   router.post(

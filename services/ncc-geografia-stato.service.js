@@ -381,10 +381,8 @@ export async function calcolaRiepilogoGeograficoNcc(
           row[punto.ruolo + '_dettaglio_geo'] ?? {};
 
         if (
-          punto.statoMemorizzato === 'VALIDATO_MANUALE' &&
           dettaglio.precisione === 'STRADA' &&
-          dettaglio.posizioneIndicativa === true &&
-          dettaglio.confermatoDaOperatore === true
+          dettaglio.posizioneIndicativa === true
         ) {
           puntiIndicativiAccettati++;
           contieneIndicativi = true;

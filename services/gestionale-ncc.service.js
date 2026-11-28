@@ -41,7 +41,11 @@ function numeroVolo(value) {
 
 export function datiPrenotazione(body) {
   const dati = body ?? {};
-  const volo = dati.volo;
+  const volo = dati.volo ?? ([dati.voloNumero, dati.voloAeroporto, dati.voloDirezione, dati.voloProgrammatoIl]
+    .some(value => value != null && value !== '') ? {
+      numero: dati.voloNumero, aeroporto: dati.voloAeroporto,
+      direzione: dati.voloDirezione, programmatoIl: dati.voloProgrammatoIl
+    } : null);
   let campiVolo = [null, null, null, null];
   if (volo != null) {
     const aeroporto = testo(volo.aeroporto, 'Aeroporto', 3).toUpperCase();
@@ -66,6 +70,10 @@ export function datiPrenotazione(body) {
   ];
 }
 
+export function notePrenotazione(body) {
+  return testo(body?.note, 'Note', 2000, true);
+}
+
 // NCC_GEOGRAFIA_API_V2902B
 const campi = `id, cliente, recapito, origine, destinazione, prelievo_il, passeggeri,
   origine_normalizzata,
@@ -88,7 +96,7 @@ const campi = `id, cliente, recapito, origine, destinazione, prelievo_il, passeg
   destinazione_geo_scade_il,
   destinazione_dettaglio_geo,
   destinazione_punto_operativo_id,
-  bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
+  bagagli, note, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
   volo_programmato_il, volo_aggiornato_il, annullata_il, creata_il, aggiornata_il,
   CASE WHEN volo_programmato_il IS NOT NULL THEN 'manuale' END AS volo_fonte`;
 
@@ -115,12 +123,12 @@ export async function creaPrenotazioneEsterna(pool, operatore, body, importHash 
     `INSERT INTO public.ncc_prenotazioni_esterne
        (operatore_id, cliente, recapito, origine, destinazione, prelievo_il, passeggeri,
         bagagli, prezzo_centesimi, volo_numero, volo_aeroporto, volo_direzione,
-        volo_programmato_il, volo_aggiornato_il${importHash ? ", import_hash" : ""})
+        volo_programmato_il, volo_aggiornato_il, note${importHash ? ", import_hash" : ""})
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::varchar, $11, $12, $13,
-       CASE WHEN $13::timestamptz IS NOT NULL THEN now() END${importHash ? ", $14" : ""})
+       CASE WHEN $13::timestamptz IS NOT NULL THEN now() END, $14${importHash ? ", $15" : ""})
      ${importHash ? "ON CONFLICT (operatore_id, import_hash) WHERE import_hash IS NOT NULL DO NOTHING" : ""}
      RETURNING ${campi}`,
-    [operatore, ...datiPrenotazione(body), ...(importHash ? [importHash] : [])]
+    [operatore, ...datiPrenotazione(body), notePrenotazione(body), ...(importHash ? [importHash] : [])]
   );
   return rows[0];
 }
@@ -135,10 +143,10 @@ export async function modificaPrenotazioneEsterna(pool, operatore, id, body) {
          WHEN ROW(volo_numero, volo_aeroporto, volo_direzione, volo_programmato_il)
            IS DISTINCT FROM ROW($11::varchar, $12::varchar, $13::varchar, $14::timestamptz)
          THEN now() ELSE volo_aggiornato_il END,
-       aggiornata_il = now()
+       note = CASE WHEN $15 THEN $16 ELSE note END, aggiornata_il = now()
      WHERE operatore_id = $1 AND id = $2 AND annullata_il IS NULL
      RETURNING ${campi}`,
-    [operatore, id, ...datiPrenotazione(body)]
+    [operatore, id, ...datiPrenotazione(body), Object.hasOwn(body ?? {}, "note"), notePrenotazione(body)]
   );
   if (!rows[0]) throw errore(404, 'Prenotazione attiva non trovata');
   return rows[0];

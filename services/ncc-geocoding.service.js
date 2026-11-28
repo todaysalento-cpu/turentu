@@ -378,7 +378,11 @@ export function creaGeocodingNcc(
       partialMatch: result.partial_match === true,
       territorio,
       localitaTerritoriale,
-      affidabile
+      affidabile,
+      puntoStradale: Boolean(comuneAtteso && territorio.valido &&
+        (!localitaGid || localitaTerritoriale?.valido === true) &&
+        chiave(paese) === 'italia' && stradaCoerente &&
+        result.types?.includes('route') && ['GEOMETRIC_CENTER', 'APPROXIMATE'].includes(precisione))
     };
   }
 
@@ -528,6 +532,17 @@ export function creaGeocodingNcc(
           valido: true,
           stato: 'VALIDATO_AUTO',
           punto: candidati[0]
+        };
+      }
+
+      const candidatoStrada = candidati[0];
+      if (risultati.length === 1 && candidatoStrada?.puntoStradale &&
+        !contieneAmbiguita && !localitaAmbigua && !analisi.puntoInteresse) {
+        stats.validati++;
+        return {
+          ...base, valido: true, stato: 'VALIDATO_AUTO',
+          motivo: analisi.civico ? 'CIVICO_NON_RICONOSCIUTO' : 'CIVICO_MANCANTE',
+          punto: { ...candidatoStrada, precisione: 'STRADA', posizioneIndicativa: true }
         };
       }
 

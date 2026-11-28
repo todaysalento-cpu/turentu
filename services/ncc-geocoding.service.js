@@ -336,7 +336,7 @@ export function creaGeocodingNcc(
     const strada = componente(result, 'route');
     const paese = componente(result, 'country');
 
-    const analisiStrada = analizzaIndirizzoNcc(indirizzo);
+    const analisiStrada = typeof indirizzo === 'string' ? analizzaIndirizzoNcc(indirizzo) : indirizzo;
     const civicoRichiesto = analisiStrada.civico;
     const stradaRichiesta = civicoRichiesto
       ? analisiStrada.indirizzo.slice(0, -civicoRichiesto.length).replace(/[\s,]+$/, '')
@@ -488,9 +488,10 @@ export function creaGeocodingNcc(
 
     try {
       let motivoBudget;
-      const query = !localitaAmbigua && !analisi.ambiguo && !analisi.puntoInteresse
+      const indirizzoRicerca = !localitaAmbigua && !analisi.ambiguo && !analisi.puntoInteresse
         ? await guard.attendi(() => espandiIndirizzoStradaleNcc(db, analisi, comuneAtteso, comuneInput))
-        : normalizzato;
+        : { ...analisi, query: normalizzato };
+      const { query } = indirizzoRicerca;
       const risultati = await geocoding(query, motivo => { motivoBudget = motivo; });
 
       guard.verifica();
@@ -510,7 +511,7 @@ export function creaGeocodingNcc(
           r => valutaGeocoding(
             r,
             comuneAtteso,
-            query,
+            indirizzoRicerca,
             localitaGid
           )
         )
@@ -524,6 +525,8 @@ export function creaGeocodingNcc(
       const verificaStrada = {
         query,
         espansioneOsm: query !== normalizzato,
+        localitaGid,
+        localitaRiconosciuta: frazione?.nome ?? risoluzioneLocalita.localita?.nome ?? null,
         totaleRisultati: risultati.length,
         candidati: candidati.map(candidato => ({
           via: candidato.strada,
@@ -534,6 +537,7 @@ export function creaGeocodingNcc(
           confronto: candidato.motivoConfrontoStrada,
           territorio: candidato.territorio?.stato,
           localita: candidato.localitaTerritoriale?.stato,
+          localitaIstat: candidato.localitaTerritoriale?.localita ?? null,
           parziale: candidato.partialMatch
         }))
       };

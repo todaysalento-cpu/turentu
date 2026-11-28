@@ -25,6 +25,7 @@ function analizza(value) {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
+    .replace(/^(\s*via\s+)(?:1\s*[°º]?|primo)(?=\s+maggio\s*$)/u, '$1primo')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)

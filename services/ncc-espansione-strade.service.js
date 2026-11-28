@@ -34,8 +34,9 @@ export async function espandiIndirizzoStradaleNcc(db, analisi, comune, localita)
   const strada = analisi.civico
     ? analisi.indirizzo.slice(0, -analisi.civico.length).replace(/[ ,]+$/, '')
     : analisi.indirizzo;
+  const invariato = { query: analisi.normalizzato, indirizzo: analisi.indirizzo, civico: analisi.civico };
   const tipo = normalizzaNomeStrada(strada).match(tipi)?.[1];
-  if (!tipo || !comune) return analisi.normalizzato;
+  if (!tipo || !comune) return invariato;
 
   let rows;
   try {
@@ -47,14 +48,15 @@ export async function espandiIndirizzoStradaleNcc(db, analisi, comune, localita)
       [comune, tipo + ' %']
     ));
   } catch (error) {
-    if (error?.code === '42P01') return analisi.normalizzato;
+    if (error?.code === '42P01') return invariato;
     throw error;
   }
   if (rows.length > 5000 || new Set(rows.map(row => row.codice_istat_comune)).size !== 1) {
-    return analisi.normalizzato;
+    return invariato;
   }
   const nome = scegliNomeStradaNcc(strada, rows.map(row => row.nome));
-  if (!nome) return analisi.normalizzato;
+  if (!nome) return invariato;
   const zona = localita && localita.toLowerCase() !== comune.toLowerCase() ? localita : null;
-  return [[nome, analisi.civico].filter(Boolean).join(' '), zona, comune, 'Italia'].filter(Boolean).join(', ');
+  const indirizzo = [nome, analisi.civico].filter(Boolean).join(' ');
+  return { query: [indirizzo, zona, comune, 'Italia'].filter(Boolean).join(', '), indirizzo, civico: analisi.civico };
 }

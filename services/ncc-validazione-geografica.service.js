@@ -54,15 +54,15 @@ export function creaValidazioneGeograficaNcc(db, opzioni = {}) {
    }
   }
 
-  const r = opzioni.soloIndirizzo === true ? { stato: 'NON_TROVATO' }
-   : await guard.attendi(() => catalogo(db, indirizzo, ruolo));
+  const r = opzioni.soloIndirizzo === true && !opzioni.operatore ? { stato: 'NON_TROVATO' }
+   : await guard.attendi(() => catalogo(db, indirizzo, ruolo, opzioni.operatore));
 
   guard.verifica();
   if (r.valido && r.stato === 'VALIDATO_CATALOGO') {
    stats.catalogoValidati++;
    return { stato: 'VALIDATO_CATALOGO', valido: true, fonte: 'CATALOGO_TURENTU', originale: indirizzo, luogo: r.luogo, punto: r.punto, puntoOperativoId: r.punto.id, tipiVeicoloAmmessi: normalizzaRestrizioniNcc(r.punto.tipi_veicolo_ammessi), lat: r.punto.lat, lon: r.punto.lon, placeId: r.punto.google_place_id, geoScadeIl: r.punto.geo_scade_il };
   }
-  if (r.stato !== 'NON_TROVATO') {
+  if (r.stato !== 'NON_TROVATO' && !(opzioni.soloIndirizzo && r.stato === 'PUNTO_NON_DISPONIBILE')) {
    stats.catalogoDaVerificare++;
    return { stato: r.stato === 'AMBIGUO' ? 'AMBIGUO' : 'DA_VERIFICARE', valido: false, fonte: 'CATALOGO_TURENTU', originale: indirizzo, motivo: r.stato, luogo: r.luogo ?? null, candidati: r.candidati ?? r.punti ?? [] };
   }

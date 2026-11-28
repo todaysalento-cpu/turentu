@@ -1,4 +1,4 @@
-import { riconosciLuogoNcc } from './ncc-catalogo-luoghi.service.js';
+import { riconosciLuogoNcc, salvaPuntoCatalogoOperatoreNcc } from './ncc-catalogo-luoghi.service.js';
 import { analizzaIndirizzoNcc } from './ncc-normalizzazione-indirizzi.service.js';
 import { normalizzaLocalita } from './ncc-locality-resolver.service.js';
 import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
@@ -194,7 +194,8 @@ async function salvaEsito(
   row,
   ruolo,
   esito,
-  guard
+  guard,
+  puntoDaRiutilizzare = null
 ) {
   if (!RUOLI.includes(ruolo)) {
     throw errore(400, 'Ruolo non valido');
@@ -255,7 +256,7 @@ async function salvaEsito(
        AND ${ruolo} = $3
        AND annullata_il IS NULL
        AND ($8 = 'VALIDATO_MANUALE' OR ${ruolo}_stato_geo <> 'VALIDATO_MANUALE')
-       AND ($8 <> 'VALIDATO_MANUALE' OR ${ruolo}_stato_geo <> 'VALIDATO_CATALOGO')
+       AND ($8 <> 'VALIDATO_MANUALE' OR ${ruolo}_stato_geo <> 'VALIDATO_CATALOGO' OR $17::boolean)
        AND NOT EXISTS (
          SELECT 1
          FROM public.ncc_gruppi_approvati g
@@ -282,12 +283,17 @@ async function salvaEsito(
       esito.valido,
       row.revisione_geo,
       row[ruolo + '_stato_geo'],
-      row[ruolo + '_revisione_geo']
+      row[ruolo + '_revisione_geo'],
+      puntoDaRiutilizzare?.rinnovo === true
     ]
   );
 
     guard.verifica();
 
+    if (rowCount === 1 && puntoDaRiutilizzare) {
+      await salvaPuntoCatalogoOperatoreNcc(client, puntoDaRiutilizzare);
+      guard.verifica();
+    }
     await client.query('COMMIT');
 
     transazioneAperta = false;
@@ -328,7 +334,7 @@ async function leggiPuntoGoogleNcc(placeId, guard) {
 }
 
 export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dipendenze = {}) {
-  const { ruolo, placeId, indirizzo, accettaPosizioneIndicativa } = body;
+  const { ruolo, placeId, indirizzo, accettaPosizioneIndicativa, riusaPunto } = body;
   if (!RUOLI.includes(ruolo) || typeof placeId !== 'string' || !/^[A-Za-z0-9_-]{1,512}$/.test(placeId) ||
     placeId.startsWith('turentu_') || typeof indirizzo !== 'string' || !indirizzo.trim() || indirizzo.length > 250) {
     throw errore(400, 'Seleziona un indirizzo Google valido.');
@@ -347,7 +353,12 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
       const row = rows[0];
       if (!row) throw errore(404, 'Prenotazione attiva e modificabile non trovata.');
       if (row[ruolo] !== indirizzo) throw errore(409, 'L’indirizzo è cambiato. Riapri la prenotazione.');
-      if (row[ruolo + '_stato_geo'] === 'VALIDATO_CATALOGO' || row[ruolo + '_fonte_geo'] === 'OPENSTREETMAP_TERMINAL') {
+      const giaCatalogo = row[ruolo + '_stato_geo'] === 'VALIDATO_CATALOGO';
+      const rinnovo = giaCatalogo && riusaPunto === true && Boolean((await guard.attendi(() => pool.query(
+        'SELECT 1 FROM public.catalogo_punti_operativi p JOIN public.catalogo_luoghi l ON l.id=p.luogo_id WHERE p.id=$1 AND l.operatore_id=$2 AND p.geo_scade_il <= now()',
+        [row[ruolo + '_punto_operativo_id'], operatore]
+      ))).rowCount);
+      if ((giaCatalogo && !rinnovo) || row[ruolo + '_fonte_geo'] === 'OPENSTREETMAP_TERMINAL') {
         throw errore(400, 'Questo riferimento aeroportuale o di catalogo segue la sua verifica dedicata.');
       }
       const luogo = await guard.attendi(() => (dipendenze.leggiPunto ?? leggiPuntoGoogleNcc)(placeId, guard));
@@ -486,7 +497,14 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
         confermatoDaOperatore: true,
         operatoreId: String(operatore)
       };
-      if (!(await salvaEsito(pool, operatore, row, ruolo, esito, guard))) {
+      if (riusaPunto === true && !poiIdentificato) {
+        throw errore(400, 'Il riuso è disponibile per un luogo identificato per nome.');
+      }
+      const puntoDaRiutilizzare = riusaPunto === true ? {
+        operatore, indirizzo, comune: comuneAtteso, ruolo, lat, lon,
+        placeId: luogo.id, fonte: esito.fonte, scadenza: esito.scadenza, rinnovo
+      } : null;
+      if (!(await salvaEsito(pool, operatore, row, ruolo, esito, guard, puntoDaRiutilizzare))) {
         throw errore(409, 'La prenotazione è cambiata. Riaprila e riprova.');
       }
       return {
@@ -497,6 +515,7 @@ export async function confermaPuntoGoogleNcc(pool, operatore, id, body = {}, dip
         precisione: esito.dettaglio.precisione,
         posizioneIndicativa,
         avviso: motivoPrecisione,
+        puntoRiutilizzabileSalvato: Boolean(puntoDaRiutilizzare),
         dettaglio: esito.dettaglio
       };
     } finally {
@@ -784,7 +803,7 @@ export async function validaGeografiaPrenotazioniNcc(
           creaValidazioneGeograficaNcc
         )(
           pool,
-          { guard, soloIndirizzo: true }
+          { guard, soloIndirizzo: true, operatore }
         );
 
         const { rows } = await pool.query(
@@ -1113,7 +1132,7 @@ export async function anteprimaGeografiaImportNcc(pool, operatore, body, dipende
       signal: sessione.signal, verificaAttiva: sessione.verificaAttiva,
       autorizzaDistribuita: sessione.autorizzaGeografia, autorizzazioneRigorosa: true
     });
-    const motore = (dipendenze.creaValidazione ?? creaValidazioneGeograficaNcc)(pool, { guard, soloIndirizzo: true });
+    const motore = (dipendenze.creaValidazione ?? creaValidazioneGeograficaNcc)(pool, { guard, soloIndirizzo: true, operatore });
     const cache = new Map();
     const risultati = [];
     const scadenza = performance.now() + FINESTRA_OPERATIVA_MS;

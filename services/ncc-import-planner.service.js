@@ -230,7 +230,7 @@ async function candidati(client, operatore, ids = null, lock = false, giornoSimu
 
 
   return (await client.query(
-    `SELECT p.id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.prezzo_centesimi, p.volo_numero,
+    `SELECT p.id, p.operatore_id, p.origine, p.destinazione, p.prelievo_il, p.passeggeri, p.prezzo_centesimi, p.volo_numero,
         p.volo_direzione, p.volo_aeroporto, p.volo_programmato_il, p.volo_aggiornato_il, p.bagagli
         ${campiGeo ? ", " + campiGeo : ""}
      FROM public.ncc_prenotazioni_esterne p

@@ -35,13 +35,15 @@ export function creaRiutilizzoGeograficoNcc(
   async function resolverCatalogo(
     database,
     indirizzo,
-    ruolo
+    ruolo,
+    operatore
   ) {
     guard.verifica();
 
     const chiave = JSON.stringify([
       indirizzo,
-      ruolo
+      ruolo,
+      operatore
     ]);
 
     if (cacheCatalogo.has(chiave)) {
@@ -59,7 +61,8 @@ export function creaRiutilizzoGeograficoNcc(
     const risultato = await risolviCatalogoNcc(
       database,
       indirizzo,
-      ruolo
+      ruolo,
+      operatore
     );
 
     guard.verifica();

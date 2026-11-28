@@ -54,7 +54,8 @@ export async function statoPuntoGeograficoNcc(
     const r = await resolver(
       db,
       row[ruolo],
-      ruolo
+      ruolo,
+      row.operatore_id
     );
 
     const punto = r?.punto;
@@ -127,7 +128,8 @@ export async function statoPuntoGeograficoNcc(
       const r = await resolver(
         db,
         row[ruolo],
-        ruolo
+        ruolo,
+        row.operatore_id
       );
 
       if (r?.stato === 'NON_TROVATO') {
@@ -259,6 +261,7 @@ export async function calcolaRiepilogoGeograficoNcc(
   const { rows } = await db.query(`
     SELECT
       p.id,
+      p.operatore_id,
       p.origine,
       p.destinazione,
       p.origine_stato_geo,
@@ -314,7 +317,8 @@ export async function calcolaRiepilogoGeograficoNcc(
         risolviCatalogoNcc(
           db,
           indirizzo,
-          ruolo
+          ruolo,
+          operatore
         )
       );
     }

@@ -22,6 +22,18 @@ import {
   riconosciLocalita
 } from './ncc-locality-resolver.service.js';
 
+const aliasStradePerComune = new Map([
+  ['lecce', new Map([
+    ['piazzetta tancredi', 'piazza tancredi'],
+    ['piazzetta santa chiara', 'piazza vittorio emanuele ii']
+  ])]
+]);
+
+function confrontoNomeStrada(nome, comune) {
+  const normalizzato = normalizzaLocalita(nome);
+  return aliasStradePerComune.get(normalizzaLocalita(comune))?.get(normalizzato) ?? normalizzato;
+}
+
 export const NCC_GEO_LIMITS = Object.freeze({
   maxGeocoding: 100,
   maxPlaces: 20,
@@ -351,6 +363,7 @@ export function creaGeocodingNcc(
     const confrontoStrada = confrontaStradeNcc(stradaRichiesta, strada);
     const stradaCoerente = Boolean(strada && (
       chiave(stradaRichiesta) === chiave(strada) ||
+      confrontoNomeStrada(stradaRichiesta, comuneAtteso) === confrontoNomeStrada(strada, comuneAtteso) ||
       ['NOME_NORMALIZZATO', 'SPAZI_EQUIVALENTI', 'INIZIALI_COMPATIBILI'].includes(confrontoStrada.motivo)
     ));
 

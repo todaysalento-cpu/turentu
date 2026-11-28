@@ -4,6 +4,7 @@ import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
 
 
 import fetch from 'node-fetch';
+import { normalizzaNomeStrada } from './territorial-osm-street-search.service.js';
 import { espandiIndirizzoStradaleNcc } from './ncc-espansione-strade.service.js';
 import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
 import { classificaCandidatiNcc } from './ncc-classificazione-geografica.service.js';
@@ -32,6 +33,47 @@ const aliasStradePerComune = new Map([
 function confrontoNomeStrada(nome, comune) {
   const normalizzato = normalizzaLocalita(nome);
   return aliasStradePerComune.get(normalizzaLocalita(comune))?.get(normalizzato) ?? normalizzato;
+}
+
+function estraiStradaCivicoPerComune(analisi, localita) {
+  if (analisi.ambiguo || analisi.puntoInteresse) return null;
+  const match = analisi.indirizzo.match(/^((?:via|viale|piazza|piazzetta|corso|vico|vicolo|largo|contrada|strada)\s+.+?)[ ,]+(\d+[a-z]?(?:\/[a-z0-9]+)?)(?:\s+(.+))?$/iu);
+  if (!match || (match[3] && normalizzaLocalita(match[3]) !== normalizzaLocalita(localita)) ||
+      (localita && !match[3])) return null;
+  return { via: match[1], civico: match[2] };
+}
+
+async function disambiguaComuneNcc(db, analisi, comune, risoluzione) {
+  if (!comune) return null;
+  const candidati = risoluzione.stato === 'COMUNE_NON_COMPATIBILE' ? risoluzione.candidati ?? [] : [];
+  const frazione = candidati.length === 1 ? candidati[0] : null;
+  const comuneFrazione = frazione?.comune?.nome;
+  const localita = comuneFrazione && normalizzaLocalita(frazione.nome) !== normalizzaLocalita(comuneFrazione)
+    ? frazione.nome : null;
+  if (!localita && !['NON_TROVATA', 'COMUNE_NON_COMPATIBILE'].includes(risoluzione.stato)) return null;
+  const campo = estraiStradaCivicoPerComune(analisi, localita);
+  if (!campo) return null;
+  const via = normalizzaNomeStrada(campo.via);
+  const varianti = [...new Set([via, via.replace(/\bsan (?=[aeiou])/u, 'sant ')])];
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `SELECT DISTINCT comune, codice_istat_comune, nome, nome_normalizzato
+       FROM public.territorial_osm_strade_attive
+       WHERE nome_normalizzato = ANY($1::text[])
+         AND (lower(comune) = lower($2) OR (($3::text IS NULL AND lower(comune) LIKE lower($4))
+           OR ($3::text IS NOT NULL AND lower(comune) = lower($3))))
+       LIMIT 3`,
+      [varianti, comune, localita ? comuneFrazione : null, comune + ' %']
+    ));
+  } catch (error) {
+    if (error?.code === '42P01') return null;
+    throw error;
+  }
+  if (rows.length !== 1 || normalizzaLocalita(rows[0].comune) === normalizzaLocalita(comune)) return null;
+  const indirizzo = rows[0].nome + ' ' + campo.civico;
+  return { comune: rows[0].comune, localita: localita ? frazione : null, indirizzo, civico: campo.civico,
+    query: [indirizzo, localita, rows[0].comune, 'Italia'].filter(Boolean).join(', ') };
 }
 
 export const NCC_GEO_LIMITS = Object.freeze({
@@ -474,8 +516,11 @@ export function creaGeocodingNcc(
         normalizzaLocalita(candidato.nome) === normalizzaLocalita(comuneInput))
       : [];
     const frazione = frazioni.length === 1 ? frazioni[0] : null;
-    const comuneAtteso = frazione?.comune.nome ?? comuneInput;
-    const localitaRiconosciuta = frazione ?? risoluzioneLocalita.localita;
+    const recuperoComune = !comuneEsplicito && !frazione
+      ? await guard.attendi(() => disambiguaComuneNcc(db, analisi, comuneInput, risoluzioneLocalita))
+      : null;
+    const comuneAtteso = recuperoComune?.comune ?? frazione?.comune.nome ?? comuneInput;
+    const localitaRiconosciuta = recuperoComune?.localita ?? frazione ?? risoluzioneLocalita.localita;
     const richiedePerimetroLocalita = localitaRiconosciuta?.nome &&
       normalizzaLocalita(localitaRiconosciuta.nome) !== normalizzaLocalita(comuneAtteso);
     const localitaGid = richiedePerimetroLocalita ? localitaRiconosciuta.gid ?? null : null;
@@ -504,10 +549,10 @@ export function creaGeocodingNcc(
 
     try {
       let motivoBudget;
-      const indirizzoRicerca = !localitaAmbigua && !analisi.ambiguo &&
+      const indirizzoRicerca = recuperoComune ?? (!localitaAmbigua && !analisi.ambiguo &&
         (!analisi.puntoInteresse || analisi.puntoInteresse === analisi.indirizzo)
         ? await guard.attendi(() => espandiIndirizzoStradaleNcc(db, analisi, comuneAtteso, comuneInput))
-        : { ...analisi, query: normalizzato };
+        : { ...analisi, query: normalizzato });
       const { query } = indirizzoRicerca;
       const risultati = await geocoding(query, motivo => { motivoBudget = motivo; });
 
@@ -615,7 +660,10 @@ export function creaGeocodingNcc(
       guard.verifica();
 
       const alternativi = await places(
-        analisi.queryPlaces || normalizzato
+        analisi.puntoInteresse && candidati.length > 0 &&
+          candidati.every(candidato => candidato.territorio?.stato === 'FUORI_COMUNE')
+          ? [analisi.puntoInteresse, analisi.indirizzo, comuneAtteso, 'Italia'].filter(Boolean).join(', ')
+          : analisi.queryPlaces || normalizzato
       );
 
       guard.verifica();
@@ -715,6 +763,7 @@ export function creaGeocodingNcc(
           ...base,
           stato: 'FUORI_COMUNE',
           ...classificaCandidatiNcc(unici, analisi),
+          verificaStrada,
           motivo: 'COORDINATE_FUORI_DAL_COMUNE_ATTESO'
         };
       }

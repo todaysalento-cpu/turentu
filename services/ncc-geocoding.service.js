@@ -521,6 +521,22 @@ export function creaGeocodingNcc(
       guard.verifica();
 
       const contieneAmbiguita = analisi.ambiguo;
+      const verificaStrada = {
+        query,
+        espansioneOsm: query !== normalizzato,
+        totaleRisultati: risultati.length,
+        candidati: candidati.map(candidato => ({
+          via: candidato.strada,
+          civico: candidato.civico,
+          precisione: candidato.precisione,
+          stradaCoerente: candidato.stradaCoerente,
+          civicoCoerente: candidato.civicoCoerente,
+          confronto: candidato.motivoConfrontoStrada,
+          territorio: candidato.territorio?.stato,
+          localita: candidato.localitaTerritoriale?.stato,
+          parziale: candidato.partialMatch
+        }))
+      };
 
       if (
         risultati.length === 1 &&
@@ -667,6 +683,7 @@ export function creaGeocodingNcc(
           ? 'AMBIGUO'
           : 'DA_VERIFICARE',
         ...classificazione,
+        verificaStrada,
         ...(localitaAmbigua && { motivo: 'LOCALITA_AMBIGUA' })
       };
 

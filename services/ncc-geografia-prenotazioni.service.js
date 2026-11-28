@@ -181,6 +181,7 @@ function normalizzaEsito(r) {
       comuneAtteso: r?.comuneAtteso ?? null,
       precisione: p.precisione ?? null,
       posizioneIndicativa: p.posizioneIndicativa === true,
+      ...(r?.verificaStrada && { verificaStrada: r.verificaStrada }),
       richiedeVerifica: !valido
     }
   };

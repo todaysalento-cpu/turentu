@@ -491,7 +491,8 @@ export function creaGeocodingNcc(
 
     try {
       let motivoBudget;
-      const indirizzoRicerca = !localitaAmbigua && !analisi.ambiguo && !analisi.puntoInteresse
+      const indirizzoRicerca = !localitaAmbigua && !analisi.ambiguo &&
+        (!analisi.puntoInteresse || analisi.puntoInteresse === analisi.indirizzo)
         ? await guard.attendi(() => espandiIndirizzoStradaleNcc(db, analisi, comuneAtteso, comuneInput))
         : { ...analisi, query: normalizzato };
       const { query } = indirizzoRicerca;
@@ -550,7 +551,7 @@ export function creaGeocodingNcc(
         candidati[0]?.affidabile &&
         !contieneAmbiguita &&
         !localitaAmbigua &&
-        !analisi.puntoInteresse
+        (!analisi.puntoInteresse || indirizzoRicerca.tipoStradaRecuperato)
       ) {
         stats.validati++;
 

@@ -160,6 +160,17 @@ export function analizzaIndirizzoNcc(value) {
     ambiguo = true;
   }
 
+  // Riferimento a una struttura separato da un trattino, anche senza spazi.
+  const strutturaSeparata = indirizzo.match(
+    /^((?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s+.+?)\s*[-–—]\s*(.+)$/i
+  );
+  if (strutturaSeparata &&
+      /\b(?:boutique|hotel|albergo|masseria|residence|ristorante)\b/i.test(strutturaSeparata[2]) &&
+      !/^(?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\b/i.test(strutturaSeparata[2])) {
+    puntoInteresse ??= pulisci(strutturaSeparata[2]);
+    indirizzo = pulisci(strutturaSeparata[1]);
+  }
+
   // Nome struttura dopo un indirizzo.
   const struttura = indirizzo.match(
     /^(.+?)\s+\b(MASSERIA|HOTEL|ALBERGO|RESIDENCE|VILLA|CONSERVATORIO|RISTORANTE|STAZIONE|TERMINAL|OSPEDALE|BASILICA|CHIESA|FORO BOARIO|B&B)\b(.*)$/i

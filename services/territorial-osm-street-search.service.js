@@ -10,7 +10,64 @@ export const VERSIONE_STREET_SEARCH =
   'TURENTU_STREET_SEARCH_V1';
 
 export const VERSIONE_MOTORE_STREET_SEARCH =
-  'TURENTU_STREET_SEARCH_V1_5';
+  'TURENTU_STREET_SEARCH_V1_8_1';
+
+// Dizionario prudenziale per abbreviazioni cartografiche.
+const NOMI_PROPRI = new Set(`
+giovanni giuseppe antonio francesco mario luigi
+michele pietro paolo carlo aldo giacomo alessandro
+andrea vincenzo salvatore domenico roberto alberto
+vittorio emanuele enrico filippo nicola nicolo
+leonardo raffaele angelo stefano lorenzo matteo
+marco luca massimo guglielmo umberto ettore
+cesare dante ugo giosue giulio guido giorgio
+bruno sergio sandro renato corrado gaetano
+pasquale donato cosimo eugenio aurelio anita
+maria anna rosa teresa grazia elena margherita
+caterina lucia irene adele emilia eleonora
+federico costantino tommaso vincenza giovanna
+antonietta
+`.trim().split(/\s+/));
+
+const TIPI_ABBREVIAZIONE = new Set([
+  'via', 'viale', 'piazza', 'piazzetta',
+  'piazzale', 'corso', 'vico', 'vicolo',
+  'largo', 'contrada', 'strada'
+]);
+
+function analizzaAbbreviazione(nome) {
+  const p = nome.split(' ');
+
+  if (!TIPI_ABBREVIAZIONE.has(p[0])) return null;
+  if (p.length !== 2 && p.length !== 3) return null;
+
+  const cognome = p.at(-1);
+
+  if (!/^[a-z]{3,}$/.test(cognome)) return null;
+  if (NOMI_PROPRI.has(cognome)) return null;
+  if (/^[ivxlcdm]+$/.test(cognome)) return null;
+
+  if (p.length === 3 && !/^[a-z]$/.test(p[1])) {
+    return null;
+  }
+
+  return {
+    tipo: p[0],
+    cognome,
+    iniziale: p.length === 3 ? p[1] : null
+  };
+}
+
+function verificaNomeEsteso(nome, abbreviazione) {
+  const p = normalizzaNomeStrada(nome).split(' ');
+
+  return p.length === 3 &&
+    p[0] === abbreviazione.tipo &&
+    NOMI_PROPRI.has(p[1]) &&
+    p[2] === abbreviazione.cognome &&
+    (!abbreviazione.iniziale ||
+      p[1].startsWith(abbreviazione.iniziale));
+}
 
 const MAX_GEOMETRIA_BYTES = 256 * 1024;
 
@@ -59,6 +116,196 @@ function esito(stato, extra = {}) {
     puntoPrelievo: null,
     ...extra
   };
+}
+
+
+// NCC_CARREGGIATE_CARTOGRAFICHE_V181
+// Non certifica connessioni percorribili o punti di prelievo.
+async function verificaDoppiaCarreggiata(
+  db, codice, nome, geometriaAttesa
+) {
+  const { rows } = await db.query(`
+    WITH originali AS MATERIALIZED (
+      SELECT id, importazione_id, highway, tags, geom
+      FROM public.territorial_osm_strade_attive
+      WHERE codice_istat_comune = $1
+        AND nome_normalizzato = $2
+        AND highway = ANY($3::text[])
+    ),
+    requisiti AS (
+      SELECT
+        COUNT(*) BETWEEN 2 AND 500 AS dimensione_ok,
+        COUNT(DISTINCT importazione_id) = 1 AS import_ok,
+        COUNT(DISTINCT tags->>'ref') = 1 AS ref_ok,
+        BOOL_AND(COALESCE(
+          highway IN ('motorway','trunk','primary','secondary')
+          AND tags->>'oneway' = 'yes'
+          AND NULLIF(BTRIM(tags->>'ref'),'') IS NOT NULL
+          AND ST_SRID(geom) = 4326
+          AND ST_IsValid(geom)
+          AND NOT ST_IsEmpty(geom)
+          AND ST_Length(geom) > 0,
+          FALSE
+        )) AS attributi_ok
+      FROM originali
+    ),
+    componenti AS MATERIALIZED (
+      SELECT
+        o.id,
+        d.path[1] AS componente,
+        d.geom,
+        COALESCE(o.tags->>'layer','0') AS livello,
+        COALESCE(o.tags->>'bridge','no') AS ponte,
+        COALESCE(o.tags->>'tunnel','no') AS tunnel
+      FROM originali o
+      CROSS JOIN LATERAL ST_Dump(o.geom) d
+      CROSS JOIN requisiti r
+      WHERE r.dimensione_ok
+        AND r.import_ok
+        AND r.ref_ok
+        AND r.attributi_ok
+    ),
+    integrita AS (
+      SELECT
+        COUNT(*) BETWEEN 2 AND 500
+        AND ST_Equals(
+          ST_Collect(geom),
+          ST_SetSRID(ST_GeomFromGeoJSON($4),4326)
+        ) AS valida
+      FROM componenti
+    ),
+    gruppi AS MATERIALIZED (
+      SELECT *,
+        ST_ClusterDBSCAN(
+          geom, eps=>0, minpoints=>1
+        ) OVER (ORDER BY id, componente) AS gruppo
+      FROM componenti
+      WHERE (SELECT valida FROM integrita)
+    ),
+    linee AS MATERIALIZED (
+      SELECT id, componente, gruppo,
+        livello, ponte, tunnel,
+        ST_Transform(geom,32634) AS geom
+      FROM gruppi
+    ),
+    aggregati AS MATERIALIZED (
+      SELECT gruppo, ST_Collect(geom) AS geom
+      FROM linee
+      GROUP BY gruppo
+    ),
+    coppia AS (
+      SELECT
+        ST_Distance(a.geom,b.geom) AS distanza,
+        ST_Length(
+          ST_Intersection(a.geom,ST_Buffer(b.geom,20))
+        ) / NULLIF(ST_Length(a.geom),0) AS copertura_a,
+        ST_Length(
+          ST_Intersection(b.geom,ST_Buffer(a.geom,20))
+        ) / NULLIF(ST_Length(b.geom),0) AS copertura_b
+      FROM aggregati a
+      JOIN aggregati b ON a.gruppo < b.gruppo
+      WHERE (SELECT COUNT(*) FROM aggregati) = 2
+    ),
+    campioni AS MATERIALIZED (
+      SELECT l.*, f,
+        ST_LineInterpolatePoint(l.geom,f) AS pt
+      FROM linee l
+      CROSS JOIN LATERAL (
+        SELECT
+          (i + 0.5) / n AS f
+        FROM (
+          SELECT GREATEST(
+            5,
+            CEIL(ST_Length(l.geom)/50)::integer
+          ) AS n
+        ) q
+        CROSS JOIN LATERAL generate_series(0,n-1) i
+      ) v
+      WHERE EXISTS (
+        SELECT 1 FROM coppia
+        WHERE distanza <= 20
+          AND copertura_a >= 0.90
+          AND copertura_b >= 0.90
+      )
+    ),
+    vicini AS MATERIALIZED (
+      SELECT c.*, b.geom AS geom_b,
+        b.livello AS livello_b,
+        b.ponte AS ponte_b,
+        b.tunnel AS tunnel_b,
+        ST_LineLocatePoint(b.geom,c.pt) AS fb
+      FROM campioni c
+      LEFT JOIN LATERAL (
+        SELECT l.*
+        FROM linee l
+        WHERE l.gruppo <> c.gruppo
+          AND ST_DWithin(l.geom,c.pt,20)
+        ORDER BY ST_Distance(l.geom,c.pt),
+          l.id,l.componente
+        LIMIT 1
+      ) b ON TRUE
+    ),
+    angoli AS (
+      SELECT *,
+        ST_Azimuth(
+          ST_LineInterpolatePoint(
+            geom,GREATEST(0,f-0.01)
+          ),
+          ST_LineInterpolatePoint(
+            geom,LEAST(1,f+0.01)
+          )
+        ) AS az_a,
+        ST_Azimuth(
+          ST_LineInterpolatePoint(
+            geom_b,GREATEST(0,fb-0.01)
+          ),
+          ST_LineInterpolatePoint(
+            geom_b,LEAST(1,fb+0.01)
+          )
+        ) AS az_b
+      FROM vicini
+    ),
+    verifiche AS (
+      SELECT gruppo,
+        COUNT(*) AS campioni,
+        COUNT(*) FILTER (
+          WHERE COALESCE(
+            livello = livello_b
+            AND ponte = ponte_b
+            AND tunnel = tunnel_b
+            AND DEGREES(ACOS(
+              LEAST(1.0,GREATEST(
+                -1.0,COS(az_a-az_b)
+              ))
+            )) >= 150
+            AND az_a IS NOT NULL
+            AND az_b IS NOT NULL,
+            FALSE
+          )
+        ) AS compatibili
+      FROM angoli
+      GROUP BY gruppo
+    )
+    SELECT COALESCE(
+      (SELECT COUNT(*) FROM verifiche) = 2
+      AND (
+        SELECT BOOL_AND(
+          campioni >= 5
+          AND compatibili::numeric /
+              NULLIF(campioni,0) >= 0.95
+        )
+        FROM verifiche
+      ),
+      FALSE
+    ) AS compatibile
+  `, [
+    codice,
+    nome,
+    HIGHWAY_AMMESSI,
+    geometriaAttesa
+  ]);
+
+  return rows[0]?.compatibile === true;
 }
 
 export async function cercaStradaOsm(
@@ -112,7 +359,24 @@ export async function cercaStradaOsm(
     }
   }
 
-  for (const nome of [...new Set(nomi)]) {
+  const tentativi = [...new Set(nomi)].map(nome => ({
+    nome,
+    abbreviazione: null
+  }));
+
+  // Tutte le ricerche esatte precedono il fallback.
+  const nomeBreve = nomi.at(-1);
+  const abbreviazione = analizzaAbbreviazione(nomeBreve);
+
+  if (abbreviazione) {
+    tentativi.push({
+      nome: nomeBreve,
+      abbreviazione
+    });
+  }
+
+  for (const tentativo of tentativi) {
+    const { nome, abbreviazione } = tentativo;
 
     const { rows } = await db.query(`
       WITH territorio AS MATERIALIZED (
@@ -132,6 +396,7 @@ export async function cercaStradaOsm(
         SELECT s.*, 1 AS priorita
         FROM public.territorial_osm_strade_attive s
         WHERE s.codice_istat_comune = $1
+          AND $6::text IS NULL
           AND s.nome_normalizzato = $2
           AND s.highway = ANY($3::text[])
 
@@ -141,6 +406,7 @@ export async function cercaStradaOsm(
         FROM public.territorial_osm_strade_attive s
         WHERE s.codice_istat_comune = $1
           AND s.highway = ANY($3::text[])
+          AND $6::text IS NULL
           AND EXISTS (
             SELECT 1
             FROM public.territorial_osm_strade_alias_attivi a
@@ -148,6 +414,60 @@ export async function cercaStradaOsm(
               AND a.strada_id = s.id
               AND a.alias_normalizzato = $2
               AND a.fonte = ANY($4::text[])
+          )
+        UNION ALL
+
+        SELECT s.*, 3 AS priorita
+        FROM public.territorial_osm_strade_attive s
+        WHERE s.codice_istat_comune = $1
+          AND s.highway = ANY($3::text[])
+          AND $6::text IS NOT NULL
+          AND split_part(s.nome_normalizzato, ' ', 1) = $6
+          AND s.nome_normalizzato LIKE '% ' || $7::text
+          AND cardinality(
+            string_to_array(s.nome_normalizzato, ' ')
+          ) >= 3
+          AND (
+            $8::text IS NULL
+            OR left(
+              reverse(split_part(
+                reverse(s.nome_normalizzato), ' ', 2
+              )), 1
+            ) = $8
+          )
+
+        UNION ALL
+
+        SELECT s.*, 3 AS priorita
+        FROM public.territorial_osm_strade_attive s
+        WHERE s.codice_istat_comune = $1
+          AND s.highway = ANY($3::text[])
+          AND $6::text IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.territorial_osm_strade_alias_attivi a
+            WHERE a.importazione_id = s.importazione_id
+              AND a.strada_id = s.id
+              AND a.fonte = ANY($4::text[])
+              AND split_part(
+                a.alias_normalizzato, ' ', 1
+              ) = $6
+              AND a.alias_normalizzato
+                LIKE '% ' || $7::text
+              AND cardinality(
+                string_to_array(
+                  a.alias_normalizzato, ' '
+                )
+              ) >= 3
+              AND (
+                $8::text IS NULL
+                OR left(
+                  reverse(split_part(
+                    reverse(a.alias_normalizzato),
+                    ' ', 2
+                  )), 1
+                ) = $8
+              )
           )
       ),
       ritagliati AS MATERIALIZED (
@@ -351,7 +671,10 @@ export async function cercaStradaOsm(
       nome,
       HIGHWAY_AMMESSI,
       ALIAS_AMMESSI,
-      localitaGid
+      localitaGid,
+      abbreviazione?.tipo ?? null,
+      abbreviazione?.cognome ?? null,
+      abbreviazione?.iniziale ?? null
     ]);
 
     if (!rows.length) continue;
@@ -364,6 +687,13 @@ export async function cercaStradaOsm(
 
     if (!r.nome) {
       return esito('STRADA_AMBIGUA');
+    }
+
+    if (
+      abbreviazione &&
+      !verificaNomeEsteso(r.nome, abbreviazione)
+    ) {
+      return esito('STRADA_NON_TROVATA');
     }
 
     // V1.3: aggregazione esclusivamente cartografica.
@@ -394,7 +724,37 @@ export async function cercaStradaOsm(
       diagonaleM >= 0 &&
       diagonaleM <= MAX_DIAGONALE_M;
 
-    if (gruppi !== 1 && !multisegmentoValido) {
+    let doppiaCarreggiataVerificata = false;
+
+    // Deroga circoscritta al solo limite della diagonale.
+    if (
+      !multisegmentoValido &&
+      gruppi === 2 &&
+      localitaGid === null &&
+      Number(r.priorita) === 1 &&
+      Number.isFinite(distanzaMaxM) &&
+      distanzaMaxM >= 0 &&
+      distanzaMaxM <= 20 &&
+      Number.isFinite(diagonaleM) &&
+      diagonaleM > MAX_DIAGONALE_M &&
+      diagonaleM <= 30000 &&
+      Number(r.geometria_bytes) <= MAX_GEOMETRIA_BYTES &&
+      typeof r.geometria_geojson === 'string'
+    ) {
+      doppiaCarreggiataVerificata =
+        await verificaDoppiaCarreggiata(
+          db,
+          codice,
+          nome,
+          r.geometria_geojson
+        );
+    }
+
+    if (
+      gruppi !== 1 &&
+      !multisegmentoValido &&
+      !doppiaCarreggiataVerificata
+    ) {
       return esito('STRADA_DISCONNESSA', {
         strada: r.nome,
         segmenti: Number(r.segmenti),
@@ -497,6 +857,12 @@ export async function cercaStradaOsm(
 
       continuitaGeometrica: !multisegmento,
 
+      ...(doppiaCarreggiataVerificata ? {
+        doppiaCarreggiataVerificata: true,
+        aggregazioneCartografica:
+          'DOPPIA_CARREGGIATA_V181'
+      } : {}),
+
       distanzaMassimaGruppiM: multisegmento
         ? Math.round(distanzaMaxM * 1000) / 1000
         : 0,
@@ -512,7 +878,11 @@ export async function cercaStradaOsm(
       corrispondenza:
         Number(r.priorita) === 1
           ? 'NOME_ESATTO'
-          : 'ALIAS_ESATTO',
+          : Number(r.priorita) === 2
+            ? 'ALIAS_ESATTO'
+            : abbreviazione?.iniziale
+              ? 'INIZIALE_COMPATIBILE'
+              : 'NOME_PROPRIO_OMESSO',
       segmenti: Number(r.segmenti),
       segmentiCorrispondenti:
         Number(r.segmenti_corrispondenti),

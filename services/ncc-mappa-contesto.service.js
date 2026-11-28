@@ -94,9 +94,194 @@ async function ottieniBoundsLocalita(db, localita) {
   return [[sud, ovest], [nord, est]];
 }
 
+// NCC_PERFORMANCE_V173
+const STRADA_GIA_VERIFICATA = Symbol(
+  'NCC_STRADA_GIA_VERIFICATA'
+);
+
 // NCC_TERRITORIO_MANUALE_V1_6
 export async function risolviTerritorioMappaNcc(db, indirizzo) {
-  const analisi = analizzaIndirizzoNcc(indirizzo);
+  // NCC_INDIRIZZI_SENZA_VIRGOLA_V17
+  let analisi = analizzaIndirizzoNcc(indirizzo);
+
+  if (
+    !analisi.comune &&
+    !analisi.ambiguo &&
+    !analisi.puntoInteresse &&
+    !analisi.codiceAeroporto &&
+    !analisi.originale.includes(',') &&
+    !/[()]/.test(analisi.originale)
+  ) {
+    const separazione = analisi.indirizzo.match(
+      /^((?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s+.+?\s+\d+[a-z]?(?:\/[a-z0-9]+)?)\s+([\p{L}][\p{L} .’'-]*)$/iu
+    );
+
+    if (separazione) {
+      const interpretata = analizzaIndirizzoNcc(
+        separazione[1] + ', ' + separazione[2]
+      );
+
+      if (
+        interpretata.comune &&
+        interpretata.civico &&
+        !interpretata.ambiguo &&
+        !interpretata.puntoInteresse &&
+        !interpretata.codiceAeroporto
+      ) {
+        analisi = {
+          ...interpretata,
+          originale: analisi.originale,
+          separatoreTerritorialeInferito: true
+        };
+      }
+    }
+  }
+
+
+  // NCC_SUFFISSI_TERRITORIALI_V172
+  // Recupero conservativo degli indirizzi senza virgola.
+  if (
+    !analisi.comune &&
+    !analisi.ambiguo &&
+    analisi.originale.length <= 250 &&
+    !/[,()]/.test(analisi.originale) &&
+    /^(via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s+/i
+      .test(analisi.originale)
+  ) {
+    const parole = analisi.originale.split(/\s+/);
+
+    const { rows: denominazioni } = await db.query(`
+      SELECT nome_comune AS nome
+      FROM public.pixel_confini_comunali
+      WHERE nome_comune IS NOT NULL
+
+      UNION ALL
+
+      SELECT nome
+      FROM public.localita_istat_2021
+      WHERE nome IS NOT NULL
+        AND codice_istat_comune IS NOT NULL
+
+      UNION ALL
+
+      SELECT alias AS nome
+      FROM public.localita_istat_alias
+      WHERE attivo = TRUE
+    `);
+
+    const catalogo = new Set(
+      denominazioni.map(
+        r => normalizzaLocalita(r.nome)
+      )
+    );
+
+    const interpretazioni = [];
+    const conflitti = [];
+
+    // Non accettare un semplice prefisso stradale
+    // seguito direttamente dal nome del territorio.
+    for (let i = 2; i < parole.length; i++) {
+      const strada = parole.slice(0, i).join(' ');
+      const territorio = parole.slice(i).join(' ');
+
+      if (!catalogo.has(
+        normalizzaLocalita(territorio)
+      )) continue;
+
+      const esplicito = strada + ', ' + territorio;
+
+      const a = analizzaIndirizzoNcc(esplicito);
+
+      if (
+        !a.comune ||
+        a.ambiguo ||
+        a.puntoInteresse ||
+        a.codiceAeroporto ||
+        normalizzaLocalita(a.comune) !==
+          normalizzaLocalita(territorio)
+      ) continue;
+
+      // La virgola impedisce la ricorsione
+      // nel nuovo ramo di inferenza.
+      const t = await risolviTerritorioMappaNcc(
+        db,
+        esplicito
+      );
+
+      if (t.stato !== 'DISPONIBILE') {
+        conflitti.push(t.motivo);
+        continue;
+      }
+
+      const r = await cercaStradaOsm(db, {
+        codiceIstatComune:
+          t.candidato.codice_istat_comune,
+        indirizzo: a.indirizzo,
+        civico: a.civico,
+        localitaGid: t.localita?.gid ?? null
+      });
+
+      if (
+        r.stato === 'STRADA_RICONOSCIUTA' &&
+        r.puntoPrelievo === null &&
+        r.doppiaCarreggiataVerificata !== true
+      ) {
+        interpretazioni.push({
+          territorio: t,
+          strada: r,
+          analisi: {
+            ...a,
+            originale: analisi.originale,
+            separatoreTerritorialeInferito: true,
+            metodoInferenzaTerritoriale:
+              'SUFFISSO_ISTAT_OSM'
+          }
+        });
+      } else if (
+        r.stato !== 'STRADA_NON_TROVATA'
+      ) {
+        conflitti.push(r.stato);
+      }
+    }
+
+    if (
+      interpretazioni.length === 1 &&
+      conflitti.length === 0
+    ) {
+      const scelta = interpretazioni[0];
+
+      const risultato = {
+        ...scelta.territorio,
+        analisi: scelta.analisi
+      };
+
+      Object.defineProperty(
+        risultato,
+        STRADA_GIA_VERIFICATA,
+        {
+          value: scelta.strada,
+          enumerable: false,
+          writable: false,
+          configurable: false
+        }
+      );
+
+      return risultato;
+    } else if (
+      interpretazioni.length > 1 ||
+      conflitti.length > 0
+    ) {
+      return {
+        stato: 'NON_DISPONIBILE',
+        motivo: conflitti.includes('LOCALITA_AMBIGUA')
+          ? 'LOCALITA_AMBIGUA'
+          : 'INFERENZA_TERRITORIALE_AMBIGUA',
+        comune: null,
+        bounds: null,
+        puntoPrelievo: null
+      };
+    }
+  }
 
   const comune = String(analisi.comune ?? '')
     .replace(/\s+[A-Z]{2}$/, '')
@@ -220,22 +405,55 @@ export async function ottieniContestoMappaNcc(db, indirizzo) {
     /^(via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\b/i
       .test(analisi.indirizzo ?? '');
 
+  // NCC_STREET_CONTEXT_V183
+  const ricercaSupplementare =
+    !indirizzoStradale &&
+    !analisi.codiceAeroporto &&
+    !analisi.separatoreTerritorialeInferito &&
+    Boolean(analisi.comune) &&
+    Boolean(analisi.indirizzo) &&
+    !analisi.civico;
+
+  // NCC_STREET_CONTEXT_V184
+  const denominazioneIntegrale =
+    typeof analisi.puntoInteresse === 'string' &&
+    analisi.puntoInteresse.trim() ===
+      String(analisi.indirizzo ?? '').trim() &&
+    !/[()]/.test(analisi.originale);
+
   if (
-    indirizzoStradale &&
     !analisi.ambiguo &&
-    !analisi.puntoInteresse
+    (
+      (indirizzoStradale && !analisi.puntoInteresse) ||
+      (ricercaSupplementare && (
+        !analisi.puntoInteresse || denominazioneIntegrale
+      ))
+    )
   ) {
-    const strada = await cercaStradaOsm(db, {
-      codiceIstatComune:
-        candidato.codice_istat_comune,
-      indirizzo: analisi.indirizzo,
-      civico: analisi.civico,
-      localitaGid: localita?.gid ?? null
-    });
+    const strada =
+      territorio[STRADA_GIA_VERIFICATA] ??
+      await cercaStradaOsm(db, {
+        codiceIstatComune:
+          candidato.codice_istat_comune,
+        indirizzo: analisi.indirizzo,
+        civico: analisi.civico,
+        localitaGid: localita?.gid ?? null
+      });
 
-    esitoStrada = strada.stato;
+    if (indirizzoStradale) {
+      esitoStrada = strada.stato;
+    }
 
-    if (strada.stato === 'STRADA_RICONOSCIUTA') {
+    if (
+      strada.stato === 'STRADA_RICONOSCIUTA' &&
+      (indirizzoStradale || (
+        strada.doppiaCarreggiataVerificata === true &&
+        strada.corrispondenza === 'NOME_ESATTO' &&
+        strada.continuitaGeometrica === false &&
+        strada.puntoPrelievo === null &&
+        strada.uso === 'SOLO_CONTESTO_CARTOGRAFICO'
+      ))
+    ) {
       return {
         ...strada,
         stato: 'DISPONIBILE',

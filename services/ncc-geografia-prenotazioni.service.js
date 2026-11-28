@@ -540,13 +540,6 @@ export async function confermaPuntoManualeNcc(
     analisi.comune ?? ''
   ).replace(/\s+[A-Z]{2}$/, '').trim();
 
-  if (!comuneAtteso) {
-    throw errore(
-      400,
-      'Specificare il comune nell’indirizzo prima della conferma.'
-    );
-  }
-
   if (/\b(aeroporto|airport|aerostazione)\b/i.test(indirizzo)) {
     throw errore(
       400,
@@ -661,8 +654,12 @@ export async function confermaPuntoManualeNcc(
           lon,
           placeId: null,
           fonte: 'OPERATORE_MAPPA',
-          normalizzato: analisi.normalizzato,
-          comuneAtteso,
+          normalizzato:
+            territorio.indirizzoNormalizzato ??
+            analisi.normalizzato,
+          comuneAtteso:
+            territorio.territorioRichiesto ??
+            comuneAtteso,
           motivo: 'COORDINATE_CONFERMATE_OPERATORE'
         });
 
@@ -679,7 +676,9 @@ export async function confermaPuntoManualeNcc(
           codiceIstatComune:
             territorio.codiceIstatComune,
           localita: territorio.localita,
-          localitaGid: territorio.localitaGid
+          localitaGid: territorio.localitaGid,
+          separatoreTerritorialeInferito:
+            territorio.separatoreTerritorialeInferito === true
         };
 
         if (!(await salvaEsito(

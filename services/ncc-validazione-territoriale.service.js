@@ -227,6 +227,10 @@ export async function verificaTerritorioManualeNcc(
     comuneAmministrativo: t.candidato.nome_comune,
     codiceIstatComune: codice,
     localita: t.localita?.nome ?? null,
-    localitaGid: gid
+    localitaGid: gid,
+    indirizzoNormalizzato: t.analisi.normalizzato,
+    territorioRichiesto: t.analisi.comune,
+    separatoreTerritorialeInferito:
+      t.analisi.separatoreTerritorialeInferito === true
   };
 }

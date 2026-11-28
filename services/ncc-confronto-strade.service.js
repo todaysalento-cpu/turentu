@@ -26,6 +26,7 @@ function analizza(value) {
     .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/^(\s*via\s+)(?:1\s*[°º]?|primo)(?=\s+maggio\s*$)/u, '$1primo')
+    .replace(/^(\s*(?:via|viale|piazza|piazzetta|piazzale|corso|largo|vicolo|vico|contrada|strada)\s+)sant(?:\s*['’]\s*|\s+)(?=[aeiou])/u, '$1san ')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)

@@ -589,6 +589,28 @@ export function creaGeocodingNcc(
         };
       }
 
+      const nomeUfficiale = confrontoNomeStrada(analisi.indirizzo, comuneAtteso);
+      if (!analisi.civico && !analisi.puntoInteresse && !contieneAmbiguita && !localitaAmbigua &&
+        nomeUfficiale !== normalizzaLocalita(analisi.indirizzo) &&
+        risultati.length === 1 && risultati[0].types?.includes('point_of_interest') &&
+        !risultati[0].types.includes('route') && candidati[0]?.territorio?.valido &&
+        !candidati[0].partialMatch) {
+        const queryUfficiale = [nomeUfficiale, comuneAtteso, 'Italia'].join(', ');
+        const risultatiUfficiali = await geocoding(queryUfficiale);
+        guard.verifica();
+        if (risultatiUfficiali?.length === 1 && risultatiUfficiali[0].types?.includes('route')) {
+          const punto = await valutaGeocoding(risultatiUfficiali[0], comuneAtteso,
+            { indirizzo: nomeUfficiale, civico: null }, localitaGid);
+          if (punto.puntoStradale && !punto.partialMatch) {
+            stats.validati++;
+            return {
+              ...base, valido: true, stato: 'VALIDATO_AUTO', motivo: 'CIVICO_MANCANTE',
+              punto: { ...punto, precisione: 'STRADA', posizioneIndicativa: true }
+            };
+          }
+        }
+      }
+
       // Fallback Places: ricerca candidati alternativi.
       guard.verifica();
 

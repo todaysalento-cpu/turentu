@@ -551,7 +551,8 @@ export function creaGeocodingNcc(
         candidati[0]?.affidabile &&
         !contieneAmbiguita &&
         !localitaAmbigua &&
-        (!analisi.puntoInteresse || indirizzoRicerca.tipoStradaRecuperato)
+        (!analisi.puntoInteresse || indirizzoRicerca.tipoStradaRecuperato ||
+          (analisi.civico && analisi.puntoInteresse !== analisi.indirizzo))
       ) {
         stats.validati++;
 

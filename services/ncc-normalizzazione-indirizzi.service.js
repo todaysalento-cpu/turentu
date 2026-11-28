@@ -191,6 +191,14 @@ if (
     );
   }
 
+  // Elimina il comune ripetuto dopo un CAP, conservando il civico.
+  const codaPostale = indirizzo.match(/^(.+?)[,\s]+(\d{5})[,\s]+([^,]+)[,\s]*$/);
+  const cap = codaPostale && comune &&
+    pulisci(codaPostale[3]).toLocaleLowerCase('it') === comune.toLocaleLowerCase('it') &&
+    /\s\d+[a-z]?(?:\/[a-z0-9]+)?\s*$/i.test(codaPostale[1])
+    ? codaPostale[2] : null;
+  if (cap) indirizzo = codaPostale[1].trim();
+
   const stradale =
     /^(VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\b/i
       .test(indirizzo);
@@ -208,7 +216,7 @@ if (
   }
 
   const normalizzato = comune
-    ? componi(indirizzo, comune)
+    ? componi(indirizzo, cap ? cap + ' ' + comune : comune)
     : indirizzo;
 
   const queryPlaces = comune

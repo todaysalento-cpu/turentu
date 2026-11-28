@@ -114,6 +114,24 @@ export function analizzaIndirizzoNcc(value) {
     indirizzo.replace(/\([^)]*\)/g, ' ')
   );
 
+  const riferimentiCivico = [];
+  const prefissoStradale = /^(?:via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo|contrada|strada)\s/i;
+  if (prefissoStradale.test(indirizzo)) {
+    const conSuffisso = indirizzo.match(/^(.+?[ ,]\d+[a-z]?(?:\/[a-z0-9]+)?)(?:\s*[,–—-]\s*|\s+)(.+)$/i);
+    if (conSuffisso) {
+      const suffisso = pulisci(conSuffisso[2]);
+      const chiave = testo => pulisci(testo).normalize('NFC').toLocaleLowerCase('it');
+      const riferimentoAttivita = suffisso.match(/^(?:\(\s*([^()]+)\)?|((?:pasticceria|farmacia|pharmaservice)\b.+))$/i);
+      if (comune && chiave(suffisso) === chiave(comune)) {
+        indirizzo = conSuffisso[1];
+      } else if (riferimentoAttivita && !prefissoStradale.test(riferimentoAttivita[1] ?? riferimentoAttivita[2])) {
+        indirizzo = conSuffisso[1];
+        riferimentiCivico.push(riferimentoAttivita[1] ?? riferimentoAttivita[2]);
+      }
+    }
+    indirizzo = indirizzo.replace(/,\s*(?=\d+[a-z]?(?:\/[a-z0-9]+)?$)/i, ' ');
+  }
+
   // Indirizzi alternativi o incroci.
   const secondoIndirizzo = indirizzo.match(
     /^(.+?)\s*(?:-|\/|\bANGOLO\b|\bANG\.)\s*((?:VIALE|VIA|PIAZZALE|PIAZZETTA|PIAZZA|CORSO|VICOLO|VICO|LARGO|CONTRADA|STRADA)\s+.+)$/i
@@ -208,7 +226,7 @@ if (
     puntoInteresse,
     ambiguo,
     alternative,
-    note,
+    note: [...note, ...riferimentiCivico],
     normalizzato,
     queryPlaces
   };

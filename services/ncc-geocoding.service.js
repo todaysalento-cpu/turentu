@@ -76,6 +76,29 @@ async function disambiguaComuneNcc(db, analisi, comune, risoluzione) {
     query: [indirizzo, localita, rows[0].comune, 'Italia'].filter(Boolean).join(', ') };
 }
 
+async function verificaNomeStradaleInvertitoNcc(db, comune, richiesto, restituito) {
+  if (!comune) return false;
+  const originale = normalizzaNomeStrada(richiesto);
+  const inverso = normalizzaNomeStrada(restituito);
+  const parti = originale.match(/^(via|viale|piazza|piazzetta|piazzale|corso|vico|vicolo|largo) ([a-z]{2,}) ([a-z]{2,})$/);
+  if (!parti || originale === inverso || inverso !== [parti[1], parti[3], parti[2]].join(' ')) return false;
+
+  let rows;
+  try {
+    ({ rows } = await db.query(
+      `SELECT DISTINCT codice_istat_comune, nome_normalizzato
+       FROM public.territorial_osm_strade_attive
+       WHERE lower(comune) = lower($1) AND nome_normalizzato = ANY($2::text[])
+       LIMIT 2`,
+      [comune, [originale, inverso]]
+    ));
+  } catch (error) {
+    if (error?.code === '42P01') return false;
+    throw error;
+  }
+  return rows.length === 1 && rows[0].nome_normalizzato === originale;
+}
+
 export const NCC_GEO_LIMITS = Object.freeze({
   maxGeocoding: 100,
   maxPlaces: 20,
@@ -403,11 +426,18 @@ export function creaGeocodingNcc(
     );
 
     const confrontoStrada = confrontaStradeNcc(stradaRichiesta, strada);
-    const stradaCoerente = Boolean(strada && (
+    const nomeStradaCoerente = Boolean(strada && (
       chiave(stradaRichiesta) === chiave(strada) ||
       confrontoNomeStrada(stradaRichiesta, comuneAtteso) === confrontoNomeStrada(strada, comuneAtteso) ||
       ['NOME_NORMALIZZATO', 'SPAZI_EQUIVALENTI', 'INIZIALI_COMPATIBILI'].includes(confrontoStrada.motivo)
     ));
+
+    const nomeInvertito = !nomeStradaCoerente && territorio.valido &&
+      (!localitaGid || localitaTerritoriale?.valido === true) &&
+      result.partial_match !== true && precisione === 'ROOFTOP' &&
+      chiave(paese) === 'italia' && civicoCoerente &&
+      await guard.attendi(() => verificaNomeStradaleInvertitoNcc(db, comuneAtteso, stradaRichiesta, strada));
+    const stradaCoerente = nomeStradaCoerente || Boolean(nomeInvertito);
 
     const affidabile =
       territorio.valido &&
@@ -430,7 +460,7 @@ export function creaGeocodingNcc(
       civicoCoerente,
       stradaCoerente,
       stradaCompatibile: confrontoStrada.compatibile,
-      motivoConfrontoStrada: confrontoStrada.motivo,
+      motivoConfrontoStrada: nomeInvertito ? 'NOME_INVERTITO_CONFERMATO_OSM' : confrontoStrada.motivo,
       partialMatch: result.partial_match === true,
       territorio,
       localitaTerritoriale,

@@ -462,7 +462,10 @@ export function creaGeocodingNcc(
       : [];
     const frazione = frazioni.length === 1 ? frazioni[0] : null;
     const comuneAtteso = frazione?.comune.nome ?? comuneInput;
-    const localitaGid = frazione?.gid ?? risoluzioneLocalita.localita?.gid ?? null;
+    const localitaRiconosciuta = frazione ?? risoluzioneLocalita.localita;
+    const richiedePerimetroLocalita = localitaRiconosciuta?.nome &&
+      normalizzaLocalita(localitaRiconosciuta.nome) !== normalizzaLocalita(comuneAtteso);
+    const localitaGid = richiedePerimetroLocalita ? localitaRiconosciuta.gid ?? null : null;
 
     const localitaAmbigua =
       risoluzioneLocalita.stato === 'AMBIGUA' || frazioni.length > 1;
@@ -526,7 +529,7 @@ export function creaGeocodingNcc(
         query,
         espansioneOsm: query !== normalizzato,
         localitaGid,
-        localitaRiconosciuta: frazione?.nome ?? risoluzioneLocalita.localita?.nome ?? null,
+        localitaRiconosciuta: localitaRiconosciuta?.nome ?? null,
         totaleRisultati: risultati.length,
         candidati: candidati.map(candidato => ({
           via: candidato.strada,

@@ -4,6 +4,7 @@ import { creaGeografiaGuardNcc } from './ncc-geografia-guard.service.js';
 
 
 import fetch from 'node-fetch';
+import { espandiIndirizzoStradaleNcc } from './ncc-espansione-strade.service.js';
 import { confrontaStradeNcc } from './ncc-confronto-strade.service.js';
 import { classificaCandidatiNcc } from './ncc-classificazione-geografica.service.js';
 
@@ -487,7 +488,10 @@ export function creaGeocodingNcc(
 
     try {
       let motivoBudget;
-      const risultati = await geocoding(normalizzato, motivo => { motivoBudget = motivo; });
+      const query = !localitaAmbigua && !analisi.ambiguo && !analisi.puntoInteresse
+        ? await guard.attendi(() => espandiIndirizzoStradaleNcc(db, analisi, comuneAtteso, comuneInput))
+        : normalizzato;
+      const risultati = await geocoding(query, motivo => { motivoBudget = motivo; });
 
       guard.verifica();
 
@@ -506,7 +510,7 @@ export function creaGeocodingNcc(
           r => valutaGeocoding(
             r,
             comuneAtteso,
-            normalizzato,
+            query,
             localitaGid
           )
         )
